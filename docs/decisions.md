@@ -98,9 +98,8 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
 
 ### Unverified items (research.md U1–U3)
 - **U1** (Better Auth schema check vs `timestamptz`): verified — `tests/integration/auth-schema.test.ts` boots Better Auth against the migrated `timestamptz` schema and `getSession` succeeds; no switch to `timestamp` needed.
-  here; it is settled at the first integration test run against Postgres.
-- **U2** (`nextCookies()` ordering): not yet verified — `src/server/auth/auth.ts`
-  does not exist yet, so there is nothing to place or observe.
+- **U2** (`nextCookies()` ordering): not verified (needs a browser to observe the
+  cookie on a server-action sign-in).
 - **U3 / SC-011 Neon half**: **not verified** — no Neon connection string was
   available to the build (constitution II).
 19. **Dependencies are installed from the front-end session, not by pipeline

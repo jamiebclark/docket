@@ -44,19 +44,35 @@ There are two ways to create the first account:
 > the first account exists before the app is exposed.
 
 ## Sessions and rate limits
+Docket uses Better Auth's installed session defaults (read from
+`node_modules/better-auth/dist/context/create-context.mjs`): a session lasts
+7 days and is extended whenever it is used more than 1 day after it was last
+refreshed.
+
 Sign-in goes through Better Auth's HTTP endpoint so its rate limiter applies.
-Better Auth enables rate limiting only when `NODE_ENV=production`; its built-in
-rule for `/sign-in*` and `/sign-up*` is 3 requests per 10 seconds, and 100 per
-10 seconds elsewhere (research.md F5). The auth server itself
-(`src/server/auth/auth.ts`) is not written yet, so these defaults are not
-configured or verified in Docket; this section will be updated when it lands.
+`src/server/auth/auth.ts` sets `rateLimit.enabled: true`, so limiting is on in
+every environment, not only production. Better Auth's built-in rule for
+`/sign-in*` and `/sign-up*` is 3 requests per 10 seconds, and 100 per 10
+seconds elsewhere (research.md F5).
 
 ## Project-owned tables
 Every table that belongs to a project must be listed in the project-owned
 registry with its scope column, and every query on it must filter on that
-column. The registry (`src/server/db/project-owned.ts`) and the data-access
-layer are not implemented yet. The query checker that will enforce the rule in
-tests lives in `tests/helpers/scope-check.ts`.
+column. To register a new project-owned table, add one line to
+`src/server/db/project-owned.ts`:
+
+```ts
+{ table: "my_table", scopeColumn: "project_id" },
+```
+
+The query checker in `tests/helpers/scope-check.ts` enforces the rule in tests.
+
+## Testing
+`DATABASE_URL` must name a database whose name ends in `_test`; the test
+helpers refuse to run against anything else. Schema changes go through
+`pnpm db:generate` (writes a migration from the Drizzle schema),
+`pnpm db:migrate` (applies migrations) and `pnpm db:check` (fails if the
+schema and the committed migrations disagree).
 
 ## Neon
 Use the pooled connection string (host ending `-pooler`) for `DATABASE_URL`.
