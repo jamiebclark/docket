@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { ForbiddenError } from "../../src/server/dal/errors";
-import { forProject } from "../../src/server/dal/scope";
+import { forProject, requirePermission } from "../../src/server/dal/scope";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import { member, membershipAuditLog } from "../../src/server/db/schema";
 import * as invitations from "../../src/server/services/invitations";
@@ -61,5 +61,22 @@ describe("permission matrix (FR-021)", () => {
     const rows = await members.list(await forProject(fakeSession(ctx.owner.id), ctx.project.slug));
     const admin = rows.find((r) => r.userId === ctx.admin.id)!;
     expect(admin).toMatchObject({ canChangeRole: true, canRemove: true, canTransfer: true, canLeave: false });
+  });
+  it("scheduling matrix (FR-009): editors queue and edit posts, only admins and owners manage accounts and slots", async () => {
+    const ctx = await createProjectWithMembers();
+    const scopeOf = async (userId: string) => forProject(fakeSession(userId), ctx.project.slug);
+    const postActions = { post: ["view", "edit", "schedule", "delete"], media: ["view", "edit"] } as const;
+    for (const who of [ctx.owner, ctx.admin, ctx.editor]) {
+      const scope = await scopeOf(who.id);
+      expect(() => requirePermission(scope, postActions)).not.toThrow();
+      expect(() => requirePermission(scope, { account: ["view"], slot: ["view"] })).not.toThrow();
+    }
+    for (const who of [ctx.owner, ctx.admin]) {
+      const scope = await scopeOf(who.id);
+      expect(() => requirePermission(scope, { account: ["manage"], slot: ["manage"] })).not.toThrow();
+    }
+    const editorScope = await scopeOf(ctx.editor.id);
+    expect(() => requirePermission(editorScope, { account: ["manage"] })).toThrow(ForbiddenError);
+    expect(() => requirePermission(editorScope, { slot: ["manage"] })).toThrow(ForbiddenError);
   });
 });
