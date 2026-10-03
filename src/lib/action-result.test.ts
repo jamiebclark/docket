@@ -17,6 +17,14 @@ function named(name: string, message = "x") {
 }
 
 describe("failFromError", () => {
+  it("maps ValidationIssuesError to validation with the issues attached", () => {
+    const issues = { t1: [{ code: "text_too_long", message: "Too long", field: "text" }] };
+    const e = Object.assign(named("ValidationIssuesError", "internal"), { issues });
+    const r = failFromError(e);
+    expect(r).toMatchObject({ ok: false, error: "validation", issues });
+    expect(JSON.stringify(r)).not.toContain("internal");
+  });
+
   it("maps NotFoundError to not_found without leaking the message", () => {
     const r = failFromError(named("NotFoundError", "project 42 secret"));
     expect(r).toMatchObject({ ok: false, error: "not_found" });
