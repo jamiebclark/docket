@@ -15,6 +15,7 @@ import { loadTargetContent, validateTargetContent } from "./validate";
 import { applyDerivedStatus } from "./status";
 
 export { applyDerivedStatus, derivePostStatus } from "./status";
+export { checkComposition, type CompositionCheck, type TargetCheck } from "./compose";
 
 export type TargetFailureCode =
   | "no_active_slots"

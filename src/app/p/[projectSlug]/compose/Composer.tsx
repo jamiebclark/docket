@@ -1,0 +1,347 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LiveRegion } from "@/components/ui/LiveRegion";
+import { saveDraftAction } from "./actions";
+import {
+  counterText,
+  emptyAccountsAudience,
+  fetchCheck,
+  groupIssues,
+  isOverLimit,
+  scheduleBlockedReason,
+  SEVERITY_LABEL,
+  type CheckResult,
+} from "./composer-logic";
+import { AddToQueueDialog } from "./ScheduleDialogs";
+
+export interface AccountOption {
+  id: string;
+  displayName: string;
+  providerName: string;
+  status: string;
+  providerAvailable: boolean;
+}
+
+export interface ComposerInitial {
+  postId: string;
+  baseText: string;
+  mediaIds: string[];
+  targets: { accountId: string; overrideText: string | null }[];
+  editable: boolean;
+  reviewBlocked: boolean;
+}
+
+const DEBOUNCE_MS = 200;
+
+/** Why an account can't be picked, or `null` when it can. */
+function unavailableReason(a: AccountOption): string | null {
+  if (!a.providerAvailable) return "This platform is not available.";
+  if (a.status === "needs_reauth") return "Needs reconnecting.";
+  return null;
+}
+
+/**
+ * The compose screen. Counts, limits and issues come only from the compose-check route (the same
+ * validation path scheduling uses); this component never counts text itself.
+ */
+export function Composer({
+  slug,
+  timeZone,
+  accounts,
+  canManageAccounts,
+  canEdit,
+  canSchedule,
+  mediaEnabled,
+  initial,
+  initialCheck = null,
+}: {
+  slug: string;
+  timeZone: string;
+  accounts: AccountOption[];
+  canManageAccounts: boolean;
+  canEdit: boolean;
+  canSchedule: boolean;
+  mediaEnabled: boolean;
+  initial?: ComposerInitial;
+  /** A check result to start from (server rendering and tests); the first edit replaces it. */
+  initialCheck?: CheckResult | null;
+}) {
+  const router = useRouter();
+  const ids = useId();
+  const [postId, setPostId] = useState(initial?.postId);
+  const [baseText, setBaseText] = useState(initial?.baseText ?? "");
+  const [mediaIds] = useState<string[]>(initial?.mediaIds ?? []);
+  const [selected, setSelected] = useState<string[]>(initial?.targets.map((t) => t.accountId) ?? []);
+  const [overrides, setOverrides] = useState<Record<string, string>>(
+    Object.fromEntries((initial?.targets ?? []).filter((t) => t.overrideText).map((t) => [t.accountId, t.overrideText!])),
+  );
+  const [lastCheck, setCheck] = useState<CheckResult | null>(initialCheck);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const first = useRef(true);
+
+  // With nothing selected there is nothing to check; the last result no longer applies.
+  const check = selected.length === 0 ? null : lastCheck;
+  const editable = check?.editable ?? initial?.editable ?? true;
+  const reviewBlocked = check?.reviewBlocked ?? initial?.reviewBlocked ?? false;
+  const targets = useMemo(
+    () => selected.map((accountId) => ({ accountId, overrideText: overrides[accountId] || null })),
+    [selected, overrides],
+  );
+
+  useEffect(() => {
+    if (first.current && initialCheck) {
+      first.current = false;
+      return;
+    }
+    first.current = false;
+    if (targets.length === 0) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const result = await fetchCheck(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, targets }, controller.signal);
+      if (result && !controller.signal.aborted) setCheck(result);
+    }, DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [slug, postId, baseText, mediaIds, targets, initialCheck]);
+
+  if (accounts.length === 0) {
+    return (
+      <section className="flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold">Compose</h1>
+        {emptyAccountsAudience(canManageAccounts) === "manage" ? (
+          <EmptyState
+            message="No accounts are connected yet. Connect an account to start composing posts."
+            action={
+              <Link href={`/p/${slug}/accounts`} className="text-sm font-medium underline">
+                Go to Accounts
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState message="No accounts are connected yet. Ask an owner or admin to connect one in Accounts." />
+        )}
+      </section>
+    );
+  }
+
+  const canSave = canEdit && editable;
+  const blocked = canSchedule
+    ? scheduleBlockedReason({ selected: selected.length, check, editable, reviewBlocked })
+    : "You don't have permission to schedule posts.";
+  const names = Object.fromEntries(accounts.map((a) => [a.id, a.displayName]));
+  const byAccount = new Map(check?.targets.map((t) => [t.accountId, t]) ?? []);
+
+  function toggle(accountId: string) {
+    setSelected((cur) => (cur.includes(accountId) ? cur.filter((x) => x !== accountId) : [...cur, accountId]));
+  }
+
+  async function save(): Promise<string | null> {
+    setSaving(true);
+    const res = await saveDraftAction(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, targets });
+    setSaving(false);
+    if (!res.ok) {
+      setMessage(res.message);
+      return null;
+    }
+    setMessage("Draft saved.");
+    if (!postId) {
+      setPostId(res.data.postId);
+      router.replace(`/p/${slug}/compose/${res.data.postId}`);
+    }
+    return res.data.postId;
+  }
+
+  async function openQueue() {
+    const id = await save();
+    if (id) setQueueOpen(true);
+  }
+
+  const blockedId = `${ids}-blocked`;
+  return (
+    <form
+      className="flex max-w-3xl flex-col gap-6"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <h1 className="text-2xl font-semibold">{initial ? "Edit post" : "Compose"}</h1>
+
+      {!editable ? <p role="status">Publishing has started, so this post can no longer be edited.</p> : null}
+      {reviewBlocked ? <p role="status">This post is waiting for review.</p> : null}
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm font-semibold">Accounts</legend>
+        {accounts.map((a) => {
+          const reason = unavailableReason(a);
+          return (
+            <div key={a.id} className="flex items-center gap-2 text-sm">
+              <input
+                id={`${ids}-acct-${a.id}`}
+                type="checkbox"
+                checked={selected.includes(a.id)}
+                disabled={!!reason || !canSave}
+                aria-describedby={reason ? `${ids}-acct-${a.id}-why` : undefined}
+                onChange={() => toggle(a.id)}
+              />
+              <label htmlFor={`${ids}-acct-${a.id}`}>
+                {a.displayName} <span className="text-foreground/70">· {a.providerName}</span>
+              </label>
+              {a.status !== "active" ? <Badge tone="danger">{a.status === "needs_reauth" ? "Needs reconnecting" : a.status}</Badge> : null}
+              {reason ? (
+                <span id={`${ids}-acct-${a.id}-why`} className="text-xs text-foreground/70">
+                  {reason}
+                </span>
+              ) : null}
+            </div>
+          );
+        })}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm font-semibold">Text</legend>
+        <label htmlFor={`${ids}-text`} className="text-sm font-medium">
+          Post text
+        </label>
+        <textarea
+          id={`${ids}-text`}
+          rows={6}
+          value={baseText}
+          readOnly={!canSave}
+          onChange={(e) => setBaseText(e.target.value)}
+          className="rounded-md border border-foreground/40 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+        />
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-sm font-semibold">Media</legend>
+        {mediaEnabled ? (
+          <p className="text-sm">{mediaIds.length === 0 ? "No images attached." : `${mediaIds.length} image(s) attached.`}</p>
+        ) : (
+          <p className="text-sm">Media storage is not set up, so images can&apos;t be attached.</p>
+        )}
+      </fieldset>
+
+      {selected.length > 0 ? (
+        <fieldset className="flex flex-col gap-3">
+          <legend className="text-sm font-semibold">Per-account text</legend>
+          {selected.map((accountId) => {
+            const t = byAccount.get(accountId);
+            const over = t ? isOverLimit(t) : false;
+            return (
+              <details key={accountId} className="rounded-md border border-foreground/20 p-3" open={!!overrides[accountId]}>
+                <summary className="cursor-pointer text-sm font-medium">{names[accountId]}</summary>
+                <div className="mt-2 flex flex-col gap-2">
+                  <label htmlFor={`${ids}-ov-${accountId}`} className="text-sm">
+                    Text for {names[accountId]}
+                  </label>
+                  <textarea
+                    id={`${ids}-ov-${accountId}`}
+                    rows={4}
+                    value={overrides[accountId] ?? ""}
+                    readOnly={!canSave}
+                    aria-invalid={over || undefined}
+                    onChange={(e) => setOverrides((cur) => ({ ...cur, [accountId]: e.target.value }))}
+                    className="rounded-md border border-foreground/40 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+                  />
+                  <div>
+                    <Button
+                      variant="secondary"
+                      disabled={!canSave || !overrides[accountId]}
+                      onClick={() => setOverrides((cur) => ({ ...cur, [accountId]: "" }))}
+                    >
+                      Use base text
+                    </Button>
+                  </div>
+                </div>
+              </details>
+            );
+          })}
+        </fieldset>
+      ) : null}
+
+      <fieldset className="flex flex-col gap-3">
+        <legend className="text-sm font-semibold">Preview</legend>
+        {selected.length === 0 ? <p className="text-sm">Choose an account to see what it will receive.</p> : null}
+        <div aria-live="polite" className="flex flex-col gap-3">
+          {selected.map((accountId) => {
+            const t = byAccount.get(accountId);
+            if (!t) {
+              return (
+                <article key={accountId} className="rounded-md border border-foreground/20 p-3 text-sm">
+                  <h3 className="font-medium">{names[accountId]}</h3>
+                  <p>Checking…</p>
+                </article>
+              );
+            }
+            const over = isOverLimit(t);
+            return (
+              <article key={accountId} className="rounded-md border border-foreground/20 p-3 text-sm">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="font-medium">
+                    {t.displayName} <span className="font-normal text-foreground/70">· {t.providerName}</span>
+                  </h3>
+                  <span
+                    data-testid={`counter-${accountId}`}
+                    className={over ? "font-semibold text-red-700 dark:text-red-400" : "text-foreground/70"}
+                  >
+                    {counterText(t)}
+                    {over ? " · over the limit" : ""}
+                  </span>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
+                {groupIssues(t.issues).map((g) => (
+                  <div key={g.severity} className="mt-2">
+                    <p className="text-xs font-semibold">{SEVERITY_LABEL[g.severity]}</p>
+                    <ul className="list-disc pl-5">
+                      {g.items.map((i, n) => (
+                        <li key={`${i.code}-${n}`}>{i.message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </article>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {blocked ? (
+          <p id={blockedId} className="mr-auto text-sm text-foreground/70">
+            {blocked}
+          </p>
+        ) : null}
+        <Button type="submit" variant="secondary" pending={saving} pendingLabel="Saving…" disabled={!canSave}>
+          Save draft
+        </Button>
+        <Button disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
+          Add to queue…
+        </Button>
+      </div>
+      <LiveRegion message={message} />
+
+      {postId ? (
+        <AddToQueueDialog
+          open={queueOpen}
+          onClose={() => setQueueOpen(false)}
+          slug={slug}
+          postId={postId}
+          timeZone={timeZone}
+          names={names}
+          onQueued={() => router.refresh()}
+        />
+      ) : null}
+    </form>
+  );
+}

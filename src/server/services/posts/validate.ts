@@ -38,10 +38,11 @@ export async function validateTargetContent(
   tx: Pick<ProjectScope, "media">,
   account: AccountRecord,
   content: TargetContent,
+  opts: { preview?: boolean } = {},
 ): Promise<ValidationIssue[] | null> {
   const provider = findProvider(account.providerKey);
   if (!provider) return null;
-  const { media, issues: planIssues } = await adaptedMediaFor(tx, provider.capabilities, provider.displayName, content.assets);
+  const { media, issues: planIssues } = await adaptedMediaFor(tx, provider.capabilities, provider.displayName, content.assets, opts);
   // An image the planner already refused (or could not adapt) would only repeat itself as a provider error.
   const planned = new Set(planIssues.filter((i) => i.severity === "error").map((i) => i.field));
   const providerIssues = provider

@@ -1,0 +1,52 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { forProject, NotFoundError } from "@/server/dal";
+import { getSession } from "@/server/auth/session";
+import { getStorage } from "@/server/storage";
+import * as accounts from "@/server/services/accounts";
+import * as posts from "@/server/services/posts";
+import { Composer } from "../Composer";
+
+export const metadata: Metadata = { title: "Edit post" };
+export const dynamic = "force-dynamic";
+
+export default async function EditPostPage({ params }: { params: Promise<{ projectSlug: string; postId: string }> }) {
+  const { projectSlug, postId } = await params;
+  let scope;
+  let detail;
+  try {
+    scope = await forProject(await getSession(), projectSlug);
+    detail = await posts.getPost(scope, postId);
+  } catch (error) {
+    // A malformed id is a ZodError from the service; to the visitor it is simply not found.
+    if (error instanceof NotFoundError || (error instanceof Error && error.name === "ZodError")) notFound();
+    throw error;
+  }
+  const list = await accounts.listAccounts(scope);
+  const live = detail.targets.filter((t) => t.status !== "cancelled");
+  return (
+    <Composer
+      slug={projectSlug}
+      timeZone={scope.project.timezone}
+      accounts={list.map(({ id, displayName, providerName, status, providerAvailable }) => ({
+        id,
+        displayName,
+        providerName,
+        status,
+        providerAvailable,
+      }))}
+      canManageAccounts={scope.can({ account: ["manage"] })}
+      canEdit={scope.can({ post: ["edit"] })}
+      canSchedule={scope.can({ post: ["schedule"] })}
+      mediaEnabled={getStorage() !== null}
+      initial={{
+        postId: detail.post.id,
+        baseText: detail.post.baseText,
+        mediaIds: detail.mediaIds,
+        targets: live.map((t) => ({ accountId: t.accountId, overrideText: t.overrideText })),
+        editable: !detail.targets.some((t) => ["publishing", "published", "ambiguous"].includes(t.status)),
+        reviewBlocked: detail.post.reviewState === "needs_review",
+      }}
+    />
+  );
+}

@@ -163,6 +163,8 @@ export async function adaptedMediaFor(
   caps: ProviderCapabilities,
   platform: string,
   assets: readonly MediaRow[],
+  /** `preview`: no variant exists yet (an unsaved composition), so the planned output stands in for it. */
+  opts: { preview?: boolean } = {},
 ): Promise<{ media: MediaItem[]; issues: ValidationIssue[] }> {
   const c = mediaConstraintsOf(caps);
   const hash = constraintsHash(c);
@@ -178,6 +180,10 @@ export async function adaptedMediaFor(
       const variant = await tx.media.getVariant(asset.id, hash);
       if (variant) {
         media.push(itemOf(asset, variant));
+        issues.push(...plan.notes);
+      } else if (opts.preview) {
+        const { mimeType, width, height, maxBytes } = plan.output;
+        media.push({ ...itemOf(asset), mimeType, width, height, bytes: Math.min(asset.byteSize, maxBytes) });
         issues.push(...plan.notes);
       } else {
         issues.push({

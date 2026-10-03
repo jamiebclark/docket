@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { NotFoundError } from "../../../src/server/dal/errors";
 import * as accounts from "../../../src/server/services/accounts";
 import * as posts from "../../../src/server/services/posts";
 import * as slots from "../../../src/server/services/slots";
@@ -111,5 +112,60 @@ describe("compose check with media adaptation", () => {
     await atTime(NOW, () => posts.addToQueue(t.env.scope, draft.post.id));
     await atTime(NOW, () => posts.updatePost(t.env.scope, draft.post.id, { mediaIds: [second.id] }));
     expect(await t.env.scope.media.listVariants(second.id)).toHaveLength(1);
+  });
+});
+
+describe("checkComposition", () => {
+  it("checks unsaved state per target, independently, without writing", async () => {
+    const t = await setup();
+    const insta = await t.account("instagram-like");
+    const bsky = await t.account("bluesky-like");
+    const wide = await t.asset(2000, 800);
+    const before = await t.env.scope.posts.list({ limit: 100, offset: 0 });
+    const res = await posts.checkComposition(t.env.scope, {
+      baseText: "hi",
+      mediaIds: [wide.id],
+      targets: [{ accountId: insta.id }, { accountId: bsky.id }],
+    });
+    const byAccount = new Map(res.targets.map((r) => [r.accountId, r]));
+    expect(byAccount.get(insta.id)).toMatchObject({ canSchedule: false, postType: "image" });
+    expect(byAccount.get(insta.id)!.issues.map((i) => i.code)).toContain("aspect_ratio_out_of_range");
+    expect(byAccount.get(bsky.id)).toMatchObject({ canSchedule: true, count: 2 });
+    expect(await t.env.scope.posts.list({ limit: 100, offset: 0 })).toEqual(before);
+    expect(await t.env.scope.media.listVariants(wide.id)).toHaveLength(0);
+  });
+
+  it("notes a planned conversion as info without a stored variant", async () => {
+    const t = await setup();
+    const insta = await t.account("instagram-like");
+    const a = await t.asset(1000, 1000);
+    const res = await posts.checkComposition(t.env.scope, { baseText: "hi", mediaIds: [a.id], targets: [{ accountId: insta.id }] });
+    expect(res.targets[0]!.issues).toEqual([expect.objectContaining({ code: "media_will_convert", severity: "info" })]);
+    expect(res.targets[0]!.canSchedule).toBe(true);
+  });
+
+  it("treats unknown accounts and media as not found", async () => {
+    const t = await setup();
+    const bsky = await t.account("bluesky-like");
+    const nope = "00000000-0000-4000-8000-000000000000";
+    await expect(posts.checkComposition(t.env.scope, { baseText: "x", targets: [{ accountId: nope }] })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      posts.checkComposition(t.env.scope, { baseText: "x", mediaIds: [nope], targets: [{ accountId: bsky.id }] }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("reports reviewBlocked and editable for a saved post", async () => {
+    const t = await setup();
+    const bsky = await t.account("bluesky-like");
+    const draft = await posts.createDraft(t.env.scope, { baseText: "hi", targets: [{ accountId: bsky.id }] });
+    const input = { postId: draft.post.id, baseText: "hi", targets: [{ accountId: bsky.id }] };
+    expect(await posts.checkComposition(t.env.scope, input)).toMatchObject({ editable: true, reviewBlocked: false });
+    await posts.setReviewState(t.env.scope, draft.post.id, "needs_review");
+    expect(await posts.checkComposition(t.env.scope, input)).toMatchObject({ reviewBlocked: true });
+    await posts.setReviewState(t.env.scope, draft.post.id, "draft");
+    await atTime(NOW, () => posts.addToQueue(t.env.scope, draft.post.id));
+    const target = (await t.env.scope.targets.listForPost(draft.post.id))[0]!;
+    await t.env.scope.targets.update(target.id, { status: "publishing" });
+    expect(await posts.checkComposition(t.env.scope, input)).toMatchObject({ editable: false });
   });
 });

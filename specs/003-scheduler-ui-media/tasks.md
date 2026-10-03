@@ -64,7 +64,7 @@
 
 - [x] T024 [P] Create `src/lib/validation/media.ts`: `tagSchema`/`tagsSchema` (trim, lowercase, ≤ 40 chars, ≤ 20 tags, dedupe), media/post/calendar search-param schemas, `localDateTimeSchema`; unit tests alongside
 - [x] T025 [P] Create the shared components `src/components/ui/{StatusBadge,Pagination,FilterTabs,LocalTime,Menu,LiveRegion}.tsx` following the `docket-ui` skill (invoke it first); text-plus-colour badges, `role="menu"` keyboard handling in `Menu`, `aria-live` in `LiveRegion`. Add React component tests (Vitest + Testing Library if already configured; otherwise server-render with `react-dom/server`) for `Menu` keyboard behaviour and `StatusBadge` text
-- [ ] T026 (rolling; nothing to remove until a route exists — do it in each story that lands one) Remove `calendar`, `posts`, `compose`, `media`, `accounts` from `PLACEHOLDERS` in `src/app/p/[projectSlug]/[section]/page.tsx` as each route lands (final removal happens in the story that adds the route)
+- [ ] T026 🛑 BLOCKED: rolling task, no route exists yet (no-op until a story lands one; removal happens in each story's own task, e.g. T052) — Remove `calendar`, `posts`, `compose`, `media`, `accounts` from `PLACEHOLDERS` in `src/app/p/[projectSlug]/[section]/page.tsx` as each route lands (final removal happens in the story that adds the route)
 
 **Checkpoint**: lint, typecheck, `db:check`, `pnpm test` green.
 
@@ -77,19 +77,19 @@
 
 ### Tests
 
-- [ ] T027 [P] [US1] `tests/integration/compose-check-route.test.ts`: call `POST` directly with a mocked session — member vs non-member (404), 415 on non-JSON, 400 with `fieldErrors`, `Cache-Control: no-store`, counts for emoji ZWJ sequences / combining marks / multi-byte text under each counting rule, and equality with what `addToQueue` returns (SC-002)
-- [ ] T028 [P] [US1] `tests/integration/compose/check.test.ts` (extend from T023): `checkComposition` on unsaved state, per-target independence (an invalid target never blocks others), `reviewBlocked`/`editable` flags
-- [ ] T029 [P] [US1] `tests/helpers/actions.ts` (mock session + `next/cache` per research D19) and `tests/integration/compose/actions.test.ts` for `saveDraftAction`, `previewQueueAction`, `addToQueueAction`
+- [X] T027 [P] [US1] `tests/integration/compose-check-route.test.ts`: call `POST` directly with a mocked session — member vs non-member (404), 415 on non-JSON, 400 with `fieldErrors`, `Cache-Control: no-store`, counts for emoji ZWJ sequences / combining marks / multi-byte text under each counting rule, and equality with what `addToQueue` returns (SC-002)
+- [X] T028 [P] [US1] `tests/integration/compose/check.test.ts` (extend from T023): `checkComposition` on unsaved state, per-target independence (an invalid target never blocks others), `reviewBlocked`/`editable` flags
+- [X] T029 [P] [US1] `tests/helpers/actions.ts` (mock session + `next/cache` per research D19) and `tests/integration/compose/actions.test.ts` for `saveDraftAction`, `previewQueueAction`, `addToQueueAction`
 
 ### Implementation
 
-- [ ] T030 [US1] Implement `checkComposition` in `src/server/services/posts/compose.ts` (+ export from `posts/index.ts`): per-target `{ accountId, displayName, providerName, effectiveText, count, limit, countingRule, postType, issues, canSchedule… }`
-- [ ] T031 [US1] Implement `src/app/p/[projectSlug]/compose/check/route.ts` (`POST` only, JSON, `Cache-Control: no-store`, `AccountView` only, 404 never reveals which of no-session/non-member/unknown-id)
-- [ ] T032 [US1] Implement `src/app/p/[projectSlug]/compose/actions.ts`: `saveDraftAction`, `previewQueueAction`, `addToQueueAction` (Zod → `ActionResult`, `refresh()` on success) per contracts/ui.md
-- [ ] T033 [P] [US1] `src/app/p/[projectSlug]/compose/{page.tsx,loading.tsx}` and `compose/[postId]/page.tsx` as server components (accounts, `mediaStatus`, connectable provider names, project zone; edit page passes `getPostView` as initial state with `editable`/`reviewBlocked`)
-- [ ] T034 [US1] `compose/Composer.tsx` client island: fieldsets (Accounts, Text, Media slot, Per-account text with "Use base text", Preview), 200 ms debounced fetch to the check route, `used / limit` counters with error state, issues grouped by severity in an `aria-live="polite"` region, empty state when no accounts (link for admin/owner, ask-an-owner copy for editors), action bar with disabled-with-reason rules
-- [ ] T035 [US1] "Add to queue…" confirmation `Dialog` in `compose/ScheduleDialogs.tsx`: preview per-target times with zone name, then assigned times after confirm, highlighting `changedFromPreview` with "Changed: another post took the previewed slot"
-- [ ] T036 [US1] Add a component/render test for `Composer` (mocked `fetch` to the check route) asserting counter text, error state at `count > limit`, disabled actions with reason, and the empty-accounts state for each role
+- [X] T030 [US1] Implement `checkComposition` in `src/server/services/posts/compose.ts` (+ export from `posts/index.ts`): per-target `{ accountId, displayName, providerName, effectiveText, count, limit, countingRule, postType, issues, canSchedule… }`
+- [X] T031 [US1] Implement `src/app/p/[projectSlug]/compose/check/route.ts` (`POST` only, JSON, `Cache-Control: no-store`, `AccountView` only, 404 never reveals which of no-session/non-member/unknown-id)
+- [X] T032 [US1] Implement `src/app/p/[projectSlug]/compose/actions.ts`: `saveDraftAction`, `previewQueueAction`, `addToQueueAction` (Zod → `ActionResult`, `refresh()` on success) per contracts/ui.md
+- [X] T033 [P] [US1] `src/app/p/[projectSlug]/compose/{page.tsx,loading.tsx}` and `compose/[postId]/page.tsx` as server components (accounts, `mediaStatus`, connectable provider names, project zone; edit page passes `getPostView` as initial state with `editable`/`reviewBlocked`)
+- [X] T034 [US1] `compose/Composer.tsx` client island: fieldsets (Accounts, Text, Media slot, Per-account text with "Use base text", Preview), 200 ms debounced fetch to the check route, `used / limit` counters with error state, issues grouped by severity in an `aria-live="polite"` region, empty state when no accounts (link for admin/owner, ask-an-owner copy for editors), action bar with disabled-with-reason rules
+- [X] T035 [US1] "Add to queue…" confirmation `Dialog` in `compose/ScheduleDialogs.tsx`: preview per-target times with zone name, then assigned times after confirm, highlighting `changedFromPreview` with "Changed: another post took the previewed slot"
+- [X] T036 [US1] Add a component/render test for `Composer` (mocked `fetch` to the check route) asserting counter text, error state at `count > limit`, disabled actions with reason, and the empty-accounts state for each role
 
 **Checkpoint**: US1 works with text-only posts; independently demonstrable.
 
