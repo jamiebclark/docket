@@ -122,6 +122,6 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
     top level, so the unbundled script crashed the container. Verified with
     `docker compose up` (migrations before "Ready", health 200, fresh install →
     `/setup`, migration failure exits 1 before listening).
-21. **Local test database runs on port 5433** (`docker-pg` container,
+21. **Local test database runs on port 5433** (`docket-pg` container,
     `postgres://docket:docket@127.0.0.1:5433/docket_test`) because a host
     Postgres on the owner's Mac owns 5432. CI is unaffected.
