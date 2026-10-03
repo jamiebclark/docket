@@ -139,3 +139,58 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
     `public-api` (job engine lands and is tested before the API exposes it).
     The run started with 8 entries counts only 8, so the last two
     (`public-api`, `hardening`) need one more `spec-roadmap run`.
+
+## 002 — Scheduling engine (implementation notes)
+
+- **`stepFor(state, settings)`** takes the account's parsed settings as a second argument.
+  The contract's `stepFor(state)` cannot express the mock's rule "multi_step starts with a
+  non-publishing `create_container` step", which depends on per-account `behaviour`. The engine
+  passes `provider.settingsSchema.parse(account.settings)`.
+- **DST rule.** A slot's wall-clock time resolves with `disambiguation: "compatible"`:
+  a time in the spring-forward gap moves later by the gap, and a time in the autumn
+  overlap takes the first (earlier) instant. Two slots resolving to the same instant on
+  one account collapse into one occurrence. Tested for New York, London, Sydney and Lord Howe.
+- **Backoff and `attempt_count`.** `attempt_count` counts *failed* attempts at the current
+  step (retryable errors and lease recoveries that retry) and resets to 0 after a step
+  continues. Delay is `min(60 s × 2^(n−1), 3600 s)`, no jitter, and
+  `next_attempt_at = max(now + delay, notBefore)`. `PUBLISH_MAX_ATTEMPTS` defaults to 5.
+- **Lease and recovery.** A claim stamps `lease_owner`, `lease_until`, `in_flight_step` and
+  `in_flight_may_publish`. An expired lease on a non-publishing step is retried
+  (`recovered_retry`); on a step that may have published it becomes `ambiguous`
+  (`recovered_ambiguous`) and is never called again. A record whose lease token no longer
+  matches writes only a `stale_result` attempt.
+- **Limit counting.** Both the provider default and the account limit are enforced. A target
+  "starts" when a first step is leased (`publish_started_at` is re-stamped on every first-step
+  lease, automatic and recovery retries included, so the attempt that may publish is the one
+  counted); starts in the window (including ones that later failed) count, except the checked target's own earlier
+  start, so an automatic retry follows its backoff instead of waiting a window. Re-arming a
+  target (`retryTarget`, `addToQueue`, `scheduleAt` / `publishNow`) clears `publish_started_at`,
+  so the new attempt is counted when it is leased. Excess targets are deferred to `oldest start + window`, with no attempt
+  counted and no provider call.
+- **Status derivation.** `posts.review_state` (`draft | needs_review | approved`) is stored;
+  `posts.status` is derived from live targets (excluding `draft`/`cancelled`) and re-stored
+  under a post row lock on every target change. `ambiguous` counts as not published.
+- **`chars` means code points**, not UTF-16 units; the capability enum is
+  `graphemes | code_points | utf8_bytes`.
+- **`needs_reauth` has no transient retry.** Any refresh failure marks the account
+  `needs_reauth`; due targets then fail with "Reconnect … to publish" without a provider call.
+- **Heartbeat is system-wide** (`scheduler_heartbeats`, not project-owned). Sections write it
+  only on completion; the indicator reads `publishing` and compares with
+  `SCHEDULER_STALE_AFTER_MINUTES`.
+- **Mock provider gating.** `MOCK_PROVIDER_ENABLED` defaults to true, except false when
+  `NODE_ENV=production`; accounts can only be connected when it is on.
+- **Soft deletes.** `posts.deleted_at` and `social_accounts.removed_at` keep the append-only
+  attempt log intact; repositories hide soft-deleted rows by default.
+- **"Move to next" excludes the current occurrence**, so the action always visibly moves
+  the post; if no other occurrence is free the target is unchanged and a message is returned.
+- **Two extra env vars:** `EXPLICIT_TIME_WARNING_MINUTES` (default 30, 0 disables) and
+  `QUEUE_HORIZON_DAYS` (default 366).
+- **Constants:** claim batch size 4 and token-refresh cap of 5 accounts per tick (not configurable).
+
+### 002 quickstart walk (T082)
+
+- **Verified:** every `pnpm vitest run …` selection in §2 passes (30 files, 143 tests).
+- **Not verified here:** §3 manual `curl` against `pnpm dev` (headless run, no network tools;
+  the same responses are covered by `tests/integration/tick-endpoint.test.ts`); §4/§6 running
+  the worker and in-process loop by hand; §5 visual check of the indicator (rendered states
+  covered by `scheduler-health.test.ts`); §7 `docker compose up` (SC-013, T084); Neon (T085).
