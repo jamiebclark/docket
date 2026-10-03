@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideRootRedirect } from "./root-redirect";
+import { decideAnonymousRedirect, decideRootRedirect } from "./root-redirect";
 
 describe("decideRootRedirect", () => {
   const mine = [
@@ -22,5 +22,15 @@ describe("decideRootRedirect", () => {
   it("sends a user with no projects to /p/new", () => {
     expect(decideRootRedirect("anything", [])).toBe("/p/new");
     expect(decideRootRedirect(undefined, [])).toBe("/p/new");
+  });
+});
+
+describe("decideAnonymousRedirect", () => {
+  it("sends a fresh install with no users to /setup", () => {
+    expect(decideAnonymousRedirect(true)).toBe("/setup");
+  });
+
+  it("sends an anonymous visitor to /login once an account exists", () => {
+    expect(decideAnonymousRedirect(false)).toBe("/login");
   });
 });

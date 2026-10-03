@@ -9,3 +9,11 @@ export function decideRootRedirect(lastSlug: string | undefined, projects: RootR
   const earliest = [...projects].sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())[0];
   return earliest ? `/p/${earliest.slug}` : "/p/new";
 }
+
+/**
+ * Where an anonymous visitor to "/" or "/login" goes: a fresh install with no
+ * account yet is sent to the first-account screen, otherwise to sign-in.
+ */
+export function decideAnonymousRedirect(setupAvailable: boolean): "/setup" | "/login" {
+  return setupAvailable ? "/setup" : "/login";
+}
