@@ -108,6 +108,10 @@ Env vars are validated at startup with Zod and documented in `.env.example`.
     boundaries changed;
   - never run `pnpm build` or the full suite after every task, and never run
     the same full check twice without a code change in between.
+  - review: do not re-run the full suite, lint, typecheck or build — implement's
+    final pass and CI already run them on the same code. Read their results
+    (`git log`, the implement pass output, CI on the PR) and run only targeted
+    tests or probes that prove or disprove a specific finding.
 - **Tests required** per the brief's quality bar: provider `validate`/`advance`
   with mocked HTTP incl. error and ambiguous paths; scheduler concurrency,
   kill-recovery, backoff, no-retry-on-ambiguous; slot double-booking, DST,
@@ -124,4 +128,4 @@ on product behaviour; `docs/research/` wins on external facts. Amendments are
 made by editing this file in a `docs(constitution):` commit with a version
 bump.
 
-**Version**: 1.2.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
+**Version**: 1.3.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
