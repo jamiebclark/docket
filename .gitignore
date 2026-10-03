@@ -44,3 +44,6 @@ next-env.d.ts
 # claude code local state
 .claude/settings.local.json
 .claude/.cc-writes
+specs/*/.pipeline/
+.specify/roadmaps/*.state.json
+.specify/feature.json
