@@ -375,7 +375,7 @@ Verified passing via curl against `docker compose up`: health `{"ok":true}`, mig
 
 **Purpose**: Fix the blocking findings in the fifth `review.md` (F1, F2; both MAJOR, both reproduced on the built standalone server). Each task carries its finding ID and location.
 
-- [ ] T102 Make sign-in rate limiting hold against a client that picks its own `X-Forwarded-For`:
+- [x] T102 Make sign-in rate limiting hold against a client that picks its own `X-Forwarded-For`:
   - Today Better Auth keys the limit on that header (no `advanced.ipAddress` in `src/server/auth/auth.ts:44`). Next only fills it from the socket when the client didn't send one, and Compose publishes port 3000 directly. Measured: a fresh client-chosen IP per try gave 10 wrong passwords and 0 × 429, and a two-entry header put every user in one shared bucket.
   - Add a limit that a header can't sidestep. For example, a per-email attempt limit for `/sign-in/email` in the existing `before` hook, with the same 3-per-10-seconds rule, in memory. Read the hook's `ctx.body` shape from `node_modules/better-auth`.
   - Make the trusted client-IP source configurable (`advanced.ipAddress.ipAddressHeaders` / `trustedProxies` from env). Document it in `.env.example` and `README.md`, together with the reverse-proxy requirement.
@@ -385,7 +385,7 @@ Verified passing via curl against `docker compose up`: health `{"ok":true}`, mig
     - three failures from one client with a two-entry header, after which a different email can still sign in.
 
   Log the decision in `docs/decisions.md` — review F1 (MAJOR), src/server/auth/auth.ts:44
-- [ ] T103 Show pending invitations to signed-in users outside the project shell:
+- [x] T103 Show pending invitations to signed-in users outside the project shell:
   - Today `InvitationBadge`, the only link to `/invitations`, renders only in `src/app/p/[projectSlug]/layout.tsx:41`. A signed-in user with no projects is sent to `/p/new`, which has no badge, no link and no sign-out. In-app delivery gives the inviter no link to resend.
   - Extract a small signed-in header (invitations link with its pending count, plus the user menu with sign-out). Render it on `src/app/p/new/page.tsx` and `src/app/invitations/page.tsx`, and reuse it in the project layout so there is one implementation.
   - Keep FR-018's redirect to project creation unchanged.
