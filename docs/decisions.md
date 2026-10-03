@@ -133,3 +133,9 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
     30 per 10 s as a backstop so a malformed header's shared bucket cannot lock
     out other users. `TRUSTED_IP_HEADERS` / `TRUSTED_PROXIES` configure
     `advanced.ipAddress`; the README states the reverse-proxy requirement.
+23. **Roadmap split to 10 entries** (owner-approved): `meta` became
+    `meta-facebook-instagram` + `meta-threads` (separate app, OAuth hosts and
+    token lifecycle), and `jobs-and-api` became `generation-jobs` +
+    `public-api` (job engine lands and is tested before the API exposes it).
+    The run started with 8 entries counts only 8, so the last two
+    (`public-api`, `hardening`) need one more `spec-roadmap run`.
