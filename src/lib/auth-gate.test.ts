@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasSessionCookie, isPublicPath, loginRedirectFor } from "./auth-gate";
+import { hasSessionCookie, isPublicPath, lastProjectSlugFor, loginRedirectFor } from "./auth-gate";
 
 describe("auth gate", () => {
   it("lets public paths through without a session", () => {
@@ -30,5 +30,19 @@ describe("auth gate", () => {
     expect(hasSessionCookie((n) => n === "better-auth.session_token")).toBe(true);
     expect(hasSessionCookie((n) => n === "__Secure-better-auth.session_token")).toBe(true);
     expect(hasSessionCookie(() => false)).toBe(false);
+  });
+});
+
+describe("lastProjectSlugFor", () => {
+  it("extracts the slug from project paths", () => {
+    expect(lastProjectSlugFor("/p/alpha")).toBe("alpha");
+    expect(lastProjectSlugFor("/p/alpha/")).toBe("alpha");
+    expect(lastProjectSlugFor("/p/alpha/settings/members")).toBe("alpha");
+  });
+  it("ignores /p/new and non-project paths", () => {
+    expect(lastProjectSlugFor("/p/new")).toBeNull();
+    expect(lastProjectSlugFor("/p")).toBeNull();
+    expect(lastProjectSlugFor("/login")).toBeNull();
+    expect(lastProjectSlugFor("/p/%E0%A4%A")).toBeNull();
   });
 });

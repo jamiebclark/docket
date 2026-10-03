@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { hasSessionCookie, loginRedirectFor } from "@/lib/auth-gate";
+import { hasSessionCookie, lastProjectSlugFor, loginRedirectFor } from "@/lib/auth-gate";
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -9,8 +9,18 @@ export function proxy(request: NextRequest) {
     search,
     hasSessionCookie((name) => request.cookies.has(name)),
   );
-  if (!target) return NextResponse.next();
-  return NextResponse.redirect(new URL(target, request.url));
+  if (target) return NextResponse.redirect(new URL(target, request.url));
+  const response = NextResponse.next();
+  const slug = lastProjectSlugFor(pathname);
+  if (slug) {
+    response.cookies.set("docket_last_project", slug, {
+      path: "/",
+      sameSite: "lax",
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
+  return response;
 }
 
 export const config = {

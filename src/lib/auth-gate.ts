@@ -26,3 +26,14 @@ export function loginRedirectFor(
   const next = pathname === "/" && !search ? "" : `?next=${encodeURIComponent(pathname + search)}`;
   return `/login${next}`;
 }
+
+/** Slug to remember as the last project for `/p/<slug>` and `/p/<slug>/…`; null for `/p/new` and everything else. */
+export function lastProjectSlugFor(pathname: string): string | null {
+  const match = /^\/p\/([^/]+)(?:\/|$)/.exec(pathname);
+  if (!match || match[1] === "new") return null;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return null;
+  }
+}
