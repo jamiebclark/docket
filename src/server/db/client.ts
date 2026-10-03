@@ -28,6 +28,12 @@ export type Database = NodePgDatabase<typeof schema>;
 
 export function createDatabase(url: string, max = 10): { db: Database; pool: Pool } {
   const pool = new Pool({ connectionString: url, max });
+  // An idle client that loses its connection (database restart, forced drop) emits
+  // "error" on the pool; unhandled, that crashes the process. The pool discards the
+  // client and reconnects on the next query, so log the code (never the URL) and go on.
+  pool.on("error", (err: Error & { code?: string }) => {
+    console.error(`Docket: idle database connection lost${err.code ? ` (${err.code})` : ""}`);
+  });
   return { db: drizzle(pool, { schema, logger }), pool };
 }
 

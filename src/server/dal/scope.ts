@@ -3,9 +3,15 @@ import { roles, type PermissionRequest, type Role } from "../auth/access";
 import { getDb, type Database } from "../db/client";
 import { runCrossProject } from "../db/cross-project";
 import { member, projects } from "../db/schema";
+import { createAccountsRepo, type AccountsRepo } from "./accounts";
+import { createAttemptsRepo, type AttemptsRepo } from "./attempts";
 import { createAuditRepo, type AuditRepo } from "./audit";
 import { ForbiddenError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
+import { createMediaRepo, type MediaRepo } from "./media";
+import { createPostsRepo, type PostsRepo } from "./posts";
+import { createSlotsRepo, type SlotsRepo } from "./slots";
+import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
 import { createMembersRepo, type MembersRepo } from "./members";
 import { getProject, updateProject, type ProjectRecord, type ProjectSettingsPatch } from "./projects";
@@ -36,6 +42,12 @@ export interface ProjectScope {
   readonly members: MembersRepo;
   readonly invitations: InvitationsRepo;
   readonly invitationTokens: TokensRepo;
+  readonly accounts: AccountsRepo;
+  readonly slots: SlotsRepo;
+  readonly media: MediaRepo;
+  readonly posts: PostsRepo;
+  readonly targets: TargetsRepo;
+  readonly attempts: AttemptsRepo;
   readonly projects: {
     get(): Promise<ProjectRecord | null>;
     update(patch: ProjectSettingsPatch): Promise<ProjectRecord>;
@@ -79,6 +91,18 @@ async function resolve(
   };
 }
 
+/** The scheduling repositories, shared with `forSchedulerProject` (pinned, no membership). */
+export function createSchedulingRepos(exec: Database, projectId: string) {
+  return {
+    accounts: createAccountsRepo(exec, projectId),
+    slots: createSlotsRepo(exec, projectId),
+    media: createMediaRepo(exec, projectId),
+    posts: createPostsRepo(exec, projectId),
+    targets: createTargetsRepo(exec, projectId),
+    attempts: createAttemptsRepo(exec, projectId),
+  };
+}
+
 function buildScope(exec: Database, data: ScopeData): ProjectScope {
   const scope: ProjectScope = {
     ...data,
@@ -87,6 +111,7 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
     members: createMembersRepo(exec, data.project.id),
     invitations: createInvitationsRepo(exec, data.project.id),
     invitationTokens: createTokensRepo(exec, data.project.id),
+    ...createSchedulingRepos(exec, data.project.id),
     projects: {
       get: () => getProject(data.project.id, exec),
       update: (patch) => updateProject(data.project.id, patch, exec),

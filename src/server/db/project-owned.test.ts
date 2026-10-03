@@ -10,7 +10,7 @@ describe("project-owned registry", () => {
     .map((t) => getTableName(t));
 
   it("finds the schema tables", () => {
-    expect(tables.length).toBeGreaterThanOrEqual(11);
+    expect(tables.length).toBeGreaterThanOrEqual(19);
   });
 
   it("lists every table in exactly one list", () => {

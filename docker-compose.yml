@@ -1,5 +1,11 @@
 # One command to run Docket: `docker compose up --build`.
 # Copy .env.example to .env first and fill in the two required secrets.
+x-docket-env: &docket-env
+  DATABASE_URL: postgres://docket:docket@postgres:5432/docket
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (openssl rand -base64 32)}
+  CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set CREDENTIALS_ENCRYPTION_KEY in .env (openssl rand -base64 32)}
+
 services:
   postgres:
     image: postgres:17
@@ -24,13 +30,25 @@ services:
       postgres:
         condition: service_healthy
     env_file: .env
-    environment:
-      DATABASE_URL: postgres://docket:docket@postgres:5432/docket
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (openssl rand -base64 32)}
-      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?set CREDENTIALS_ENCRYPTION_KEY in .env (openssl rand -base64 32)}
+    environment: *docket-env
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     ports:
       - "3000:3000"
+
+  worker:
+    image: docket:local
+    restart: unless-stopped
+    command: ["node", "worker.mjs"]
+    env_file: .env
+    environment: *docket-env
+    depends_on:
+      web:
+        condition: service_healthy
 
 volumes:
   docket-pgdata:

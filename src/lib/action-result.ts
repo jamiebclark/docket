@@ -16,7 +16,13 @@ export type ActionResult<T> =
       error: ErrorCode;
       message: string;
       fieldErrors?: Record<string, string>;
+      /** Present for `validation` failures raised by `ValidationIssuesError`. */
+      issues?: ValidationIssues;
     };
+
+export type ValidationIssues =
+  | Array<{ severity?: string; code: string; message: string; field?: string }>
+  | Record<string, Array<{ severity?: string; code: string; message: string; field?: string }>>;
 
 export function ok<T>(data: T): ActionResult<T> {
   return { ok: true, data };
@@ -40,6 +46,7 @@ const ERROR_NAME_TO_CODE: Record<string, ErrorCode> = {
   InvitationInvalidError: "invitation_invalid",
   EmailMismatchError: "email_mismatch",
   SetupUnavailableError: "setup_unavailable",
+  ValidationIssuesError: "validation",
 };
 
 const GENERIC_MESSAGE: Record<string, string> = {
@@ -50,6 +57,7 @@ const GENERIC_MESSAGE: Record<string, string> = {
   invitation_invalid: "This invitation is invalid, expired or already used.",
   email_mismatch: "This invitation was sent to a different email address.",
   setup_unavailable: "Setup is no longer available.",
+  validation: "Some posts have validation problems.",
 };
 
 /**
@@ -66,6 +74,10 @@ export function failFromError(err: unknown): ActionResult<never> {
     keepsMessage && err instanceof Error && err.message
       ? err.message
       : (GENERIC_MESSAGE[code] ?? "Something went wrong.");
+  if (code === "validation") {
+    const issues = (err as { issues?: ValidationIssues }).issues;
+    return issues ? { ok: false, error: code, message, issues } : fail(code, message);
+  }
   const field = (err as { field?: unknown }).field;
   return typeof field === "string" && field
     ? fail(code, message, { [field]: message })

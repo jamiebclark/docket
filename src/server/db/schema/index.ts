@@ -3,3 +3,8 @@ export * from "./projects";
 export * from "./invitations";
 export * from "./audit";
 export * from "./install";
+export * from "./accounts";
+export * from "./media";
+export * from "./posts";
+export * from "./attempts";
+export * from "./scheduler";

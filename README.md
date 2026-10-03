@@ -29,7 +29,27 @@ never prints values.
 cp .env.example .env     # set BETTER_AUTH_SECRET and CREDENTIALS_ENCRYPTION_KEY
 docker compose up --build
 ```
-This starts Postgres 17 and the web image (`docker-compose.yml`).
+This starts Postgres 17, the web image and a `worker` (same image) that runs
+the scheduler (`docker-compose.yml`).
+
+## Running the scheduler
+Scheduled posts only go out while something ticks the scheduler. Pick one:
+
+- **Worker (recommended).** `docker compose up -d worker`, or without Docker:
+  `pnpm build && node .next/standalone/worker.mjs`. It ticks every
+  `WORKER_INTERVAL_SECONDS` (default 60) and exits cleanly on SIGTERM/Ctrl-C.
+- **Tick endpoint.** Set `TICK_SECRET` and call it from a cron every minute:
+  ```sh
+  curl -fsS -X POST -H "Authorization: Bearer $TICK_SECRET" https://docket.example.com/api/internal/tick
+  ```
+  Without `TICK_SECRET` the endpoint answers 404.
+- **In-process.** Set `RUN_WORKER_IN_PROCESS=true` on the web service; the web
+  server runs the loop itself.
+
+Every project page shows when the scheduler last ran. A red **"The scheduler
+last ran … ago"** (or **"has never run"**) banner means no tick has been
+recorded within `SCHEDULER_STALE_AFTER_MINUTES` (default 5): scheduled posts
+are not going out until you start one of the options above.
 
 ## First account: bootstrap env vs `/setup`
 There are two ways to create the first account:

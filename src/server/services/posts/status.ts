@@ -1,0 +1,33 @@
+import type { ProjectScope } from "../../dal/scope";
+import type { PostRecord } from "../../dal/posts";
+import type { TargetStatus as PostTargetStatus } from "../../dal/targets";
+
+type PostStatus = PostRecord["status"];
+
+type ReviewState = "draft" | "needs_review" | "approved";
+
+/** FR-029. Live targets exclude `draft` and `cancelled`; `ambiguous` counts as not published. */
+export function derivePostStatus(reviewState: ReviewState, statuses: readonly PostTargetStatus[]): PostStatus {
+  const live = statuses.filter((s) => s !== "draft" && s !== "cancelled");
+  if (live.length === 0) return reviewState;
+  if (live.includes("publishing")) return "publishing";
+  if (live.includes("scheduled")) return "scheduled";
+  if (live.every((s) => s === "published")) return "published";
+  if (!live.includes("published")) return "failed";
+  return "partially_failed";
+}
+
+type Repos = Pick<ProjectScope, "posts" | "targets">;
+
+/**
+ * Locks the post (its own statement), re-reads its targets and writes `posts.status`.
+ * Call inside the transaction that changed a target. Returns the new status, or `null` for a deleted post.
+ */
+export async function applyDerivedStatus(tx: Repos, postId: string): Promise<PostStatus | null> {
+  const post = await tx.posts.lockForUpdate(postId);
+  if (!post) return null;
+  const targets = await tx.targets.listForPost(postId);
+  const status = derivePostStatus(post.reviewState, targets.map((t) => t.status));
+  if (status !== post.status) await tx.posts.setStatus(postId, status);
+  return status;
+}
