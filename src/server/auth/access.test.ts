@@ -10,14 +10,29 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     member: ["view", "remove", "remove_owner", "update_role", "transfer_ownership"],
     invitation: ["view", "create", "create_owner", "revoke", "regenerate"],
     audit: ["view"],
+    account: ["view", "manage"],
+    slot: ["view", "manage"],
+    media: ["view", "edit"],
+    post: ["view", "edit", "schedule", "delete"],
   },
   admin: {
     project: ["view", "update"],
     member: ["view", "remove"],
     invitation: ["view", "create", "revoke", "regenerate"],
     audit: ["view"],
+    account: ["view", "manage"],
+    slot: ["view", "manage"],
+    media: ["view", "edit"],
+    post: ["view", "edit", "schedule", "delete"],
   },
-  editor: { project: ["view"], member: ["view"] },
+  editor: {
+    project: ["view"],
+    member: ["view"],
+    account: ["view"],
+    slot: ["view"],
+    media: ["view", "edit"],
+    post: ["view", "edit", "schedule", "delete"],
+  },
 };
 
 describe("access control matrix", () => {
