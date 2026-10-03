@@ -369,7 +369,12 @@ export async function addToQueue(
     const all = await tx.targets.listForPost(id);
     const chosen = pickTargets(all, opts.targetIds).filter((t) => opts.targetIds || t.status === "draft" || t.status === "cancelled");
     const out: TargetResult<PlannedTime & { changedFromPreview: boolean }>[] = [];
-    for (const t of chosen) {
+    // Hold occurrences in one global order (by account) so two posts sharing accounts
+    // queue concurrently without deadlocking on each other's unique-index entries (F20).
+    const byAccount = [...chosen].sort((a, b) =>
+      a.socialAccountId < b.socialAccountId ? -1 : a.socialAccountId > b.socialAccountId ? 1 : a.id < b.id ? -1 : 1,
+    );
+    for (const t of byAccount) {
       const blocked = queueableGate(post, t);
       if (blocked) {
         out.push(blocked);
@@ -403,7 +408,8 @@ export async function addToQueue(
       });
     }
     await applyDerivedStatus(tx, id);
-    return out;
+    const order = new Map(chosen.map((t, i) => [t.id, i]));
+    return out.sort((a, b) => order.get(a.targetId)! - order.get(b.targetId)!);
   });
 }
 

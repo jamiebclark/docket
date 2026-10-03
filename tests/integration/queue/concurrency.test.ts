@@ -39,6 +39,28 @@ describe("queue concurrency (SC-003)", () => {
     }
   }, 300_000);
 
+  it("posts sharing two accounts in opposite target order queue concurrently without deadlock (F20)", async () => {
+    for (let run = 0; run < 10; run++) {
+      const env = await postsEnv();
+      const a = await env.account();
+      const b = await env.account();
+      const drafts: Awaited<ReturnType<typeof posts.createDraft>>[] = [];
+      for (let i = 0; i < 10; i++) {
+        const order = i % 2 === 0 ? [a, b] : [b, a];
+        drafts.push(await posts.createDraft(env.scope, { baseText: `p${i}`, targets: order.map((x) => ({ accountId: x.id })) }));
+      }
+      const results = await atTime(NOW, () => Promise.all(drafts.map((d) => posts.addToQueue(env.scope, d.post.id))));
+      for (const r of results) {
+        expect(r).toHaveLength(2);
+        for (const t of r) expect(t).toMatchObject({ ok: true });
+      }
+      for (const acct of [a, b]) {
+        const rows = await getDb().select().from(postTargets).where(and(eq(postTargets.projectId, env.project.id), eq(postTargets.socialAccountId, acct.id)));
+        expect(new Set(rows.map((r) => r.slotOccurrenceAt!.getTime())).size).toBe(10);
+      }
+    }
+  }, 300_000);
+
   it("the database refuses a second target on the same occurrence", async () => {
     const env = await postsEnv();
     const a = await env.account();
