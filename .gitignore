@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+!.env.example
+
+# claude code local state
+.claude/settings.local.json
+.claude/.cc-writes
