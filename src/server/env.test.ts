@@ -64,6 +64,21 @@ describe("parseEnv", () => {
     ).toBe(true);
   });
 
+  it("reports cross-field issues even when a base field fails", () => {
+    const names = issues({ ...base, DATABASE_URL: undefined, DATABASE_URL_DIRECT: "mysql://x" }).map(
+      (i) => i.name,
+    );
+    expect(names).toContain("DATABASE_URL");
+    expect(names).toContain("DATABASE_URL_DIRECT");
+    const names2 = issues({
+      ...base,
+      BOOTSTRAP_ADMIN_EMAIL: "a@example.com",
+      DATABASE_POOL_MAX: "0",
+    }).map((i) => i.name);
+    expect(names2).toContain("BOOTSTRAP_ADMIN_PASSWORD");
+    expect(names2).toContain("DATABASE_POOL_MAX");
+  });
+
   it("accepts a 32-byte key as base64 or hex only", () => {
     expect(parseEnv({ ...base, CREDENTIALS_ENCRYPTION_KEY: randomBytes(32).toString("hex") }).ok).toBe(true);
     for (const bad of [randomBytes(16).toString("base64"), randomBytes(31).toString("hex"), "not a key"]) {

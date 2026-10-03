@@ -1,11 +1,44 @@
 import { z } from "zod";
 
+const PG_URL = /^postgres(ql)?:\/\//;
+
+/**
+ * Cross-field rules, computed from the raw source rather than inside the schema:
+ * a schema-level refinement is skipped when any base field fails, which would hide
+ * these issues until the base ones were fixed.
+ */
+function crossFieldIssues(source: Record<string, string | undefined>): EnvIssue[] {
+  const out: EnvIssue[] = [];
+  const email = source.BOOTSTRAP_ADMIN_EMAIL;
+  const pw = source.BOOTSTRAP_ADMIN_PASSWORD;
+  if (email && !pw) {
+    out.push({ name: "BOOTSTRAP_ADMIN_PASSWORD", reason: "required when BOOTSTRAP_ADMIN_EMAIL is set" });
+  }
+  if (pw && !email) {
+    out.push({ name: "BOOTSTRAP_ADMIN_EMAIL", reason: "required when BOOTSTRAP_ADMIN_PASSWORD is set" });
+  }
+  if (email && !z.email().safeParse(email).success) {
+    out.push({ name: "BOOTSTRAP_ADMIN_EMAIL", reason: "must be an email address" });
+  }
+  if (pw && (pw.length < 12 || pw.length > 128)) {
+    out.push({ name: "BOOTSTRAP_ADMIN_PASSWORD", reason: "must be 12–128 characters" });
+  }
+  const direct = source.DATABASE_URL_DIRECT;
+  if (direct && !PG_URL.test(direct)) {
+    out.push({
+      name: "DATABASE_URL_DIRECT",
+      reason: "must be a PostgreSQL URL starting with postgres:// or postgresql://",
+    });
+  }
+  return out;
+}
+
 export type EnvIssue = { name: string; reason: string };
 
 const url = (what: string) =>
   z
     .string({ error: "required" })
-    .refine((v) => /^postgres(ql)?:\/\//.test(v), { error: `must be a ${what} URL starting with postgres:// or postgresql://` });
+    .refine((v) => PG_URL.test(v), { error: `must be a ${what} URL starting with postgres:// or postgresql://` });
 
 function isValidKey(v: string): boolean {
   if (/^[0-9a-fA-F]{64}$/.test(v)) return true;
@@ -60,41 +93,6 @@ const schema = z
         return z.NEVER;
       }),
   })
-  .superRefine((e, ctx) => {
-    const hasEmail = !!e.BOOTSTRAP_ADMIN_EMAIL;
-    const hasPw = !!e.BOOTSTRAP_ADMIN_PASSWORD;
-    if (hasEmail && !hasPw) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["BOOTSTRAP_ADMIN_PASSWORD"],
-        message: "required when BOOTSTRAP_ADMIN_EMAIL is set",
-      });
-    }
-    if (hasPw && !hasEmail) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["BOOTSTRAP_ADMIN_EMAIL"],
-        message: "required when BOOTSTRAP_ADMIN_PASSWORD is set",
-      });
-    }
-    if (hasEmail && !z.email().safeParse(e.BOOTSTRAP_ADMIN_EMAIL).success) {
-      ctx.addIssue({ code: "custom", path: ["BOOTSTRAP_ADMIN_EMAIL"], message: "must be an email address" });
-    }
-    if (hasPw && (e.BOOTSTRAP_ADMIN_PASSWORD!.length < 12 || e.BOOTSTRAP_ADMIN_PASSWORD!.length > 128)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["BOOTSTRAP_ADMIN_PASSWORD"],
-        message: "must be 12–128 characters",
-      });
-    }
-    if (e.DATABASE_URL_DIRECT && !/^postgres(ql)?:\/\//.test(e.DATABASE_URL_DIRECT)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["DATABASE_URL_DIRECT"],
-        message: "must be a PostgreSQL URL starting with postgres:// or postgresql://",
-      });
-    }
-  })
   .transform((e) => ({
     ...e,
     DATABASE_URL_DIRECT: e.DATABASE_URL_DIRECT || e.DATABASE_URL,
@@ -108,15 +106,18 @@ export function parseEnv(
   source: Record<string, string | undefined>,
 ): { ok: true; env: Env } | { ok: false; issues: EnvIssue[] } {
   const r = schema.safeParse(source);
-  if (r.success) return { ok: true, env: r.data };
+  const cross = crossFieldIssues(source);
+  if (r.success && cross.length === 0) return { ok: true, env: r.data };
   const seen = new Set<string>();
   const issues: EnvIssue[] = [];
-  for (const i of r.error.issues) {
-    const name = String(i.path[0] ?? "environment");
-    const key = `${name}:${i.message}`;
+  const base = r.success
+    ? []
+    : r.error.issues.map((i) => ({ name: String(i.path[0] ?? "environment"), reason: i.message }));
+  for (const i of [...base, ...cross]) {
+    const key = `${i.name}:${i.reason}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    issues.push({ name, reason: i.message });
+    issues.push(i);
   }
   return { ok: false, issues };
 }
