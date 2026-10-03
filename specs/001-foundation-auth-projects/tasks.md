@@ -325,3 +325,39 @@ Task: "tests/integration/invitation-accept.test.ts (T057)"
   - `select * from "member" where not $1 = "member"."organization_id"`
 
   The first two are what `drizzle-orm@0.45.3` emits for `not(and(eq(…), eq(…)))` and `insert().select()` — review F3 (MAJOR), tests/helpers/scope-check.ts:83
+
+---
+
+## Phase 12: Review remediation
+
+**Purpose**: Fix the blocking findings in the third `review.md` (F1–F4). The BLOCKER comes first. Each task carries its finding ID and location.
+
+- [ ] T096 Make `src/lib/validation` the single source of input rules:
+  - Build `createProjectSchema`/`updateSettingsSchema` in `src/server/services/projects.ts` from `projectNameSchema`, `slugSchema`, `timeZoneSchema`, `approvalPolicySchema` and `schedulingPolicySchema`, and delete the local `slugSchema`/`timezoneSchema`/`isValidTimeZone`.
+  - Use `emailSchema`, `passwordSchema`, `personNameSchema` and `roleSchema` in `src/server/services/setup.ts`, in `src/server/services/invitations/index.ts`, and in `crossFieldIssues` in `src/server/env.ts`.
+  - Cap `slugify` in `src/app/p/new/new-project-form.tsx` with the shared slug maximum.
+
+  Add integration cases through `projects.create` and `projects.updateSettings`:
+  - expect `validation` on the named field for slug `settings`, slug `ab`, time zone `+02:00` and an 81-character name;
+  - expect success for a 45-character slug.
+
+  Never loosen the shared schemas — review F1 (BLOCKER), src/server/services/projects.ts:15
+- [ ] T097 Make the locked re-check fresh:
+  - In `scope.transaction(fn, { lockProject: true })` (`src/server/dal/scope.ts:96`), run `select id from projects where id = $1 for update` as its own statement.
+  - Then resolve the caller's membership in a separate statement, which gets a fresh snapshot after the lock is granted, and throw `NotFoundError` if it's gone.
+  - Re-check `tx.can({ project: ["update"] })` inside `projects.updateSettings`.
+
+  Add `tests/integration/lock-recheck.test.ts`:
+  - hold the project lock with a raw `pg` client and delete an admin's `member` row;
+  - start `invitations.create` with the admin's pre-resolved scope, then commit the raw transaction;
+  - expect `NotFoundError` and no new `invitation` row.
+
+  Repeat the test for a concurrent demotion from admin to editor followed by `members.remove`, expecting `ForbiddenError` — review F2 (MAJOR), src/server/dal/scope.ts:75
+- [ ] T098 Close the relative-import hole in the raw-database ban in `eslint.config.mjs:23`, so that `src/server/services/**` (and any other non-exempt `src/` file) can't import `../db/client`, `../../db/client`, `../db/schema` or `./db/client`. Keep `src/server/{dal,db,auth,startup}/**` exempt. Add those four imports as cases in `tests/lint/db-import.test.ts`, using file paths under `src/server/services/` and `src/server/`, each expecting the restricted-import error, and confirm `pnpm lint` stays clean on the tree — review F3 (MAJOR), eslint.config.mjs:23
+- [ ] T099 Rewrite `README.md:46-59` from the code as it is now:
+  - session lifetime and refresh, as Better Auth's installed defaults (read from `node_modules/better-auth`);
+  - sign-in rate limiting on in every environment (`rateLimit.enabled: true`, 3 per 10 s);
+  - registering a project-owned table with one line in `src/server/db/project-owned.ts`;
+  - a Testing note: `DATABASE_URL` naming a database that ends `_test`, plus `pnpm db:check`, `db:generate` and `db:migrate`.
+
+  In `docs/decisions.md`, delete the orphaned line at `:101`, and replace U2's "auth.ts does not exist yet" (`:102-103`) with what was observed, or with "not verified (needs a browser)". Describe only behaviour that exists — review F4 (MAJOR), README.md:51
