@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import type { ActionResult } from "@/lib/action-result";
+import { SLUG_MAX } from "@/lib/validation/slug";
 import { createProject } from "./actions";
 
 const input = "rounded border border-foreground/30 bg-transparent px-3 py-2 focus-visible:ring-2";
@@ -11,7 +12,7 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+    .slice(0, SLUG_MAX);
 }
 
 export function NewProjectForm() {

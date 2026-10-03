@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emailSchema, PASSWORD_MAX, PASSWORD_MIN, passwordSchema } from "@/lib/validation";
 
 const PG_URL = /^postgres(ql)?:\/\//;
 
@@ -17,11 +18,11 @@ function crossFieldIssues(source: Record<string, string | undefined>): EnvIssue[
   if (pw && !email) {
     out.push({ name: "BOOTSTRAP_ADMIN_EMAIL", reason: "required when BOOTSTRAP_ADMIN_PASSWORD is set" });
   }
-  if (email && !z.email().safeParse(email).success) {
+  if (email && !emailSchema.safeParse(email).success) {
     out.push({ name: "BOOTSTRAP_ADMIN_EMAIL", reason: "must be an email address" });
   }
-  if (pw && (pw.length < 12 || pw.length > 128)) {
-    out.push({ name: "BOOTSTRAP_ADMIN_PASSWORD", reason: "must be 12–128 characters" });
+  if (pw && !passwordSchema.safeParse(pw).success) {
+    out.push({ name: "BOOTSTRAP_ADMIN_PASSWORD", reason: `must be ${PASSWORD_MIN}–${PASSWORD_MAX} characters` });
   }
   const direct = source.DATABASE_URL_DIRECT;
   if (direct && !PG_URL.test(direct)) {

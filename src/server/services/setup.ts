@@ -1,14 +1,12 @@
 import { z } from "zod";
+import { emailSchema, passwordSchema, personNameSchema } from "@/lib/validation";
 import { bootstrapFirstUser, isSetupAvailable } from "../dal/install";
 import { SetupUnavailableError } from "../dal/errors";
 
 export const firstUserSchema = z.object({
-  name: z.string().trim().min(1, "Enter a name").max(100, "Use 100 characters or fewer"),
-  email: z.email("Enter a valid email address"),
-  password: z
-    .string()
-    .min(12, "Use at least 12 characters")
-    .max(128, "Use 128 characters or fewer"),
+  name: personNameSchema,
+  email: emailSchema,
+  password: passwordSchema,
 });
 
 export async function isAvailable(): Promise<boolean> {

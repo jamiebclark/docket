@@ -1,5 +1,6 @@
 import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
+import { emailSchema, passwordSchema, personNameSchema, roleSchema } from "@/lib/validation";
 import { roles, type Role } from "@/server/auth/access";
 import { generateInvitationToken, hashInvitationToken, invitationUrl, isWellFormedToken } from "@/server/crypto/tokens";
 import {
@@ -31,14 +32,11 @@ export interface InviteeSession {
   user: { id: string; email: string };
 }
 
-const emailSchema = z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address").max(254));
-const roleSchema = z.enum(["owner", "admin", "editor"], { error: "Choose a role" });
-
 export const inviteSchema = z.object({ email: emailSchema, role: roleSchema });
 export const signUpSchema = z.object({
   token: z.string(),
-  name: z.string().trim().min(1, "Enter a name").max(100, "Use 100 characters or fewer"),
-  password: z.string().min(12, "Use at least 12 characters").max(128, "Use 128 characters or fewer"),
+  name: personNameSchema,
+  password: passwordSchema,
 });
 
 export type ShownStatus = "pending" | "expired" | "accepted" | "declined" | "revoked";

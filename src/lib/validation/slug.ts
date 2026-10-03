@@ -15,10 +15,13 @@ export const RESERVED_SLUGS = [
   "_next",
 ] as const;
 
+export const SLUG_MIN = 3;
+export const SLUG_MAX = 48;
+
 export const slugSchema = z
   .string()
-  .min(3, { error: "Slug must be at least 3 characters" })
-  .max(48, { error: "Slug must be at most 48 characters" })
+  .min(SLUG_MIN, { error: "Slug must be at least 3 characters" })
+  .max(SLUG_MAX, { error: "Slug must be at most 48 characters" })
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
     error: "Use lowercase letters, numbers and single hyphens",
   })
