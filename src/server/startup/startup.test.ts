@@ -53,6 +53,12 @@ describe("runStartup", () => {
     expect(d.migrate).not.toHaveBeenCalled();
   });
 
+  it("does not migrate again when scripts/prestart.mjs already did", async () => {
+    const { d } = deps({ env: { ...GOOD_ENV, DOCKET_PREMIGRATED: "1" } });
+    await runStartup(d);
+    expect(d.migrate).not.toHaveBeenCalled();
+  });
+
   it("migrates with DATABASE_URL_DIRECT when set", async () => {
     const direct = "postgres://u:p@localhost:5433/direct";
     const { d } = deps({ env: { ...GOOD_ENV, DATABASE_URL_DIRECT: direct } });

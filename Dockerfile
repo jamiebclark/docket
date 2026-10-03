@@ -34,6 +34,8 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/drizzle ./drizzle
+COPY --from=build --chown=nextjs:nodejs /app/scripts/prestart.mjs ./scripts/prestart.mjs
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+# Migrates first so a failed migration exits before the server listens.
+CMD ["node", "scripts/prestart.mjs"]

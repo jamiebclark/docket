@@ -33,7 +33,8 @@ export async function runStartup(overrides: Partial<StartupDeps> = {}): Promise<
   }
   const env = parsed.env;
 
-  if (env.MIGRATE_ON_START) {
+  // scripts/prestart.mjs migrates before the server loads; don't repeat it.
+  if (env.MIGRATE_ON_START && deps.env.DOCKET_PREMIGRATED !== "1") {
     try {
       await deps.migrate(env.DATABASE_URL_DIRECT);
       deps.log("Docket: database migrations applied");
