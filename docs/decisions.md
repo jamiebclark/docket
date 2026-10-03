@@ -116,3 +116,12 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
 ## T082 gate run (local)
 
 `pnpm lint`, `pnpm typecheck`, `pnpm db:check`, `pnpm test` (29 files / 225 tests) and `pnpm build` all pass with only `DATABASE_URL` set (no other auth/crypto env in the shell), matching CI's `check` job env. Run against Postgres on :5433 (host Postgres owns :5432).
+20. **esbuild bundles `scripts/prestart.mjs`** into `.next/standalone/scripts/`
+    during `pnpm build`. The pre-start migrator runs outside Next's bundle, and
+    under pnpm the standalone `node_modules` does not link `drizzle-orm` at the
+    top level, so the unbundled script crashed the container. Verified with
+    `docker compose up` (migrations before "Ready", health 200, fresh install →
+    `/setup`, migration failure exits 1 before listening).
+21. **Local test database runs on port 5433** (`docker-pg` container,
+    `postgres://docket:docket@127.0.0.1:5433/docket_test`) because a host
+    Postgres on the owner's Mac owns 5432. CI is unaffected.
