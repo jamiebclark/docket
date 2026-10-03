@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasSessionCookie, isPublicPath, lastProjectSlugFor, loginRedirectFor } from "./auth-gate";
+import { isPublicPath, lastProjectSlugFor, loginRedirectFor } from "./auth-gate";
 
 describe("auth gate", () => {
   it("lets public paths through without a session", () => {
@@ -24,12 +24,6 @@ describe("auth gate", () => {
 
   it("lets a request with a session cookie through", () => {
     expect(loginRedirectFor("/p/acme", "", true)).toBeNull();
-  });
-
-  it("recognises plain and __Secure- session cookie names", () => {
-    expect(hasSessionCookie((n) => n === "better-auth.session_token")).toBe(true);
-    expect(hasSessionCookie((n) => n === "__Secure-better-auth.session_token")).toBe(true);
-    expect(hasSessionCookie(() => false)).toBe(false);
   });
 });
 

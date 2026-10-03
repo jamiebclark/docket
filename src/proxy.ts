@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { hasSessionCookie, lastProjectSlugFor, loginRedirectFor } from "@/lib/auth-gate";
+import { getSessionCookie } from "better-auth/cookies";
+import { lastProjectSlugFor, loginRedirectFor } from "@/lib/auth-gate";
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const target = loginRedirectFor(
-    pathname,
-    search,
-    hasSessionCookie((name) => request.cookies.has(name)),
-  );
+  const target = loginRedirectFor(pathname, search, getSessionCookie(request) !== null);
   if (target) return NextResponse.redirect(new URL(target, request.url));
   const response = NextResponse.next();
   const slug = lastProjectSlugFor(pathname);
