@@ -9,6 +9,12 @@ describe("auth gate", () => {
     }
   });
 
+  it("lets the secret-protected tick endpoint through without a session", () => {
+    expect(isPublicPath("/api/internal/tick")).toBe(true);
+    expect(loginRedirectFor("/api/internal/tick", "", false)).toBeNull();
+    expect(isPublicPath("/api/internals")).toBe(false);
+  });
+
   it("does not treat look-alike paths as public", () => {
     expect(isPublicPath("/login/evil")).toBe(false);
     expect(isPublicPath("/api/authx")).toBe(false);
