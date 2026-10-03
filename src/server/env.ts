@@ -60,6 +60,15 @@ const int = (min: number, max: number, def: number) =>
       return n;
     });
 
+/** Comma-separated list; empty or unset means "not configured" (undefined). */
+const csv = z
+  .string()
+  .optional()
+  .transform((v) => {
+    const items = (v ?? "").split(",").map((i) => i.trim()).filter(Boolean);
+    return items.length > 0 ? items : undefined;
+  });
+
 const schema = z
   .object({
     DATABASE_URL: url("PostgreSQL"),
@@ -83,6 +92,8 @@ const schema = z
     BOOTSTRAP_ADMIN_PASSWORD: z.string().optional(),
     BOOTSTRAP_ADMIN_NAME: z.string().max(100, { error: "must be 1–100 characters" }).optional(),
     INVITATION_TTL_DAYS: int(1, 90, 7),
+    TRUSTED_IP_HEADERS: csv,
+    TRUSTED_PROXIES: csv,
     MIGRATE_ON_START: z
       .string()
       .optional()

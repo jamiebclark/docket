@@ -94,4 +94,39 @@ describe("Better Auth HTTP surface", () => {
     expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
     expect(statuses[3]).toBe(429);
   });
+
+  it("limits sign-in per email even when every try claims a different client IP", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = await post("/sign-in/email", { email: "spread@example.com", password: "whatever-password" }, `203.0.113.${100 + i}`);
+      statuses.push(res.status);
+    }
+    expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
+    expect(statuses[3]).toBe(429);
+  });
+
+  it("keeps other emails signing in after failures behind a two-entry forwarded header", async () => {
+    const db = getDb();
+    const [u] = await db
+      .insert(user)
+      .values({ name: "Other", email: "other-ok@example.com", emailVerified: false })
+      .returning({ id: user.id });
+    await db.insert(account).values({
+      userId: u!.id,
+      accountId: u!.id,
+      providerId: "credential",
+      password: await hashPassword("the-right-password"),
+    });
+    try {
+      const shared = "198.51.100.50, 198.51.100.51";
+      for (let i = 0; i < 3; i++) {
+        const res = await post("/sign-in/email", { email: "victim@example.com", password: "wrong-password-here" }, shared);
+        expect(res.status).toBe(401);
+      }
+      const ok = await post("/sign-in/email", { email: "other-ok@example.com", password: "the-right-password" }, shared);
+      expect(ok.status).toBe(200);
+    } finally {
+      await db.delete(user).where(eq(user.id, u!.id));
+    }
+  });
 });
