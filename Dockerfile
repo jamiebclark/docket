@@ -34,7 +34,7 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/drizzle ./drizzle
-COPY --from=build --chown=nextjs:nodejs /app/scripts/prestart.mjs ./scripts/prestart.mjs
+# scripts/prestart.mjs is bundled (esbuild) into .next/standalone/scripts by `pnpm build`.
 USER nextjs
 EXPOSE 3000
 # Migrates first so a failed migration exits before the server listens.
