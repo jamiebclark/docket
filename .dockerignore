@@ -1,0 +1,12 @@
+.git
+.next
+node_modules
+coverage
+.env*
+!.env.example
+.claude
+.specify
+specs
+Dockerfile
+docker-compose*.yml
+*.log
