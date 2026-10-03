@@ -15,6 +15,8 @@ export default defineConfig({
     setupFiles: ["tests/setup/worker-db.ts", "tests/setup/scope-recorder.ts"],
     // Files run in parallel, one database clone per worker (see global-setup.ts).
     maxWorkers: testWorkerCount(),
+    // Parallel workers share CPU with password hashing and DB work; 5 s is too tight.
+    testTimeout: 20_000,
     env: {
       BETTER_AUTH_SECRET: "test-secret-not-real-0123456789abcdef0123456789",
       CREDENTIALS_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
