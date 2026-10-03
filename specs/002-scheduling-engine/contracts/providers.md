@@ -109,7 +109,7 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
     credentials: unknown; now: Date; signal: AbortSignal;
   }): Promise<RefreshResult>;
   validate(content: PostContent, capabilities: ProviderCapabilities): ValidationIssue[];
-  stepFor(state: State | null): StepInfo;
+  stepFor(state: State | null, settings: Settings): StepInfo;   // settings = parsed account settings (decisions.md, 002)
   advance(ctx: PublishContext): Promise<StepResult>;
 }
 ```
