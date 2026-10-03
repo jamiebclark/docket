@@ -53,3 +53,19 @@ export class SetupUnavailableError extends Error {
     this.name = "SetupUnavailableError";
   }
 }
+
+/** Structural subset of the provider `ValidationIssue`, so the DAL does not import the provider framework. */
+export type ValidationIssueLike = { severity?: string; code: string; message: string; field?: string };
+
+/** Whole-request validation failure: a flat list, or issues grouped by target id. */
+export class ValidationIssuesError extends Error {
+  readonly issues: ValidationIssueLike[] | Record<string, ValidationIssueLike[]>;
+  constructor(
+    issues: ValidationIssueLike[] | Record<string, ValidationIssueLike[]>,
+    message = "Some posts have validation problems.",
+  ) {
+    super(message);
+    this.name = "ValidationIssuesError";
+    this.issues = issues;
+  }
+}
