@@ -291,3 +291,37 @@ Task: "tests/integration/invitation-accept.test.ts (T057)"
 - [ ] T090 Write the README sections T079 requires: local setup, `docker compose up --build`, bootstrap env vs `/setup`, the setup-screen exposure note, session/rate-limit defaults, registering a project-owned table, and Neon pooled `DATABASE_URL` vs direct `DATABASE_URL_DIRECT`. Describe only behaviour that exists at the time of writing. Reword `docs/decisions.md:102-103` (U2) to "not yet verified" until `src/server/auth/auth.ts` exists — review F6 (MAJOR), README.md:15
 - [ ] T091 Make `failFromError` cover every T027 error. Map `InvitationInvalidError`→`invitation_invalid`, `EmailMismatchError`→`email_mismatch`, `SetupUnavailableError`→`setup_unavailable`. Pass `ConflictError`'s fixed message and optional `field` through as `message`/`fieldErrors`, e.g. slug taken shown on `slug`, and "Regenerate the existing invitation instead". Either drop `UnauthenticatedError` or define it in `src/server/dal/errors.ts`. Make every error class set `this.name`, and add a test per mapping in `src/lib/action-result.test.ts` — review F7 (MAJOR), src/lib/action-result.ts:35
 - [ ] T092 Make `parseEnv` report the cross-field issues (bootstrap pairing, bootstrap email/password rules, `DATABASE_URL_DIRECT` format) even when a base field fails: compute them from the raw source and merge them, or use the refinement `when` option. Add tests in `src/server/env.test.ts`: `DATABASE_URL` unset + `DATABASE_URL_DIRECT=mysql://x` must name both, and `BOOTSTRAP_ADMIN_EMAIL` without a password + `DATABASE_POOL_MAX=0` must name both — review F8 (MAJOR), src/server/env.ts:63
+
+---
+
+## Phase 11: Review remediation
+
+**Purpose**: Fix the blocking findings in the second `review.md` (F1–F3). The BLOCKER comes first. Each task carries its finding ID and location.
+
+- [ ] T093 Clear the stale blockers. T001 and T085 are done, and `better-auth`, `@better-auth/drizzle-adapter`, `drizzle-orm`, `pg`, `zod` and `drizzle-kit` are in `package.json:29-38` and `node_modules/`. So remove the `🛑 BLOCKED: … (T001 blocked, no registry access)` prefix, and T082's "deps … not installed" note, from every open task whose only stated blocker is that install: every open task from T012 to T078 except T076, plus T082. Keep T083 and T084 as they are. After the edit, `grep -n 'T001 blocked' tasks.md` must list only this task (T093). Then resume Phase 2 at T012, in phase order. For DB-backed tests, try `TEST_DATABASE_URL`/`DATABASE_URL` against the Postgres listening on `localhost:5432` before declaring a database block. Re-mark a task 🛑 only with a cause observed in that pass — review F1 (BLOCKER), specs/001-foundation-auth-projects/tasks.md:58
+- [ ] T094 Commit the finished-but-uncommitted work: one Conventional Commit per task or tight group, explicit paths only, never `git add -A`.
+  - T086: `src/proxy.ts`, `src/lib/auth-gate.ts`, `src/lib/auth-gate.test.ts`
+  - T088: `src/server/crypto/secrets.ts`, `src/server/crypto/secrets.test.ts`
+  - T091: `src/lib/action-result.ts`, `src/lib/action-result.test.ts`, `src/server/dal/errors.ts`
+  - T092: `src/server/env.ts`, `src/server/env.test.ts`
+  - T087: `tests/helpers/scope-check.ts`, `tests/helpers/scope-check.test.ts`
+  - T080/T090: `README.md`, `docs/decisions.md`
+  - T004: `.env.example`
+  - T006: `next.config.ts`
+  - T071: `src/app/p/[projectSlug]/settings/layout.tsx`
+  - T081: `src/app/titles.test.ts`, `src/app/page.tsx`
+  - `specs/001-foundation-auth-projects/tasks.md`
+
+  Commit `vitest.config.ts` **without** its `globalSetup`/`setupFiles` lines, and leave `drizzle.config.ts` uncommitted, until T089's preconditions hold. Then confirm `git show HEAD:src/lib/auth-gate.ts` contains no `SESSION_COOKIES`, and that `pnpm lint && pnpm typecheck` pass on HEAD — review F2 (MAJOR), src/server/crypto/secrets.ts:41
+- [ ] T095 Make `checkScope` fail closed by construction, never by loosening an existing case:
+  - (a) any `not` in a scope's predicate disqualifies that scope's equality pins, as `or` already does (`tests/helpers/scope-check.ts:70`, `:83`, `:88`);
+  - (b) the `select` part of an `insert … select` is checked by the select rules (`:185`);
+  - (c) registered tables in a comma-separated `from` list (and after `using`) are found (`:39`).
+
+  Add these as tests in `tests/helpers/scope-check.test.ts` that expect a violation:
+  - `select "id" from "member" where not ("member"."user_id" = $1 and "member"."organization_id" = $2)`
+  - `insert into "member" ("id", "organization_id", "user_id") select "id", "organization_id", "user_id" from "member" where "member"."user_id" = $1`
+  - `select * from "member", "membership_audit_log" where "member"."organization_id" = $1`
+  - `select * from "member" where not $1 = "member"."organization_id"`
+
+  The first two are what `drizzle-orm@0.45.3` emits for `not(and(eq(…), eq(…)))` and `insert().select()` — review F3 (MAJOR), tests/helpers/scope-check.ts:83
