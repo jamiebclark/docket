@@ -48,6 +48,23 @@ function findTables(sql: string, owned: readonly ProjectOwnedTable[]): TableRef[
     if (!m[5] && NOT_ALIASES.has(alias)) alias = "";
     refs.push({ table, alias: alias || table, scopeColumn: entry.scopeColumn });
   }
+  // Further items of a comma-separated `from a, b` / `using a, b` list.
+  const listRe = /\b(?:from|using)\s+([^()]*?)(?=\b(?:where|inner|left|right|full|cross|natural|join|on|group|order|limit|offset|returning|union|having|set|for)\b|\)|$)/gi;
+  const itemRe = new RegExp(
+    String.raw`^\s*(?:${IDENT}\s*\.\s*)?${IDENT}(?:\s+(?:as\s+)?${IDENT})?\s*$`,
+    "i",
+  );
+  for (const seg of sql.matchAll(listRe)) {
+    for (const item of seg[1]!.split(",").slice(1)) {
+      const m = item.match(itemRe);
+      if (!m) continue;
+      const table = unquote(m[3], m[4]);
+      const entry = owned.find((o) => o.table === table);
+      if (!entry) continue;
+      const alias = unquote(m[5], m[6]);
+      refs.push({ table, alias: alias || table, scopeColumn: entry.scopeColumn });
+    }
+  }
   return refs;
 }
 
@@ -66,8 +83,9 @@ function whereClause(sql: string): string {
 function pinnedAliases(sql: string, refs: TableRef[]): Set<string> {
   const pinned = new Set<string>();
   const where = whereClause(sql);
-  // `or` anywhere in the predicate means equality may not pin the project.
-  const disjunctive = /\bor\b/i.test(where);
+  // `or` or `not` anywhere in the predicate means equality may not pin the project.
+  // (`is not null` is a null test, not a negated predicate.)
+  const disjunctive = /\bor\b|\bnot\b(?!\s+null\b)/i.test(where);
   const resolve = (q: string, col: string): TableRef | undefined => {
     const cands = q
       ? refs.filter((r) => r.alias === q || r.table === q)
@@ -80,7 +98,6 @@ function pinnedAliases(sql: string, refs: TableRef[]): Set<string> {
   if (!disjunctive) {
     const eq = new RegExp(`${COL}\\s*=\\s*\\$\\d+`, "gi");
     for (const m of where.matchAll(eq)) {
-      if (/\bnot\s*\(?\s*$/i.test(where.slice(0, m.index))) continue; // negated: not a pin
       const { q, col } = parseCol(m[1], m[2], m[3], m[4]);
       const r = resolve(q, col);
       if (r) pinned.add(r.alias);
@@ -183,8 +200,23 @@ export function checkScope(
       const kind = scopeId === 0 ? statementKind : "select";
 
       if (kind === "insert") {
-        const cols = insertColumns(scopeSql);
-        const target = refs[0]!;
+        // `insert ... select`: the select part is a query in its own right.
+        const selAt = scopeSql.search(/\bselect\b/i);
+        const insertSql = selAt === -1 ? scopeSql : scopeSql.slice(0, selAt);
+        if (selAt !== -1) {
+          const selSql = scopeSql.slice(selAt);
+          const selRefs = findTables(selSql, owned);
+          const selPinned = pinnedAliases(selSql, selRefs);
+          for (const r of selRefs) {
+            if (selPinned.has(r.alias)) continue;
+            result.violations.push(
+              `Unscoped query on project-owned table "${r.table}" (needs "${r.table}"."${r.scopeColumn}" = $n):\n  ${sql}`,
+            );
+          }
+        }
+        const cols = insertColumns(insertSql);
+        const target = findTables(insertSql, owned)[0];
+        if (!target) return;
         if (!cols.has(target.scopeColumn)) {
           result.violations.push(
             `Unscoped query on project-owned table "${target.table}" (insert needs "${target.scopeColumn}" in its column list):\n  ${sql}`,

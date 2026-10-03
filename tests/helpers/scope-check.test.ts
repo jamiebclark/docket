@@ -78,4 +78,21 @@ describe("checkScope", () => {
     expect(r.violations).toEqual([]);
     expect(r.crossProject).toEqual([{ reason: "list my projects", sql: 'select * from "member"' }]);
   });
+
+  it("fails closed on negation, insert-select and comma joins", () => {
+    expect(
+      run(
+        'select "id" from "member" where not ("member"."user_id" = $1 and "member"."organization_id" = $2)',
+      ).violations,
+    ).toHaveLength(1);
+    expect(
+      run(
+        'insert into "member" ("id", "organization_id", "user_id") select "id", "organization_id", "user_id" from "member" where "member"."user_id" = $1',
+      ).violations,
+    ).toHaveLength(1);
+    expect(
+      run('select * from "member", "membership_audit_log" where "member"."organization_id" = $1').violations,
+    ).toHaveLength(1);
+    expect(run('select * from "member" where not $1 = "member"."organization_id"').violations).toHaveLength(1);
+  });
 });
