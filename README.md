@@ -31,7 +31,7 @@ Behind a TLS-intercepting proxy, pass your CA bundle as a build secret:
 ## Contributing
 Conventional Commits are enforced (commitlint + husky). Releases are cut by
 semantic-release from `main`. Features are built with
-[speckit-pipeline](https://github.com/github/spec-kit): see
+[spec-kit](https://github.com/github/spec-kit) via speckit-pipeline: see
 `.specify/memory/constitution.md` for the rules every change follows.
 
 ## License

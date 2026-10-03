@@ -23,12 +23,17 @@ how to reverse it. The owner reviews these; anything here can be overturned.
 8. **CI** = one workflow: commitlint (PRs), lint, typecheck, `db:check` (once
    Drizzle exists), Vitest against a `postgres:17` service, `next build`,
    Docker build, then semantic-release on `main` after those pass.
-9. **semantic-release** bumps `package.json` and `CHANGELOG.md` and commits
-   back as `chore(release): x.y.z [skip ci]`; no npm publish; GitHub release.
-10. **Merge strategy**: the roadmap runner squash-merges whenever the repo
-    allows squash. Asked the owner to disable squash merging so `main` keeps the
-    small conventional commits semantic-release reads. If squash is still
-    enabled at run time, entries land as a single `feat(<slug>)` commit each.
+9. **semantic-release** creates a git tag and a GitHub release (notes from
+   conventional commits) on `main`; no npm publish. It does **not** commit back
+   (`package.json` version / `CHANGELOG.md`) because the `main` ruleset requires
+   pull requests. The tag/release is the source of truth for the version.
+10. **Merge strategy**: the owner's `main` ruleset requires PRs and allows only
+    the `merge` method, which keeps the small conventional commits. The repo-level
+    "Allow squash merging" flag is still on, and the roadmap runner picks squash
+    from that flag (then the ruleset refuses it). Until the flag is unticked,
+    roadmap runs use a PATH shim for `gh` (scratchpad, not in the repo) that
+    reports only `merge` as allowed. **Owner action**: untick "Allow squash
+    merging" (and "Allow rebase merging") in Settings → General.
 11. **speckit auto-commit stays off** (it runs `git add .`); phases commit per
     task with explicit paths per the constitution. `commit_style` set to
     `conventional` in case a hook fires.
@@ -46,3 +51,5 @@ how to reverse it. The owner reviews these; anything here can be overturned.
     build-time download from Google Fonts, which broke Docker builds behind a
     proxy and leaks requests to Google for self-hosters. Reverse by using
     `next/font/local` with a vendored font file.
+17. **Roadmap titles kept short** so the runner's fallback commit
+    `feat(<slug>): <title>` fits commitlint's 100-char header limit.

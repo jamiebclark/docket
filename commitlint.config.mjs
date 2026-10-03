@@ -1,4 +1,4 @@
-export default {
+const config = {
   extends: ["@commitlint/config-conventional"],
   rules: {
     // Allow the Co-Authored-By trailer and wrapped prose without tripping length rules.
@@ -6,3 +6,5 @@ export default {
     "footer-max-line-length": [0],
   },
 };
+
+export default config;
