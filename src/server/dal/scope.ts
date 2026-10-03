@@ -64,15 +64,13 @@ async function resolve(
   exec: Database,
   userId: string,
   where: ReturnType<typeof eq>,
-  lock: boolean,
 ): Promise<ScopeData> {
-  const query = exec
+  const rows = await exec
     .select({ project: projectColumns, memberId: member.id, role: member.role })
     .from(projects)
     .innerJoin(member, and(eq(member.organizationId, projects.id), eq(member.userId, userId)))
     .where(where)
     .limit(1);
-  const rows = await (lock ? query.for("update", { of: projects }) : query);
   const row = rows[0];
   if (!row || !(row.role in roles)) throw new NotFoundError();
   return {
@@ -96,10 +94,13 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
     async transaction(fn, opts) {
       return getRoot(exec).transaction(async (tx) => {
         const txExec = tx as unknown as Database;
-        const fresh = opts?.lockProject
-          ? // Lock the project row, then re-check membership so a member removed concurrently can't act.
-            await resolve(txExec, data.membership.userId, eq(projects.id, data.project.id), true)
-          : await resolve(txExec, data.membership.userId, eq(projects.id, data.project.id), false);
+        const projectId = eq(projects.id, data.project.id);
+        if (opts?.lockProject) {
+          // The lock is its own statement: a membership read in the same statement would use the
+          // snapshot taken before the lock was granted and miss a concurrent removal or demotion.
+          await txExec.select({ id: projects.id }).from(projects).where(projectId).for("update");
+        }
+        const fresh = await resolve(txExec, data.membership.userId, projectId);
         return fn(buildScope(txExec, fresh));
       });
     },
@@ -120,7 +121,7 @@ export async function forProject(session: SessionLike | null, projectSlug: strin
   if (!session) throw new NotFoundError();
   const db = getDb();
   const data = await crossProject("resolve project", () =>
-    resolve(db, session.user.id, eq(projects.slug, projectSlug), false),
+    resolve(db, session.user.id, eq(projects.slug, projectSlug)),
   );
   return buildScope(db, data);
 }
