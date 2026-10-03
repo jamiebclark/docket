@@ -1,0 +1,28 @@
+// Pure decision logic for src/proxy.ts (FR-013). Optimistic only: it checks that a
+// session cookie is present, never that it is valid — pages and actions re-check.
+
+const PUBLIC_EXACT = new Set(["/login", "/setup", "/signup"]);
+const PUBLIC_PREFIXES = ["/api/auth/", "/api/health", "/_next/", "/favicon.ico"];
+
+const SESSION_COOKIES = ["better-auth.session_token", "__Secure-better-auth.session_token"];
+
+export function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_EXACT.has(pathname)) return true;
+  if (pathname === "/api/auth") return true;
+  return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+export function hasSessionCookie(has: (name: string) => boolean): boolean {
+  return SESSION_COOKIES.some(has);
+}
+
+/** Returns the `/login?next=…` target for an unauthenticated request, or null to let it through. */
+export function loginRedirectFor(
+  pathname: string,
+  search: string,
+  hasSession: boolean,
+): string | null {
+  if (hasSession || isPublicPath(pathname)) return null;
+  const next = pathname === "/" && !search ? "" : `?next=${encodeURIComponent(pathname + search)}`;
+  return `/login${next}`;
+}
