@@ -49,11 +49,23 @@ Docket uses Better Auth's installed session defaults (read from
 7 days and is extended whenever it is used more than 1 day after it was last
 refreshed.
 
-Sign-in goes through Better Auth's HTTP endpoint so its rate limiter applies.
-`src/server/auth/auth.ts` sets `rateLimit.enabled: true`, so limiting is on in
-every environment, not only production. Better Auth's built-in rule for
-`/sign-in*` and `/sign-up*` is 3 requests per 10 seconds, and 100 per 10
-seconds elsewhere (research.md F5).
+Sign-in goes through Better Auth's HTTP endpoint so rate limiting applies, and
+`rateLimit.enabled: true` makes it active in every environment. What holds:
+
+- **Per email**: at most 3 `/sign-in/email` attempts per 10 seconds for one
+  email address, whatever client IP or `X-Forwarded-For` the request claims.
+  The counter is in memory, so it resets on restart and is per instance.
+- **Per client IP**: Better Auth's per-IP rule for `/sign-in/email` is relaxed
+  to 30 per 10 seconds as a backstop against one client trying many emails.
+  Other routes keep Better Auth's defaults (100 per 10 seconds).
+
+The client IP is only as trustworthy as the header it comes from. Docket's
+container publishes port 3000 directly, so a client can send any
+`X-Forwarded-For`. For per-IP limits to mean anything, run Docket behind a
+reverse proxy that overwrites the client IP header, and set
+`TRUSTED_IP_HEADERS` (for example `x-real-ip`) and `TRUSTED_PROXIES` (IPs or
+CIDRs of that proxy) so Docket reads the address from where the proxy puts it.
+Unset, Better Auth's default (`x-forwarded-for`) is used.
 
 ## Project-owned tables
 Every table that belongs to a project must be listed in the project-owned

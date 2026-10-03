@@ -125,3 +125,11 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
 21. **Local test database runs on port 5433** (`docket-pg` container,
     `postgres://docket:docket@127.0.0.1:5433/docket_test`) because a host
     Postgres on the owner's Mac owns 5432. CI is unaffected.
+22. **Sign-in is rate-limited per email, not only per IP** (review F1). Better
+    Auth keys its limit on `X-Forwarded-For`, which a client can choose when
+    port 3000 is published directly. The `before` hook now counts
+    `/sign-in/email` attempts per normalised email (3 per 10 s, in memory,
+    HTTP requests only), and the per-IP rule for that path is relaxed to
+    30 per 10 s as a backstop so a malformed header's shared bucket cannot lock
+    out other users. `TRUSTED_IP_HEADERS` / `TRUSTED_PROXIES` configure
+    `advanced.ipAddress`; the README states the reverse-proxy requirement.
