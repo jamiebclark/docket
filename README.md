@@ -12,9 +12,59 @@ and brand setting belongs to exactly one project.
 - Node 24 LTS (`.nvmrc`) and pnpm (`corepack enable`)
 - Docker (for Postgres and the Compose stack)
 
+## Local setup
+```sh
+corepack enable && pnpm install
+cp .env.example .env     # then fill in the required values (see below)
+pnpm dev                 # http://localhost:3000
+```
+`.env.example` documents every variable. Required: `DATABASE_URL`,
+`BETTER_AUTH_SECRET` (32+ chars), `BETTER_AUTH_URL` and
+`CREDENTIALS_ENCRYPTION_KEY` (32 bytes, base64 or hex). Configuration is
+validated lazily by `src/server/env.ts`, which names every invalid variable and
+never prints values.
+
+## Docker Compose
+```sh
+cp .env.example .env     # set BETTER_AUTH_SECRET and CREDENTIALS_ENCRYPTION_KEY
+docker compose up --build
+```
+This starts Postgres 17 and the web image (`docker-compose.yml`).
+
+## First account: bootstrap env vs `/setup`
+There are two ways to create the first account:
+- **Bootstrap env**: set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD`
+  (12–128 chars) together, optionally `BOOTSTRAP_ADMIN_NAME`. They apply only
+  while no account exists.
+- **`/setup`**: with no bootstrap credentials, the `/setup` screen stays open
+  until the first account exists.
+
+> **Exposure note**: `/setup` is reachable by anyone until the first account is
+> created. For an internet-reachable deploy, set the bootstrap credentials so
+> the first account exists before the app is exposed.
+
+## Sessions and rate limits
+Sign-in goes through Better Auth's HTTP endpoint so its rate limiter applies.
+Better Auth enables rate limiting only when `NODE_ENV=production`; its built-in
+rule for `/sign-in*` and `/sign-up*` is 3 requests per 10 seconds, and 100 per
+10 seconds elsewhere (research.md F5). The auth server itself
+(`src/server/auth/auth.ts`) is not written yet, so these defaults are not
+configured or verified in Docket; this section will be updated when it lands.
+
+## Project-owned tables
+Every table that belongs to a project must be listed in the project-owned
+registry with its scope column, and every query on it must filter on that
+column. The registry (`src/server/db/project-owned.ts`) and the data-access
+layer are not implemented yet. The query checker that will enforce the rule in
+tests lives in `tests/helpers/scope-check.ts`.
+
+## Neon
+Use the pooled connection string (host ending `-pooler`) for `DATABASE_URL`.
+Set `DATABASE_URL_DIRECT` to the direct (non-pooled) string for migrations; it
+defaults to `DATABASE_URL`. Neon is not yet verified against this build.
+
 ## Development
 ```sh
-pnpm install
 pnpm dev          # http://localhost:3000
 pnpm lint
 pnpm typecheck
