@@ -299,7 +299,7 @@ Task: "tests/integration/invitation-accept.test.ts (T057)"
 **Purpose**: Fix the blocking findings in the second `review.md` (F1–F3). The BLOCKER comes first. Each task carries its finding ID and location.
 
 - [x] T093 Clear the stale blockers. T001 and T085 are done, and `better-auth`, `@better-auth/drizzle-adapter`, `drizzle-orm`, `pg`, `zod` and `drizzle-kit` are in `package.json:29-38` and `node_modules/`. So remove the `🛑 BLOCKED: … (T001 blocked, no registry access)` prefix, and T082's "deps … not installed" note, from every open task whose only stated blocker is that install: every open task from T012 to T078 except T076, plus T082. Keep T083 and T084 as they are. After the edit, `grep -n 'T001 blocked' tasks.md` must list only this task (T093). Then resume Phase 2 at T012, in phase order. For DB-backed tests, try `TEST_DATABASE_URL`/`DATABASE_URL` against the Postgres listening on `localhost:5432` before declaring a database block. Re-mark a task 🛑 only with a cause observed in that pass — review F1 (BLOCKER), specs/001-foundation-auth-projects/tasks.md:58
-- [ ] T094 Commit the finished-but-uncommitted work: one Conventional Commit per task or tight group, explicit paths only, never `git add -A`.
+- [x] T094 Commit the finished-but-uncommitted work: one Conventional Commit per task or tight group, explicit paths only, never `git add -A`.
   - T086: `src/proxy.ts`, `src/lib/auth-gate.ts`, `src/lib/auth-gate.test.ts`
   - T088: `src/server/crypto/secrets.ts`, `src/server/crypto/secrets.test.ts`
   - T091: `src/lib/action-result.ts`, `src/lib/action-result.test.ts`, `src/server/dal/errors.ts`
@@ -313,7 +313,7 @@ Task: "tests/integration/invitation-accept.test.ts (T057)"
   - `specs/001-foundation-auth-projects/tasks.md`
 
   Commit `vitest.config.ts` **without** its `globalSetup`/`setupFiles` lines, and leave `drizzle.config.ts` uncommitted, until T089's preconditions hold. Then confirm `git show HEAD:src/lib/auth-gate.ts` contains no `SESSION_COOKIES`, and that `pnpm lint && pnpm typecheck` pass on HEAD — review F2 (MAJOR), src/server/crypto/secrets.ts:41
-- [ ] T095 Make `checkScope` fail closed by construction, never by loosening an existing case:
+- [x] T095 Make `checkScope` fail closed by construction, never by loosening an existing case:
   - (a) any `not` in a scope's predicate disqualifies that scope's equality pins, as `or` already does (`tests/helpers/scope-check.ts:70`, `:83`, `:88`);
   - (b) the `select` part of an `insert … select` is checked by the select rules (`:185`);
   - (c) registered tables in a comma-separated `from` list (and after `using`) are found (`:39`).
