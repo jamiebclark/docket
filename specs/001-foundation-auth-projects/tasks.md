@@ -1,0 +1,392 @@
+---
+
+description: "Task list for Docket Foundation — accounts, projects, members, invitations and project isolation"
+---
+
+# Tasks: Docket Foundation — Accounts, Projects, Members, Invitations and Project Isolation
+
+**Input**: Design documents from `/specs/001-foundation-auth-projects/`
+
+**Prerequisites**: plan.md, spec.md, research.md (D1–D18, F1–F17, U1–U3), data-model.md, contracts/ (env, routes, server-actions, dal, internal-interfaces), quickstart.md
+
+**Tests**: REQUIRED. FR-038 and the quickstart list the mandatory suites; test tasks are written before the code they cover.
+
+**Organization**: Tasks are grouped by user story. Story order follows the spec: US1–US3 and US6 are P1, US4–US5 are P2.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no dependency on an incomplete task)
+- **[Story]**: US1…US6, matching spec.md
+- Paths are relative to the repository root.
+
+## Conventions for the implementing process (headless)
+
+- The implementation process has **no browser, no network, no `curl`**. Every check below is a Vitest test, a `tsc`/ESLint/build run, or a Node script. UI behaviour is covered by extracting pure logic into modules that Vitest can run (the test environment is `node`; do **not** add jsdom, Playwright or any other dependency — constitution VI).
+- Integration tests use a real Postgres from `TEST_DATABASE_URL ?? DATABASE_URL` (db name must end `_test`). If no Postgres is reachable in the sandbox, say so in the task note; do not tick DB-backed tests as passing.
+- Read the installed docs before writing Next.js code (`node_modules/next/dist/docs/`, per AGENTS.md) and the installed `better-auth` / `drizzle-orm` types before using their APIs (constitution I).
+- Commit per task or tight group, explicit paths only, Conventional Commits.
+- Run `pnpm lint`, `pnpm typecheck` and the touched tests before ticking a task.
+
+---
+
+## Phase 1: Setup (Shared Infrastructure)
+
+**Purpose**: Dependencies, scripts and config files every later task assumes.
+
+- [x] T001 Add exact-pinned runtime deps `better-auth@1.7.7`, `@better-auth/drizzle-adapter@1.7.7`, `drizzle-orm@0.45.3`, `pg@8`, `zod@4.6.5` and dev deps `drizzle-kit@0.31.11`, `@types/pg`; lockfile updated (installed from the front-end session, which can reach the registry; later-entry deps pre-installed too — see docs/decisions.md #19)
+- [x] T002 Add scripts `db:generate` (`drizzle-kit generate`), `db:migrate` (`drizzle-kit migrate`, using the direct URL via `drizzle.config.ts`; research D14/D15) and `db:check` (`node scripts/check-migrations-current.mjs`) to `package.json`
+- [x] T003 [P] Create `drizzle.config.ts` (schema `./src/server/db/schema`, out `./drizzle`, dialect postgresql, url = `DATABASE_URL_DIRECT ?? DATABASE_URL`; must NOT require any other secret so CI with only `DATABASE_URL` works — plan note 3)
+- [x] T004 [P] Create `.env.example` documenting every variable in `contracts/env.md` (purpose, required?, format, safe example or `openssl rand -base64 32` hint — FR-002)
+- [x] T005 [P] Update `vitest.config.ts`: add `globalSetup: tests/setup/global-setup.ts`, `setupFiles: tests/setup/scope-recorder.ts`, and `test.env` with fixed fake `BETTER_AUTH_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `BETTER_AUTH_URL=http://localhost:3000`; keep the `@` alias; run integration files serially (`fileParallelism: false` or per-file DB isolation per T016)
+- [x] T006 [P] Update `next.config.ts`: add `outputFileTracingIncludes` so `drizzle/**` is traced into the standalone output (research F16, plan note 5)
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: Config, database, test harness, crypto, auth wiring, scoped DAL core, shared UI primitives. No user story starts until this phase is done.
+
+**⚠️ CRITICAL**: Everything in US1–US6 depends on this phase.
+
+### Config and database
+
+- [x] T007 [P] Write failing unit test `src/server/env.test.ts`: `parseEnv` returns every issue (not just the first) by variable name + reason; never echoes values; `BOOTSTRAP_ADMIN_EMAIL`/`PASSWORD` must be set together; defaults for `DATABASE_URL_DIRECT`, `DATABASE_POOL_MAX`, `INVITATION_TTL_DAYS=7`, `MIGRATE_ON_START=true`, `BOOTSTRAP_ADMIN_NAME=Admin`; key accepts 32-byte base64 or hex only
+- [x] T008 Implement `src/server/env.ts` (`parseEnv` pure, lazy memoised `getEnv`, never evaluated at import so `next build` works without secrets) per `contracts/env.md`; makes T007 pass
+- [x] T009 [P] Write validation unit tests `src/lib/validation/validation.test.ts`: email (trim/lowercase/≤254), password 12–128, person name 1–100, project name 1–80, slug rules + reserved words (`new`, `settings`, `api`, `setup`, `login`, `signup`, `invitations`, …), IANA time zone (accepts `Europe/London`, `Asia/Kolkata`, `UTC`; rejects `+02:00`, `Foo/Bar`, free text — research F17/D17), role, policies, token (43-char base64url)
+- [x] T010 Implement shared Zod schemas in `src/lib/validation/{email,password,name,slug,timezone,role,policies,token}.ts` plus `index.ts`; makes T009 pass
+- [x] T011 [P] Create `src/lib/action-result.ts` (`ActionResult<T>`, `ErrorCode` union exactly as in `contracts/server-actions.md`, helpers `ok()`/`fail()`), and `src/lib/safe-redirect.ts` (same-origin relative-path-only `next` check) with unit test `src/lib/safe-redirect.test.ts` rejecting `//evil.com`, `https://…`, `\\`, and non-paths
+- [x] T012 Hand-write Drizzle schema in `src/server/db/schema/auth.ts` (`user`, `session`, `account`, `verification`, `organization`, `member`, `invitation` exactly per data-model.md incl. +D constraints: role checks, `(organization_id,user_id)` unique, partial unique pending-invite index; `uuid` ids with `gen_random_uuid()`; `timestamptz`), `projects.ts` (+ enums `approval_policy`, `scheduling_policy`), `invitations.ts` (`invitation_tokens` + partial unique active-token index), `audit.ts` (`membership_action` enum, `membership_audit_log`, index `(project_id, created_at desc)`), `install.ts` (`install_state` singleton check `id = 1`), and `index.ts` re-exporting all (data-model.md, research D3/D9/D10)
+- [x] T013 Implement `src/server/db/client.ts` (`pg.Pool` sized by `DATABASE_POOL_MAX`, `drizzle(pool, { logger })` where the logger forwards `(sql, params)` to an exported `queryObservers` set — empty in production — and never prints params; captures `crossProjectReason` from an `AsyncLocalStorage`) and `src/server/db/migrate.ts` (`runMigrations(url)` using `drizzle-orm/node-postgres/migrator` with `./drizzle`; no advisory locks — research F13/F14)
+- [x] T014 Generate the initial migration with `pnpm db:generate` into `drizzle/` (commit SQL + `meta/`); add the CHECK constraints and partial indexes by hand-editing the generated SQL only if drizzle-kit cannot express them, then confirm `pnpm db:generate` produces no further diff
+- [x] T015 [P] Implement `scripts/check-migrations-current.mjs` (D15): run `drizzle-kit check`, then `drizzle-kit generate` into a temp dir and fail if it would emit any new migration; wire as `pnpm db:check`; run it and confirm exit 0
+- [x] T016 Implement test harness: `tests/setup/global-setup.ts` (refuse unless db name ends `_test`; create DB if missing; drop/recreate schema; run `runMigrations`), `tests/helpers/db.ts` (test client, `createThrowawayDb()` for empty-install tests), `tests/helpers/factories.ts` (unique-per-test users, projects, members via the services/DAL), `tests/helpers/auth.ts` (fake session builder)
+- [X] T017 (Postgres now reachable: DATABASE_URL=postgres://docket:docket@127.0.0.1:5433/docket_test — a host Postgres owns :5432; test written at tests/integration/auth-schema.test.ts, run it.) Check research **U1** early: add `tests/integration/auth-schema.test.ts` that boots the Better Auth instance (after T024) against the migrated schema and performs one `auth.api` call; if the runtime schema check rejects `timestamptz`, switch only the Better Auth tables to `timestamp` in `src/server/db/schema/auth.ts`, regenerate the migration, and record the outcome in `docs/decisions.md` (depends on T024)
+
+### Scope check and registry (constitution III)
+
+- [x] T018 [P] Create `src/server/db/project-owned.ts` with the six registry entries and `notProjectOwned` list (`user`, `session`, `account`, `verification`, `install_state`) per `contracts/dal.md`, plus `src/server/db/project-owned.test.ts` asserting every Drizzle table in `src/server/db/schema/` is in exactly one list
+- [x] T019 [P] Write failing unit tests `tests/helpers/scope-check.test.ts` for `checkScope`: pinned select/update/delete pass; `in (…)`, range, `or` fail; join pinned by scope-column equality passes; insert needs scope column in its list; quoted identifiers; raw `sql` statements; `crossProjectReason` records skipped and counted; failure message matches `Unscoped query on project-owned table "member" (needs …)`
+- [x] T020 Implement `tests/helpers/scope-check.ts` (`checkScope(records, projectOwnedTables)`) and `tests/setup/scope-recorder.ts` (registers observer, clears `beforeEach`, runs `checkScope` in `afterEach`, prints summary of checked and cross-project queries); makes T019 pass
+
+### Secrets and tokens (FR-007, FR-008, FR-026)
+
+- [x] T021 [P] Write failing tests `src/server/crypto/secrets.test.ts`: round trip incl. empty string and multibyte; ciphertext differs per call; tamper of each part; wrong key; unknown `v2`; unknown kid; AAD mismatch; error `message`/`cause`/`stack` contain no plaintext, key or ciphertext; module never logs
+- [x] T022 [P] Write failing tests `src/server/crypto/tokens.test.ts`: `generateInvitationToken` yields 43-char base64url and a 64-char hex SHA-256 that equals `hashInvitationToken(token)`; `isWellFormedToken` accepts/rejects correctly; `invitationUrl` is `${BETTER_AUTH_URL}/signup?token=…`
+- [x] T023 Implement `src/server/crypto/secrets.ts` (`enc:v1:<kid>:<iv>:<tag>:<ct>`, `SecretDecryptionError`, key from `getEnv().CREDENTIALS_ENCRYPTION_KEY`) and `src/server/crypto/tokens.ts` per `contracts/internal-interfaces.md`; makes T021/T022 pass
+
+### Auth wiring and DAL core
+
+- [x] T024 Implement `src/server/auth/access.ts` (`createAccessControl` statements from data-model "Permission statements"; roles `owner`, `admin`, `editor`) with unit test `src/server/auth/access.test.ts` asserting the full FR-021 matrix via `role.authorize`
+- [x] T025 Implement `src/server/auth/auth.ts` (betterAuth config from `contracts/internal-interfaces.md`: drizzle adapter `transaction: true`, `generateId: "uuid"`, email/password 12–128, `rateLimit.enabled: true`, `hooks.before` middleware returning **400** `{ message: "Sign-up requires an invitation" }` for `/sign-up/email` and **404** for `/organization/*`, organization plugin with `ac`/roles, `nextCookies()` last) and `src/server/auth/session.ts` (`getSession()`/`requireSession()` cached per request); verify option names against the installed package types first (research D2, F4–F6, F11, F12)
+- [x] T026 Create `src/app/api/auth/[...all]/route.ts` (`toNextJsHandler(auth)`) and `src/app/api/health/route.ts` (`select 1` through the DAL → `200 {"ok":true}` / `503 {"ok":false}`), with `src/server/dal/health.ts`
+- [x] T027 Implement `src/server/dal/errors.ts` (`NotFoundError`, `ForbiddenError`, `ConflictError`, `LastOwnerError`, `InvitationInvalidError`, `EmailMismatchError`, `SetupUnavailableError`) and `src/server/dal/scope.ts`: `crossProject(reason, fn)` (AsyncLocalStorage), `forProject(session, slug)` (single `projects ⋈ member` query, `NotFoundError` for no session/unknown slug/non-member), `requireRole`, `requirePermission`, `scope.can`, and `scope.transaction(fn, { lockProject })` (`SELECT … FROM projects WHERE id = $1 FOR UPDATE`, membership re-check inside the tx) per `contracts/dal.md`; repositories are attached by later tasks
+- [x] T028 [P] Implement `src/server/dal/index.ts` exporting only the sanctioned surface, and the ESLint `no-restricted-imports` block in `eslint.config.mjs` (paths `pg`, `drizzle-orm/node-postgres`; patterns `@/server/db`, `@/server/db/*`, `**/server/db`, `**/server/db/**`; exempt `src/server/{dal,db,auth,startup}/**` and `tests/**`; message "Import the scoped DAL (`@/server/dal`) instead of the database client."); run `pnpm lint` to confirm the tree is clean
+- [x] T029 [P] Implement `src/server/services/audit.ts` and `src/server/dal/audit.ts` (insert + list only; no update/delete; details never carry tokens/URLs/passwords) and wire `scope.audit`
+
+### Shared UI primitives (docket-ui skill)
+
+- [x] T030 [P] Read the `docket-ui` skill, then create `src/components/ui/{Button,Field,Select,Dialog,Badge,Table,CopyField,EmptyState}.tsx` (labelled controls, inline `aria-live` errors via `aria-describedby`, visible focus, confirm `Dialog` using native `<dialog>` with focus trap/restore, `CopyField` with copy button and status announcement); server components by default, `"use client"` only where interactive
+- [x] T031 [P] Update `src/app/layout.tsx` (skip link, `metadata.title.template` `"%s · Docket"`) and add `src/app/not-found.tsx`; keep system font stack (decision 16)
+
+**Checkpoint**: `pnpm lint && pnpm typecheck && pnpm db:check && pnpm test` pass; foundation ready.
+
+---
+
+## Phase 3: User Story 1 — Start Docket and create the first account (Priority: P1) 🎯 MVP
+
+**Goal**: One-command start; first account via bootstrap env or one-time `/setup`; login/logout; startup fails loudly on bad config.
+
+**Independent Test**: `tests/integration/bootstrap.test.ts` + `tests/integration/auth-endpoints.test.ts` pass; `docker compose config` validates.
+
+### Tests for User Story 1 ⚠️ (write first, see them fail)
+
+- [x] T032 [P] [US1] `tests/integration/bootstrap.test.ts` on a throwaway DB: setup available only while zero users and no `install_state`; concurrent `createFirstUser` ×2 → exactly one success, loser gets `setup_unavailable`; env bootstrap creates the account then is skipped when accounts exist (no reset of the password); invalid bootstrap email/password fails with the variable named; created user can sign in via `auth.api.signInEmail`
+- [x] T033 [P] [US1] `tests/integration/auth-endpoints.test.ts`: `POST /api/auth/sign-up/email` → 400 and no `user` row; `/api/auth/organization/*` → 404; 4th `sign-in/email` within 10 s → 429; wrong credentials give the generic `INVALID_EMAIL_OR_PASSWORD` for both unknown email and wrong password (call the route handlers directly with `Request` objects; no network)
+- [x] T034 [P] [US1] `src/server/startup/startup.test.ts`: `runStartup` with a bad env prints every offending variable name, contains none of the values, and calls `process.exit(1)` (inject exit); with `MIGRATE_ON_START=false` skips migration; migration failure logs a fixed message and exits 1
+
+### Implementation for User Story 1
+
+- [x] T035 [US1] Implement `src/server/dal/install.ts` (`isSetupAvailable`, `bootstrapFirstUser` — one transaction: insert `install_state` singleton (conflict ⇒ unavailable), `user` (lowercased email), credential `account` with Better Auth's `hashPassword`; all in `crossProject("install")` — research D4/D13)
+- [x] T036 [US1] Implement `src/server/services/setup.ts` (`isAvailable`, `createFirstUser`) and `src/server/startup/index.ts` (`runStartup`: env → migrate with `DATABASE_URL_DIRECT ?? DATABASE_URL` → bootstrap from env; logs "created"/"skipped (accounts exist)", never the password) and `src/instrumentation.ts` (Node runtime only); makes T032/T034 pass
+- [x] T037 [P] [US1] `src/app/login/page.tsx` + `src/app/login/login-form.tsx` (client; posts via `src/lib/auth-client.ts` to `/api/auth/sign-in/email`; generic failure message; safe `next` redirect; signed-in visitors redirected to `/`) and `src/lib/auth-client.ts`
+- [x] T038 [P] [US1] `src/app/setup/page.tsx` + `src/app/setup/actions.ts` (`completeSetup` → `setup.createFirstUser`, sign in via `auth.api`, redirect `/p/new`; unavailable ⇒ redirect `/login`)
+- [x] T039 [US1] `src/proxy.ts`: optimistic session-cookie check redirecting to `/login?next=<path>` for every path except `/login`, `/setup`, `/signup`, `/api/auth/*`, `/api/health`, static assets (FR-013); read the installed `proxy.md` docs first (Done: pure logic in `src/lib/auth-gate.ts` + unit test; session cookie checked by name, since `better-auth/cookies` is not installable)
+- [x] T040 [US1] Sign-out: `signOut` action in `src/components/shell/actions.ts` (`auth.api.signOut({ headers })` → `/login`)
+- [x] T041 [US1] `docker-compose.yml` (postgres:17 with healthcheck + named volume; `web` built from the existing Dockerfile image `docket:local`, `depends_on: service_healthy`, `env_file: .env`, `DATABASE_URL` overridden to the compose postgres, `BETTER_AUTH_URL` default `http://localhost:3000`, `${BETTER_AUTH_SECRET:?…}`/`${CREDENTIALS_ENCRYPTION_KEY:?…}`; **no worker service**) and `Dockerfile` edit to `COPY --from=build … /app/drizzle ./drizzle` in the runner stage; validate with `docker compose config` if Docker is installed, otherwise note that it could not be run (Done: `docker compose config` validated; missing secrets fail loudly)
+- [x] T042 [US1] (Postgres now reachable: DATABASE_URL=postgres://docket:docket@127.0.0.1:5433/docket_test — a host Postgres owns :5432) run `pnpm test` against a _test database to close this (Done: 29 files / 225 tests passed)
+
+**Checkpoint**: US1 independently testable via tests; stack definition committed.
+
+---
+
+## Phase 4: User Story 2 — Create projects and hop between them (Priority: P1)
+
+**Goal**: Create projects, project shell with nav + placeholders, keyboard switcher, root redirect with last-project memory.
+
+**Independent Test**: `tests/integration/projects.test.ts` and `src/components/shell/switcher-logic.test.ts` pass.
+
+### Tests for User Story 2 ⚠️
+
+- [x] T043 [P] [US2] `tests/integration/projects.test.ts`: `projects.create` inserts `organization` + `projects` (same id) + `member(owner)` in one transaction with defaults `review_required`/`leave_as_draft`; duplicate slug → `conflict` on `slug` and nothing written; invalid slug/time zone/name → `validation` with field errors; `listMine` returns only the caller's projects ordered by name; two users never see each other's projects
+- [x] T044 [P] [US2] `tests/integration/scope-resolution.test.ts`: `forProject` throws the **same** `NotFoundError` for non-member, unknown slug and old (renamed) slug; resolves role for members; `requireRole`/`requirePermission` throw `ForbiddenError`
+- [x] T045 [P] [US2] `src/components/shell/switcher-logic.test.ts` and `src/app/root-redirect.test.ts`: pure functions for switcher filtering (case-insensitive on name and slug, "Create project" always last), highlight movement (↑/↓ wrap, clamp on empty list), Enter target selection, and root-redirect decision (last-project cookie if still a member → else earliest-joined → else `/p/new`)
+
+### Implementation for User Story 2
+
+- [x] T046 [US2] DAL: `src/server/dal/projects.ts` (create via a user-level transaction in `crossProject("create project")`, `get`, `listMine`) and `src/server/dal/members.ts` (base: find membership, insert owner member, list by project) and `src/server/dal/users.ts` (`listMyProjects`); attach `scope.projects`/`scope.members` in `scope.ts`
+- [x] T047 [US2] `src/server/services/projects.ts` (`create`, `listMine`, `get`) per `contracts/server-actions.md`; makes T043/T044 pass
+- [x] T048 [P] [US2] Implement `src/components/shell/switcher-logic.ts` (pure helpers from T045) and `src/app/root-redirect.ts` (pure decision function); makes T045 pass
+- [x] T049 [US2] (PARTIAL: proxy cookie half done in src/proxy.ts + `lastProjectSlugFor` in src/lib/auth-gate.ts with tests; `src/app/page.tsx` redirect still needs `projects.listMine` and `decideRootRedirect` from src/app/root-redirect.ts) `src/app/page.tsx` ("/" redirect using `docket_last_project` cookie and `projects.listMine`, FR-018) and extend `src/proxy.ts` to set `docket_last_project` (`Path=/`, `SameSite=Lax`, `HttpOnly`, 1 year) on `/p/<slug>` and `/p/<slug>/…` but not `/p/new`
+- [x] T050 [P] [US2] `src/app/p/new/page.tsx` + `actions.ts` (`createProject` → `projects.create` → redirect `/p/<slug>`; time zone pre-filled from the browser via a small client island; field errors beside fields)
+- [x] T051 [US2] (components ready in src/components/shell; needs forProject) `src/app/p/[projectSlug]/layout.tsx` (calls `forProject` per request, `notFound()` on `NotFoundError`; top bar with switcher, invitations link with badge, user menu; left `<nav>` with Calendar, Posts, Compose, Generate, Jobs, Review, Media, Accounts, Voice, Settings and `aria-current="page"`), `page.tsx` (project home), `loading.tsx`, `error.tsx`, `not-found.tsx`
+- [x] T052 [P] [US2] `src/components/shell/{ProjectSwitcher,LeftNav,InvitationBadge,UserMenu}.tsx` — `ProjectSwitcher` is a client component using the helpers from T048: modal dialog, `role="combobox"` + `listbox`/`option`, `aria-expanded`/`aria-controls`/`aria-selected`, Ctrl/⌘+K (respects `defaultPrevented`, calls `preventDefault`), focus in filter on open, Escape closes and restores focus
+- [x] T053 [US2] `src/app/p/[projectSlug]/[section]/page.tsx`: placeholder "‹Screen› is coming in a later release." for `calendar|posts|compose|generate|jobs|review|media|accounts|voice`, `notFound()` otherwise; per-route titles
+- [x] T054 [US2] (PARTIAL: `InvitationBadge` with `count` prop done; layout wiring waits on T051) Make `InvitationBadge` in `src/components/shell/InvitationBadge.tsx` take a `count` prop (hidden when 0) and have `src/app/p/[projectSlug]/layout.tsx` pass a literal `0` with a `// wired in T063` comment; T063 replaces it with the real count
+
+**Checkpoint**: US1 + US2 work; `pnpm test` green.
+
+---
+
+## Phase 5: User Story 3 — Invite people and let them join (Priority: P1)
+
+**Goal**: Hashed single-use invitation tokens, in-app and manual-link delivery, accept/decline/revoke/regenerate, invitation-only sign-up.
+
+**Independent Test**: `tests/integration/invitations.test.ts` passes, including the token-failure matrix and double-submit race.
+
+### Tests for User Story 3 ⚠️
+
+- [x] T055 [P] [US3] `tests/integration/invitations.test.ts`: create (pending, expiry = now + `INVITATION_TTL_DAYS`, role stored, audit `invite`); duplicate pending → `conflict` pointing to regenerate; already a member → `conflict`; email compared case/whitespace-insensitively; admin cannot invite owner (`forbidden`); delivery is `in_app` for existing accounts and `manual_link` with URL (shown once, not retrievable afterwards) for unknown emails; fake `InvitationDelivery` injection; delivery throwing leaves invitation pending
+- [x] T056 [P] [US3] `tests/integration/invitation-tokens.test.ts`: tokens fail when expired, revoked, regenerated-away, already used (accepted/signed-up/declined); malformed token never hits the DB (assert via recorder); `signUp` creates user + credential account + member + `accepted` + audit `invite_accept` with `newAccount=true` atomically; any failure mid-way creates nothing; **two concurrent submissions → exactly one success**; token invalidated between `resolveToken` and `signUp` → no account; email that gained an account meanwhile → `invitation_invalid`
+- [x] T057 [P] [US3] `tests/integration/invitation-accept.test.ts`: `acceptById`/`declineById` require matching signed-in email (`email_mismatch`), pending + unexpired (else `invitation_invalid`), create `member` with the invited role, close tokens, audit `invite_accept`/`invite_decline`; `revoke` and `regenerate` (pending incl. expired only; resets expiry; old token dead; admin can't revoke/regenerate owner-role invites); `resolveToken` returns the five states and never reveals why a token is invalid; `listMine`/`countMine` only for the session email, pending and unexpired
+- [x] T058 [P] [US3] Extend `tests/integration/auth-endpoints.test.ts`: sign-up endpoint rejected both with and without a valid token (token must not unlock the HTTP endpoint — SC-004)
+
+### Implementation for User Story 3
+
+- [x] T059 [US3] DAL: `src/server/dal/invitations.ts`, `src/server/dal/tokens.ts` (claim by one conditional `UPDATE … RETURNING`, close-all-active-tokens helper; token lookups wrapped in `crossProject("resolve invitation token")`), and extend `members.ts` as needed; attach `scope.invitations`/`scope.invitationTokens`
+- [x] T060 [US3] (tests T055–T058 written and typechecked but not run: local Postgres has no `docket` role) `src/server/services/invitations/delivery.ts` (`InvitationDelivery`, `defaultInvitationDelivery`) and `src/server/services/invitations/index.ts` (`create`, `regenerate`, `revoke`, `acceptById`, `declineById`, `acceptByToken`, `declineByToken`, `signUp`, `resolveToken`, `listForProject`, `listMine`, `countMine`) per `contracts/server-actions.md`; each mutation is one `lockProject` transaction with its audit row; `deliver()` runs after commit; makes T055–T057 pass
+- [x] T061 [P] [US3] `src/app/signup/page.tsx` (+ `signup-form.tsx` client) rendering the five `resolveToken` states from `contracts/routes.md`, email read-only, `Referrer-Policy: no-referrer`, plain "no longer valid" message; `src/app/signup/actions.ts` (`signUpWithInvitation`, `acceptInvitationByToken`, `declineInvitationByToken`; after sign-up create the session via `auth.api` and redirect `/p/<slug>`)
+- [x] T062 [P] [US3] `src/app/invitations/page.tsx` + `actions.ts` (`acceptInvitation`, `declineInvitation`; empty state "You have no pending invitations.")
+- [x] T063 [US3] Wire `InvitationBadge` in `src/app/p/[projectSlug]/layout.tsx` to `invitations.countMine`; remove the temporary `0` from T054
+- [x] T064 [US3] Invitation section of `src/app/p/[projectSlug]/settings/members/page.tsx` + `actions.ts`: invite form (email, role limited by permission), invitations table (status per D11, role, inviter, expiry), Revoke/Regenerate, one-time link panel using `CopyField` with "shown only once" and expiry text; actions `inviteMember`, `regenerateInvitation`, `revokeInvitation` (shared file with US4 — create the page skeleton here, US4 adds the members table)
+
+**Checkpoint**: Invitation-only sign-up verified by tests (SC-004).
+
+---
+
+## Phase 6: User Story 4 — Manage members and keep projects safe (Priority: P2)
+
+**Goal**: Members list, role change, remove, leave, transfer ownership, audit view; last owner always protected; removal immediate.
+
+**Independent Test**: `tests/integration/members.test.ts`, `permissions.test.ts`, `audit.test.ts` pass.
+
+### Tests for User Story 4 ⚠️
+
+- [x] T065 [P] [US4] `tests/integration/members.test.ts`: last owner cannot be removed, demoted or leave (`last_owner`, message suggests transfer); two owners demoting each other **concurrently** leaves ≥ 1 owner; removed member's next `forProject` and next action → not found, nothing changed (SC-005); leave redirects data; transfer makes target owner and actor admin in one tx, target must be another member, target already owner ⇒ only actor demoted; self-remove refused (use leave); no-op role change writes no audit row
+- [x] T066 [P] [US4] `tests/integration/permissions.test.ts`: for every action in FR-021 run as owner/admin/editor via the services and assert allowed/`forbidden` and **no row changed** on refusal; admin cannot remove an owner, change roles, transfer, or invite owner; editor cannot see invitations or audit
+- [x] T067 [P] [US4] `tests/integration/audit.test.ts`: every invite, regenerate, revoke, accept, decline, remove, leave, role change and transfer writes exactly one matching audit row with actor/subject/details; list is newest-first; the audit DAL exposes no update/delete
+
+### Implementation for User Story 4
+
+- [x] T068 [US4] Extend `src/server/dal/members.ts` with role update, delete, owner count under lock, transfer; implement `src/server/services/members.ts` (`list` with per-row allowed actions, `changeRole`, `remove`, `leave`, `transferOwnership`) — all `lockProject` transactions that re-check membership inside the tx; makes T065–T067 pass
+- [x] T069 [US4] Members section of `src/app/p/[projectSlug]/settings/members/page.tsx` (+ `actions.ts` additions `changeMemberRole`, `removeMember`, `leaveProject`, `transferOwnership`): members table (name, email, role, joined) for all roles, actions shown by permission, confirm `Dialog` naming the person for remove/leave/transfer, last-owner message surfaced inline; activity list (last 50, newest first) for owner/admin only
+- [x] T070 [P] [US4] Server-action not-found handling: a shared helper in `src/lib/action-result.ts` mapping `NotFoundError` → `{ ok:false, error:"not_found" }`, `ForbiddenError` → `forbidden`, etc., used by every `actions.ts`; unit test `src/lib/action-result.test.ts`
+- [x] T071 [US4] Add settings sub-navigation (Project settings | Members & invitations) in `src/app/p/[projectSlug]/settings/layout.tsx`
+
+**Checkpoint**: Member management complete; SC-005, SC-006, SC-010 covered by tests.
+
+---
+
+## Phase 7: User Story 5 — Configure project settings (Priority: P2)
+
+**Goal**: Owners/admins edit name, slug, time zone and default policies; editors read-only; slug rename moves the project.
+
+**Independent Test**: `tests/integration/project-settings.test.ts` passes.
+
+- [X] T072 [P] [US5] `tests/integration/project-settings.test.ts`: owner/admin update name, timezone, both policies; editor update → `forbidden` and unchanged; slug change mirrors to `organization.slug` in the same tx, old slug → `NotFoundError`, new slug resolves; slug conflict/reserved/malformed → field errors; invalid time zone rejected; `updated_at` advances
+- [X] T073 [US5] (Postgres now reachable: DATABASE_URL=postgres://docket:docket@127.0.0.1:5433/docket_test — a host Postgres owns :5432) Implement `projects.updateSettings` in `src/server/services/projects.ts` + DAL update in `src/server/dal/projects.ts` (project row + organization mirror in one tx); makes T072 pass
+- [X] T074 [US5] `src/app/p/[projectSlug]/settings/page.tsx` + `actions.ts` (`updateProjectSettings`): form editable for owner/admin, disabled fields + note for editor, auto-approve option labelled "Auto-approve: generated posts skip review", redirect to `/p/<newSlug>/settings` on slug change; proxy cookie follows the new slug
+
+**Checkpoint**: All five product stories done.
+
+---
+
+## Phase 8: User Story 6 — Guaranteed project isolation (Priority: P1, developer-facing)
+
+**Goal**: Prove the isolation guarantees (the machinery was built in Phase 2/US2).
+
+**Independent Test**: `tests/integration/scope-check.test.ts` and `tests/lint/db-import.test.ts` pass.
+
+- [X] T075 [P] [US6] `tests/integration/scope-check.test.ts`: a deliberately unscoped `select` on `member` through the raw client **outside** `crossProject` is reported by `checkScope` (assert the violation text, then clear the recorder so the `afterEach` hook does not fail the test itself); a pinned query passes; a `crossProject` query is skipped and counted; registering a fake table with one registry line makes it covered (Story 6 #5)
+- [X] T076 [P] [US6] `tests/lint/db-import.test.ts`: use the ESLint Node API (`new ESLint({ overrideConfigFile })`, `lintText`) with `filePath: "src/app/example.ts"` importing `pg`, `drizzle-orm/node-postgres`, `@/server/db/client` and a relative `../server/db` → each yields the restricted-import error; the same import under `src/server/dal/example.ts` is allowed
+- [X] T077 [P] [US6] `tests/integration/no-plaintext.test.ts` (SC-009): after running the invitation, sign-up, setup and member flows with captured `console`/logger output, scan all tables' text/jsonb columns, audit `details` and captured logs for the plaintext tokens, passwords and the test encryption key → zero hits
+- [X] T078 [US6] Run the full suite and confirm the scope summary shows no unscoped-query failures; fix any query that the recorder flags (the fix is always scoping or a documented `crossProject` reason, never loosening the checker)
+
+---
+
+## Phase 9: Polish & Cross-Cutting Concerns
+
+- [X] T079 [P] README: local setup, Docker Compose, first-run bootstrap vs `/setup`, the setup-screen exposure note (configure bootstrap credentials for internet-reachable deploys), session/rate-limit defaults, how to register a project-owned table, Neon notes (pooled `DATABASE_URL`, direct `DATABASE_URL_DIRECT`) — FR-040, in `README.md`
+- [X] T080 [P] Append to `docs/decisions.md`: condensed D1–D18, dependency rationale for `pg` and `@better-auth/drizzle-adapter`, spec assumptions (7-day TTL, transfer → admin, owner-only role changes, non-member = not found, setup exposure), and the U1/U2 outcomes
+- [X] T081 [P] Accessibility/title audit as an automated check: `src/app/titles.test.ts` asserting every `page.tsx` under `src/app` exports `metadata` or `generateMetadata` (FR-041); fix any miss
+- [X] T082 (Postgres now reachable: DATABASE_URL=postgres://docket:docket@127.0.0.1:5433/docket_test — a host Postgres owns :5432) Run the complete gate set locally and record results in the final note: `pnpm lint && pnpm typecheck && pnpm db:check && pnpm test && pnpm build`; confirm CI's `check` job env (only `DATABASE_URL`) is sufficient by running with only that variable plus vitest's fake env
+- [ ] T083 🛑 BLOCKED: needs docker compose and a browser (docker socket denied here) — one survey run of quickstart.md §2–§6 against `docker compose up --build`: bootstrap vs `/setup`, config-failure exit within 5 s naming `CREDENTIALS_ENCRYPTION_KEY`, migration-failure exit before listening, Ctrl/⌘+K switcher focus return and ≤ 4 keystrokes, `/` returns to last project after browser restart, removed-member second tab gets not-found. Report every finding in one pass with the pass/fail count over all items (denominator = the checklist items in quickstart §2–§6)
+- [ ] T084 🛑 BLOCKED: needs a Neon connection string and network egress; SC-011 Neon half stays recorded as "not verified" (README, decisions.md) — run quickstart.md §7 and the setup check against it; if none is available record SC-011's Neon half as "not verified" in the README and `docs/decisions.md` (constitution II)
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Setup (1)** → **Foundational (2)** → user stories → **Polish (9)**
+- Inside Phase 2: T007→T008; T009→T010; T012→T014→T016; T018–T020 after T012/T013; T023 after T008; T024→T025→T026; T027 after T013; T017 after T025
+- **US1 (3)** needs Phase 2; **US2 (4)** needs Phase 2 (+ `proxy.ts` from T039); **US3 (5)** needs US2 (projects, members, layout); **US4 (6)** needs US3 for invitation audit overlap but its services are independent of US3's UI; **US5 (7)** needs US2; **US6 (8)** needs Phase 2 and is best run after US3/US4 so the recorder has seen real traffic.
+
+### Within each story
+
+Tests first (and failing) → DAL → services → actions/pages.
+
+### Parallel opportunities
+
+- Phase 1: T003–T006 in parallel after T001/T002.
+- Phase 2: T007, T009, T011, T018, T019, T021, T022, T030, T031 touch separate files and can run together.
+- US1: T032–T034 together; T037 and T038 together.
+- US3: T055–T058 together; T061 and T062 together.
+- US4: T065–T067 together. US5 can run alongside US4 after US2.
+- Polish: T079–T081 together.
+
+### Parallel example: User Story 3 tests
+
+```text
+Task: "tests/integration/invitations.test.ts (T055)"
+Task: "tests/integration/invitation-tokens.test.ts (T056)"
+Task: "tests/integration/invitation-accept.test.ts (T057)"
+```
+
+## Implementation Strategy
+
+### MVP first
+
+1. Phase 1 → Phase 2 (T017 early to retire risk U1) → Phase 3 (US1). Stop and run the gates.
+2. Add US2 (projects + shell) → US3 (invitations; the security-critical story) → US6 proofs.
+3. Add US4, then US5; finish with Polish.
+
+### Notes
+
+- `🛑 BLOCKED` tasks (T083, T084) are owed to a human with a Docker daemon/browser/Neon; they are the only tasks of that kind and everything else is machine-verifiable.
+- Never relax the scope checker or the lint rule to make a task pass.
+- Keep tokens, passwords and keys out of logs, snapshots and error text (constitution VII).
+
+---
+
+## Phase 10: Review remediation
+
+**Purpose**: Fix the blocking findings in `review.md` (F1–F8). BLOCKERs come first. Each task carries its finding ID and location.
+
+- [x] T085 🛑 needs a human if the sandbox still cannot reach registry.npmjs.org — Install the T001 dependencies exactly as pinned (`better-auth@1.7.7`, `@better-auth/drizzle-adapter@1.7.7`, `drizzle-orm@0.45.3`, `pg@8`, `zod@4.6.5`; dev `drizzle-kit@0.31.11`, `@types/pg`). Commit `package.json` + `pnpm-lock.yaml`. Confirm `pnpm typecheck` no longer reports TS2307, then resume the open tasks T012–T078 — review F1 (BLOCKER), package.json:21
+- [x] T086 Replace the hard-coded session cookie names with Better Auth's `getSessionCookie()` from `better-auth/cookies` (research F11/D18), called in `src/proxy.ts`, and pass its result into the pure `loginRedirectFor`. Delete `SESSION_COOKIES` and the test that asserts the guessed names. Depends on T085 — review F2 (BLOCKER), src/lib/auth-gate.ts:7
+- [x] T087 Make `checkScope` fail closed. Treat each occurrence of a registered table separately, so a pin inside a subquery no longer pins the outer reference, and stop counting `not "t"."scope" = $n` as a pin. Add these as failing cases in `tests/helpers/scope-check.test.ts`: `select "member"."organization_id" from "member" where "member"."user_id" in (select "user_id" from "member" where "member"."organization_id" = $1)` and `select * from "member" where not "member"."organization_id" = $1`. Never loosen any existing case — review F3 (MAJOR), tests/helpers/scope-check.ts:49
+- [x] T088 Fix the `noUncheckedIndexedAccess` type errors in `src/server/crypto/secrets.ts` (lines 46, 47, 53) and `src/server/crypto/secrets.test.ts:43` by narrowing the split parts after the length check. Confirm `tsc --noEmit` reports nothing for `src/server/crypto/` — review F4 (MAJOR), src/server/crypto/secrets.ts:46
+- [ ] T089 🛑 BLOCKED: `docker build .` needs the Docker socket, denied in this sandbox (`pnpm test` 225/225 and `pnpm db:check` pass; config/setup files all exist) — Restore the gates. Commit the `globalSetup`/`setupFiles` lines in `vitest.config.ts` and the new `drizzle.config.ts` only once `tests/setup/global-setup.ts`, `tests/setup/scope-recorder.ts`, `drizzle/` and `scripts/check-migrations-current.mjs` exist (T014–T016, T020). Then confirm `pnpm test`, `pnpm db:check` and `docker build .` each exit 0 (`Dockerfile:36` copies `drizzle/`) — review F5 (MAJOR), vitest.config.ts:12
+- [x] T090 Write the README sections T079 requires: local setup, `docker compose up --build`, bootstrap env vs `/setup`, the setup-screen exposure note, session/rate-limit defaults, registering a project-owned table, and Neon pooled `DATABASE_URL` vs direct `DATABASE_URL_DIRECT`. Describe only behaviour that exists at the time of writing. Reword `docs/decisions.md:102-103` (U2) to "not yet verified" until `src/server/auth/auth.ts` exists — review F6 (MAJOR), README.md:15
+- [x] T091 Make `failFromError` cover every T027 error. Map `InvitationInvalidError`→`invitation_invalid`, `EmailMismatchError`→`email_mismatch`, `SetupUnavailableError`→`setup_unavailable`. Pass `ConflictError`'s fixed message and optional `field` through as `message`/`fieldErrors`, e.g. slug taken shown on `slug`, and "Regenerate the existing invitation instead". Either drop `UnauthenticatedError` or define it in `src/server/dal/errors.ts`. Make every error class set `this.name`, and add a test per mapping in `src/lib/action-result.test.ts` — review F7 (MAJOR), src/lib/action-result.ts:35
+- [x] T092 Make `parseEnv` report the cross-field issues (bootstrap pairing, bootstrap email/password rules, `DATABASE_URL_DIRECT` format) even when a base field fails: compute them from the raw source and merge them, or use the refinement `when` option. Add tests in `src/server/env.test.ts`: `DATABASE_URL` unset + `DATABASE_URL_DIRECT=mysql://x` must name both, and `BOOTSTRAP_ADMIN_EMAIL` without a password + `DATABASE_POOL_MAX=0` must name both — review F8 (MAJOR), src/server/env.ts:63
+
+---
+
+## Phase 11: Review remediation
+
+**Purpose**: Fix the blocking findings in the second `review.md` (F1–F3). The BLOCKER comes first. Each task carries its finding ID and location.
+
+- [x] T093 Clear the stale blockers. T001 and T085 are done, and `better-auth`, `@better-auth/drizzle-adapter`, `drizzle-orm`, `pg`, `zod` and `drizzle-kit` are in `package.json:29-38` and `node_modules/`. So remove the `🛑 BLOCKED: … (T001 blocked, no registry access)` prefix, and T082's "deps … not installed" note, from every open task whose only stated blocker is that install: every open task from T012 to T078 except T076, plus T082. Keep T083 and T084 as they are. After the edit, `grep -n 'T001 blocked' tasks.md` must list only this task (T093). Then resume Phase 2 at T012, in phase order. For DB-backed tests, try `TEST_DATABASE_URL`/`DATABASE_URL` against the Postgres listening on `localhost:5432` before declaring a database block. Re-mark a task 🛑 only with a cause observed in that pass — review F1 (BLOCKER), specs/001-foundation-auth-projects/tasks.md:58
+- [x] T094 Commit the finished-but-uncommitted work: one Conventional Commit per task or tight group, explicit paths only, never `git add -A`.
+  - T086: `src/proxy.ts`, `src/lib/auth-gate.ts`, `src/lib/auth-gate.test.ts`
+  - T088: `src/server/crypto/secrets.ts`, `src/server/crypto/secrets.test.ts`
+  - T091: `src/lib/action-result.ts`, `src/lib/action-result.test.ts`, `src/server/dal/errors.ts`
+  - T092: `src/server/env.ts`, `src/server/env.test.ts`
+  - T087: `tests/helpers/scope-check.ts`, `tests/helpers/scope-check.test.ts`
+  - T080/T090: `README.md`, `docs/decisions.md`
+  - T004: `.env.example`
+  - T006: `next.config.ts`
+  - T071: `src/app/p/[projectSlug]/settings/layout.tsx`
+  - T081: `src/app/titles.test.ts`, `src/app/page.tsx`
+  - `specs/001-foundation-auth-projects/tasks.md`
+
+  Commit `vitest.config.ts` **without** its `globalSetup`/`setupFiles` lines, and leave `drizzle.config.ts` uncommitted, until T089's preconditions hold. Then confirm `git show HEAD:src/lib/auth-gate.ts` contains no `SESSION_COOKIES`, and that `pnpm lint && pnpm typecheck` pass on HEAD — review F2 (MAJOR), src/server/crypto/secrets.ts:41
+- [x] T095 Make `checkScope` fail closed by construction, never by loosening an existing case:
+  - (a) any `not` in a scope's predicate disqualifies that scope's equality pins, as `or` already does (`tests/helpers/scope-check.ts:70`, `:83`, `:88`);
+  - (b) the `select` part of an `insert … select` is checked by the select rules (`:185`);
+  - (c) registered tables in a comma-separated `from` list (and after `using`) are found (`:39`).
+
+  Add these as tests in `tests/helpers/scope-check.test.ts` that expect a violation:
+  - `select "id" from "member" where not ("member"."user_id" = $1 and "member"."organization_id" = $2)`
+  - `insert into "member" ("id", "organization_id", "user_id") select "id", "organization_id", "user_id" from "member" where "member"."user_id" = $1`
+  - `select * from "member", "membership_audit_log" where "member"."organization_id" = $1`
+  - `select * from "member" where not $1 = "member"."organization_id"`
+
+  The first two are what `drizzle-orm@0.45.3` emits for `not(and(eq(…), eq(…)))` and `insert().select()` — review F3 (MAJOR), tests/helpers/scope-check.ts:83
+
+---
+
+## Phase 12: Review remediation
+
+**Purpose**: Fix the blocking findings in the third `review.md` (F1–F4). The BLOCKER comes first. Each task carries its finding ID and location.
+
+- [x] T096 Make `src/lib/validation` the single source of input rules:
+  - Build `createProjectSchema`/`updateSettingsSchema` in `src/server/services/projects.ts` from `projectNameSchema`, `slugSchema`, `timeZoneSchema`, `approvalPolicySchema` and `schedulingPolicySchema`, and delete the local `slugSchema`/`timezoneSchema`/`isValidTimeZone`.
+  - Use `emailSchema`, `passwordSchema`, `personNameSchema` and `roleSchema` in `src/server/services/setup.ts`, in `src/server/services/invitations/index.ts`, and in `crossFieldIssues` in `src/server/env.ts`.
+  - Cap `slugify` in `src/app/p/new/new-project-form.tsx` with the shared slug maximum.
+
+  Add integration cases through `projects.create` and `projects.updateSettings`:
+  - expect `validation` on the named field for slug `settings`, slug `ab`, time zone `+02:00` and an 81-character name;
+  - expect success for a 45-character slug.
+
+  Never loosen the shared schemas — review F1 (BLOCKER), src/server/services/projects.ts:15
+- [x] T097 Make the locked re-check fresh:
+  - In `scope.transaction(fn, { lockProject: true })` (`src/server/dal/scope.ts:96`), run `select id from projects where id = $1 for update` as its own statement.
+  - Then resolve the caller's membership in a separate statement, which gets a fresh snapshot after the lock is granted, and throw `NotFoundError` if it's gone.
+  - Re-check `tx.can({ project: ["update"] })` inside `projects.updateSettings`.
+
+  Add `tests/integration/lock-recheck.test.ts`:
+  - hold the project lock with a raw `pg` client and delete an admin's `member` row;
+  - start `invitations.create` with the admin's pre-resolved scope, then commit the raw transaction;
+  - expect `NotFoundError` and no new `invitation` row.
+
+  Repeat the test for a concurrent demotion from admin to editor followed by `members.remove`, expecting `ForbiddenError` — review F2 (MAJOR), src/server/dal/scope.ts:75
+- [x] T098 Close the relative-import hole in the raw-database ban in `eslint.config.mjs:23`, so that `src/server/services/**` (and any other non-exempt `src/` file) can't import `../db/client`, `../../db/client`, `../db/schema` or `./db/client`. Keep `src/server/{dal,db,auth,startup}/**` exempt. Add those four imports as cases in `tests/lint/db-import.test.ts`, using file paths under `src/server/services/` and `src/server/`, each expecting the restricted-import error, and confirm `pnpm lint` stays clean on the tree — review F3 (MAJOR), eslint.config.mjs:23
+- [x] T099 Rewrite `README.md:46-59` from the code as it is now:
+  - session lifetime and refresh, as Better Auth's installed defaults (read from `node_modules/better-auth`);
+  - sign-in rate limiting on in every environment (`rateLimit.enabled: true`, 3 per 10 s);
+  - registering a project-owned table with one line in `src/server/db/project-owned.ts`;
+  - a Testing note: `DATABASE_URL` naming a database that ends `_test`, plus `pnpm db:check`, `db:generate` and `db:migrate`.
+
+  In `docs/decisions.md`, delete the orphaned line at `:101`, and replace U2's "auth.ts does not exist yet" (`:102-103`) with what was observed, or with "not verified (needs a browser)". Describe only behaviour that exists — review F4 (MAJOR), README.md:51
+
+## Front-end survey findings (docker compose up, 2026-10-03; T083 partial)
+
+Verified passing via curl against `docker compose up`: health `{"ok":true}`, migrations applied on start, sign-up without token → 400, blank `CREDENTIALS_ENCRYPTION_KEY` → exit 1 in 1 s naming the variable with no secrets printed, unreachable `DATABASE_URL_DIRECT` → exit 1.
+
+- [x] T100 Fresh install with no users and no bootstrap vars: `GET /` redirects to `/login` (proxy) and never offers `/setup`, contradicting quickstart §2 ("<http://localhost:3000> redirects to `/setup`"). Route unauthenticated `/` (and `/login`) to `/setup` while the install has no users; add an integration test for the redirect decision.
+- [x] T101 Migration failure: the container log prints Next's "✓ Ready" before "Docket: database migration failed. Not starting.", so the server may accept connections before migrations finish, contradicting FR-004 ("exits before listening"). Run migrations before the HTTP server starts (e.g. a pre-start migrate step in the image's start command rather than inside `instrumentation.ts`), keep exit code 1, and verify ordering with a test or documented check.
+
+---
+
+## Phase 13: Review remediation
+
+**Purpose**: Fix the blocking findings in the fifth `review.md` (F1, F2; both MAJOR, both reproduced on the built standalone server). Each task carries its finding ID and location.
+
+- [x] T102 Make sign-in rate limiting hold against a client that picks its own `X-Forwarded-For`:
+  - Today Better Auth keys the limit on that header (no `advanced.ipAddress` in `src/server/auth/auth.ts:44`). Next only fills it from the socket when the client didn't send one, and Compose publishes port 3000 directly. Measured: a fresh client-chosen IP per try gave 10 wrong passwords and 0 × 429, and a two-entry header put every user in one shared bucket.
+  - Add a limit that a header can't sidestep. For example, a per-email attempt limit for `/sign-in/email` in the existing `before` hook, with the same 3-per-10-seconds rule, in memory. Read the hook's `ctx.body` shape from `node_modules/better-auth`.
+  - Make the trusted client-IP source configurable (`advanced.ipAddress.ipAddressHeaders` / `trustedProxies` from env). Document it in `.env.example` and `README.md`, together with the reverse-proxy requirement.
+  - Rewrite `README.md:52-56` to describe only what holds.
+  - In `tests/integration/auth-endpoints.test.ts`:
+    - four sign-ins for one email, each with a different `x-forwarded-for`, where the 4th is 429;
+    - three failures from one client with a two-entry header, after which a different email can still sign in.
+
+  Log the decision in `docs/decisions.md` — review F1 (MAJOR), src/server/auth/auth.ts:44
+- [x] T103 Show pending invitations to signed-in users outside the project shell:
+  - Today `InvitationBadge`, the only link to `/invitations`, renders only in `src/app/p/[projectSlug]/layout.tsx:41`. A signed-in user with no projects is sent to `/p/new`, which has no badge, no link and no sign-out. In-app delivery gives the inviter no link to resend.
+  - Extract a small signed-in header (invitations link with its pending count, plus the user menu with sign-out). Render it on `src/app/p/new/page.tsx` and `src/app/invitations/page.tsx`, and reuse it in the project layout so there is one implementation.
+  - Keep FR-018's redirect to project creation unchanged.
+  - Add a test proving that a zero-project user with a pending invitation sees the count on `/p/new`, for example a decision or render test for the shared header — review F2 (MAJOR), src/app/p/new/page.tsx:9

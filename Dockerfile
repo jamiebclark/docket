@@ -33,6 +33,9 @@ RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nod
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
+COPY --from=build --chown=nextjs:nodejs /app/drizzle ./drizzle
+# scripts/prestart.mjs is bundled (esbuild) into .next/standalone/scripts by `pnpm build`.
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+# Migrates first so a failed migration exits before the server listens.
+CMD ["node", "scripts/prestart.mjs"]

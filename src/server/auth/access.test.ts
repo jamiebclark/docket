@@ -1,0 +1,39 @@
+import { describe, expect, it } from "vitest";
+import { roles, statements, type Role } from "./access";
+
+type Resource = keyof typeof statements;
+
+// FR-021 matrix: which actions each role may perform.
+const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
+  owner: {
+    project: ["view", "update"],
+    member: ["view", "remove", "remove_owner", "update_role", "transfer_ownership"],
+    invitation: ["view", "create", "create_owner", "revoke", "regenerate"],
+    audit: ["view"],
+  },
+  admin: {
+    project: ["view", "update"],
+    member: ["view", "remove"],
+    invitation: ["view", "create", "revoke", "regenerate"],
+    audit: ["view"],
+  },
+  editor: { project: ["view"], member: ["view"] },
+};
+
+describe("access control matrix", () => {
+  for (const role of Object.keys(roles) as Role[]) {
+    for (const resource of Object.keys(statements) as Resource[]) {
+      for (const action of statements[resource]) {
+        const expected = allowed[role][resource]?.includes(action) ?? false;
+        it(`${role} ${expected ? "can" : "cannot"} ${resource}:${action}`, () => {
+          const result = roles[role].authorize({ [resource]: [action] } as never);
+          expect(result.success).toBe(expected);
+        });
+      }
+    }
+  }
+
+  it("requires every requested action", () => {
+    expect(roles.admin.authorize({ member: ["view", "remove_owner"] } as never).success).toBe(false);
+  });
+});

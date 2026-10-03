@@ -53,7 +53,87 @@ how to reverse it. The owner reviews these; anything here can be overturned.
     `next/font/local` with a vendored font file.
 17. **Roadmap titles kept short** so the runner's fallback commit
     `feat(<slug>): <title>` fits commitlint's 100-char header limit.
-18. **Roadmap split to 10 entries** (owner-approved): `meta` became
+
+## 001 — Foundation, auth, projects (D1–D18, condensed)
+
+Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
+
+1. **Better Auth owns authentication**; Docket's DAL owns membership changes.
+2. **Organization-plugin HTTP endpoints are blocked**; the sign-up endpoint
+   always returns 400.
+3. **`projects.id` = `organization.id`** (shared primary key, cascade delete).
+4. **Invitation sign-up and first-user setup insert credentials directly** in
+   DAL transactions rather than via the HTTP sign-up endpoint.
+5. **Login posts to the HTTP endpoint** so Better Auth's rate limiter applies.
+6. **Invitation tokens are 32 random bytes, hashed, single-use.**
+7. **`InvitationDelivery` interface** with one implementation.
+8. **Scope enforcement**: table registry + SQL recorder in tests +
+   `crossProject` escape hatch.
+9. **Hand-written Drizzle schema**, core query builder only.
+10. **Extra constraints on Better Auth tables** added in Docket migrations.
+11. **Invitation states** mapped onto Better Auth's stored values.
+12. **Race-free last-owner protection**; membership changes serialised.
+13. **First-run bootstrap guarded by a singleton `install_state` row.**
+14. **Startup order** (env validation → migrations → bootstrap) runs from
+    `instrumentation.ts`.
+15. **`db:check`** = migration history check + "schema has no ungenerated
+    changes".
+16. **Secrets at rest**: `enc:v1:<kid>:<iv>:<tag>:<ciphertext>` (AES-256-GCM).
+17. **Shared Zod schemas** for time zone and slug validation.
+18. **Routing/UI structure**: `/p/[projectSlug]/...` with a shared shell.
+
+### Dependencies
+- `pg` — the Postgres driver Drizzle's node-postgres adapter and Better
+  Auth's Drizzle adapter use; supports pooled Neon URLs.
+- `@better-auth/drizzle-adapter` — Better Auth's supported adapter for the
+  Drizzle schema Docket already owns, avoiding a second ORM.
+
+### Spec assumptions
+- Invitation TTL is 7 days by default (`INVITATION_TTL_DAYS`).
+- Ownership transfer demotes the previous owner to admin.
+- Only owners change roles.
+- A non-member sees "not found" for a project, never "forbidden".
+- The `/setup` screen is open until the first account exists; internet-
+  reachable deploys should set bootstrap credentials.
+
+### Unverified items (research.md U1–U3)
+- **U1** (Better Auth schema check vs `timestamptz`): verified — `tests/integration/auth-schema.test.ts` boots Better Auth against the migrated `timestamptz` schema and `getSession` succeeds; no switch to `timestamp` needed.
+- **U2** (`nextCookies()` ordering): not verified (needs a browser to observe the
+  cookie on a server-action sign-in).
+- **U3 / SC-011 Neon half**: **not verified** — no Neon connection string was
+  available to the build (constitution II).
+19. **Dependencies are installed from the front-end session, not by pipeline
+    phases.** Headless phases cannot reach the npm registry (TLS-intercepting
+    proxy + sandbox), which blocked foundation's T001 and most later tasks.
+    Installed up front for all planned entries: better-auth 1.7.7,
+    @better-auth/drizzle-adapter 1.7.7, @better-auth/api-key 1.7.7,
+    drizzle-orm 0.45.3, drizzle-kit 0.31.11, pg 8, zod 4.6.5,
+    @js-temporal/polyfill, sharp, @aws-sdk/client-s3 + s3-request-presigner,
+    @atproto/api (resolved 0.22.x), openai, @anthropic-ai/sdk, zod-openapi,
+    csv-parse. A phase that needs anything else must mark the task
+    `NEEDS DEPENDENCY: <pkg>` instead of guessing APIs.
+
+## T082 gate run (local)
+
+`pnpm lint`, `pnpm typecheck`, `pnpm db:check`, `pnpm test` (29 files / 225 tests) and `pnpm build` all pass with only `DATABASE_URL` set (no other auth/crypto env in the shell), matching CI's `check` job env. Run against Postgres on :5433 (host Postgres owns :5432).
+20. **esbuild bundles `scripts/prestart.mjs`** into `.next/standalone/scripts/`
+    during `pnpm build`. The pre-start migrator runs outside Next's bundle, and
+    under pnpm the standalone `node_modules` does not link `drizzle-orm` at the
+    top level, so the unbundled script crashed the container. Verified with
+    `docker compose up` (migrations before "Ready", health 200, fresh install →
+    `/setup`, migration failure exits 1 before listening).
+21. **Local test database runs on port 5433** (`docket-pg` container,
+    `postgres://docket:docket@127.0.0.1:5433/docket_test`) because a host
+    Postgres on the owner's Mac owns 5432. CI is unaffected.
+22. **Sign-in is rate-limited per email, not only per IP** (review F1). Better
+    Auth keys its limit on `X-Forwarded-For`, which a client can choose when
+    port 3000 is published directly. The `before` hook now counts
+    `/sign-in/email` attempts per normalised email (3 per 10 s, in memory,
+    HTTP requests only), and the per-IP rule for that path is relaxed to
+    30 per 10 s as a backstop so a malformed header's shared bucket cannot lock
+    out other users. `TRUSTED_IP_HEADERS` / `TRUSTED_PROXIES` configure
+    `advanced.ipAddress`; the README states the reverse-proxy requirement.
+23. **Roadmap split to 10 entries** (owner-approved): `meta` became
     `meta-facebook-instagram` + `meta-threads` (separate app, OAuth hosts and
     token lifecycle), and `jobs-and-api` became `generation-jobs` +
     `public-api` (job engine lands and is tested before the API exposes it).

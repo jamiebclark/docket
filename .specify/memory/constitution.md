@@ -52,7 +52,10 @@ migrations committed), Better Auth, Zod at every boundary, Vitest,
 `@js-temporal/polyfill` for time-zone maths, sharp for images, S3-compatible
 storage behind an interface. Adding any other runtime dependency or any
 infrastructure (queues, Redis, etc.) requires a justification in plan.md and an
-entry in `docs/decisions.md`.
+entry in `docs/decisions.md`. Pipeline phases cannot reach the npm registry:
+dependencies are pre-installed (see `docs/decisions.md` #19). If a task needs a
+package that is not in `package.json`, mark it `NEEDS DEPENDENCY: <pkg>` and
+continue with other tasks — never hand-roll a substitute or guess its API.
 
 ### VII. Secrets never leak
 Credentials are encrypted at rest (AES-256-GCM, key from env). Tokens never
@@ -111,4 +114,4 @@ on product behaviour; `docs/research/` wins on external facts. Amendments are
 made by editing this file in a `docs(constitution):` commit with a version
 bump.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
+**Version**: 1.1.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03

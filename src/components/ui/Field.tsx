@@ -1,0 +1,45 @@
+import type { InputHTMLAttributes, ReactNode } from "react";
+
+/**
+ * Labelled input. `error` is rendered in an `aria-live` region linked through
+ * `aria-describedby`; `hint` is help text linked the same way.
+ */
+export function Field({
+  id,
+  label,
+  hint,
+  error,
+  className = "",
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "id"> & {
+  id: string;
+  label: ReactNode;
+  hint?: ReactNode;
+  error?: string;
+}) {
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const describedBy = [hint ? hintId : null, `${errorId}`].filter(Boolean).join(" ");
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+      </label>
+      {hint ? (
+        <p id={hintId} className="text-xs text-foreground/70">
+          {hint}
+        </p>
+      ) : null}
+      <input
+        id={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={`rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground ${className}`}
+        {...rest}
+      />
+      <p id={errorId} aria-live="polite" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+        {error ?? ""}
+      </p>
+    </div>
+  );
+}
