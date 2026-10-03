@@ -139,3 +139,14 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
     `public-api` (job engine lands and is tested before the API exposes it).
     The run started with 8 entries counts only 8, so the last two
     (`public-api`, `hardening`) need one more `spec-roadmap run`.
+24. **Faster checks** (owner asked to stop re-running expensive checks):
+    - Vitest runs files in parallel, each worker on its own clone of the
+      migrated test database (`CREATE DATABASE … TEMPLATE`, made once in
+      global setup; `DOCKET_TEST_WORKERS` overrides the count, default
+      min(4, cores − 1)). Suite on main: 46 s → ~20 s.
+    - The constitution (v1.2.0) tells implement passes to run only affected
+      tests per task and the full suite/build once at the end of the phase.
+    - CI splits `check` into parallel `static`, `test` and `build` jobs and
+      caches `.next/cache`.
+    - The front-end session no longer re-runs full gates locally when CI will
+      run them on the push.
