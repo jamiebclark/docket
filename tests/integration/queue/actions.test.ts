@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { ConflictError } from "../../../src/server/dal/errors";
 import * as posts from "../../../src/server/services/posts";
 import * as queue from "../../../src/server/services/queue";
+import * as slots from "../../../src/server/services/slots";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
@@ -100,6 +101,22 @@ describe("pullQueueForward", () => {
     expect(await when(env, t2)).toBe(MON(0));
     expect(await when(env, t3)).toBe(MON(1));
     expect((await atTime(NOW, () => queue.pullQueueForward(env.scope, a.id))).moved).toEqual([]);
+  });
+
+  it("never moves a target later when it holds an occurrence of a paused slot (F19)", async () => {
+    const env = await postsEnv();
+    const a = await env.account(); // Monday 09:00
+    const tuesday = await slots.addSlot(env.scope, { accountId: a.id, weekday: 2, localTime: "09:00" });
+    const t1 = await queued(env, a.id); // Mon 5th
+    const t2 = await queued(env, a.id); // Tue 6th
+    const before = [await when(env, t1), await when(env, t2)];
+    const [monday] = (await slots.listSlots(env.scope, a.id)).filter((s) => s.id !== tuesday.id);
+    await slots.setSlotPaused(env.scope, monday!.id, true);
+    const r = await atTime(NOW, () => queue.pullQueueForward(env.scope, a.id));
+    for (const m of r.moved) expect(new Date(m.to).getTime()).toBeLessThan(new Date(m.from).getTime());
+    const after = [await when(env, t1), await when(env, t2)];
+    expect(new Date(after[0]!).getTime()).toBeLessThanOrEqual(new Date(before[0]!).getTime());
+    expect(new Date(after[1]!).getTime()).toBeLessThanOrEqual(new Date(before[1]!).getTime());
   });
 
   it("leaves explicit targets alone and does not touch other accounts", async () => {

@@ -195,7 +195,13 @@ export async function pullQueueForward(
     for (const t of queued) {
       const from = t.slotOccurrenceAt!;
       const r = await allocateNextFree(tx, { id: t.id, accountId: id }, { after });
-      if (r.ok) {
+      if (r.ok && r.instant.getTime() > from.getTime()) {
+        // Only active slots are candidates, so a target on a paused or deleted slot can be
+        // offered something later. Never move later: keep the occurrence it held (F19).
+        await tx.targets.releaseOccurrence(t.id);
+        await tx.targets.tryHoldOccurrence(t.id, from, t.slotId as string);
+        after = from;
+      } else if (r.ok) {
         after = r.instant;
         if (r.instant.getTime() !== from.getTime()) moved.push({ targetId: t.id, from: from.toISOString(), to: r.instant.toISOString() });
       } else {
