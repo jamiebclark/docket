@@ -34,6 +34,18 @@ describe("checkScope", () => {
     ).toHaveLength(1);
   });
 
+  it("does not let a pin inside a subquery pin the outer reference", () => {
+    const sql =
+      'select "member"."organization_id" from "member" where "member"."user_id" in (select "user_id" from "member" where "member"."organization_id" = $1)';
+    expect(run(sql).violations).toHaveLength(1);
+  });
+
+  it("does not count a negated equality as a pin", () => {
+    expect(
+      run('select * from "member" where not "member"."organization_id" = $1').violations,
+    ).toHaveLength(1);
+  });
+
   it("accepts a join pinned by scope-column equality", () => {
     const sql =
       'select "m"."id" from "member" "m" inner join "membership_audit_log" "a" on "a"."project_id" = "m"."organization_id" where "m"."organization_id" = $1';

@@ -80,6 +80,7 @@ function pinnedAliases(sql: string, refs: TableRef[]): Set<string> {
   if (!disjunctive) {
     const eq = new RegExp(`${COL}\\s*=\\s*\\$\\d+`, "gi");
     for (const m of where.matchAll(eq)) {
+      if (/\bnot\s*\(?\s*$/i.test(where.slice(0, m.index))) continue; // negated: not a pin
       const { q, col } = parseCol(m[1], m[2], m[3], m[4]);
       const r = resolve(q, col);
       if (r) pinned.add(r.alias);
@@ -126,6 +127,35 @@ function insertColumns(sql: string): Set<string> {
   return cols;
 }
 
+/**
+ * Splits a statement into its query scopes: the outer query plus each `(select ...)`
+ * subquery. Each returned string keeps every character index but blanks anything that
+ * belongs to another scope, so a pin inside a subquery never pins an outer reference.
+ */
+function splitScopes(sql: string): string[] {
+  const owner: number[] = [];
+  const stack: number[] = [0];
+  let count = 1;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (ch === "(") {
+      const sub = /^\(\s*select\b/i.test(sql.slice(i, i + 40));
+      const id = sub ? count++ : stack[stack.length - 1]!;
+      // The opening paren of a subquery belongs to the subquery, not to the outer scope.
+      stack.push(id);
+      owner.push(id);
+    } else if (ch === ")") {
+      owner.push(stack[stack.length - 1]!);
+      if (stack.length > 1) stack.pop();
+    } else {
+      owner.push(stack[stack.length - 1]!);
+    }
+  }
+  return Array.from({ length: count }, (_, id) =>
+    [...sql].map((c, i) => (owner[i] === id ? c : " ")).join(""),
+  );
+}
+
 export function checkScope(
   records: readonly QueryRecord[],
   projectOwnedTables: readonly ProjectOwnedTable[],
@@ -142,31 +172,37 @@ export function checkScope(
       result.crossProject.push({ reason: record.crossProjectReason, sql });
       continue;
     }
-    const refs = findTables(sql, owned);
-    if (refs.length === 0) continue;
+    if (findTables(sql, owned).length === 0) continue;
     result.checked++;
-    const kind = sql.match(/^\s*(\w+)/)?.[1]?.toLowerCase();
+    const statementKind = sql.match(/^\s*(\w+)/)?.[1]?.toLowerCase();
 
-    if (kind === "insert") {
-      const cols = insertColumns(sql);
-      const target = refs[0]!;
-      if (!cols.has(target.scopeColumn)) {
+    // Each query scope (outer query, every subquery) is checked on its own.
+    splitScopes(sql).forEach((scopeSql, scopeId) => {
+      const refs = findTables(scopeSql, owned);
+      if (refs.length === 0) return;
+      const kind = scopeId === 0 ? statementKind : "select";
+
+      if (kind === "insert") {
+        const cols = insertColumns(scopeSql);
+        const target = refs[0]!;
+        if (!cols.has(target.scopeColumn)) {
+          result.violations.push(
+            `Unscoped query on project-owned table "${target.table}" (insert needs "${target.scopeColumn}" in its column list):\n  ${sql}`,
+          );
+        }
+        return;
+      }
+
+      const pinned = pinnedAliases(scopeSql, refs);
+      const seen = new Set<string>();
+      for (const r of refs) {
+        if (pinned.has(r.alias) || seen.has(r.alias)) continue;
+        seen.add(r.alias);
         result.violations.push(
-          `Unscoped query on project-owned table "${target.table}" (insert needs "${target.scopeColumn}" in its column list):\n  ${sql}`,
+          `Unscoped query on project-owned table "${r.table}" (needs "${r.table}"."${r.scopeColumn}" = $n):\n  ${sql}`,
         );
       }
-      continue;
-    }
-
-    const pinned = pinnedAliases(sql, refs);
-    const seen = new Set<string>();
-    for (const r of refs) {
-      if (pinned.has(r.alias) || seen.has(r.alias)) continue;
-      seen.add(r.alias);
-      result.violations.push(
-        `Unscoped query on project-owned table "${r.table}" (needs "${r.table}"."${r.scopeColumn}" = $n):\n  ${sql}`,
-      );
-    }
+    });
   }
   return result;
 }
