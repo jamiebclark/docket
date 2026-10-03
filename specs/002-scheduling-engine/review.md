@@ -56,7 +56,7 @@ Each needs a few lines plus a test, appended as T090 and T091.
 
 ## Findings
 
-- [ ] MAJOR F19 — `pullQueueForward` moves queued targets *later* when one holds an occurrence of a paused or deleted slot, and every target after it moves later too
+- [x] MAJOR F19 — `pullQueueForward` moves queued targets *later* when one holds an occurrence of a paused or deleted slot, and every target after it moves later too
       where:  src/server/services/queue/index.ts:192-205, src/server/services/queue/index.ts:39, src/server/services/slots.ts:38, specs/002-scheduling-engine/spec.md:207, specs/002-scheduling-engine/spec.md:312-314, tests/integration/queue/actions.test.ts:87-116
       why:    How the walk works:
               - `pullQueueForward` releases every queued occurrence (:192), then re-allocates each target in order with `allocateNextFree(…, { after })` (:197).
@@ -76,7 +76,7 @@ Each needs a few lines plus a test, appended as T090 and T091.
               - Add tests to `tests/integration/queue/actions.test.ts` for a paused-slot target and a deleted-slot target: both keep their times, and the targets after them still move only earlier.
       traces: FR-021, US4-AS9, edge case "Pausing or deleting a slot"
 
-- [ ] MAJOR F20 — Concurrent `addToQueue` calls for posts aimed at two or more shared accounts deadlock, and the losing request fails with `40P01` instead of taking the next occurrence
+- [x] MAJOR F20 — Concurrent `addToQueue` calls for posts aimed at two or more shared accounts deadlock, and the losing request fails with `40P01` instead of taking the next occurrence
       where:  src/server/services/posts/index.ts:369-383, src/server/dal/targets.ts:62-67, src/server/dal/targets.ts:114-133, src/server/services/queue/index.ts:85-90, tests/integration/queue/concurrency.test.ts:25-40
       why:    The mechanism:
               - `addToQueue` allocates a post's targets in `listForPost` order: `created_at, id` (targets.ts:62-67).
