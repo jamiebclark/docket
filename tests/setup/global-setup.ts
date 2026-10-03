@@ -1,5 +1,6 @@
 import pg from "pg";
 import { runMigrations } from "../../src/server/db/migrate";
+import { testWorkerCount, workerDatabaseUrl } from "./worker-databases";
 
 function dbName(url: string): string {
   return decodeURIComponent(new URL(url).pathname.slice(1));
@@ -35,4 +36,20 @@ export default async function setup(): Promise<void> {
     await pool.end();
   }
   await runMigrations(url);
+
+  // One clone per worker so test files run in parallel on separate databases.
+  // CREATE DATABASE … TEMPLATE copies files, which is far faster than migrating each,
+  // and needs no other session connected to the template — hence sequential, after
+  // every pool on the base database has closed.
+  const quote = (n: string) => `"${n.replace(/"/g, '""')}"`;
+  const clonePool = new pg.Pool({ connectionString: admin.toString(), max: 1 });
+  try {
+    for (let id = 1; id <= testWorkerCount(); id++) {
+      const clone = dbName(workerDatabaseUrl(url, id));
+      await clonePool.query(`drop database if exists ${quote(clone)} with (force)`);
+      await clonePool.query(`create database ${quote(clone)} template ${quote(name)}`);
+    }
+  } finally {
+    await clonePool.end();
+  }
 }

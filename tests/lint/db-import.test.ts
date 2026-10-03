@@ -8,7 +8,9 @@ async function messages(filePath: string, code: string) {
   return res!.messages.filter((m) => m.ruleId === "no-restricted-imports");
 }
 
-describe("db import restriction", () => {
+// The first lintText call loads the full Next ESLint config; a cold start can exceed
+// Vitest\'s 5 s default on a busy machine or CI runner.
+describe("db import restriction", { timeout: 30_000 }, () => {
   it.each([
     'import pg from "pg";',
     'import { drizzle } from "drizzle-orm/node-postgres";',

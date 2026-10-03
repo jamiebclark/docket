@@ -96,8 +96,18 @@ Env vars are validated at startup with Zod and documented in `.env.example`.
 - **Quality gates** (CI must be green before merge): `pnpm lint`,
   `pnpm typecheck`, `pnpm test` (Vitest, real Postgres service), `pnpm build`,
   Docker image build, `pnpm db:check` (migrations match schema) once Drizzle
-  exists, commitlint on PR commits. A task is not done until these pass
-  locally for the code it touched.
+  exists, commitlint on PR commits.
+- **Run checks in proportion to the change** (they are expensive; CI runs the
+  full set on every push anyway):
+  - per task: only the affected tests, e.g. `pnpm vitest run <test files>` or
+    `pnpm vitest run --changed`, plus `pnpm typecheck` when types changed and
+    `pnpm lint <files>` for touched files. A task is done when those pass;
+  - once per implement phase, at the end (the final pass): the full
+    `pnpm lint && pnpm typecheck && pnpm test`, plus `pnpm db:check` if the
+    schema changed and `pnpm build` if routes, config or server/client
+    boundaries changed;
+  - never run `pnpm build` or the full suite after every task, and never run
+    the same full check twice without a code change in between.
 - **Tests required** per the brief's quality bar: provider `validate`/`advance`
   with mocked HTTP incl. error and ambiguous paths; scheduler concurrency,
   kill-recovery, backoff, no-retry-on-ambiguous; slot double-booking, DST,
@@ -114,4 +124,4 @@ on product behaviour; `docs/research/` wins on external facts. Amendments are
 made by editing this file in a `docs(constitution):` commit with a version
 bump.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
+**Version**: 1.2.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
