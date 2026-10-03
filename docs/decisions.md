@@ -42,3 +42,7 @@ how to reverse it. The owner reviews these; anything here can be overturned.
     pipeline phases cannot spawn agents but do load skills.
 15. **Postgres 17** image for Compose and CI (current stable major supported
     by Neon). Bump deliberately.
+16. **System font stack instead of `next/font/google`** (Geist). Removes the
+    build-time download from Google Fonts, which broke Docker builds behind a
+    proxy and leaks requests to Google for self-hosters. Reverse by using
+    `next/font/local` with a vendored font file.
