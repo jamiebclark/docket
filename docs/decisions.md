@@ -53,3 +53,9 @@ how to reverse it. The owner reviews these; anything here can be overturned.
     `next/font/local` with a vendored font file.
 17. **Roadmap titles kept short** so the runner's fallback commit
     `feat(<slug>): <title>` fits commitlint's 100-char header limit.
+18. **Roadmap split to 10 entries** (owner-approved): `meta` became
+    `meta-facebook-instagram` + `meta-threads` (separate app, OAuth hosts and
+    token lifecycle), and `jobs-and-api` became `generation-jobs` +
+    `public-api` (job engine lands and is tested before the API exposes it).
+    The run started with 8 entries counts only 8, so the last two
+    (`public-api`, `hardening`) need one more `spec-roadmap run`.
