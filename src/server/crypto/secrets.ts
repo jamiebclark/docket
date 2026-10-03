@@ -38,19 +38,27 @@ export function encryptSecret(plaintext: string, opts?: { aad?: string }): strin
 export function decryptSecret(ciphertext: string, opts?: { aad?: string }): string {
   try {
     const parts = ciphertext.split(":");
-    if (parts.length !== 6 || parts[0] !== PREFIX || parts[1] !== VERSION) {
+    const [prefix, version, kid, ivPart, tagPart, ctPart] = parts;
+    if (
+      parts.length !== 6 ||
+      prefix !== PREFIX ||
+      version !== VERSION ||
+      ivPart === undefined ||
+      tagPart === undefined ||
+      ctPart === undefined
+    ) {
       throw new Error("shape");
     }
     const key = getKey();
-    if (parts[2] !== keyId(key)) throw new Error("kid");
-    const iv = Buffer.from(parts[3], "base64url");
-    const tag = Buffer.from(parts[4], "base64url");
+    if (kid !== keyId(key)) throw new Error("kid");
+    const iv = Buffer.from(ivPart, "base64url");
+    const tag = Buffer.from(tagPart, "base64url");
     if (iv.length !== 12 || tag.length !== 16) throw new Error("shape");
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
     if (opts?.aad !== undefined) decipher.setAAD(Buffer.from(opts.aad, "utf8"));
     return Buffer.concat([
-      decipher.update(Buffer.from(parts[5], "base64url")),
+      decipher.update(Buffer.from(ctPart, "base64url")),
       decipher.final(),
     ]).toString("utf8");
   } catch {

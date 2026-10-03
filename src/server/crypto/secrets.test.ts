@@ -39,7 +39,7 @@ describe("secrets", () => {
     const parts = encryptSecret("secret-value").split(":");
     for (let i = 2; i < parts.length; i++) {
       const copy = [...parts];
-      const p = copy[i];
+      const p = copy[i] ?? "";
       copy[i] = (p[0] === "A" ? "B" : "A") + p.slice(1);
       expect(() => decryptSecret(copy.join(":"))).toThrow(SecretDecryptionError);
     }
