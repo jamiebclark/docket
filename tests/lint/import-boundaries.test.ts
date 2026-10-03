@@ -19,7 +19,9 @@ function specifiers(file: string): string[] {
 
 const isTest = (f: string) => /\.test\.tsx?$/.test(f);
 
-describe("import boundaries", () => {
+// The first lintText call loads the full Next ESLint config; a cold start can exceed
+// Vitest\'s 5 s default on a busy machine or CI runner.
+describe("import boundaries", { timeout: 30_000 }, () => {
   it("src/providers/** imports nothing from src/server/**", () => {
     const bad = files("src/providers")
       .filter((f) => !isTest(f))
