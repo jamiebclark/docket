@@ -62,4 +62,9 @@ describe("validateAgainstCapabilities", () => {
     );
     expect(issues.map((i) => i.field)).toEqual(["text", "postType", "media.0"]);
   });
+  it("flags alt text over maxAltTextLength", () => {
+    const c = { ...caps, media: { ...caps.media, maxAltTextLength: 5 } };
+    expect(codes("x", [img({ altText: "123456" })], c)).toEqual(["alt_text_too_long"]);
+    expect(codes("x", [img({ altText: "12345" })], c)).toEqual([]);
+  });
 });

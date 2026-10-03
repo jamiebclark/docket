@@ -34,6 +34,7 @@ export const mockProvider: SocialProvider<MockSettings, MockState> = {
       allowedMimeTypes: ["image/jpeg", "image/png"],
       maxBytesPerFile: 5_000_000,
       required: false,
+      outputMimeType: "image/jpeg",
     },
     textOnlyAllowed: true,
     postTypes: ["text", "image", "carousel"],

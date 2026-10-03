@@ -14,6 +14,7 @@ import type { TargetPatch, TargetRecord } from "../dal/targets";
 import { decryptCredentials } from "../services/accounts";
 import { applyDerivedStatus } from "../services/posts/status";
 import type { SchedulerConfig } from "./config";
+import { resolvePublishMedia } from "../services/media-variants";
 import { deferralTime, effectiveLimits } from "./limits";
 import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
@@ -198,6 +199,9 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 
+/** Media could not be resolved before the provider call; the target fails with no call made. */
+class MediaUnavailable extends Error {}
+
 async function execute(
   lease: Leased,
   config: SchedulerConfig,
@@ -231,8 +235,17 @@ async function execute(
   let result: StepResult;
   const startedMs = Date.now();
   try {
-    const content = await repos.targets.effectiveContent(target.id);
-    if (!content) throw new Error("The post is no longer available.");
+    const loaded = await repos.targets.effectiveContent(target.id);
+    if (!loaded) throw new Error("The post is no longer available.");
+    // Adapted media (FR-016): regenerates a vanished variant; a deleted original fails the target before any provider call.
+    // Text-only posts (the common case) skip it.
+    let media = loaded.media;
+    if (loaded.media.length > 0) {
+      const resolved = await resolvePublishMedia(repos, target.id, provider);
+      if (!resolved.ok) throw new MediaUnavailable(resolved.error);
+      media = resolved.media;
+    }
+    const content = { text: loaded.text, media };
     const ciphertext = await repos.accounts.getCredentialsCiphertext(account.id);
     const credentials = decryptCredentials(account.id, ciphertext);
     secrets = secretValues(credentials);
@@ -257,9 +270,13 @@ async function execute(
       config.providerTimeoutMs,
     );
   } catch (error) {
-    // A lost or failed call: whether the step could have published decides the outcome (D5).
-    const message = redact(error instanceof Error ? error.message : "The provider call failed.", secrets);
-    result = lease.mayPublish ? { kind: "ambiguous", error: message } : { kind: "retryable_error", error: message };
+    if (error instanceof MediaUnavailable) {
+      result = { kind: "fatal_error", error: error.message };
+    } else {
+      // A lost or failed call: whether the step could have published decides the outcome (D5).
+      const message = redact(error instanceof Error ? error.message : "The provider call failed.", secrets);
+      result = lease.mayPublish ? { kind: "ambiguous", error: message } : { kind: "retryable_error", error: message };
+    }
   }
 
   const now = await clock.now();

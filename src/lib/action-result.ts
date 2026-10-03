@@ -43,6 +43,7 @@ const ERROR_NAME_TO_CODE: Record<string, ErrorCode> = {
   ForbiddenError: "forbidden",
   LastOwnerError: "last_owner",
   ConflictError: "conflict",
+  StorageUnavailableError: "conflict",
   InvitationInvalidError: "invitation_invalid",
   EmailMismatchError: "email_mismatch",
   SetupUnavailableError: "setup_unavailable",

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseEnv } from "./env";
 
 const key = randomBytes(32).toString("base64");
@@ -198,5 +198,90 @@ describe("parseEnv", () => {
       expect(out).not.toContain("31337");
       expect(out).not.toContain("9999");
     });
+  });
+});
+
+describe("parseEnv media storage", () => {
+  const group = {
+    S3_BUCKET: "docket-media",
+    S3_ACCESS_KEY_ID: "AKIAEXAMPLE",
+    S3_SECRET_ACCESS_KEY: "super-secret-value",
+    S3_PUBLIC_BASE_URL: "https://media.example.com/",
+  };
+
+  it("is disabled when nothing is set", () => {
+    const r = parseEnv(base);
+    if (!r.ok) throw new Error(JSON.stringify(r.issues));
+    expect(r.env.storage).toBeNull();
+    expect(r.env.media).toEqual({ maxUploadBytes: 20 * 1024 * 1024, maxPixels: 50_000_000 });
+  });
+
+  it("parses a full R2 configuration", () => {
+    const r = parseEnv({
+      ...base,
+      ...group,
+      S3_ENDPOINT: "https://abc.r2.cloudflarestorage.com",
+      S3_PREVIEW_URLS: "signed",
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.issues));
+    expect(r.env.storage).toMatchObject({
+      bucket: "docket-media",
+      publicBaseUrl: "https://media.example.com",
+      region: "auto",
+      forcePathStyle: false,
+      checksums: "when_required",
+      previewUrls: "signed",
+    });
+  });
+
+  it("parses an offline MinIO configuration", () => {
+    const r = parseEnv({
+      ...base,
+      ...group,
+      S3_PUBLIC_BASE_URL: "http://localhost:9000/docket-media",
+      S3_ENDPOINT: "http://minio:9000",
+      S3_FORCE_PATH_STYLE: "true",
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it.each(Object.keys(group))("names %s when it is the only one missing", (name) => {
+    const partial: Record<string, string | undefined> = { ...base, ...group, [name]: undefined };
+    expect(issues(partial)).toEqual([{ name, reason: "required when media storage is configured" }]);
+  });
+
+  it("reports an orphan optional setting", () => {
+    expect(issues({ ...base, S3_ENDPOINT: "http://minio:9000" }).map((i) => i.name)).toEqual(["S3_ENDPOINT"]);
+  });
+
+  it("refuses invalid values", () => {
+    expect(issues({ ...base, ...group, S3_CHECKSUMS: "sometimes" }).map((i) => i.name)).toEqual(["S3_CHECKSUMS"]);
+    expect(issues({ ...base, ...group, S3_BUCKET: "A" }).map((i) => i.name)).toEqual(["S3_BUCKET"]);
+    expect(issues({ ...base, ...group, S3_PUBLIC_BASE_URL: "https://m.example.com/?x=1" }).map((i) => i.name)).toEqual([
+      "S3_PUBLIC_BASE_URL",
+    ]);
+    expect(issues({ ...base, MEDIA_MAX_UPLOAD_MB: "26" }).map((i) => i.name)).toEqual(["MEDIA_MAX_UPLOAD_MB"]);
+  });
+
+  it("requires https in production except for localhost", () => {
+    const prev = process.env.NODE_ENV;
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(issues({ ...base, ...group, S3_PUBLIC_BASE_URL: "http://media.example.com" }).map((i) => i.name)).toEqual([
+        "S3_PUBLIC_BASE_URL",
+      ]);
+      expect(parseEnv({ ...base, ...group, S3_PUBLIC_BASE_URL: "http://localhost:9000/b" }).ok).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+      expect(process.env.NODE_ENV).toBe(prev);
+    }
+  });
+
+  it("never echoes a secret in issue text", () => {
+    const text = JSON.stringify(
+      issues({ ...base, ...group, S3_BUCKET: undefined, S3_CHECKSUMS: "super-secret-value" }),
+    );
+    expect(text).not.toContain("super-secret-value");
+    expect(text).not.toContain("AKIAEXAMPLE");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { UnknownProviderError } from "./errors";
+import { mediaConstraintsOf } from "./media";
 import { findProvider, getProvider, listProviders } from "./registry";
 
 describe("provider registry", () => {
@@ -15,5 +16,8 @@ describe("provider registry", () => {
     const keys = listProviders().map((p) => p.key);
     expect(new Set(keys).size).toBe(keys.length);
     for (const key of keys) expect(key).toMatch(/^[a-z0-9-]+$/);
+  });
+  it("declares consistent media constraints for every provider", () => {
+    for (const p of listProviders()) expect(() => mediaConstraintsOf(p.capabilities), p.key).not.toThrow();
   });
 });

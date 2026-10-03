@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && pnpm run build:prestart && pnpm run build:worker",
-    "build:worker": "esbuild src/worker.ts --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/worker.mjs --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "build": "next build && pnpm run build:prestart && pnpm run build:storage-init && pnpm run build:worker",
+    "build:worker": "esbuild src/worker.ts --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/worker.mjs --external:pg-native --external:sharp --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "build:prestart": "esbuild scripts/prestart.mjs --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/scripts/prestart.mjs --external:../server.js --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "build:storage-init": "esbuild scripts/storage-init.mjs --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/scripts/storage-init.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",

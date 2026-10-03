@@ -12,6 +12,16 @@ export interface ProviderCapabilities {
     maxBytesPerFile: number;
     /** e.g. Instagram: true */
     required: boolean;
+    /** Converted to when an image's type is not allowed. Default: allowedMimeTypes[0]. */
+    outputMimeType?: string;
+    minWidth?: number;
+    maxWidth?: number;
+    minHeight?: number;
+    maxHeight?: number;
+    /** width ÷ height, inclusive. */
+    minAspectRatio?: number;
+    maxAspectRatio?: number;
+    maxAltTextLength?: number;
   };
   /** e.g. Instagram: false */
   textOnlyAllowed: boolean;
@@ -50,7 +60,8 @@ export interface PostContent {
 }
 
 export interface ValidationIssue {
-  severity: "error" | "warning";
+  /** "info" never blocks. */
+  severity: "error" | "warning" | "info";
   code:
     | "text_too_long"
     | "too_many_images"
@@ -61,6 +72,14 @@ export interface ValidationIssue {
     | "unsupported_post_type"
     | "missing_alt_text"
     | "empty_post"
+    | "media_will_convert"
+    | "media_will_downscale"
+    | "media_will_compress"
+    | "aspect_ratio_out_of_range"
+    | "image_too_small"
+    | "variant_failed"
+    | "alt_text_too_long"
+    | "media_unavailable"
     | (string & {});
   message: string;
   field: "text" | "media" | "postType" | `media.${number}`;
