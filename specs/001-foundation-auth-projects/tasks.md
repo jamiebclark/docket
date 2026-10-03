@@ -332,7 +332,7 @@ Task: "tests/integration/invitation-accept.test.ts (T057)"
 
 **Purpose**: Fix the blocking findings in the third `review.md` (F1–F4). The BLOCKER comes first. Each task carries its finding ID and location.
 
-- [ ] T096 Make `src/lib/validation` the single source of input rules:
+- [x] T096 Make `src/lib/validation` the single source of input rules:
   - Build `createProjectSchema`/`updateSettingsSchema` in `src/server/services/projects.ts` from `projectNameSchema`, `slugSchema`, `timeZoneSchema`, `approvalPolicySchema` and `schedulingPolicySchema`, and delete the local `slugSchema`/`timezoneSchema`/`isValidTimeZone`.
   - Use `emailSchema`, `passwordSchema`, `personNameSchema` and `roleSchema` in `src/server/services/setup.ts`, in `src/server/services/invitations/index.ts`, and in `crossFieldIssues` in `src/server/env.ts`.
   - Cap `slugify` in `src/app/p/new/new-project-form.tsx` with the shared slug maximum.
@@ -342,7 +342,7 @@ Task: "tests/integration/invitation-accept.test.ts (T057)"
   - expect success for a 45-character slug.
 
   Never loosen the shared schemas — review F1 (BLOCKER), src/server/services/projects.ts:15
-- [ ] T097 Make the locked re-check fresh:
+- [x] T097 Make the locked re-check fresh:
   - In `scope.transaction(fn, { lockProject: true })` (`src/server/dal/scope.ts:96`), run `select id from projects where id = $1 for update` as its own statement.
   - Then resolve the caller's membership in a separate statement, which gets a fresh snapshot after the lock is granted, and throw `NotFoundError` if it's gone.
   - Re-check `tx.can({ project: ["update"] })` inside `projects.updateSettings`.
@@ -353,11 +353,40 @@ Task: "tests/integration/invitation-accept.test.ts (T057)"
   - expect `NotFoundError` and no new `invitation` row.
 
   Repeat the test for a concurrent demotion from admin to editor followed by `members.remove`, expecting `ForbiddenError` — review F2 (MAJOR), src/server/dal/scope.ts:75
-- [ ] T098 Close the relative-import hole in the raw-database ban in `eslint.config.mjs:23`, so that `src/server/services/**` (and any other non-exempt `src/` file) can't import `../db/client`, `../../db/client`, `../db/schema` or `./db/client`. Keep `src/server/{dal,db,auth,startup}/**` exempt. Add those four imports as cases in `tests/lint/db-import.test.ts`, using file paths under `src/server/services/` and `src/server/`, each expecting the restricted-import error, and confirm `pnpm lint` stays clean on the tree — review F3 (MAJOR), eslint.config.mjs:23
-- [ ] T099 Rewrite `README.md:46-59` from the code as it is now:
+- [x] T098 Close the relative-import hole in the raw-database ban in `eslint.config.mjs:23`, so that `src/server/services/**` (and any other non-exempt `src/` file) can't import `../db/client`, `../../db/client`, `../db/schema` or `./db/client`. Keep `src/server/{dal,db,auth,startup}/**` exempt. Add those four imports as cases in `tests/lint/db-import.test.ts`, using file paths under `src/server/services/` and `src/server/`, each expecting the restricted-import error, and confirm `pnpm lint` stays clean on the tree — review F3 (MAJOR), eslint.config.mjs:23
+- [x] T099 Rewrite `README.md:46-59` from the code as it is now:
   - session lifetime and refresh, as Better Auth's installed defaults (read from `node_modules/better-auth`);
   - sign-in rate limiting on in every environment (`rateLimit.enabled: true`, 3 per 10 s);
   - registering a project-owned table with one line in `src/server/db/project-owned.ts`;
   - a Testing note: `DATABASE_URL` naming a database that ends `_test`, plus `pnpm db:check`, `db:generate` and `db:migrate`.
 
   In `docs/decisions.md`, delete the orphaned line at `:101`, and replace U2's "auth.ts does not exist yet" (`:102-103`) with what was observed, or with "not verified (needs a browser)". Describe only behaviour that exists — review F4 (MAJOR), README.md:51
+
+## Front-end survey findings (docker compose up, 2026-10-03; T083 partial)
+
+Verified passing via curl against `docker compose up`: health `{"ok":true}`, migrations applied on start, sign-up without token → 400, blank `CREDENTIALS_ENCRYPTION_KEY` → exit 1 in 1 s naming the variable with no secrets printed, unreachable `DATABASE_URL_DIRECT` → exit 1.
+
+- [x] T100 Fresh install with no users and no bootstrap vars: `GET /` redirects to `/login` (proxy) and never offers `/setup`, contradicting quickstart §2 ("<http://localhost:3000> redirects to `/setup`"). Route unauthenticated `/` (and `/login`) to `/setup` while the install has no users; add an integration test for the redirect decision.
+- [x] T101 Migration failure: the container log prints Next's "✓ Ready" before "Docket: database migration failed. Not starting.", so the server may accept connections before migrations finish, contradicting FR-004 ("exits before listening"). Run migrations before the HTTP server starts (e.g. a pre-start migrate step in the image's start command rather than inside `instrumentation.ts`), keep exit code 1, and verify ordering with a test or documented check.
+
+---
+
+## Phase 13: Review remediation
+
+**Purpose**: Fix the blocking findings in the fifth `review.md` (F1, F2; both MAJOR, both reproduced on the built standalone server). Each task carries its finding ID and location.
+
+- [ ] T102 Make sign-in rate limiting hold against a client that picks its own `X-Forwarded-For`:
+  - Today Better Auth keys the limit on that header (no `advanced.ipAddress` in `src/server/auth/auth.ts:44`). Next only fills it from the socket when the client didn't send one, and Compose publishes port 3000 directly. Measured: a fresh client-chosen IP per try gave 10 wrong passwords and 0 × 429, and a two-entry header put every user in one shared bucket.
+  - Add a limit that a header can't sidestep. For example, a per-email attempt limit for `/sign-in/email` in the existing `before` hook, with the same 3-per-10-seconds rule, in memory. Read the hook's `ctx.body` shape from `node_modules/better-auth`.
+  - Make the trusted client-IP source configurable (`advanced.ipAddress.ipAddressHeaders` / `trustedProxies` from env). Document it in `.env.example` and `README.md`, together with the reverse-proxy requirement.
+  - Rewrite `README.md:52-56` to describe only what holds.
+  - In `tests/integration/auth-endpoints.test.ts`:
+    - four sign-ins for one email, each with a different `x-forwarded-for`, where the 4th is 429;
+    - three failures from one client with a two-entry header, after which a different email can still sign in.
+
+  Log the decision in `docs/decisions.md` — review F1 (MAJOR), src/server/auth/auth.ts:44
+- [ ] T103 Show pending invitations to signed-in users outside the project shell:
+  - Today `InvitationBadge`, the only link to `/invitations`, renders only in `src/app/p/[projectSlug]/layout.tsx:41`. A signed-in user with no projects is sent to `/p/new`, which has no badge, no link and no sign-out. In-app delivery gives the inviter no link to resend.
+  - Extract a small signed-in header (invitations link with its pending count, plus the user menu with sign-out). Render it on `src/app/p/new/page.tsx` and `src/app/invitations/page.tsx`, and reuse it in the project layout so there is one implementation.
+  - Keep FR-018's redirect to project creation unchanged.
+  - Add a test proving that a zero-project user with a pending invitation sees the count on `/p/new`, for example a decision or render test for the shared header — review F2 (MAJOR), src/app/p/new/page.tsx:9
