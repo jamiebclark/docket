@@ -20,7 +20,7 @@ const eslintConfig = defineConfig([
           ],
           patterns: [
             {
-              group: ["@/server/db", "@/server/db/*", "**/server/db", "**/server/db/**"],
+              group: ["@/server/db", "@/server/db/*", "**/server/db", "**/server/db/**", "**/db", "**/db/**"],
               message: DB_MESSAGE,
             },
           ],
