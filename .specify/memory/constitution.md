@@ -112,6 +112,21 @@ Env vars are validated at startup with Zod and documented in `.env.example`.
     final pass and CI already run them on the same code. Read their results
     (`git log`, the implement pass output, CI on the PR) and run only targeted
     tests or probes that prove or disprove a specific finding.
+- **Review is exhaustive once, then scoped** (each extra round costs ~40 min):
+  - the first review of an entry MUST sweep every category below and report
+    ALL findings in that one pass — do not stop at the first few:
+    concurrency and locking (races between user actions and the tick,
+    deadlocks from inconsistent lock order, stale reads under READ
+    COMMITTED); idempotency and retries (double effects, counters,
+    limits); authorization and project scoping; time zones and DST;
+    error, timeout and ambiguous paths; secrets in logs/responses; and
+    every functional requirement and success criterion in spec.md, one by
+    one;
+  - a re-review after remediation checks ONLY that each earlier finding is
+    fixed and that the files changed by the remediation introduced no
+    regression. It does not open new lines of inquiry; anything else it
+    notices is recorded as MINOR for the hardening entry, not BLOCKER/MAJOR.
+
 - **Tests required** per the brief's quality bar: provider `validate`/`advance`
   with mocked HTTP incl. error and ambiguous paths; scheduler concurrency,
   kill-recovery, backoff, no-retry-on-ambiguous; slot double-booking, DST,
@@ -128,4 +143,4 @@ on product behaviour; `docs/research/` wins on external facts. Amendments are
 made by editing this file in a `docs(constitution):` commit with a version
 bump.
 
-**Version**: 1.3.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
+**Version**: 1.4.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
