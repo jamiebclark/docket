@@ -51,7 +51,8 @@ Ten MINORs remain:
 
 ## Findings
 
-- [ ] MAJOR F16 — `pnpm test` exits 1 although every test passes: tearing down a throwaway database leaves an unhandled `57P01` error, so the CI gate is red
+- [x] MAJOR F16 — `pnpm test` exits 1 although every test passes: tearing down a throwaway database leaves an unhandled `57P01` error, so the CI gate is red
+      resolved: pool `error` listener in `src/server/db/client.ts` (commit "fix(db): keep the process alive when an idle database connection drops"); regression test `tests/integration/db-pool-error.test.ts` fails without it. Full suite 550/551 locally, the one failure an ESLint cold-start timeout fixed in "test(lint): allow for ESLint cold start".
       where:  tests/helpers/db.ts:34-37, tests/integration/anonymous-entry.test.ts:18-23, tests/integration/bootstrap.test.ts:15-17, node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.1/node_modules/pg-pool/index.js:133-142, node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.1/node_modules/pg-pool/index.js:172-188, node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.1/node_modules/pg-pool/index.js:50-61, .github/workflows/ci.yml:63-64, .specify/memory/constitution.md:96-100, specs/002-scheduling-engine/tasks.md:229
       why:    What happened:
               - Both full `pnpm vitest run` invocations this pass ended `Test Files 77 passed / Tests 550 passed / Errors 1 error`, with exit code 1.
