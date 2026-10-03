@@ -31,6 +31,40 @@ function crossFieldIssues(source: Record<string, string | undefined>): EnvIssue[
       reason: "must be a PostgreSQL URL starting with postgres:// or postgresql://",
     });
   }
+  const secret = source.TICK_SECRET;
+  if (secret && secret.length < 32) {
+    out.push({ name: "TICK_SECRET", reason: "must be at least 32 characters when set" });
+  }
+  // Only compared when both are valid integers; a malformed one is already a base issue.
+  const num = (name: string, def: number) => {
+    const raw = source[name];
+    if (raw === undefined || raw === "") return def;
+    const n = Number(raw);
+    return Number.isInteger(n) ? n : undefined;
+  };
+  const budget = num("SCHEDULER_TICK_BUDGET_SECONDS", 20);
+  const timeout = num("SCHEDULER_PROVIDER_TIMEOUT_SECONDS", 10);
+  const lease = num("SCHEDULER_LEASE_SECONDS", 300);
+  const backoffBase = num("PUBLISH_BACKOFF_BASE_SECONDS", 60);
+  const backoffMax = num("PUBLISH_BACKOFF_MAX_SECONDS", 3600);
+  if (budget !== undefined && timeout !== undefined && lease !== undefined && lease <= budget + timeout) {
+    out.push({
+      name: "SCHEDULER_LEASE_SECONDS",
+      reason: "must be greater than the tick budget plus the provider timeout",
+    });
+  }
+  if (budget !== undefined && timeout !== undefined && timeout >= budget) {
+    out.push({
+      name: "SCHEDULER_PROVIDER_TIMEOUT_SECONDS",
+      reason: "must be less than SCHEDULER_TICK_BUDGET_SECONDS",
+    });
+  }
+  if (backoffBase !== undefined && backoffMax !== undefined && backoffMax < backoffBase) {
+    out.push({
+      name: "PUBLISH_BACKOFF_MAX_SECONDS",
+      reason: "must be at least PUBLISH_BACKOFF_BASE_SECONDS",
+    });
+  }
   return out;
 }
 
@@ -58,6 +92,19 @@ const int = (min: number, max: number, def: number) =>
         return z.NEVER;
       }
       return n;
+    });
+
+/** `true` | `false`; unset or empty means `def`. */
+const bool = (def: boolean | (() => boolean)) =>
+  z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      if (v === undefined || v === "") return typeof def === "function" ? def() : def;
+      if (v === "true") return true;
+      if (v === "false") return false;
+      ctx.addIssue({ code: "custom", message: "must be true or false" });
+      return z.NEVER;
     });
 
 /** Comma-separated list; empty or unset means "not configured" (undefined). */
@@ -94,6 +141,22 @@ const schema = z
     INVITATION_TTL_DAYS: int(1, 90, 7),
     TRUSTED_IP_HEADERS: csv,
     TRUSTED_PROXIES: csv,
+    TICK_SECRET: z.string().optional(),
+    WORKER_INTERVAL_SECONDS: int(30, 60, 60),
+    RUN_WORKER_IN_PROCESS: bool(false),
+    SCHEDULER_TICK_BUDGET_SECONDS: int(5, 25, 20),
+    SCHEDULER_TICK_MAX_ITEMS: int(1, 500, 25),
+    SCHEDULER_PROVIDER_TIMEOUT_SECONDS: int(1, 20, 10),
+    SCHEDULER_LEASE_SECONDS: int(60, 3600, 300),
+    PUBLISH_MAX_ATTEMPTS: int(1, 20, 5),
+    PUBLISH_BACKOFF_BASE_SECONDS: int(1, 3600, 60),
+    PUBLISH_BACKOFF_MAX_SECONDS: int(1, 86400, 3600),
+    PUBLISH_MAX_DURATION_HOURS: int(1, 168, 24),
+    TOKEN_REFRESH_WINDOW_HOURS: int(1, 720, 72),
+    SCHEDULER_STALE_AFTER_MINUTES: int(1, 1440, 5),
+    EXPLICIT_TIME_WARNING_MINUTES: int(0, 1440, 30),
+    QUEUE_HORIZON_DAYS: int(7, 730, 366),
+    MOCK_PROVIDER_ENABLED: bool(() => process.env.NODE_ENV !== "production"),
     MIGRATE_ON_START: z
       .string()
       .optional()
@@ -109,6 +172,7 @@ const schema = z
     ...e,
     DATABASE_URL_DIRECT: e.DATABASE_URL_DIRECT || e.DATABASE_URL,
     BOOTSTRAP_ADMIN_NAME: e.BOOTSTRAP_ADMIN_NAME || "Admin",
+    TICK_SECRET: e.TICK_SECRET || undefined,
   }));
 
 export type Env = z.output<typeof schema>;
