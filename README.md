@@ -103,6 +103,22 @@ Images need S3-compatible storage with a **publicly readable** bucket: Instagram
 `localhost`, private buckets and signed URLs will not work. Without the `S3_*` settings the app still runs and media features show a
 "Media storage is not set up" state. See [docs/storage.md](docs/storage.md) for Cloudflare R2, AWS S3 and the opt-in offline MinIO profile.
 
+## Connecting a Bluesky account
+
+Bluesky connects with an **app password**, not your main password. Create one in your Bluesky settings (look for app passwords under
+privacy and security) and give it a name such as "Docket". Then open the project's Accounts screen, choose Bluesky and enter:
+
+- **Handle**: your Bluesky handle, without the `@`.
+- **App password**: the one you just created.
+- **Server (PDS) address**: leave the default unless you run a self-hosted server; then enter its `https://` address.
+
+What is stored: the session tokens Bluesky returns, plus your DID and handle, encrypted like every other credential.
+What is **not** stored: the app password itself. It is used once to open the session and then discarded.
+
+If an account shows **Needs reconnecting**, Bluesky refused to renew its session (the app password was revoked, or the session expired).
+Open Accounts and enter an app password again. Removing the account deletes the stored tokens, but revoking the app password
+is done in Bluesky.
+
 ## Project-owned tables
 Every table that belongs to a project must be listed in the project-owned
 registry with its scope column, and every query on it must filter on that

@@ -152,13 +152,13 @@ description: "Task list for the Bluesky provider (004)"
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T047 [P] Write `tests/integration/bluesky/no-secrets.test.ts`: for connect, refresh and every advance path, collect `accessJwt`, `refreshJwt` and the app password; assert absence from `publish_attempts`, `post_targets`, `social_accounts` (excluding `credentials_encrypted`), captured `console` output (`vi.spyOn`), action results and rendered HTML (FR-026, SC-007)
-- [ ] T048 [P] Add the README section "Connecting a Bluesky account" (generic app-password wording, PDS field, what is/isn't stored, "Needs reconnecting", revoke in Bluesky) in `README.md`
-- [ ] T049 [P] Update `docs/adding-a-provider.md`: §4 connectAccount, §6 stepFor content + `ctx.step`, §7 `credentialsExpired`, §9 `needsRefresh`/transient/displayName, new §13 Bluesky worked example (FR-029)
-- [ ] T050 [P] Append "004 — Bluesky provider" to `docs/decisions.md` covering every item in plan.md implementation note 13 (FR-007, G1–G4 with what/why/reverse, `released` reuse, refresh recovery note, JPEG/PNG only, one image per step, PDS URL rules, `Retry-After` only with U1 NEEDS RESEARCH, "verified with mocks only", not using `CredentialSession`, mention transient vs unresolved)
-- [ ] T051 Run the final gates and record real output: `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm db:check` (no drift, no migration; `tests/lint/worker-bundle.test.ts` and import-boundaries green)
-- [ ] T052 Verify scope (SC-008) with `git diff --stat main -- . ':!src/providers/bluesky' ':!tests' ':!docs' ':!README.md' ':!specs'`; only the registry line and the generic G1–G4 files from plan.md may appear
-- [ ] T053 Execute quickstart.md §1–§6 commands and note each as "verified with mocks only" in the `docs/decisions.md` entry
+- [x] T047 [P] Write `tests/integration/bluesky/no-secrets.test.ts`: for connect, refresh and every advance path, collect `accessJwt`, `refreshJwt` and the app password; assert absence from `publish_attempts`, `post_targets`, `social_accounts` (excluding `credentials_encrypted`), captured `console` output (`vi.spyOn`), action results and rendered HTML (FR-026, SC-007)
+- [x] T048 [P] Add the README section "Connecting a Bluesky account" (generic app-password wording, PDS field, what is/isn't stored, "Needs reconnecting", revoke in Bluesky) in `README.md`
+- [x] T049 [P] Update `docs/adding-a-provider.md`: §4 connectAccount, §6 stepFor content + `ctx.step`, §7 `credentialsExpired`, §9 `needsRefresh`/transient/displayName, new §13 Bluesky worked example (FR-029)
+- [x] T050 [P] Append "004 — Bluesky provider" to `docs/decisions.md` covering every item in plan.md implementation note 13 (FR-007, G1–G4 with what/why/reverse, `released` reuse, refresh recovery note, JPEG/PNG only, one image per step, PDS URL rules, `Retry-After` only with U1 NEEDS RESEARCH, "verified with mocks only", not using `CredentialSession`, mention transient vs unresolved)
+- [x] T051 Run the final gates and record real output: `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm db:check` (no drift, no migration; `tests/lint/worker-bundle.test.ts` and import-boundaries green)
+- [x] T052 Verify scope (SC-008) with `git diff --stat main -- . ':!src/providers/bluesky' ':!tests' ':!docs' ':!README.md' ':!specs'`; only the registry line and the generic G1–G4 files from plan.md may appear
+- [x] T053 Execute quickstart.md §1–§6 commands and note each as "verified with mocks only" in the `docs/decisions.md` entry
 - [ ] T054 🛑 BLOCKED: needs a real Bluesky account and app password — owner performs the live check in quickstart.md §7 after merge and records "verified live on <date>" in `docs/decisions.md`
 
 ---
