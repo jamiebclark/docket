@@ -84,6 +84,10 @@ describe("pasting a Threads token", () => {
     const before = Date.now();
     const { env, session, r } = await paste();
     if (!r.ok) throw new Error(r.message);
+    // The chooser says the expiry is estimated before anything is saved (F2).
+    const connect = await import("../../../src/server/services/connect");
+    const choice = await connect.getConnectChoice(env.scope, r.attemptId, session);
+    expect(JSON.stringify(choice?.candidates)).toContain("Expiry estimated");
     const { creds, row } = await saved(env, session, r.attemptId);
     expect(creds).toMatchObject({ accessToken: PASTED, expiryEstimated: true });
     expect(creds.expiresAt as number).toBeGreaterThanOrEqual(before + SIXTY_DAYS_MS);

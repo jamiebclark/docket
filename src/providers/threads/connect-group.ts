@@ -32,6 +32,9 @@ function candidateFor(
         settings,
         credentials,
         expiresAt: new Date(credentials.expiresAt),
+        ...(credentials.expiryEstimated
+          ? { notes: ["Expiry estimated: Docket could not confirm when this token expires and assumes 60 days."] }
+          : {}),
       },
     ],
   };
