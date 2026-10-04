@@ -95,7 +95,12 @@ Signed-in members of a project get these screens under `/p/<project>/`:
 - **Calendar** (`calendar`): month and week views of scheduled posts and empty slots, with drag and drop and keyboard alternatives for moving, swapping and pulling the queue forward.
 - **Posts** (`posts`, `posts/<postId>`): filter by status, open a post, retry, cancel, resolve ambiguous targets or delete.
 - **Media** (`media`): upload, tag, add alt text and delete images.
+- **Generate** (`generate`), **Review** (`review`) and **Voice** (`voice`): create posts with the model, approve or reject them, and manage voice profiles.
 - **Accounts** (`accounts`): connect the mock provider, reconnect, remove, and edit posting slots. A banner appears on every screen when an account needs reconnecting.
+
+## Generator
+
+Docket can draft posts with OpenAI or Anthropic: pick a voice profile, write a brief, choose accounts, and get a variant per platform that goes through the review queue and the project's approval and scheduling policies. Set `LLM_PROVIDER`, `LLM_MODEL` and the matching API key (see `.env.example`) to enable it; without them everything else still works. Details, the policy matrix and what is out of scope are in [docs/generator.md](docs/generator.md).
 
 ## Media storage
 
