@@ -65,10 +65,72 @@ function crossFieldIssues(source: Record<string, string | undefined>): EnvIssue[
       reason: "must be at least PUBLISH_BACKOFF_BASE_SECONDS",
     });
   }
+  out.push(...storageIssues(source));
+  return out;
+}
+
+const STORAGE_GROUP = ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_PUBLIC_BASE_URL"] as const;
+const STORAGE_OPTIONAL = ["S3_ENDPOINT", "S3_REGION", "S3_FORCE_PATH_STYLE", "S3_CHECKSUMS", "S3_PREVIEW_URLS"] as const;
+const HTTP_URL = /^https?:\/\/[^/\s?#][^\s?#]*$/;
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+
+/** All-or-none storage group plus the checks that depend on NODE_ENV. Messages never carry values. */
+function storageIssues(source: Record<string, string | undefined>): EnvIssue[] {
+  const out: EnvIssue[] = [];
+  const set = (n: string) => Boolean(source[n]);
+  const anyGroup = STORAGE_GROUP.some(set);
+  if (!anyGroup) {
+    for (const n of STORAGE_OPTIONAL) {
+      if (set(n)) out.push({ name: n, reason: "set S3_BUCKET and the other storage settings to enable storage" });
+    }
+    return out;
+  }
+  for (const n of STORAGE_GROUP) {
+    if (!set(n)) out.push({ name: n, reason: "required when media storage is configured" });
+  }
+  const bucket = source.S3_BUCKET;
+  if (bucket && !/^[a-z0-9.-]{3,63}$/.test(bucket)) {
+    out.push({ name: "S3_BUCKET", reason: "must be 3–63 characters of a-z, 0-9, . or -" });
+  }
+  const base = source.S3_PUBLIC_BASE_URL;
+  if (base) {
+    let host: string | undefined;
+    let protocol: string | undefined;
+    let clean = false;
+    try {
+      const u = new URL(base);
+      host = u.hostname;
+      protocol = u.protocol;
+      clean = !u.search && !u.hash && !u.username && !u.password;
+    } catch {
+      // handled below
+    }
+    if (!HTTP_URL.test(base) || !clean) {
+      out.push({ name: "S3_PUBLIC_BASE_URL", reason: "must be an absolute http(s) URL with no query or fragment" });
+    } else if (process.env.NODE_ENV === "production" && protocol === "http:" && !LOCAL_HOSTS.has(host ?? "")) {
+      out.push({ name: "S3_PUBLIC_BASE_URL", reason: "must use https:// in production" });
+    }
+  }
+  const endpoint = source.S3_ENDPOINT;
+  if (endpoint && !HTTP_URL.test(endpoint)) {
+    out.push({ name: "S3_ENDPOINT", reason: "must be an absolute http(s) URL" });
+  }
   return out;
 }
 
 export type EnvIssue = { name: string; reason: string };
+
+export type S3StorageConfig = {
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  publicBaseUrl: string;
+  endpoint?: string;
+  region: string;
+  forcePathStyle: boolean;
+  checksums: "when_required" | "when_supported";
+  previewUrls: "public" | "signed";
+};
 
 const url = (what: string) =>
   z
@@ -107,6 +169,18 @@ const bool = (def: boolean | (() => boolean)) =>
       return z.NEVER;
     });
 
+/** One of a fixed set of strings; unset or empty means `def`. */
+const oneOf = <const T extends string>(values: readonly T[], def: T) =>
+  z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      if (v === undefined || v === "") return def;
+      if ((values as readonly string[]).includes(v)) return v as T;
+      ctx.addIssue({ code: "custom", message: `must be one of: ${values.join(", ")}` });
+      return z.NEVER;
+    });
+
 /** Comma-separated list; empty or unset means "not configured" (undefined). */
 const csv = z
   .string()
@@ -115,6 +189,31 @@ const csv = z
     const items = (v ?? "").split(",").map((i) => i.trim()).filter(Boolean);
     return items.length > 0 ? items : undefined;
   });
+
+function toStorage(e: {
+  S3_BUCKET?: string;
+  S3_ACCESS_KEY_ID?: string;
+  S3_SECRET_ACCESS_KEY?: string;
+  S3_PUBLIC_BASE_URL?: string;
+  S3_ENDPOINT?: string;
+  S3_REGION?: string;
+  S3_FORCE_PATH_STYLE: boolean;
+  S3_CHECKSUMS: S3StorageConfig["checksums"];
+  S3_PREVIEW_URLS: S3StorageConfig["previewUrls"];
+}): S3StorageConfig | null {
+  if (!e.S3_BUCKET || !e.S3_ACCESS_KEY_ID || !e.S3_SECRET_ACCESS_KEY || !e.S3_PUBLIC_BASE_URL) return null;
+  return {
+    bucket: e.S3_BUCKET,
+    accessKeyId: e.S3_ACCESS_KEY_ID,
+    secretAccessKey: e.S3_SECRET_ACCESS_KEY,
+    publicBaseUrl: e.S3_PUBLIC_BASE_URL.replace(/\/+$/, ""),
+    endpoint: e.S3_ENDPOINT || undefined,
+    region: e.S3_REGION || "auto",
+    forcePathStyle: e.S3_FORCE_PATH_STYLE,
+    checksums: e.S3_CHECKSUMS,
+    previewUrls: e.S3_PREVIEW_URLS,
+  };
+}
 
 const schema = z
   .object({
@@ -156,6 +255,17 @@ const schema = z
     SCHEDULER_STALE_AFTER_MINUTES: int(1, 1440, 5),
     EXPLICIT_TIME_WARNING_MINUTES: int(0, 1440, 30),
     QUEUE_HORIZON_DAYS: int(7, 730, 366),
+    S3_BUCKET: z.string().optional(),
+    S3_ACCESS_KEY_ID: z.string().optional(),
+    S3_SECRET_ACCESS_KEY: z.string().optional(),
+    S3_PUBLIC_BASE_URL: z.string().optional(),
+    S3_ENDPOINT: z.string().optional(),
+    S3_REGION: z.string().optional(),
+    S3_FORCE_PATH_STYLE: bool(false),
+    S3_CHECKSUMS: oneOf(["when_required", "when_supported"], "when_required"),
+    S3_PREVIEW_URLS: oneOf(["public", "signed"], "public"),
+    MEDIA_MAX_UPLOAD_MB: int(1, 25, 20),
+    MEDIA_MAX_MEGAPIXELS: int(1, 100, 50),
     MOCK_PROVIDER_ENABLED: bool(() => process.env.NODE_ENV !== "production"),
     MIGRATE_ON_START: z
       .string()
@@ -170,6 +280,8 @@ const schema = z
   })
   .transform((e) => ({
     ...e,
+    storage: toStorage(e),
+    media: { maxUploadBytes: e.MEDIA_MAX_UPLOAD_MB * 1024 * 1024, maxPixels: e.MEDIA_MAX_MEGAPIXELS * 1_000_000 },
     DATABASE_URL_DIRECT: e.DATABASE_URL_DIRECT || e.DATABASE_URL,
     BOOTSTRAP_ADMIN_NAME: e.BOOTSTRAP_ADMIN_NAME || "Admin",
     TICK_SECRET: e.TICK_SECRET || undefined,

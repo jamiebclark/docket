@@ -1,6 +1,6 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { postMedia, posts, type PostRow } from "../db/schema";
+import { postMedia, postStatus, postTargets, posts, type PostRow, type PostTargetStatus } from "../db/schema";
 
 export type PostRecord = PostRow;
 export type NewPost = Partial<
@@ -10,7 +10,31 @@ export type PostPatch = Partial<
   Pick<typeof posts.$inferInsert, "baseText" | "reviewState" | "generationMetadata">
 >;
 
+export interface PostListFilter {
+  status?: PostRecord["status"];
+  needsDecision?: boolean;
+  limit: number;
+  offset: number;
+}
+export interface PostListRow {
+  post: PostRecord;
+  /** Next scheduled target time for live posts, else the latest published time; null when neither. */
+  relevantAt: Date | null;
+  needsDecision: boolean;
+  targets: {
+    id: string;
+    socialAccountId: string;
+    status: PostTargetStatus;
+    scheduledAt: Date | null;
+    publishedAt: Date | null;
+  }[];
+}
+
 export interface PostsRepo {
+  /** Non-deleted posts: live ones by next scheduled time ascending, then the rest by `updated_at` descending. */
+  list(filter: PostListFilter): Promise<{ rows: PostListRow[]; total: number }>;
+  /** Counts per status plus `needs_decision`, over non-deleted posts. */
+  counts(): Promise<Record<PostRecord["status"] | "needs_decision", number>>;
   insert(input: NewPost): Promise<PostRecord>;
   /** Excludes soft-deleted posts. */
   get(id: string): Promise<PostRecord | null>;
@@ -30,7 +54,79 @@ export interface PostsRepo {
 
 export function createPostsRepo(db: Database, projectId: string): PostsRepo {
   const mine = (id: string) => and(eq(posts.projectId, projectId), eq(posts.id, id));
+  const needsDecisionExpr = sql<boolean>`EXISTS (SELECT 1 FROM "post_targets" WHERE "post_targets"."project_id" = ${projectId} AND "post_targets"."post_id" = ${posts.id} AND "post_targets"."status" = 'ambiguous')`;
+  const nextScheduledExpr = sql<Date | null>`(SELECT min("post_targets"."scheduled_at") FROM "post_targets" WHERE "post_targets"."project_id" = ${projectId} AND "post_targets"."post_id" = ${posts.id} AND "post_targets"."status" IN ('scheduled','publishing'))`;
   return {
+    async list(f) {
+      const conds: (SQL | undefined)[] = [eq(posts.projectId, projectId), isNull(posts.deletedAt)];
+      if (f.status) conds.push(eq(posts.status, f.status));
+      if (f.needsDecision) conds.push(needsDecisionExpr);
+      const where = and(...conds);
+      const [page, [count]] = await Promise.all([
+        db
+          .select({ post: posts })
+          .from(posts)
+          .where(where)
+          .orderBy(sql`${nextScheduledExpr} ASC NULLS LAST`, desc(posts.updatedAt), desc(posts.id))
+          .limit(f.limit)
+          .offset(f.offset),
+        db.select({ n: sql<number>`count(*)::int` }).from(posts).where(where),
+      ]);
+      const ids = page.map((p) => p.post.id);
+      const targets = ids.length
+        ? await db
+            .select({
+              postId: postTargets.postId,
+              id: postTargets.id,
+              socialAccountId: postTargets.socialAccountId,
+              status: postTargets.status,
+              scheduledAt: postTargets.scheduledAt,
+              publishedAt: postTargets.publishedAt,
+            })
+            .from(postTargets)
+            .where(and(eq(postTargets.projectId, projectId), inArray(postTargets.postId, ids)))
+            .orderBy(asc(postTargets.createdAt), asc(postTargets.id))
+        : [];
+      const rows = page.map(({ post }): PostListRow => {
+        const mine = targets.filter((t) => t.postId === post.id);
+        const live = mine
+          .filter((t) => (t.status === "scheduled" || t.status === "publishing") && t.scheduledAt)
+          .map((t) => t.scheduledAt!.getTime());
+        const published = mine.filter((t) => t.publishedAt).map((t) => t.publishedAt!.getTime());
+        const at = live.length ? Math.min(...live) : published.length ? Math.max(...published) : null;
+        return {
+          post,
+          relevantAt: at === null ? null : new Date(at),
+          needsDecision: mine.some((t) => t.status === "ambiguous"),
+          targets: mine.map((t) => ({
+            id: t.id,
+            socialAccountId: t.socialAccountId,
+            status: t.status,
+            scheduledAt: t.scheduledAt,
+            publishedAt: t.publishedAt,
+          })),
+        };
+      });
+      return { rows, total: count?.n ?? 0 };
+    },
+    async counts() {
+      const out = Object.fromEntries([...postStatus.enumValues, "needs_decision"].map((k) => [k, 0])) as Record<
+        PostRecord["status"] | "needs_decision",
+        number
+      >;
+      const byStatus = await db
+        .select({ status: posts.status, n: sql<number>`count(*)::int` })
+        .from(posts)
+        .where(and(eq(posts.projectId, projectId), isNull(posts.deletedAt)))
+        .groupBy(posts.status);
+      for (const r of byStatus) out[r.status] = r.n;
+      const [nd] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(posts)
+        .where(and(eq(posts.projectId, projectId), isNull(posts.deletedAt), needsDecisionExpr));
+      out.needs_decision = nd?.n ?? 0;
+      return out;
+    },
     async insert(input) {
       const [row] = await db
         .insert(posts)

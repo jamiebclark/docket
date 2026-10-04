@@ -4,6 +4,7 @@ import * as clock from "../../dal/clock";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
 import { getEnv } from "../../env";
+import { hasLiveLease } from "../posts/cancel";
 import { applyDerivedStatus } from "../posts/status";
 import { occurrencesBetween } from "./occurrences";
 
@@ -175,42 +176,158 @@ export async function swapQueuedTargets(scope: ProjectScope, targetIdA: string, 
   });
 }
 
+export interface PullMove {
+  targetId: string;
+  from: string;
+  to: string;
+  fromLocal: string;
+  toLocal: string;
+  /** Only set when `expected` was given: the move is not what the preview showed. */
+  differsFromPreview?: boolean;
+}
+
+export interface PullExpected {
+  targetId: string;
+  to: string;
+}
+
+async function pullForwardBody(tx: ActionTx, id: string): Promise<PullMove[]> {
+  if (!(await tx.accounts.get(id))) throw new NotFoundError();
+  const tz = tx.project.timezone;
+  const now = await clock.now();
+  // Posts first (by id), then the targets in scheduled_at order.
+  await lockPostsOf(tx, await tx.targets.listOpenForAccount(id));
+  const queued = await tx.targets.queuedForAccount(id, now);
+  for (const t of queued) await tx.targets.releaseOccurrence(t.id);
+  const moved: PullMove[] = [];
+  let after = now;
+  for (const t of queued) {
+    const from = t.slotOccurrenceAt!;
+    const r = await allocateNextFree(tx, { id: t.id, accountId: id }, { after });
+    if (r.ok && r.instant.getTime() > from.getTime()) {
+      // Only active slots are candidates, so a target on a paused or deleted slot can be
+      // offered something later. Never move later: keep the occurrence it held (F19).
+      await tx.targets.releaseOccurrence(t.id);
+      await tx.targets.tryHoldOccurrence(t.id, from, t.slotId as string);
+      after = from;
+    } else if (r.ok) {
+      after = r.instant;
+      if (r.instant.getTime() !== from.getTime()) {
+        moved.push({
+          targetId: t.id,
+          from: from.toISOString(),
+          to: r.instant.toISOString(),
+          fromLocal: plannedTime(from, t.slotId, tz).localTime,
+          toLocal: r.planned.localTime,
+        });
+      }
+    } else {
+      // Beyond the search horizon: it keeps what it had.
+      await tx.targets.tryHoldOccurrence(t.id, from, t.slotId!);
+      after = from;
+    }
+  }
+  return moved;
+}
+
 /** Closes gaps: every queued target takes the earliest free occurrence, in order, never later than it held. */
 export async function pullQueueForward(
   scope: ProjectScope,
   accountId: string,
-): Promise<{ moved: { targetId: string; from: string; to: string }[] }> {
+  opts: { expected?: readonly PullExpected[] } = {},
+): Promise<{ moved: PullMove[] }> {
   const id = uuid.parse(accountId);
+  need(scope, { post: ["schedule"] });
+  const moved = await scope.transaction(async (tx) => {
+    need(tx, { post: ["schedule"] });
+    return pullForwardBody(tx, id);
+  });
+  const expected = opts.expected;
+  if (!expected) return { moved };
+  const byTarget = new Map(expected.map((e) => [e.targetId, e.to]));
+  return { moved: moved.map((m) => ({ ...m, differsFromPreview: byTarget.get(m.targetId) !== m.to })) };
+}
+
+class PreviewRollback extends Error {
+  constructor(readonly moved: PullMove[]) {
+    super("preview rollback");
+  }
+}
+
+/** The same body as `pullQueueForward`, rolled back: what would move, with nothing changed (D13). */
+export async function previewPullQueueForward(scope: ProjectScope, accountId: string): Promise<{ moved: PullMove[] }> {
+  const id = uuid.parse(accountId);
+  need(scope, { post: ["schedule"] });
+  try {
+    await scope.transaction(async (tx) => {
+      need(tx, { post: ["schedule"] });
+      throw new PreviewRollback(await pullForwardBody(tx, id));
+    });
+  } catch (error) {
+    if (error instanceof PreviewRollback) return { moved: error.moved };
+    throw error;
+  }
+  throw new Error("unreachable");
+}
+
+export interface QueuedItem {
+  targetId: string;
+  postId: string;
+  scheduledAt: string;
+  localTime: string;
+  excerpt: string;
+}
+
+/** Queued (slot) future targets of the account with the post excerpt: the "Swap with…" picker. */
+export async function listQueuedForAccount(scope: ProjectScope, accountId: string): Promise<QueuedItem[]> {
+  const id = uuid.parse(accountId);
+  need(scope, { post: ["view"] });
+  if (!(await scope.accounts.get(id))) throw new NotFoundError();
+  const now = await clock.now();
+  const to = new Date(now.getTime() + getEnv().QUEUE_HORIZON_DAYS * 86_400_000 * 2);
+  const rows = await scope.targets.listInRange(now, to, id);
+  return rows
+    .filter(({ target: t }) => t.status === "scheduled" && t.scheduleKind === "slot" && t.slotOccurrenceAt !== null && t.slotOccurrenceAt > now)
+    .map(({ target: t, baseText }) => ({
+      targetId: t.id,
+      postId: t.postId,
+      scheduledAt: t.slotOccurrenceAt!.toISOString(),
+      localTime: plannedTime(t.slotOccurrenceAt!, t.slotId, scope.project.timezone).localTime,
+      excerpt: Array.from(baseText).slice(0, 140).join(""),
+    }));
+}
+
+const moveSchema = z.object({ targetId: uuid, slotId: uuid, scheduledAt: z.coerce.date() });
+
+/** Moves a scheduled target into a specific empty occurrence; the unique index decides races (D12). */
+export async function moveTargetToOccurrence(scope: ProjectScope, input: unknown): Promise<PlannedTime> {
+  const { targetId, slotId, scheduledAt } = moveSchema.parse(input);
   need(scope, { post: ["schedule"] });
   return scope.transaction(async (tx) => {
     need(tx, { post: ["schedule"] });
-    if (!(await tx.accounts.get(id))) throw new NotFoundError();
+    const first = await tx.targets.get(targetId);
+    if (!first) throw new NotFoundError();
+    await lockPostsOf(tx, [first]);
+    const target = await tx.targets.get(targetId);
+    if (!target) throw new NotFoundError();
     const now = await clock.now();
-    // Posts first (by id), then the targets in scheduled_at order.
-    await lockPostsOf(tx, await tx.targets.listOpenForAccount(id));
-    const queued = await tx.targets.queuedForAccount(id, now);
-    for (const t of queued) await tx.targets.releaseOccurrence(t.id);
-    const moved: { targetId: string; from: string; to: string }[] = [];
-    let after = now;
-    for (const t of queued) {
-      const from = t.slotOccurrenceAt!;
-      const r = await allocateNextFree(tx, { id: t.id, accountId: id }, { after });
-      if (r.ok && r.instant.getTime() > from.getTime()) {
-        // Only active slots are candidates, so a target on a paused or deleted slot can be
-        // offered something later. Never move later: keep the occurrence it held (F19).
-        await tx.targets.releaseOccurrence(t.id);
-        await tx.targets.tryHoldOccurrence(t.id, from, t.slotId as string);
-        after = from;
-      } else if (r.ok) {
-        after = r.instant;
-        if (r.instant.getTime() !== from.getTime()) moved.push({ targetId: t.id, from: from.toISOString(), to: r.instant.toISOString() });
-      } else {
-        // Beyond the search horizon: it keeps what it had.
-        await tx.targets.tryHoldOccurrence(t.id, from, t.slotId!);
-        after = from;
-      }
-    }
-    return { moved };
+    if (target.status !== "scheduled") throw new ConflictError("Only a scheduled post can be moved.");
+    if (hasLiveLease(target, now)) throw new ConflictError("Publishing in progress. Try again in a moment.");
+    const slot = await tx.slots.get(slotId);
+    if (!slot || slot.socialAccountId !== target.socialAccountId) throw new ConflictError("That slot belongs to another account.");
+    if (slot.paused) throw new ConflictError("That slot is paused.");
+    if (scheduledAt.getTime() <= now.getTime()) throw new ConflictError("That time has passed.");
+    const horizon = now.getTime() + getEnv().QUEUE_HORIZON_DAYS * 86_400_000;
+    const at = Temporal.Instant.fromEpochMilliseconds(scheduledAt.getTime());
+    const isOccurrence =
+      scheduledAt.getTime() <= horizon &&
+      occurrencesBetween([slot], tx.project.timezone, at.subtract({ minutes: 1 }), at).some((o) => o.instant.epochMilliseconds === scheduledAt.getTime());
+    if (!isOccurrence) throw new ConflictError("That is not one of this slot's times.");
+    await tx.targets.releaseOccurrence(target.id);
+    if (!(await tx.targets.tryHoldOccurrence(target.id, scheduledAt, slot.id))) throw new ConflictError("That slot was just taken.");
+    await tx.targets.update(target.id, { attemptCount: 0, stepState: null, firstStepAt: null, publishStartedAt: null, lastError: null }, { statuses: ["scheduled"] });
+    await applyDerivedStatus(tx, target.postId);
+    return plannedTime(scheduledAt, slot.id, tx.project.timezone);
   });
 }
 

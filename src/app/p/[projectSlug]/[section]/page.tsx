@@ -2,14 +2,9 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 const PLACEHOLDERS: Record<string, string> = {
-  calendar: "Calendar",
-  posts: "Posts",
-  compose: "Compose",
   generate: "Generate",
   jobs: "Jobs",
   review: "Review",
-  media: "Media",
-  accounts: "Accounts",
   voice: "Voice",
 };
 

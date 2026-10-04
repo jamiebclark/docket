@@ -97,6 +97,17 @@ export function validateAgainstCapabilities(
         limit: caps.media.maxBytesPerFile,
       });
     }
+    const maxAlt = caps.media.maxAltTextLength;
+    if (maxAlt !== undefined && item.altText.length > maxAlt) {
+      issues.push({
+        severity: "error",
+        code: "alt_text_too_long",
+        message: `Image ${i + 1} alt text is ${item.altText.length} characters; the limit is ${maxAlt}.`,
+        field,
+        count: item.altText.length,
+        limit: maxAlt,
+      });
+    }
     if (item.altText.trim() === "") {
       issues.push({
         severity: "warning",

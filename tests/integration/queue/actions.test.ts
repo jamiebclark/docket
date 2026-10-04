@@ -94,7 +94,7 @@ describe("pullQueueForward", () => {
     const t3 = await queued(env, a.id);
     await posts.cancelTarget(env.scope, t1.targetId);
     const r = await atTime(NOW, () => queue.pullQueueForward(env.scope, a.id));
-    expect(r.moved).toEqual([
+    expect(r.moved).toMatchObject([
       { targetId: t2.targetId, from: MON(1), to: MON(0) },
       { targetId: t3.targetId, from: MON(2), to: MON(1) },
     ]);

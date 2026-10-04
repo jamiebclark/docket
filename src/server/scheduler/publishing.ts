@@ -14,6 +14,7 @@ import type { TargetPatch, TargetRecord } from "../dal/targets";
 import { decryptCredentials } from "../services/accounts";
 import { applyDerivedStatus } from "../services/posts/status";
 import type { SchedulerConfig } from "./config";
+import { resolvePublishMedia } from "../services/media-variants";
 import { deferralTime, effectiveLimits } from "./limits";
 import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
@@ -198,6 +199,23 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 
+/** Media could not be resolved before the provider call; the target fails with no call made. */
+class MediaUnavailable extends Error {}
+
+/**
+ * Media preparation failed or overran the tick budget. It runs before any provider call,
+ * so the step cannot have published: always retryable, never ambiguous (F3).
+ */
+class MediaNotReady extends Error {}
+
+function withinBudget<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new MediaNotReady("Preparing media took too long; will retry.")), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function execute(
   lease: Leased,
   config: SchedulerConfig,
@@ -231,8 +249,21 @@ async function execute(
   let result: StepResult;
   const startedMs = Date.now();
   try {
-    const content = await repos.targets.effectiveContent(target.id);
-    if (!content) throw new Error("The post is no longer available.");
+    const loaded = await repos.targets.effectiveContent(target.id);
+    if (!loaded) throw new Error("The post is no longer available.");
+    // Adapted media (FR-016): regenerates a vanished variant; a deleted original fails the target before any provider call.
+    // Text-only posts (the common case) skip it.
+    let media = loaded.media;
+    if (loaded.media.length > 0) {
+      // Storage calls can hang; leave room for the provider call inside the tick deadline.
+      const budget = Math.max(1_000, deadline - (await clock.now()).getTime() - config.providerTimeoutMs);
+      const resolved = await withinBudget(resolvePublishMedia(repos, target.id, provider), budget).catch((e: unknown) => {
+        throw e instanceof MediaNotReady ? e : new MediaNotReady("Preparing media failed; will retry.");
+      });
+      if (!resolved.ok) throw new MediaUnavailable(resolved.error);
+      media = resolved.media;
+    }
+    const content = { text: loaded.text, media };
     const ciphertext = await repos.accounts.getCredentialsCiphertext(account.id);
     const credentials = decryptCredentials(account.id, ciphertext);
     secrets = secretValues(credentials);
@@ -257,9 +288,15 @@ async function execute(
       config.providerTimeoutMs,
     );
   } catch (error) {
-    // A lost or failed call: whether the step could have published decides the outcome (D5).
-    const message = redact(error instanceof Error ? error.message : "The provider call failed.", secrets);
-    result = lease.mayPublish ? { kind: "ambiguous", error: message } : { kind: "retryable_error", error: message };
+    if (error instanceof MediaUnavailable) {
+      result = { kind: "fatal_error", error: error.message };
+    } else if (error instanceof MediaNotReady) {
+      result = { kind: "retryable_error", error: error.message };
+    } else {
+      // A lost or failed call: whether the step could have published decides the outcome (D5).
+      const message = redact(error instanceof Error ? error.message : "The provider call failed.", secrets);
+      result = lease.mayPublish ? { kind: "ambiguous", error: message } : { kind: "retryable_error", error: message };
+    }
   }
 
   const now = await clock.now();

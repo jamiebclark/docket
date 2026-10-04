@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, lte, gt } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, gt, ne, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { mediaAssets, postMedia, postTargets, posts, type PostTargetRow } from "../db/schema";
 
@@ -25,7 +25,17 @@ export interface EffectiveContent {
   }[];
 }
 
+export interface RangeTarget {
+  target: TargetRecord;
+  baseText: string;
+}
+
 export interface TargetsRepo {
+  /**
+   * Non-cancelled targets whose `scheduled_at` (or `published_at` once published) falls in
+   * `[from, to)`, with the base text of their non-deleted post. Ordered by that instant, then id.
+   */
+  listInRange(from: Date, to: Date, accountId?: string): Promise<RangeTarget[]>;
   listForPost(postId: string): Promise<TargetRecord[]>;
   get(id: string): Promise<TargetRecord | null>;
   /** Locks every target row of the post (`FOR UPDATE`, its own statement), waiting out a claim in flight. */
@@ -59,6 +69,31 @@ function isUniqueViolation(error: unknown): boolean {
 export function createTargetsRepo(db: Database, projectId: string): TargetsRepo {
   const mine = (id: string) => and(eq(postTargets.projectId, projectId), eq(postTargets.id, id));
   return {
+    async listInRange(from, to, accountId) {
+      const at = sql`CASE WHEN ${postTargets.status} = 'published' THEN ${postTargets.publishedAt} ELSE ${postTargets.scheduledAt} END`;
+      const rows = await db
+        .select({ target: postTargets, baseText: posts.baseText })
+        .from(postTargets)
+        .innerJoin(
+          posts,
+          and(
+            eq(posts.id, postTargets.postId),
+            eq(posts.projectId, postTargets.projectId),
+            isNull(posts.deletedAt),
+          ),
+        )
+        .where(
+          and(
+            eq(postTargets.projectId, projectId),
+            ne(postTargets.status, "cancelled"),
+            sql`${at} >= ${from.toISOString()}::timestamptz`,
+            sql`${at} < ${to.toISOString()}::timestamptz`,
+            accountId ? eq(postTargets.socialAccountId, accountId) : undefined,
+          ),
+        )
+        .orderBy(asc(at), asc(postTargets.id));
+      return rows;
+    },
     async listForPost(postId) {
       return db
         .select()

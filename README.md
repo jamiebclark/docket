@@ -87,6 +87,22 @@ reverse proxy that overwrites the client IP header, and set
 CIDRs of that proxy) so Docket reads the address from where the proxy puts it.
 Unset, Better Auth's default (`x-forwarded-for`) is used.
 
+## Screens
+
+Signed-in members of a project get these screens under `/p/<project>/`:
+
+- **Compose** (`compose`, `compose/<postId>`): write a post, pick accounts and images, see live per-account checks, then save a draft, add to the queue, schedule or publish now.
+- **Calendar** (`calendar`): month and week views of scheduled posts and empty slots, with drag and drop and keyboard alternatives for moving, swapping and pulling the queue forward.
+- **Posts** (`posts`, `posts/<postId>`): filter by status, open a post, retry, cancel, resolve ambiguous targets or delete.
+- **Media** (`media`): upload, tag, add alt text and delete images.
+- **Accounts** (`accounts`): connect the mock provider, reconnect, remove, and edit posting slots. A banner appears on every screen when an account needs reconnecting.
+
+## Media storage
+
+Images need S3-compatible storage with a **publicly readable** bucket: Instagram and Threads fetch each image by its public URL, so
+`localhost`, private buckets and signed URLs will not work. Without the `S3_*` settings the app still runs and media features show a
+"Media storage is not set up" state. See [docs/storage.md](docs/storage.md) for Cloudflare R2, AWS S3 and the opt-in offline MinIO profile.
+
 ## Project-owned tables
 Every table that belongs to a project must be listed in the project-owned
 registry with its scope column, and every query on it must filter on that

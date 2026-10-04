@@ -1,6 +1,6 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { socialAccounts, type SocialAccountRow } from "../db/schema";
+import { postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
 
 export type AccountRow = SocialAccountRow;
 export type AccountRecord = Omit<AccountRow, "credentialsEncrypted"> & { hasCredentials: boolean };
@@ -24,6 +24,9 @@ export interface RefreshPatch {
 }
 
 export interface AccountsRepo {
+  /** Distinct non-deleted posts with a draft/scheduled/publishing target on the account. */
+  countUnpublishedPosts(accountId: string): Promise<number>;
+  listNeedingReauth(): Promise<{ id: string; displayName: string; providerKey: string }[]>;
   list(): Promise<AccountRecord[]>;
   get(id: string): Promise<AccountRecord | null>;
   /** Row lock as its own statement; includes soft-deleted rows so callers can refuse them. */
@@ -52,6 +55,44 @@ function strip(row: AccountRow): AccountRecord {
 export function createAccountsRepo(db: Database, projectId: string): AccountsRepo {
   const mine = (id: string) => and(eq(socialAccounts.projectId, projectId), eq(socialAccounts.id, id));
   return {
+    async countUnpublishedPosts(accountId) {
+      const [row] = await db
+        .select({ n: sql<number>`count(DISTINCT ${posts.id})::int` })
+        .from(postTargets)
+        .innerJoin(
+          posts,
+          and(
+            eq(posts.id, postTargets.postId),
+            eq(posts.projectId, postTargets.projectId),
+            isNull(posts.deletedAt),
+          ),
+        )
+        .where(
+          and(
+            eq(postTargets.projectId, projectId),
+            eq(postTargets.socialAccountId, accountId),
+            sql`${postTargets.status} IN ('draft','scheduled','publishing')`,
+          ),
+        );
+      return row?.n ?? 0;
+    },
+    async listNeedingReauth() {
+      return db
+        .select({
+          id: socialAccounts.id,
+          displayName: socialAccounts.displayName,
+          providerKey: socialAccounts.providerKey,
+        })
+        .from(socialAccounts)
+        .where(
+          and(
+            eq(socialAccounts.projectId, projectId),
+            isNull(socialAccounts.removedAt),
+            eq(socialAccounts.status, "needs_reauth"),
+          ),
+        )
+        .orderBy(asc(socialAccounts.createdAt), asc(socialAccounts.id));
+    },
     async list() {
       const rows = await db
         .select()

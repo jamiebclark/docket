@@ -1,0 +1,110 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { Cell, Row, Table } from "@/components/ui/Table";
+import { forProject, NotFoundError } from "@/server/dal";
+import { getSession } from "@/server/auth/session";
+import * as accounts from "@/server/services/accounts";
+import * as slots from "@/server/services/slots";
+import { ConnectMockForm } from "./ConnectMockForm";
+import { RemoveAccountDialog } from "./RemoveAccountDialog";
+import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
+
+export const metadata: Metadata = { title: "Accounts" };
+export const dynamic = "force-dynamic";
+
+const WEEKDAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+
+const STATUS: Record<accounts.AccountView["status"], { label: string; tone: "success" | "danger" | "neutral" }> = {
+  active: { label: "Connected", tone: "success" },
+  needs_reauth: { label: "Needs reconnecting", tone: "danger" },
+};
+
+export default async function AccountsPage({ params }: { params: Promise<{ projectSlug: string }> }) {
+  const { projectSlug } = await params;
+  let scope;
+  try {
+    scope = await forProject(await getSession(), projectSlug);
+  } catch (error) {
+    if (error instanceof NotFoundError) notFound();
+    throw error;
+  }
+  const canManage = scope.can({ account: ["manage"] });
+  const timeZone = scope.project.timezone;
+  const [list, providers] = await Promise.all([accounts.listAccounts(scope), accounts.listConnectableProviders(scope)]);
+  const mockEnabled = providers.some((p) => p.key === "mock");
+  const withSlots = await Promise.all(list.map(async (account) => ({ account, slots: await slots.listSlots(scope, account.id) })));
+
+  return (
+    <section className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold">Accounts</h1>
+      {canManage && mockEnabled ? <ConnectMockForm slug={projectSlug} /> : null}
+      {withSlots.length === 0 ? (
+        <EmptyState message="No accounts are connected yet." />
+      ) : (
+        withSlots.map(({ account, slots: rows }) => {
+          const status = STATUS[account.status];
+          const isMock = account.providerKey === "mock";
+          const behaviour = (account.settings as { behaviour?: string } | null)?.behaviour ?? "succeed";
+          return (
+            <section
+              key={account.id}
+              id={`account-${account.id}`}
+              aria-labelledby={`account-${account.id}-name`}
+              className="flex flex-col gap-3 rounded-lg border border-foreground/20 p-4"
+            >
+              <header className="flex flex-wrap items-center gap-2">
+                <h2 id={`account-${account.id}-name`} className="text-lg font-semibold">
+                  {account.displayName}
+                </h2>
+                <span className="text-sm text-foreground/70">{account.providerName}</span>
+                <Badge tone={status.tone}>{status.label}</Badge>
+              </header>
+              {account.lastError ? (
+                <p className="text-sm text-red-700 dark:text-red-400">Last error: {account.lastError}</p>
+              ) : null}
+              <p className="text-sm text-foreground/70">
+                Connected <LocalTime value={account.connectedAt} timeZone={timeZone} />
+              </p>
+              {canManage && isMock ? (
+                <div className="flex flex-wrap items-end gap-4">
+                  {account.status === "needs_reauth" ? <ReconnectMockButton slug={projectSlug} id={account.id} /> : null}
+                  <MockBehaviourForm slug={projectSlug} id={account.id} behaviour={behaviour} />
+                </div>
+              ) : null}
+              <h3 className="text-base font-medium">Posting slots ({timeZone})</h3>
+              {rows.length === 0 ? (
+                <p className="text-sm text-foreground/70">No posting slots yet.</p>
+              ) : (
+                <Table caption={`Posting slots for ${account.displayName}`} columns={canManage ? ["Day", "Time", "Status", "Actions"] : ["Day", "Time", "Status"]}>
+                  {rows.map((slot) => (
+                    <Row key={slot.id}>
+                      <Cell>{WEEKDAYS[slot.weekday]}</Cell>
+                      <Cell>
+                        {slot.localTime.slice(0, 5)} {timeZone}
+                      </Cell>
+                      <Cell>{slot.paused ? <Badge tone="warning">Paused</Badge> : <Badge>Active</Badge>}</Cell>
+                      {canManage ? (
+                        <Cell>
+                          <SlotRowActions slug={projectSlug} id={slot.id} paused={slot.paused} label={`${WEEKDAYS[slot.weekday]} ${slot.localTime.slice(0, 5)}`} />
+                        </Cell>
+                      ) : null}
+                    </Row>
+                  ))}
+                </Table>
+              )}
+              {canManage ? (
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <SlotEditor slug={projectSlug} accountId={account.id} />
+                  <RemoveAccountDialog slug={projectSlug} id={account.id} name={account.displayName} />
+                </div>
+              ) : null}
+            </section>
+          );
+        })
+      )}
+    </section>
+  );
+}

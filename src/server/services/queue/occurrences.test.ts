@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { describe, expect, it } from "vitest";
-import { occurrencesBetween, resolveOccurrence } from "./occurrences";
+import { occurrencesBetween, resolveLocalDateTime, resolveOccurrence } from "./occurrences";
 
 const I = (s: string) => Temporal.Instant.from(s);
 const slot = (id: string, weekday: number, localTime: string, paused = false) => ({ id, weekday, localTime, paused });
@@ -76,5 +76,23 @@ describe("DST transitions (SC-007)", () => {
   it("handles a southern-hemisphere zone (Sydney, DST starts in October)", () => {
     const out = occurrencesBetween(sun("02:30"), "Australia/Sydney", I("2026-10-01T00:00:00Z"), I("2026-10-06T00:00:00Z"));
     expect(out.map((o) => o.instant.toString())).toEqual(["2026-10-03T16:30:00Z"]);
+  });
+});
+
+describe("resolveLocalDateTime (Temporal compatible)", () => {
+  it("is exact for an ordinary time", () => {
+    expect(resolveLocalDateTime("Europe/London", "2026-10-05T09:00").toString()).toBe("2026-10-05T08:00:00Z");
+  });
+  it("New York gap 02:30 on 2026-03-08 resolves later, to 03:30 EDT", () => {
+    expect(resolveLocalDateTime("America/New_York", "2026-03-08T02:30").toString()).toBe("2026-03-08T07:30:00Z");
+  });
+  it("New York overlap 01:30 on 2026-11-01 takes the earlier (EDT) instant", () => {
+    expect(resolveLocalDateTime("America/New_York", "2026-11-01T01:30").toString()).toBe("2026-11-01T05:30:00Z");
+  });
+  it("London gap 01:30 on 2026-03-29 resolves to 02:30 BST", () => {
+    expect(resolveLocalDateTime("Europe/London", "2026-03-29T01:30").toString()).toBe("2026-03-29T01:30:00Z");
+  });
+  it("Lord Howe's 30-minute gap (02:15 on 2026-10-04) resolves later", () => {
+    expect(resolveLocalDateTime("Australia/Lord_Howe", "2026-10-04T02:15").toString()).toBe("2026-10-03T15:45:00Z");
   });
 });

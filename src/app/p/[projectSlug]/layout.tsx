@@ -1,12 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 import { LeftNav } from "@/components/shell/LeftNav";
 import { ProjectSwitcher } from "@/components/shell/ProjectSwitcher";
+import { ReauthBanner } from "@/components/shell/ReauthBanner";
 import { SchedulerHealth } from "@/components/shell/SchedulerHealth";
 import { SignedInHeader } from "@/components/shell/SignedInHeader";
 import { NotFoundError } from "@/server/dal";
 import { forProject } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { now } from "@/server/dal/clock";
+import { listAccountsNeedingReauth } from "@/server/services/accounts";
 import * as projects from "@/server/services/projects";
 import { getSchedulerHealth } from "@/server/services/scheduler-health";
 
@@ -30,6 +32,7 @@ export default async function ProjectLayout({
   }
   const mine = await projects.listMine(session);
   const health = await getSchedulerHealth(scope);
+  const reauth = await listAccountsNeedingReauth(scope);
   const at = await now();
   const timezone = scope.project.timezone;
 
@@ -45,6 +48,7 @@ export default async function ProjectLayout({
         }
       />
       <SchedulerHealth variant="banner" health={health} now={at} timezone={timezone} />
+      <ReauthBanner accounts={reauth} projectSlug={scope.project.slug} canManage={scope.can({ account: ["manage"] })} />
       <div className="flex flex-1">
         <LeftNav projectSlug={scope.project.slug} />
         <main id="main" className="flex-1 p-6">

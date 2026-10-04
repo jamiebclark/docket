@@ -41,16 +41,20 @@ describe("token refresh", () => {
     const { project } = await createProjectWithMembers();
     const bad = await expiring(project.id, { refresh: "fail" });
     const good = await expiring(project.id);
-    const { target } = await createDueTarget(project.id, bad.account.id);
 
-    const tick = await runTick();
+    // Refresh is global and capped per tick (default 5); expiring accounts left by other
+    // files on this worker's database could fill the cap first, so lift it here.
+    const tick = await runTick({ config: { refreshMaxAccounts: 1000 } });
     expect(tick.tokenRefresh.counts.failed).toBeGreaterThanOrEqual(1);
     const badAfter = await bad.repos.accounts.get(bad.account.id);
     expect(badAfter).toMatchObject({ status: "needs_reauth", lastError: "Mock refresh failure" });
     expect(badAfter!.lastError).not.toContain("old-secret-token");
     expect((await good.repos.accounts.get(good.account.id))!.status).toBe("active");
 
-    // The target on the failed account was not published (publishing ran concurrently or on the next tick).
+    // Publishing and refresh run concurrently within a tick, so a target due during the
+    // flagging tick may still go out on the not-yet-expired token. Once flagged, due targets
+    // on the account fail without a provider call.
+    const { target } = await createDueTarget(project.id, bad.account.id);
     await runTick();
     const t = await bad.repos.targets.get(target.id);
     expect(t!.status).toBe("failed");

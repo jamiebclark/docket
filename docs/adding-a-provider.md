@@ -42,6 +42,21 @@ Use the rule the platform itself uses. `capabilities.media` sets `maxImages` (0 
 `maxBytesPerFile` and `required`. `textOnlyAllowed` and `postTypes` finish the picture.
 Everything is checked by `validateAgainstCapabilities` in `src/providers/validation.ts`.
 
+### Declaring media constraints
+
+Image rules live in `capabilities.media`, inside the provider's own folder. Nothing else changes when a platform's rules do.
+Beyond the fields above, a provider may declare:
+
+- `outputMimeType`: what to convert to when a source type is not accepted (default: the first `allowedMimeTypes`);
+- `minWidth`, `maxWidth`, `minHeight`, `maxHeight`;
+- `minAspectRatio`, `maxAspectRatio` (width ÷ height);
+- `maxAltTextLength`.
+
+`mediaConstraintsOf(capabilities)` in `src/providers/media.ts` normalises these, and the pure `planImage` decides per image whether to
+send the original, derive a variant (convert, downscale, compress) or refuse it (aspect ratio out of range, below the minimum size).
+Derived variants are generated at compose time and cached by constraint hash. Fixable mismatches surface as `info` notes, not errors.
+`validate` therefore judges the content as it will be sent; do not re-implement image adaptation in a provider.
+
 ## 4. Connect strategies and where credentials live
 
 `connect` is one of `oauth`, `credentials` (named fields, e.g. a handle and app password) or `manual-token`.

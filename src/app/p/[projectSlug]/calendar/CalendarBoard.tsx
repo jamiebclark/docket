@@ -1,0 +1,292 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { LiveRegion } from "@/components/ui/LiveRegion";
+import { Menu } from "@/components/ui/Menu";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Button } from "@/components/ui/Button";
+import type { CalendarDay, CalendarItem, CalendarView } from "@/server/services/calendar";
+import {
+  listEmptySlotsAction,
+  listQueuedForAccountAction,
+  moveToNextFreeAction,
+  moveToOccurrenceAction,
+  previewPullForwardAction,
+  pullForwardAction,
+  swapTargetsAction,
+} from "./actions";
+import { announceMoved, canDrop, moveChipToSlot, type MoveDeps } from "./calendar-logic";
+import { MoveToSlotDialog, PullForwardDialog, SwapDialog } from "./MoveDialogs";
+
+type TargetItem = Extract<CalendarItem, { kind: "target" }>;
+type EmptyItem = Extract<CalendarItem, { kind: "empty" }>;
+type Dialog = { kind: "move" | "swap"; item: TargetItem } | { kind: "pull"; accountId: string } | null;
+
+const hm = (localTime: string) => /T(\d{2}:\d{2})/.exec(localTime)?.[1] ?? localTime;
+
+export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; calendar: CalendarView; canSchedule: boolean }) {
+  const router = useRouter();
+  const [announcement, setAnnouncement] = useState("");
+  const [error, setError] = useState("");
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const dragging = useRef<{ targetId: string; accountId: string } | null>(null);
+  const focusId = useRef<string | null>(null);
+  const accountName = (id: string) => calendar.accounts.find((a) => a.id === id)?.displayName ?? "Account";
+
+  // After a refresh brings the new cells, focus goes back to the chip that moved.
+  useEffect(() => {
+    const id = focusId.current;
+    if (!id) return;
+    const el = document.querySelector<HTMLElement>(`[data-target-id="${id}"]`);
+    (el?.matches("button") ? el : el?.querySelector<HTMLElement>("button, a"))?.focus();
+    focusId.current = null;
+  }, [calendar]);
+
+  const say = (message: string) => {
+    setAnnouncement("");
+    // A fresh node text each time so identical messages are re-announced.
+    setTimeout(() => setAnnouncement(message), 0);
+  };
+  const deps: MoveDeps = {
+    moveToOccurrence: (input) => moveToOccurrenceAction(slug, input),
+    announce: say,
+    refresh: () => router.refresh(),
+    focusAfterRefresh: (id) => {
+      focusId.current = id;
+    },
+  };
+
+  const failure = (message: string) => {
+    setError(message);
+    say(message);
+    router.refresh();
+  };
+
+  async function dropOn(slot: EmptyItem) {
+    const chip = dragging.current;
+    dragging.current = null;
+    if (!chip) return;
+    const outcome = await moveChipToSlot(deps, chip, slot);
+    setError(outcome.ok ? "" : outcome.message);
+  }
+
+  async function nextFree(item: TargetItem) {
+    const r = await moveToNextFreeAction(slug, { targetId: item.targetId });
+    if (!r.ok) return failure(r.message);
+    setError("");
+    focusId.current = item.targetId;
+    say(announceMoved(r.data.localTime));
+    router.refresh();
+  }
+
+  function chip(item: TargetItem) {
+    const body = (
+      <>
+        <span className="font-medium">{hm(item.localTime)}</span> <span>{accountName(item.accountId)}</span>{" "}
+        <StatusBadge status={item.status} />
+        <span className="block truncate text-xs text-foreground/70">{item.excerpt}</span>
+      </>
+    );
+    const open = `/p/${slug}/posts/${item.postId}`;
+    if (!canSchedule || !item.movable) {
+      return (
+        <Link key={item.targetId} data-target-id={item.targetId} href={open} className="block rounded border border-foreground/30 px-2 py-1 text-sm hover:bg-foreground/10">
+          {body}
+        </Link>
+      );
+    }
+    return (
+      <div
+        key={item.targetId}
+        data-target-id={item.targetId}
+        draggable
+        onDragStart={(e) => {
+          dragging.current = { targetId: item.targetId, accountId: item.accountId };
+          e.dataTransfer.setData("text/plain", item.targetId);
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragEnd={() => {
+          dragging.current = null;
+        }}
+      >
+        <Menu
+          label={`Actions for the ${hm(item.localTime)} post on ${accountName(item.accountId)}`}
+          items={[
+            { label: "Open post", onSelect: () => router.push(open) },
+            { label: "Move to slot…", onSelect: () => setDialog({ kind: "move", item }) },
+            { label: "Move to next free slot", onSelect: () => void nextFree(item) },
+            { label: "Swap with…", onSelect: () => setDialog({ kind: "swap", item }), disabled: item.scheduleKind !== "slot" },
+            { label: "Cancel", onSelect: () => {} },
+          ]}
+        >
+          {body}
+        </Menu>
+      </div>
+    );
+  }
+
+  function empty(item: EmptyItem) {
+    return (
+      <button
+        key={`${item.slotId}-${item.at}`}
+        type="button"
+        data-drop-slot={item.slotId}
+        disabled={!canSchedule}
+        onDragOver={(e) => {
+          const d = dragging.current;
+          if (!d) return;
+          if (canDrop(d.accountId, item.accountId)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+          } else e.dataTransfer.dropEffect = "none";
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          void dropOn(item);
+        }}
+        onClick={() => say("To place a post here, open its menu and choose Move to slot…")}
+        className="block w-full rounded border border-dashed border-foreground/40 px-2 py-1 text-left text-xs text-foreground/80 hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+      >
+        Empty slot · {accountName(item.accountId)} · {hm(item.localTime)}
+      </button>
+    );
+  }
+
+  const cell = (items: CalendarItem[]) => (
+    <ul className="flex flex-col gap-1">
+      {items.map((i) => (
+        <li key={i.kind === "target" ? i.targetId : `${i.slotId}-${i.at}`}>{i.kind === "target" ? chip(i) : empty(i)}</li>
+      ))}
+    </ul>
+  );
+
+  const dayHeading = (d: CalendarDay) => (
+    <span className={`text-xs ${d.isToday ? "font-bold underline" : ""}`}>
+      {Number(d.date.slice(8))}
+      {d.isToday ? <span className="sr-only"> (today)</span> : null}
+    </span>
+  );
+
+  const hourOf = (i: CalendarItem) => /T(\d{2}):/.exec(i.localTime)?.[1] ?? "00";
+  const weekday = (d: CalendarDay) => ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][calendar.days.indexOf(d) % 7];
+
+  const pullAccount = dialog?.kind === "pull" ? dialog.accountId : null;
+  const pullable = calendar.accounts.filter((a) => a.status === "active");
+
+  return (
+    <div className="flex flex-col gap-3">
+      <LiveRegion message={announcement} />
+      {error ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+      {canSchedule && pullable.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {pullable.map((a) => (
+            <Button key={a.id} variant="secondary" onClick={() => setDialog({ kind: "pull", accountId: a.id })}>
+              Pull {a.displayName} queue forward…
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
+      {calendar.view === "month" ? (
+        <table className="w-full table-fixed border-collapse text-sm">
+          <thead>
+            <tr>
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((w) => (
+                <th key={w} scope="col" className="border border-foreground/20 p-1 text-left text-xs">
+                  {w}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: calendar.days.length / 7 }, (_, row) => (
+              <tr key={row}>
+                {calendar.days.slice(row * 7, row * 7 + 7).map((d) => (
+                  <td key={d.date} className={`h-24 border border-foreground/20 p-1 align-top ${d.inMonth ? "" : "bg-foreground/5 text-foreground/60"}`}>
+                    {dayHeading(d)}
+                    {cell(d.items)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-7">
+          {calendar.days.map((d) => (
+            <section key={d.date} aria-label={`${weekday(d)} ${d.date}`} className="rounded border border-foreground/20 p-1">
+              <h3 className="text-xs">
+                {weekday(d)} {dayHeading(d)}
+              </h3>
+              {(d.hours ?? []).map((h, idx) => {
+                // On a repeated DST hour, the later copy takes none of the items (they sit under the first).
+                const items = d.hours!.indexOf(h) === idx ? d.items.filter((i) => hourOf(i) === h) : [];
+                return items.length ? (
+                  <div key={`${h}-${idx}`} role="group" aria-label={`${h}:00`} className="mt-1">
+                    <p className="text-xs text-foreground/70">{h}:00</p>
+                    {cell(items)}
+                  </div>
+                ) : null;
+              })}
+            </section>
+          ))}
+        </div>
+      )}
+
+      {dialog?.kind === "move" ? (
+        <MoveToSlotDialog
+          open
+          onClose={() => setDialog(null)}
+          accountName={accountName(dialog.item.accountId)}
+          listSlots={() =>
+            listEmptySlotsAction(slug, { accountId: dialog.item.accountId, from: new Date().toISOString(), to: new Date(Date.now() + 30 * 86_400_000).toISOString() })
+          }
+          onPick={async (s) => {
+            const item = dialog.item;
+            setDialog(null);
+            const outcome = await moveChipToSlot(deps, { targetId: item.targetId, accountId: item.accountId }, { accountId: s.accountId, slotId: s.slotId, at: s.scheduledAt });
+            setError(outcome.ok ? "" : outcome.message);
+          }}
+        />
+      ) : null}
+      {dialog?.kind === "swap" ? (
+        <SwapDialog
+          open
+          onClose={() => setDialog(null)}
+          exceptTargetId={dialog.item.targetId}
+          listQueued={() => listQueuedForAccountAction(slug, { accountId: dialog.item.accountId })}
+          onPick={async (other) => {
+            const item = dialog.item;
+            setDialog(null);
+            const r = await swapTargetsAction(slug, { targetIdA: item.targetId, targetIdB: other.targetId });
+            if (!r.ok) return failure(r.message);
+            setError("");
+            focusId.current = item.targetId;
+            say("Swapped the two posts' times");
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {pullAccount ? (
+        <PullForwardDialog
+          open
+          onClose={() => setDialog(null)}
+          accountName={accountName(pullAccount)}
+          preview={() => previewPullForwardAction(slug, { accountId: pullAccount })}
+          confirm={(expected) => pullForwardAction(slug, { accountId: pullAccount, expected })}
+          onDone={(moved) => {
+            setDialog(null);
+            say(`Pulled the queue forward: ${moved.length} ${moved.length === 1 ? "post" : "posts"} moved`);
+            router.refresh();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}

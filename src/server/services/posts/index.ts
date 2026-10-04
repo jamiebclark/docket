@@ -10,10 +10,14 @@ import type { ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
 import { allocateNextFree, nearQueuedWarnings, peekNextFree, plannedTime, type PlannedTime, type Warning } from "../queue";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./cancel";
-import { effectiveContent } from "./content";
+import { prepareVariants } from "../media-variants";
+import { loadTargetContent, validateTargetContent } from "./validate";
 import { applyDerivedStatus } from "./status";
 
 export { applyDerivedStatus, derivePostStatus } from "./status";
+export { excerptOf, listPosts, POSTS_PAGE_SIZE, type PostList, type PostListItem } from "./list";
+export { getPostView, type AttemptView, type PostView, type PostViewMedia, type PostViewTarget } from "./view";
+export { checkComposition, previewExplicitTime, type CompositionCheck, type ExplicitTimePreview, type TargetCheck } from "./compose";
 
 export type TargetFailureCode =
   | "no_active_slots"
@@ -118,13 +122,11 @@ async function detail(tx: Tx, postId: string): Promise<PostDetail> {
   };
 }
 
-/** Provider validation of the effective content; `null` when the account's provider is unavailable. */
+/** Validation of the effective content; `null` when the account's provider is unavailable. */
 async function issuesFor(tx: Tx, target: TargetRecord, account: AccountRecord): Promise<ValidationIssue[] | null> {
-  const provider = findProvider(account.providerKey);
-  if (!provider) return null;
-  const content = await effectiveContent(tx, target);
+  const content = await loadTargetContent(tx, target);
   if (!content) return null;
-  return provider.validate(content, provider.capabilities);
+  return validateTargetContent(tx, account, content);
 }
 
 const errorsOf = (issues: ValidationIssue[]) => issues.filter((i) => i.severity === "error");
@@ -149,6 +151,18 @@ async function gate(tx: Tx, target: TargetRecord): Promise<Gate> {
     return { ok: false, code: "validation", message: errors[0]!.message, issues };
   }
   return { ok: true, account, issues };
+}
+
+/**
+ * Adapted images are made before any transaction opens: converting and storing can take seconds, which must
+ * not be spent holding row locks. Best effort; a pair that fails shows up as `variant_failed` at the gate.
+ */
+async function prepare(scope: ProjectScope, postId: string, opts?: Parameters<typeof prepareVariants>[2]): Promise<void> {
+  try {
+    await prepareVariants(scope, postId, opts);
+  } catch {
+    // Reported per target by the gate.
+  }
 }
 
 function fail(t: TargetRecord, code: TargetFailureCode, message: string, issues?: ValidationIssue[]): TargetResult<never> {
@@ -185,7 +199,7 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
     need(tx, { post: ["edit"] });
     const now = await clock.now();
     for (const target of parsed.targets) if (!(await tx.accounts.get(target.accountId))) throw new NotFoundError();
-    if ((await tx.media.getMany(parsed.mediaIds)).length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
+    if ((await tx.media.lockShared(parsed.mediaIds)).length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
     const post = await tx.posts.insert({
       baseText: parsed.baseText,
       createdByUserId: tx.membership.userId,
@@ -211,6 +225,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
   const id = uuid.parse(postId);
   const patch = patchSchema.parse(patchInput);
   need(scope, { post: ["edit"] });
+  if (patch.mediaIds) await prepare(scope, id, { mediaIds: patch.mediaIds });
   return scope.transaction(async (tx) => {
     need(tx, { post: ["edit"] });
     await lockPost(tx, id);
@@ -226,7 +241,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
       });
     }
     if (patch.mediaIds) {
-      if ((await tx.media.getMany(patch.mediaIds)).length !== new Set(patch.mediaIds).size) throw new NotFoundError();
+      if ((await tx.media.lockShared(patch.mediaIds)).length !== new Set(patch.mediaIds).size) throw new NotFoundError();
       await tx.posts.setMedia(id, patch.mediaIds);
       await tx.media.markUsed(patch.mediaIds, now);
     }
@@ -308,6 +323,7 @@ export async function validatePost(
   const id = uuid.parse(postId);
   need(scope, { post: ["view"] });
   if (!(await scope.posts.get(id))) throw new NotFoundError();
+  await prepare(scope, id);
   const out: { targetId: string; issues: ValidationIssue[] }[] = [];
   for (const t of await scope.targets.listForPost(id)) {
     if (t.status === "cancelled") continue;
@@ -328,6 +344,7 @@ export async function previewQueue(
   need(scope, { post: ["view"] });
   const post = await scope.posts.get(id);
   if (!post) throw new NotFoundError();
+  await prepare(scope, id);
   const now = await clock.now();
   const out: TargetResult<PlannedTime & { issues: ValidationIssue[] }>[] = [];
   for (const t of await scope.targets.listForPost(id)) {
@@ -362,6 +379,7 @@ export async function addToQueue(
   const id = uuid.parse(postId);
   const opts = queueSchema.parse(input);
   need(scope, { post: ["schedule"] });
+  await prepare(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
   return scope.transaction(async (tx) => {
     need(tx, { post: ["schedule"] });
     const post = await lockPost(tx, id);
@@ -486,6 +504,7 @@ export async function scheduleAt(
   const id = uuid.parse(postId);
   const opts = selectSchema.extend({ at: atSchema }).parse(input);
   need(scope, { post: ["schedule"] });
+  await prepare(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
   return scope.transaction((tx) => {
     need(tx, { post: ["schedule"] });
     return scheduleExplicit(tx, id, opts.targetIds, "explicit", () => new Date(opts.at));
@@ -500,6 +519,7 @@ export async function publishNow(
   const id = uuid.parse(postId);
   const opts = selectSchema.parse(input);
   need(scope, { post: ["schedule"] });
+  await prepare(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
   return scope.transaction((tx) => {
     need(tx, { post: ["schedule"] });
     return scheduleExplicit(tx, id, opts.targetIds, "now", (now) => now);
