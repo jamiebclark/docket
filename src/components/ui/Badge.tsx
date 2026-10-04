@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 
-type Tone = "neutral" | "success" | "warning" | "danger";
+type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
 const tones: Record<Tone, string> = {
   neutral: "border-foreground/40",
+  info: "border-blue-700 text-blue-800 dark:border-blue-400 dark:text-blue-300",
   success: "border-green-700 text-green-800 dark:border-green-400 dark:text-green-300",
   warning: "border-amber-700 text-amber-800 dark:border-amber-400 dark:text-amber-300",
   danger: "border-red-700 text-red-800 dark:border-red-400 dark:text-red-300",

@@ -1,6 +1,6 @@
 import { Badge } from "./Badge";
 
-type Tone = "neutral" | "success" | "warning" | "danger";
+type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
 const STATUSES: Record<string, { label: string; tone: Tone }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -17,6 +17,11 @@ const STATUSES: Record<string, { label: string; tone: Tone }> = {
   needs_decision: { label: "Needs your decision", tone: "warning" },
   active: { label: "Connected", tone: "success" },
   needs_reauth: { label: "Needs reconnecting", tone: "danger" },
+  queued: { label: "Queued", tone: "neutral" },
+  running: { label: "Running", tone: "info" },
+  done: { label: "Done", tone: "success" },
+  completed: { label: "Completed", tone: "success" },
+  completed_with_failures: { label: "Completed with failures", tone: "warning" },
 };
 
 /** Human label for a post, target or account status; unknown values read as their raw name. */
