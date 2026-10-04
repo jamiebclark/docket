@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { providerPublishLimits } from "../../../src/providers/limits";
 import { providers } from "../../../src/providers/registry";
-import type { MediaItem, SocialProvider } from "../../../src/providers/types";
+import { mediaConstraintsOf } from "../../../src/providers/media";
+import type { ValidationIssue } from "../../../src/providers/types";
 import { posts as postsTable, postTargets } from "../../../src/server/db/schema/posts";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
@@ -14,7 +15,8 @@ import { createProjectWithMembers } from "../../helpers/factories";
 import { fakeSession } from "../../helpers/auth";
 import { forProject } from "../../../src/server/dal/scope";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDueTarget, createMockAccount, createSlots, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDraftPost, createDueTarget, createMediaAsset, createMockAccount, createSlots, parkAllDueTargets } from "../../helpers/scheduling";
+import { coreRows, limitRows, planWith, plannerRows, textRows, type Expectation } from "../../helpers/limit-rows";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 
 /** Any request to a platform fails the test: every row below must be refused or deferred before one is made. */
@@ -36,71 +38,51 @@ afterAll(closeDb);
 const BEFORE = new Date("2026-10-01T12:00:00Z");
 const T0 = new Date("2026-10-05T09:00:00Z");
 
-const image = (over: Partial<MediaItem> = {}): MediaItem => ({
-  url: "http://localhost:3000/media/x.jpg",
-  mimeType: "image/jpeg",
-  width: 1000,
-  height: 1000,
-  bytes: 1000,
-  altText: "",
-  ...over,
-});
+/** A failed assertion inside a row generator fails the test that runs it. */
+const assert = (cond: boolean, message: string) => expect(cond, message).toBe(true);
 
-/** Oversize files are compressed by the media planner, not refused (D15); the planner's own tests prove the edge. */
-const COMPRESSES_OVERSIZE = new Set(["instagram", "threads"]);
-
-/** The violating content for each capability field, derived from the provider's own values. */
-function violations(provider: SocialProvider) {
-  const { text, media, textOnlyAllowed } = provider.capabilities;
-  const ok = image({ mimeType: media.allowedMimeTypes[0] ?? "image/jpeg" });
-  const rows: { field: string; code: string; text: string; media: MediaItem[] }[] = [
-    { field: "text length", code: "text_too_long", text: "a".repeat(text.maxLength + 1), media: media.required ? [ok] : [] },
-  ];
-  if (media.maxImages > 0) {
-    rows.push({ field: "image count", code: "too_many_images", text: "hi", media: Array.from({ length: media.maxImages + 1 }, () => ok) });
-    if (!COMPRESSES_OVERSIZE.has(provider.key)) {
-      rows.push({ field: "bytes per file", code: "file_too_large", text: "hi", media: [{ ...ok, bytes: media.maxBytesPerFile + 1 }] });
-    }
-  }
-  if (media.maxAltTextLength !== undefined) {
-    rows.push({ field: "alt text", code: "alt_text_too_long", text: "hi", media: [{ ...ok, altText: "a".repeat(media.maxAltTextLength + 1) }] });
-  }
-  if (!textOnlyAllowed) rows.push({ field: "text-only", code: media.required ? "media_required" : "text_only_not_allowed", text: "hi", media: [] });
-  return rows;
+function expectOutcome(issues: readonly ValidationIssue[], e: Expectation): void {
+  const errors = issues.filter((i) => i.severity === "error").map((i) => i.code);
+  if ("refuse" in e) expect(errors.some((c) => e.refuse.includes(c)), `expected one of ${e.refuse.join(", ")}, got ${errors.join(", ")}`).toBe(true);
+  else expect(errors.filter((c) => e.accept.includes(c))).toEqual([]);
 }
 
-describe("capabilities are refused by the shared validation core (scheduling gate and publish engine)", () => {
+describe("capability rows: the shared validation core (scheduling gate and publish engine) refuses past the limit and accepts what is allowed", () => {
   for (const provider of providers) {
-    for (const row of violations(provider)) {
-      it(`${provider.key}: ${row.field}`, () => {
-        const issues = validateResolvedContent(provider, { text: row.text, media: row.media });
-        expect(issues.map((i) => i.code)).toContain(row.code);
-        expect(issues.find((i) => i.code === row.code)?.severity).toBe("error");
-      });
+    for (const row of coreRows(provider)) {
+      it(row.title, () => expectOutcome(validateResolvedContent(provider, { text: row.text, media: row.media }), row.expect));
     }
   }
 });
+
+/** A post whose only target is due at `dueAt`, with `mediaIds` attached. */
+async function dueTargetWithMedia(projectId: string, accountId: string, text: string, mediaIds: string[], dueAt: Date) {
+  const repos = forSchedulerProject(projectId);
+  const { post, targets } = await createDraftPost(projectId, { baseText: text, accountIds: [accountId], mediaIds });
+  const target = await repos.targets.update(targets[0]!.id, { status: "scheduled", scheduleKind: "explicit", scheduledAt: dueAt, nextAttemptAt: dueAt });
+  await repos.posts.setStatus(post.id, "scheduled");
+  return target!;
+}
 
 describe("text rows: refused when scheduling and again at publish time, with no platform request (D14 a, b)", () => {
   for (const provider of providers) {
-    const rows = violations(provider).filter((r) => r.media.length === 0 || r.field === "text length");
-    for (const row of rows.filter((r) => r.field === "text length" || r.field === "text-only")) {
-      if (row.media.length > 0) continue; // a media-required provider needs stored media; its text row is covered above
-      it(`${provider.key}: ${row.field}`, async () => {
+    for (const row of textRows(provider)) {
+      it(row.title, async () => {
         const env = await createProjectWithMembers();
         const scope = await forProject(fakeSession(env.owner.id), env.project.slug);
         const account = await createMockAccount(env.project.id, {}, { providerKey: provider.key });
         await createSlots(env.project.id, account.id, [{ weekday: 1, localTime: "09:00" }]);
+        // A media-required provider gets a stored image of an accepted type, so only the text breaks the limit.
+        const mediaIds = row.media.length > 0 ? [(await createMediaAsset(env.project.id, { mimeType: row.media[0]!.mimeType })).id] : [];
 
         // Before scheduling.
-        const draft = await posts.createDraft(scope, { baseText: row.text, targets: [{ accountId: account.id }] });
+        const draft = await posts.createDraft(scope, { baseText: row.text, targets: [{ accountId: account.id }], mediaIds });
         const queued = await atTime(BEFORE, () => posts.addToQueue(scope, draft.post.id, {}));
         expect(queued[0]).toMatchObject({ ok: false, code: "validation" });
-        const issues = queued[0]!.ok ? [] : (queued[0]!.issues ?? []);
-        expect(issues.map((i) => i.code)).toContain(row.code);
+        expectOutcome(queued[0]!.ok ? [] : (queued[0]!.issues ?? []), row.expect);
 
         // At publish time: scheduled while valid by the engine's view, content then past the limit.
-        const { target } = await createDueTarget(env.project.id, account.id, { baseText: row.text, dueAt: new Date(T0.getTime() - 1000) });
+        const target = await dueTargetWithMedia(env.project.id, account.id, row.text, mediaIds, new Date(T0.getTime() - 1000));
         await atTime(T0, () => runTick());
         const after = await forSchedulerProject(env.project.id).targets.get(target.id);
         expect(after).toMatchObject({ status: "failed", externalId: null });
@@ -112,12 +94,35 @@ describe("text rows: refused when scheduling and again at publish time, with no 
   }
 });
 
+describe("media planner rows: each provider's own constraints adapt or refuse an image before validation (D15)", () => {
+  for (const provider of providers) {
+    for (const row of plannerRows(provider, assert)) {
+      it(row.title, () => {
+        row.check(planWith(provider, row.asset), mediaConstraintsOf(provider.capabilities));
+        if (row.inside) {
+          // Just inside the limit, the same rule does not fire.
+          const inside = planWith(provider, row.inside);
+          if (["formats", "bytes per file", "max width", "max height"].includes(row.category)) expect(inside).toEqual({ kind: "original" });
+          else expect(inside.kind).not.toBe("refuse");
+        }
+      });
+    }
+  }
+});
+
 describe("publish limits defer without a platform request or a counted attempt (D14 c, D15)", () => {
   for (const provider of providers) {
-    providerPublishLimits(provider).forEach((limit, index, all) => {
-      it(`${provider.key}: ${limit.count} per ${limit.windowSeconds}s`, async () => {
+    for (const row of limitRows(provider)) {
+      it(row.title, async () => {
         const env = await createProjectWithMembers();
         const account = await createMockAccount(env.project.id, {}, { providerKey: provider.key });
+        if (row.accountLevel) {
+          // The provider declares none, so only the account's own limit can defer.
+          expect(providerPublishLimits(provider)).toEqual([]);
+          const scope = await forProject(fakeSession(env.owner.id), env.project.slug);
+          await accounts.setPublishLimit(scope, account.id, row.limit);
+        }
+        const { limit, all } = row;
         // Start times sit inside this window but outside every shorter one, so only this limit is full.
         const shorter = all.filter((l) => l.windowSeconds < limit.windowSeconds).map((l) => l.windowSeconds);
         const ageSeconds = Math.max(0, ...shorter) + 600;
@@ -147,7 +152,7 @@ describe("publish limits defer without a platform request or a counted attempt (
         expect(after!.nextAttemptAt!.getTime()).toBe(startedAt.getTime() + limit.windowSeconds * 1000);
         expect((await repos.attempts.listForTarget(target.id)).map((a) => a.outcome)).toEqual(["deferred"]);
       }, 60_000);
-    });
+    }
   }
 });
 

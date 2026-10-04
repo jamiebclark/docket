@@ -39,7 +39,8 @@ export async function updateAltText(scope: ProjectScope, assetId: string, altTex
 }
 
 export const MEDIA_PAGE_SIZE = 24;
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+/** The image types an upload may have; anything a provider does not accept is converted by the media planner. */
+export const UPLOAD_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 const PREVIEW_SECONDS = 3600;
 /** A target in one of these states means the post is, or was meant to be, live: its images stay. */
 type PostTargetStatus = Awaited<ReturnType<MediaRepo["postsUsing"]>>[number]["targetStatuses"][number];
@@ -82,7 +83,7 @@ function need(scope: Pick<ProjectScope, "can">, permission: "view" | "edit") {
 export async function mediaStatus(scope: ProjectScope): Promise<MediaStatus> {
   need(scope, "view");
   const { maxUploadBytes, maxPixels } = getEnv().media;
-  return { enabled: getStorage() !== null, maxUploadBytes, maxMegapixels: maxPixels / 1_000_000, acceptedTypes: ACCEPTED_TYPES };
+  return { enabled: getStorage() !== null, maxUploadBytes, maxMegapixels: maxPixels / 1_000_000, acceptedTypes: UPLOAD_MIME_TYPES };
 }
 
 export async function toView(

@@ -4,8 +4,24 @@ import { describe, expect, it } from "vitest";
 import { providerPublishLimits } from "../../../src/providers/limits";
 import { providers } from "../../../src/providers/registry";
 import type { SocialProvider } from "../../../src/providers/types";
+import { generatedTitles, type Suite } from "../../helpers/limit-rows";
 
 const root = resolve(__dirname, "../../..");
+const ENFORCEMENT = "tests/integration/limits/enforcement.test.ts";
+
+/** Which generated suites may prove a row, by its "Enforced in" cell. */
+function suitesFor(enforcedIn: string): Suite[] | undefined {
+  if (enforcedIn === "validateResolvedContent") return ["core", "text"];
+  if (enforcedIn === "media planner") return ["planner"];
+  if (/^(engine deferral|account limit)/.test(enforcedIn)) return ["limits"];
+  return undefined;
+}
+
+/** The string-literal titles of `describe(`, `it(` and `test(` calls (template titles are generated, not literal). */
+function literalTitles(path: string): string[] {
+  const src = readFileSync(path, "utf8");
+  return [...src.matchAll(/\b(?:describe|it|test)(?:\.\w+)*(?:\([^)]*\))?\(\s*(["'])((?:\\.|(?!\1).)*)\1/g)].map((m) => m[2]!);
+}
 const doc = readFileSync(resolve(root, "docs/limits.md"), "utf8");
 
 interface Row {
@@ -97,8 +113,28 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
           expect(file, `${provider.key} ${r.category}: no test file named`).toBeDefined();
           const path = resolve(root, file!);
           expect(existsSync(path), `${file} does not exist`).toBe(true);
+        }
+      });
+
+      it("cites, on every row, a test that breaks exactly that limit in the suite for its enforcement point", () => {
+        const generated = generatedTitles(provider);
+        for (const r of rows) {
+          const where = `${provider.key} ${r.category}`;
+          const file = /`([^`]+\.test\.ts)`/.exec(r.test)?.[1];
           const fragment = /"([^"]+)"/.exec(r.test)?.[1];
-          if (fragment) expect(readFileSync(path, "utf8"), `${file} has no title containing "${fragment}"`).toContain(fragment);
+          expect(fragment, `${where}: no quoted test name`).toBeDefined();
+          if (file === ENFORCEMENT && !r.category.startsWith("note:")) {
+            // A generated row: named after this provider and this row's category (and value, for publish limits).
+            const expected = r.category === "publish limit" ? `${provider.key}: publish limit ${r.value}` : `${provider.key}: ${r.category}`;
+            expect(fragment, where).toBe(expected);
+            const suites = generated.filter((g) => g.title === fragment).map((g) => g.suite);
+            expect(suites.length, `${where}: the enforcement test generates no test named "${fragment}"`).toBeGreaterThan(0);
+            const wanted = suitesFor(r.enforcedIn);
+            expect(wanted, `${where}: unknown enforcement point "${r.enforcedIn}"`).toBeDefined();
+            expect(suites.some((s) => wanted!.includes(s)), `${where}: "${fragment}" is not in a ${wanted!.join("/")} suite`).toBe(true);
+          } else {
+            expect(literalTitles(resolve(root, file!)).some((t) => t.includes(fragment!)), `${file} has no test or describe titled "${fragment}"`).toBe(true);
+          }
         }
       });
 
