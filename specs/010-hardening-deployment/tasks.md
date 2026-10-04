@@ -66,7 +66,7 @@
 - [X] T026 [US1] Add the Failures entry with ambiguous count to `src/components/shell/LeftNav.tsx` and pass `countNeedsDecision` from `src/app/p/[projectSlug]/layout.tsx` (FR-005)
 - [X] T027 [US1] Update `src/app/p/[projectSlug]/posts/[postId]/page.tsx`: attempt count, "Who" column, `safeExternalHref` for the external link, `TargetResolution` (FR-011)
 - [X] T028 [P] [US1] Write `tests/integration/failures/ui.test.tsx` per contracts/ui.md §6: labelled controls, keyboard-operable `<details>`/dialogs, focus management, live-region result text, four states (FR-013)
-- [ ] T029 [US1] Run `pnpm vitest run tests/integration/failures tests/integration/posts tests/integration/scheduler tests/integration/actions-authz.test.ts`, then `pnpm tsc --noEmit`, and fix until green
+- [X] T029 [US1] Run `pnpm vitest run tests/integration/failures tests/integration/posts tests/integration/scheduler tests/integration/actions-authz.test.ts`, then `pnpm tsc --noEmit`, and fix until green
 
 **Checkpoint**: US1 is independently usable and tested.
 
