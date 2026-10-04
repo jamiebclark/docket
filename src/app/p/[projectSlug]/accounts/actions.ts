@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import type { ActionResult } from "@/lib/action-result";
+import { fail, ok, type ActionResult } from "@/lib/action-result";
 import * as accounts from "@/server/services/accounts";
 import * as slots from "@/server/services/slots";
 import { runAction } from "../run-action";
@@ -18,6 +18,27 @@ export async function connectMockAction(
   input: { displayName: string; simulateCredentialExpiryHours?: number },
 ): Promise<ActionResult<accounts.AccountView>> {
   return mutate(slug, (scope) => accounts.connectMock(scope, input));
+}
+
+/** Never echoes `input.fields`: the result carries the account view or an error message only. */
+export async function connectCredentialsAction(
+  slug: string,
+  input: { providerKey: string; fields: Record<string, string>; accountId?: string },
+): Promise<ActionResult<accounts.AccountView>> {
+  const result = await runAction(slug, async (scope) => ({
+    outcome: await accounts.connectWithCredentials(scope, input),
+    timeZone: scope.project.timezone,
+  }));
+  if (!result.ok) return result;
+  const { outcome, timeZone } = result.data;
+  if (!outcome.ok) {
+    const when = outcome.retryAt
+      ? ` Try again after ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone }).format(outcome.retryAt)} (${timeZone}).`
+      : "";
+    return fail("validation", `${outcome.message}${when}`, outcome.fieldErrors);
+  }
+  refresh();
+  return ok(outcome.account);
 }
 
 export async function reconnectMockAction(slug: string, input: { id: string }): Promise<ActionResult<accounts.AccountView>> {

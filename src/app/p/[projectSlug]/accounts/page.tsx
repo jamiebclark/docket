@@ -8,6 +8,7 @@ import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
 import * as slots from "@/server/services/slots";
+import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
 import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
@@ -35,12 +36,26 @@ export default async function AccountsPage({ params }: { params: Promise<{ proje
   const timeZone = scope.project.timezone;
   const [list, providers] = await Promise.all([accounts.listAccounts(scope), accounts.listConnectableProviders(scope)]);
   const mockEnabled = providers.some((p) => p.key === "mock");
+  // The mock keeps its own form; every other provider with `connectAccount` gets the generic credentials form.
+  const credentialProviders = providers.flatMap((p) =>
+    p.key !== "mock" && p.credentialConnect && p.connect.strategy !== "oauth" ? [{ ...p, fields: [...p.connect.fields] }] : [],
+  );
   const withSlots = await Promise.all(list.map(async (account) => ({ account, slots: await slots.listSlots(scope, account.id) })));
 
   return (
     <section className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Accounts</h1>
       {canManage && mockEnabled ? <ConnectMockForm slug={projectSlug} /> : null}
+      {canManage
+        ? credentialProviders.map((p) => (
+            <section key={p.key} aria-labelledby={`connect-${p.key}-heading`} className="flex flex-col gap-3 rounded-lg border border-foreground/20 p-4">
+              <h2 id={`connect-${p.key}-heading`} className="text-lg font-semibold">
+                Connect a {p.displayName} account
+              </h2>
+              <ConnectCredentialsForm slug={projectSlug} providerKey={p.key} providerName={p.displayName} fields={p.fields} submitLabel="Connect" />
+            </section>
+          ))
+        : null}
       {withSlots.length === 0 ? (
         <EmptyState message="No accounts are connected yet." />
       ) : (
@@ -74,6 +89,27 @@ export default async function AccountsPage({ params }: { params: Promise<{ proje
                   <MockBehaviourForm slug={projectSlug} id={account.id} behaviour={behaviour} />
                 </div>
               ) : null}
+              {canManage && account.status === "needs_reauth"
+                ? credentialProviders
+                    .filter((p) => p.key === account.providerKey)
+                    .map((p) => (
+                      <details key={p.key} className="rounded-md border border-foreground/20 p-3">
+                        <summary className="cursor-pointer text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground">
+                          Reconnect
+                        </summary>
+                        <div className="mt-3">
+                          <ConnectCredentialsForm
+                            slug={projectSlug}
+                            providerKey={p.key}
+                            providerName={p.displayName}
+                            fields={p.fields}
+                            accountId={account.id}
+                            submitLabel="Reconnect"
+                          />
+                        </div>
+                      </details>
+                    ))
+                : null}
               <h3 className="text-base font-medium">Posting slots ({timeZone})</h3>
               {rows.length === 0 ? (
                 <p className="text-sm text-foreground/70">No posting slots yet.</p>

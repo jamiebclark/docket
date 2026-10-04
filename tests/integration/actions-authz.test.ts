@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../helpers/actions")).sessionModule);
 vi.mock("next/cache", async () => (await import("../helpers/actions")).cacheModule);
@@ -19,12 +19,28 @@ import { createUser } from "../helpers/factories";
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
 import { createMemoryStorage } from "../helpers/storage";
+import { createFakePds, mintJwt, type FakePds } from "../helpers/fake-pds";
 
 afterAll(async () => {
   setStorageForTests(undefined);
   await closeDb();
 });
-afterEach(() => setStorageForTests(undefined));
+let pds: FakePds;
+beforeEach(() => {
+  pds = createFakePds().route("POST", "/xrpc/com.atproto.server.createSession", {
+    json: {
+      accessJwt: mintJwt(new Date("2030-01-01T00:00:00Z")),
+      refreshJwt: mintJwt(new Date("2030-03-01T00:00:00Z")),
+      did: "did:plc:authz",
+      handle: "authz.bsky.social",
+    },
+  });
+  vi.stubGlobal("fetch", pds.fetch);
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  setStorageForTests(undefined);
+});
 
 const NOW = new Date("2026-10-01T12:00:00Z");
 type Env = Awaited<ReturnType<typeof postsEnv>>;
@@ -90,6 +106,15 @@ const CASES: Case[] = [
   { name: "previewPullForwardAction", run: (s, f) => calendarActions.previewPullForwardAction(s, { accountId: f.accountId }) },
   { name: "pullForwardAction", run: (s, f) => calendarActions.pullForwardAction(s, { accountId: f.accountId, expected: [] }) },
   { name: "connectMockAction", manage: true, run: (s) => accountActions.connectMockAction(s, { displayName: "New mock" }) },
+  {
+    name: "connectCredentialsAction",
+    manage: true,
+    run: (s) =>
+      accountActions.connectCredentialsAction(s, {
+        providerKey: "bluesky",
+        fields: { handle: "authz.bsky.social", appPassword: "authz-app-password-1", pdsUrl: "" },
+      }),
+  },
   { name: "reconnectMockAction", manage: true, run: (s, f) => accountActions.reconnectMockAction(s, { id: f.accountId }) },
   { name: "setMockBehaviourAction", manage: true, run: (s, f) => accountActions.setMockBehaviourAction(s, { id: f.accountId, settings: {} }) },
   { name: "removeAccountAction", manage: true, run: (s, f) => accountActions.removeAccountAction(s, { id: f.accountId }) },
@@ -141,5 +166,32 @@ describe("every server action × role (SC-009, SC-011)", () => {
     const r = await call(CASES[0]!, env.project.slug, await fixtures(env));
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/^(not_found|unauthenticated)$/);
+  });
+});
+
+describe("connectCredentialsAction", () => {
+  it("makes no PDS request for an editor", async () => {
+    const env = await postsEnv();
+    actAs(env.editor);
+    const r = await accountActions.connectCredentialsAction(env.project.slug, {
+      providerKey: "bluesky",
+      fields: { handle: "authz.bsky.social", appPassword: "authz-app-password-1", pdsUrl: "" },
+    });
+    expect(r).toMatchObject({ ok: false, error: "forbidden" });
+    expect(pds.requests).toHaveLength(0);
+  });
+
+  it("lets owners and admins through, and never echoes field values", async () => {
+    const env = await postsEnv();
+    for (const who of [env.owner, env.admin]) {
+      actAs(who);
+      const r = await accountActions.connectCredentialsAction(env.project.slug, {
+        providerKey: "bluesky",
+        fields: { handle: "authz.bsky.social", appPassword: "authz-app-password-1", pdsUrl: "" },
+      });
+      expect(r.ok).toBe(true);
+      expect(JSON.stringify(r)).not.toContain("authz-app-password-1");
+    }
+    expect(pds.requests).toHaveLength(2);
   });
 });

@@ -1,5 +1,10 @@
 import { Agent } from "@atproto/api";
 
-export function agentFor(_pdsUrl: string, _accessJwt?: string): Agent {
-  throw new Error("not implemented");
+/** A plain agent: no `CredentialSession`, so nothing refreshes or replays a request behind the engine's back. */
+export function agentFor(pdsUrl: string, accessJwt?: string): Agent {
+  return new Agent({
+    service: pdsUrl,
+    headers: accessJwt ? { authorization: `Bearer ${accessJwt}` } : {},
+    fetch: (input, init) => globalThis.fetch(input, init),
+  });
 }
