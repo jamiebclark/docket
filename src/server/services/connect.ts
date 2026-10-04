@@ -263,7 +263,7 @@ export async function chooseConnectCandidates(
 
 export type CallbackOutcome =
   | { kind: "chooser"; projectSlug: string; attemptId: string }
-  | { kind: "accounts"; projectSlug: string; code: "cancelled" | "platform_error" | "exchange_failed" | "no_candidates" | "too_many" | "not_allowed" }
+  | { kind: "accounts"; projectSlug: string; groupKey: string; code: "cancelled" | "platform_error" | "exchange_failed" | "no_candidates" | "too_many" | "not_allowed" }
   | { kind: "invalid" };
 
 const INVALID: CallbackOutcome = { kind: "invalid" };
@@ -290,7 +290,7 @@ export async function handleOAuthCallback(
     if (error instanceof NotFoundError) return INVALID;
     throw error;
   }
-  if (!scope.can({ account: ["manage"] })) return { kind: "accounts", projectSlug: found.projectSlug, code: "not_allowed" };
+  if (!scope.can({ account: ["manage"] })) return { kind: "accounts", projectSlug: found.projectSlug, groupKey: found.groupKey, code: "not_allowed" };
   const now = await clock.now();
   // Expiry and reuse are decided by this single conditional UPDATE, so parallel callbacks cannot both pass.
   if (!(await scope.connectAttempts.consumeState(found.id, { ...caller, now }))) return INVALID;
@@ -298,6 +298,7 @@ export async function handleOAuthCallback(
   const back = (code: Extract<CallbackOutcome, { kind: "accounts" }>["code"]): CallbackOutcome => ({
     kind: "accounts",
     projectSlug: found.projectSlug,
+    groupKey: found.groupKey,
     code,
   });
   const finish = async (outcome: CallbackOutcome) => {

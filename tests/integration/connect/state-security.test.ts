@@ -113,7 +113,7 @@ describe("platform and exchange failures", () => {
     const exchange = vi.spyOn(throwawayGroup, "exchangeCode");
     const params = new URLSearchParams({ state, error: "access_denied", error_reason: "user_denied" });
     const outcome = await connect.handleOAuthCallback(params, callerFor(env.owner.id, session));
-    expect(outcome).toEqual({ kind: "accounts", projectSlug: env.project.slug, code: "platform_error" });
+    expect(outcome).toEqual({ kind: "accounts", projectSlug: env.project.slug, groupKey: "throwaway", code: "platform_error" });
     expect(exchange).not.toHaveBeenCalled();
     const replay = await connect.handleOAuthCallback(new URLSearchParams({ state, code: "c" }), callerFor(env.owner.id, session));
     expect(replay.kind).toBe("invalid");
@@ -143,7 +143,7 @@ describe("platform and exchange failures", () => {
     const state = await begin(env, session);
     vi.spyOn(throwawayGroup, "exchangeCode").mockImplementation(impl as never);
     const outcome = await connect.handleOAuthCallback(new URLSearchParams({ state, code: "c" }), callerFor(env.owner.id, session));
-    expect(outcome).toEqual({ kind: "accounts", projectSlug: env.project.slug, code: "exchange_failed" });
+    expect(outcome).toEqual({ kind: "accounts", projectSlug: env.project.slug, groupKey: "throwaway", code: "exchange_failed" });
     expect(JSON.stringify(outcome)).not.toContain("SECRET-VALUE");
     expect(await accountCount(env)).toBe(0);
     const [row] = await testDb().select().from(connectAttempts).where(and(eq(connectAttempts.projectId, env.project.id), eq(connectAttempts.stateHash, hashInvitationToken(state))));
