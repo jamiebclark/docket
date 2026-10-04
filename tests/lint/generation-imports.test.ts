@@ -2,7 +2,7 @@ import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 
 describe("worker bundle graph", () => {
-  it("does not import the LLM layer or the generation services", async () => {
+  it("includes the job runner and the LLM layer, and imports nothing from next/*", async () => {
     const result = await build({
       entryPoints: ["src/worker.ts"],
       bundle: true,
@@ -15,7 +15,11 @@ describe("worker bundle graph", () => {
       external: ["pg-native", "sharp"],
     });
     const inputs = Object.keys(result.metafile.inputs);
-    const offenders = inputs.filter((p) => /src\/server\/(llm|services\/generation)\//.test(p) || /node_modules\/openai\//.test(p));
-    expect(offenders).toEqual([]);
+    expect(inputs.some((p) => p.endsWith("src/server/services/jobs/runner.ts"))).toBe(true);
+    expect(inputs.some((p) => /src\/server\/llm\//.test(p))).toBe(true);
+    const nextImports = inputs.filter((p) => /node_modules\/next\//.test(p));
+    expect(nextImports).toEqual([]);
+    const importsNext = Object.values(result.metafile.inputs).flatMap((i) => i.imports.map((x) => x.path)).filter((p) => p === "next" || p.startsWith("next/"));
+    expect(importsNext).toEqual([]);
   }, 60_000);
 });
