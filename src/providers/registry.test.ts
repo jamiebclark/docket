@@ -83,6 +83,15 @@ describe("provider registry", () => {
         if (group.pasteToken) expect(group.pasteToken.field.secret, group.key).toBe(true);
       }
     });
+    it("registers threads in its own connect group", () => {
+      const entry = findConnectGroup("threads");
+      expect(entry?.providers.map((p) => p.key)).toEqual(["threads"]);
+      expect(entry?.group.environment.variables.map((v) => v.name)).toEqual([
+        "THREADS_APP_ID",
+        "THREADS_APP_SECRET",
+        "THREADS_GRAPH_BASE",
+      ]);
+    });
     it("documents every environment variable in .env.example", () => {
       const example = readFileSync(".env.example", "utf8");
       for (const { group } of groups) {

@@ -8,3 +8,9 @@ export const threadsCredentialsSchema = z.object({
   expiryEstimated: z.boolean(),
 });
 export type ThreadsCredentials = z.infer<typeof threadsCredentialsSchema>;
+
+/** Only `accessToken` is a secret. Null when the stored value is not a Threads credentials blob. */
+export function readThreadsCredentials(value: unknown): ThreadsCredentials | null {
+  const parsed = threadsCredentialsSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}

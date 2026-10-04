@@ -1,16 +1,23 @@
 import type { ProviderCapabilities, PublishLimit } from "../types";
+import { threadsCountingRule } from "./text";
 
-// Stub (T002): interim values; the real counting rule and limits land with the capabilities task.
+// R9 interim: 500 characters, emoji counted by UTF-8 bytes (see ./text.ts).
 export const THREADS_MAX_TEXT = 500;
 export const THREADS_MAX_IMAGES = 20;
+export const THREADS_MAX_BYTES_PER_FILE = 8_000_000;
 
 export const threadsCapabilities: ProviderCapabilities = {
-  text: { maxLength: THREADS_MAX_TEXT, countingRule: "graphemes" },
+  text: { maxLength: THREADS_MAX_TEXT, countingRule: threadsCountingRule },
   media: {
     maxImages: THREADS_MAX_IMAGES,
-    allowedMimeTypes: ["image/jpeg"],
+    allowedMimeTypes: ["image/jpeg", "image/png"],
     outputMimeType: "image/jpeg",
-    maxBytesPerFile: 8_000_000,
+    maxBytesPerFile: THREADS_MAX_BYTES_PER_FILE,
+    minWidth: 320,
+    maxWidth: 1440,
+    minAspectRatio: 0.1,
+    maxAspectRatio: 10,
+    maxAltTextLength: 1000,
     required: false,
   },
   textOnlyAllowed: true,
