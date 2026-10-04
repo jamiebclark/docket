@@ -10,3 +10,4 @@ export {
 export { listRecentFailures, recordFailure } from "./failures";
 export { generateSingle, generateSingleSchema, type GenerateResult } from "./single";
 export { regeneratePost } from "./regenerate";
+export { getSeries, planSeries, startSeries, writeSeriesPost, type PlanSeriesResult } from "./series";

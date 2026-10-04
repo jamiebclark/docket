@@ -68,11 +68,12 @@ describe("regeneratePost", () => {
     expect((await t.records())[2].inputs.instructions).toBe("One\nTwo");
   });
 
-  it("never approves; an invalid result moves an approved post to review", async () => {
+  it("never approves; new content on an approved post goes back to review under review_required (F1)", async () => {
     const t = await setup();
     await t.env.scope.posts.update(t.postId, { reviewState: "approved" });
-    await regeneratePost(t.env.scope, t.postId, {}, createFakeLlm([ok("Fine and short")]));
-    expect((await t.env.scope.posts.get(t.postId))!.reviewState).toBe("approved");
+    const valid = await regeneratePost(t.env.scope, t.postId, {}, createFakeLlm([ok("Fine and short")]));
+    expect(valid).toMatchObject({ ok: true, decision: { reviewState: "needs_review", reason: "Review required by policy" } });
+    expect((await t.env.scope.posts.get(t.postId))!.reviewState).toBe("needs_review");
     const bad = createFakeLlm([ok("x".repeat(400)), ok("y".repeat(400))]);
     const res = await regeneratePost(t.env.scope, t.postId, {}, bad);
     expect(res).toMatchObject({ ok: true, decision: { reviewState: "needs_review" } });
