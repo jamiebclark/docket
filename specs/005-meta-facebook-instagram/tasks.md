@@ -24,8 +24,8 @@ description: "Task list for the Facebook Pages and Instagram providers (005)"
 
 **Purpose**: confirm the baseline and create the folder skeleton
 
-- [ ] T001 Run `pnpm typecheck` and `pnpm vitest run src/providers tests/integration/scheduler` to record a green baseline; confirm no new dependency is needed (platform `fetch`, `node:crypto`, zod, drizzle already installed). Add no dependency
-- [ ] T002 [P] Create typed stub files (exporting their planned names per contracts/meta.md, facebook.md, instagram.md) under `src/providers/meta/` (`config.ts graph.ts errors.ts oauth.ts candidates.ts credentials.ts connect-group.ts`), `src/providers/facebook/` (`index.ts capabilities.ts settings.ts steps.ts links.ts publish.ts validate.ts`) and `src/providers/instagram/` (`index.ts capabilities.ts settings.ts state.ts steps.ts quota.ts publish.ts validate.ts`) so later tasks compile. Do NOT register the providers yet
+- [X] T001 Run `pnpm typecheck` and `pnpm vitest run src/providers tests/integration/scheduler` to record a green baseline; confirm no new dependency is needed (platform `fetch`, `node:crypto`, zod, drizzle already installed). Add no dependency
+- [X] T002 [P] Create typed stub files (exporting their planned names per contracts/meta.md, facebook.md, instagram.md) under `src/providers/meta/` (`config.ts graph.ts errors.ts oauth.ts candidates.ts credentials.ts connect-group.ts`), `src/providers/facebook/` (`index.ts capabilities.ts settings.ts steps.ts links.ts publish.ts validate.ts`) and `src/providers/instagram/` (`index.ts capabilities.ts settings.ts state.ts steps.ts quota.ts publish.ts validate.ts`) so later tasks compile. Do NOT register the providers yet
 
 ---
 
