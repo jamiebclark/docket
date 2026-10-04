@@ -26,6 +26,7 @@ export interface AccountView {
   publishLimit: PublishLimit | null;
   settings: unknown;
   providerAvailable: boolean;
+  connectedAt: Date;
 }
 
 export interface ConnectableProvider {
@@ -55,6 +56,7 @@ function view(a: AccountRecord): AccountView {
         : null,
     settings: a.settings,
     providerAvailable: provider !== undefined,
+    connectedAt: a.createdAt,
   };
 }
 
@@ -156,6 +158,42 @@ export async function setPublishLimit(
     }
     return { warnings };
   });
+}
+
+/** Mock accounts only, and only while the mock provider is enabled: reactivates in place and clears `last_error`. */
+export async function reconnectMock(scope: ProjectScope, accountId: string): Promise<AccountView> {
+  const id = idSchema.parse(accountId);
+  require(scope, "manage");
+  if (!getEnv().MOCK_PROVIDER_ENABLED) throw new ForbiddenError("The mock provider is disabled.");
+  const account = await scope.accounts.get(id);
+  if (!account || account.removedAt) throw new NotFoundError();
+  if (account.providerKey !== "mock") throw new ConflictError("Only the mock provider can be reconnected here.");
+  return saveConnectedAccount(scope, {
+    providerKey: "mock",
+    externalAccountId: account.externalAccountId,
+    displayName: account.displayName,
+    settings: account.settings ?? {},
+  });
+}
+
+/** How many posts would lose a target if the account were removed. */
+export async function accountRemovalImpact(scope: ProjectScope, accountId: string): Promise<{ unpublishedPosts: number }> {
+  const id = idSchema.parse(accountId);
+  require(scope, "view");
+  const account = await scope.accounts.get(id);
+  if (!account || account.removedAt) throw new NotFoundError();
+  return { unpublishedPosts: await scope.accounts.countUnpublishedPosts(id) };
+}
+
+export async function listAccountsNeedingReauth(
+  scope: ProjectScope,
+): Promise<{ id: string; displayName: string; providerName: string }[]> {
+  require(scope, "view");
+  return (await scope.accounts.listNeedingReauth()).map((a) => ({
+    id: a.id,
+    displayName: a.displayName,
+    providerName: findProvider(a.providerKey)?.displayName ?? a.providerKey,
+  }));
 }
 
 /** Lock order: account → posts (by id) → targets. Refused while any target is mid-call. */
