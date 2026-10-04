@@ -1,10 +1,14 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { setLlmForTests } from "../../../../src/server/llm";
+import { createJob } from "../../../../src/server/services/jobs";
 import { setUrlFetchOverridesForTests } from "../../../../src/server/services/media-from-url";
 import { setStorageForTests } from "../../../../src/server/storage";
 import { api, createKey } from "../../../helpers/api";
 import { closeDb } from "../../../helpers/db";
+import { createFakeLlm } from "../../../helpers/fake-llm";
 import { htmlAsJpg, jpeg, oversizePixels } from "../../../helpers/images";
 import { startImageServer, type ImageServer } from "../../../helpers/image-server";
+import { jobsEnv } from "../../../helpers/jobs-env";
 import { postsEnv } from "../../../helpers/posts-env";
 import { createMemoryStorage } from "../../../helpers/storage";
 import { createMediaAsset } from "../../../helpers/scheduling";
@@ -15,6 +19,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await images.close();
+  setLlmForTests(null);
   await closeDb();
 });
 afterEach(() => {
@@ -141,5 +146,20 @@ describe("GET /media", () => {
     expect(ids).not.toContain(used.id);
     expect((await api("GET", "/media?limit=0", { key })).status).toBe(400);
     expect((await api("GET", "/media/not-a-uuid", { key })).status).toBe(404);
+  });
+
+  it("reports the job that reserves an image on GET /media/{id}", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    const key = (await createKey(e.scope, ["read"], { rateLimitPerMinute: 1000 })).secret;
+    const [held, free] = await e.assets(2);
+    const { jobId } = await createJob(
+      e.scope,
+      e.input({ source: { kind: "media", selection: { mode: "pick", ids: [held!.id] }, includeUsed: false } }),
+    );
+    const got = await api("GET", `/media/${held!.id}`, { key });
+    expect(got.status).toBe(200);
+    expect(got.json.reservedByJobId).toBe(jobId);
+    expect((await api("GET", `/media/${free!.id}`, { key })).json.reservedByJobId).toBeNull();
   });
 });

@@ -260,7 +260,8 @@ export async function getMedia(scope: ProjectScope, assetId: string) {
   const row = await scope.media.get(id);
   if (!row) throw new NotFoundError();
   const usedBy = (await refsFor(scope, id)).map(({ postId, excerpt, status }) => ({ postId, excerpt, status }));
-  return { ...(await toView(row, row.firstUsedAt !== null || usedBy.length > 0)), usedBy };
+  const reservedByJobId = await scope.media.reservedJobFor(id);
+  return { ...(await toView(row, row.firstUsedAt !== null || usedBy.length > 0, reservedByJobId)), usedBy };
 }
 
 const updateSchema = z.object({ altText: z.string().max(2000).optional(), tags: tagsSchema.optional() });
