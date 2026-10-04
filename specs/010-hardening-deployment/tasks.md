@@ -171,8 +171,8 @@
 
 ## Phase 9: Polish and final gate
 
-- [ ] T074 Confirm no runtime or dev dependency was added: `git diff main -- package.json` shows only script changes (FR-042)
-- [ ] T075 Run the final gate once (quickstart §8): `pnpm tsc --noEmit`, `pnpm lint`, `pnpm db:check`, `pnpm vitest run`, `pnpm build` and `pnpm build:smoke`; fix anything red and record the results in `docs/decisions.md`
+- [x] T074 Confirm no runtime or dev dependency was added: `git diff main -- package.json` shows only script changes (FR-042)
+- [x] T075 Run the final gate once (quickstart §8): `pnpm tsc --noEmit`, `pnpm lint`, `pnpm db:check`, `pnpm vitest run`, `pnpm build` and `pnpm build:smoke`; fix anything red and record the results in `docs/decisions.md`
 
 ---
 

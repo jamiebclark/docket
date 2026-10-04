@@ -452,3 +452,12 @@ Baseline before any 010 change: `pnpm tsc --noEmit` clean, `pnpm lint` 0 errors 
 - **D31 Compose hardening.** *What:* the web port binds to `127.0.0.1` by default, `MOCK_PROVIDER_ENABLED` is passed through unset by default, and no service is added. *Why:* plain HTTP on the LAN with no proxy is exposed by default otherwise (FR-036, FR-038). *Reverse:* publish `3000:3000` in `docker-compose.yml`.
 - **Judgement call: the verified-run record is honest.** Docker was unavailable where this feature was built, so `docs/deployment.md` says **NOT VERIFIED** and the README marks the quick-start commands "(not run)"; a doc test refuses a claimed run without a date. *Reverse:* replace the notice with the commands, results and date once the stack has been run.
 - **Judgement call: docs are tested, not trusted.** `tests/integration/docs/provider-guide.test.ts` parses `src/providers/types.ts` with the TypeScript compiler API and fails when a contract member or G1–G14 is missing from `docs/adding-a-provider.md`, or when a 004 F5 contradiction returns; `readme.test.ts` checks the README's section order, links, anchors, `pnpm` scripts and repository paths. *Reverse:* delete the two tests.
+
+### 010 — Final gate results (T074/T075)
+
+- `git diff main -- package.json` shows script changes only (build chain, `build:prestart` externals, new `build:smoke`); no dependency added (FR-042).
+- `pnpm tsc --noEmit`: clean. `pnpm lint`: 0 errors, 2 pre-existing unused `_ctx` warnings in scheduler integration tests.
+- `pnpm db:check`: migrations current.
+- `pnpm vitest run`: 306 files passed, 1 skipped; 2579 tests passed, 1 skipped.
+- `pnpm build` (includes `build:prestart`, `build:storage-init`, `build:smoke`, `build:worker`): succeeds.
+- Not verified headlessly: Docker compose bring-up and browser checks (no Docker/browser in this run).
