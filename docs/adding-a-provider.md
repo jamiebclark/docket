@@ -38,6 +38,13 @@ The contract lives in `src/providers/types.ts`; the `mock` provider
 - `code_points`: `[...text].length`. The same emoji is 7.
 - `utf8_bytes`: `Buffer.byteLength`. The same emoji is 25.
 
+### Custom counting rules (G9)
+
+When the platform's rule is none of these, declare `countingRule: { kind: "custom", name, unit, count(text) }`. `countText` calls
+`count`, so the composer's count, `validateAgainstCapabilities` and the publish gates all use the same function. `name` is what
+`TargetCheck.countingRule` carries (a string, never the function) and `unit` is the word in messages ("500 units"). Threads uses
+this: an emoji grapheme counts its UTF-8 bytes and every other character counts per code point.
+
 Use the rule the platform itself uses. `capabilities.media` sets `maxImages` (0 = none), `allowedMimeTypes`,
 `maxBytesPerFile` and `required`. `textOnlyAllowed` and `postTypes` finish the picture.
 Everything is checked by `validateAgainstCapabilities` in `src/providers/validation.ts`.
@@ -82,6 +89,19 @@ same candidates. The pasted token is never stored (G6).
 
 A group declares its own environment in `environment` (`variables`, `issues(source)`, `configured(source)`) and an optional `setupDoc`.
 Startup merges those issues with the core ones, so no provider variable belongs in `src/server/env.ts` (G8).
+
+### Callback-address requirement and hint (G10, G12)
+
+A group may declare `redirectRequirement: { https, publicHost, reason, doc? }` when the platform refuses some callback addresses
+(Threads refuses `http://` and localhost). When `BETTER_AUTH_URL` does not qualify, the group is shown as unavailable with `reason`
+and a link to `doc`, and starting is refused on the server (the paste form, if any, stays available). Point `doc` at a real file
+and anchor. A group may also set a static `callbackHint`, shown after a failed callback (Threads: the tester-invite reminder); the
+callback carries only the registered group key, so nothing from the platform is reflected.
+
+### Account notes (G13)
+
+A provider may expose non-secret `accountNotes({ settings, credentialsExpireAt })` strings, shown on the account. Threads shows the estimated expiry of a
+pasted token. Keep notes plain text and free of secrets.
 
 ## 5. Settings vs credentials
 
@@ -149,6 +169,9 @@ expiry. Return `{ ok: true, credentials, expiresAt }` to store the new credentia
 A failure marks the account `needs_reauth`: its targets stop publishing until the user reconnects.
 Do not throw for an expected refusal; return `ok: false`.
 
+A transient failure may carry `retryAt`. The scheduled refresh then parks the account's refresh lease until then (capped at 24 hours)
+instead of retrying every tick (G11). Threads uses this for a token younger than 24 hours, which the platform will not renew yet.
+
 Optional extras: `needsRefresh(credentials, now)` lets the engine renew ahead of a publish when the access token is about to expire
 (Bluesky: within 5 minutes of the JWT's `exp`). A failure with `transient: true` (and optionally `retryAt`) keeps the account
 `active` instead of marking `needs_reauth`. A successful result may carry `displayName`, which updates the account's name.
@@ -211,3 +234,21 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
   `notBefore` of `QUOTA_RETRY_MS` (nothing was published, so this is safe); otherwise it returns `continue` with `quotaChecked: true`.
 - **Outcomes.** Only the `publish` call can be `ambiguous`; every earlier step is `retryable_error` on transient failures.
   A revoked token is `fatal_error` with `credentialsInvalid: true`.
+
+## 15. Worked example: the `threads` provider
+
+`src/providers/threads/` combines three ideas the other providers show separately.
+
+- **An expiring token with a 24-hour rule.** Only the long-lived token is stored (with `issuedAt`, `expiresAt` and
+  `expiryEstimated`). `refreshCredentials` renews it ahead of expiry, but Threads will not renew a token under 24 hours old, so a
+  young token returns `ok: false, transient: true` with `retryAt` and the account stays `active` (sections 9 and G11). A token
+  rejected by Threads is `needs_reauth`.
+- **Three container types in one step machine.** A text or single-image post creates one container; a carousel creates one item
+  container per image and then a parent. `threadsStepFor` is pure and total across all three. Only the parent is status-checked,
+  by `check_status` with `continue` + `notBefore` (30 s, then 60 s, capped at 5 minutes). `ERROR` is fatal, `EXPIRED` recreates
+  (at most twice, and only before `publish`), and a container older than 23 hours is recreated at the quota step.
+- **Publish-only ambiguity.** Only `publish` has `mayPublish: true`. A network failure or timeout after it was sent is `ambiguous`
+  and is never retried; everything earlier is `retryable_error`. A status of `PUBLISHED` found while checking is also treated as
+  ambiguous rather than published again.
+- **Framework hooks it uses:** a custom counting rule (G9), a redirect requirement and callback hint (G10, G12), account notes
+  (G13) and a held refresh (G11). Its tests are mocked HTTP only, and the DB clock is advanced rather than sleeping.
