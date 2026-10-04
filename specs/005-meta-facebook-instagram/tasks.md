@@ -171,9 +171,9 @@ description: "Task list for the Facebook Pages and Instagram providers (005)"
 
 **Independent Test**: fake-graph long-lived exchange + Pages listing; pasted token only in the exchange; not stored/echoed/logged.
 
-- [ ] T058 [US8] Implement `pasteConnectToken` in `src/server/services/connect.ts` and `pasteConnectTokenAction` in `src/app/p/[projectSlug]/accounts/actions.ts` (owner/admin only; insert the attempt then store the ciphertext in the same transaction; exchange outside any transaction; clear-field result on failure; the token is never stored or returned) and the paste form in `ConnectGroupSection.tsx` (label, hint listing the five permissions, field cleared after submit)
-- [ ] T059 [US8] Implement `pasteToken` in `src/providers/meta/connect-group.ts` using `oauth.ts` (long-lived exchange then `candidates.ts`) with a case in `src/providers/meta/oauth.test.ts`
-- [ ] T060 [US8] Write `tests/integration/connect/paste.test.ts`: valid token → chooser; unexchangeable token (expired/wrong app/malformed) → clear message and nothing changes; no Pages → message lists needed permissions; editor refused server-side and form not rendered; neither pasted nor long-lived user token stored anywhere (FR-012/FR-013)
+- [x] T058 [US8] Implement `pasteConnectToken` in `src/server/services/connect.ts` and `pasteConnectTokenAction` in `src/app/p/[projectSlug]/accounts/actions.ts` (owner/admin only; insert the attempt then store the ciphertext in the same transaction; exchange outside any transaction; clear-field result on failure; the token is never stored or returned) and the paste form in `ConnectGroupSection.tsx` (label, hint listing the five permissions, field cleared after submit)
+- [x] T059 [US8] Implement `pasteToken` in `src/providers/meta/connect-group.ts` using `oauth.ts` (long-lived exchange then `candidates.ts`) with a case in `src/providers/meta/oauth.test.ts`
+- [x] T060 [US8] Write `tests/integration/connect/paste.test.ts`: valid token → chooser; unexchangeable token (expired/wrong app/malformed) → clear message and nothing changes; no Pages → message lists needed permissions; editor refused server-side and form not rendered; neither pasted nor long-lived user token stored anywhere (FR-012/FR-013)
 
 ---
 

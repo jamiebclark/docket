@@ -318,3 +318,57 @@ export async function handleOAuthCallback(
   if (!(await scope.connectAttempts.storeCandidates(found.id, ciphertext))) return INVALID;
   return { kind: "chooser", projectSlug: found.projectSlug, attemptId: found.id };
 }
+
+export type PasteOutcome = { ok: true; attemptId: string } | { ok: false; message: string };
+
+const pasteSchema = z.object({ groupKey: z.string().min(1).max(100), token: z.string().trim().min(1).max(4000) });
+
+/**
+ * A token generated in the platform's own tools, taken to the same chooser as the OAuth return. The pasted
+ * token only reaches the exchange; it is never stored, returned or logged. The exchange runs outside any
+ * transaction, then the attempt row and its candidate ciphertext are written in one.
+ */
+export async function pasteConnectToken(
+  scope: ProjectScope,
+  input: { groupKey: string; token: string },
+  session: ConnectSession,
+): Promise<PasteOutcome> {
+  require(scope, "manage");
+  const parsed = pasteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Paste a user access token." };
+  const entry = findConnectGroup(parsed.data.groupKey);
+  const paste = entry?.group.pasteToken;
+  if (!entry || !paste) throw new NotFoundError("That connection is not available.");
+  if (!isGroupConfigured(entry.group.key)) throw new NotFoundError("That connection is not configured.");
+  const now = await clock.now();
+  await purgeExpiredConnectAttempts(now);
+  let result;
+  try {
+    result = await paste.exchange({ token: parsed.data.token, now, signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS) });
+  } catch {
+    return { ok: false, message: "Could not check that token. Nothing changed. Try again." };
+  }
+  if (!result.ok) return { ok: false, message: result.message };
+  if (result.candidates.length === 0) return { ok: false, message: `No accounts were found for that token. ${paste.help}` };
+  let tooMany = false;
+  const created = await scope.connectAttempts.createReady({
+    userId: scope.membership.userId,
+    sessionId: session.sessionId,
+    groupKey: entry.group.key,
+    stateHash: generateInvitationToken().tokenHash,
+    expiresAt: new Date(now.getTime() + CONNECT_ATTEMPT_MINUTES * 60_000),
+    encrypt: (id) => {
+      const c = encryptCandidates(id, result.candidates, result.notices);
+      if (!c) {
+        tooMany = true;
+        throw new Error("too many candidates");
+      }
+      return c;
+    },
+  }).catch((error) => {
+    if (tooMany) return null;
+    throw error;
+  });
+  if (!created) return { ok: false, message: "That token can reach too many accounts to list. Nothing changed." };
+  return { ok: true, attemptId: created.id };
+}

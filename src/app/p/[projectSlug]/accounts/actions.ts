@@ -127,3 +127,18 @@ export async function chooseConnectCandidatesAction(
   refresh();
   redirect(`/p/${slug}/accounts`);
 }
+
+/** Never echoes `input.token`; redirects to the chooser on success. */
+export async function pasteConnectTokenAction(
+  slug: string,
+  input: { groupKey: string; token: string },
+): Promise<ActionResult<never>> {
+  const binding = await sessionBinding();
+  if (!binding) return fail("unauthenticated", "Sign in to continue.");
+  const result = await runAction(slug, (scope) =>
+    connect.pasteConnectToken(scope, { groupKey: input?.groupKey, token: input?.token }, binding),
+  );
+  if (!result.ok) return result;
+  if (!result.data.ok) return fail("validation", result.data.message);
+  redirect(`/p/${slug}/accounts/connect/${result.data.attemptId}`);
+}

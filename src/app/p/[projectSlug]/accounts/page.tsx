@@ -82,6 +82,7 @@ export default async function AccountsPage({
           setupDoc={g.setupDoc}
           redirectUri={g.redirectUri}
           canManage={canManage}
+          paste={g.paste}
         />
       ))}
       {canManage && mockEnabled ? <ConnectMockForm slug={projectSlug} /> : null}
