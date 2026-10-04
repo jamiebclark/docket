@@ -58,11 +58,8 @@ use the fallback in step 7, or paste a token (step 10).
 
 ## 7. Fallback: a hosts-file name plus an mkcert certificate
 
-If localhost is refused, give your machine an HTTPS name:
-
-1. Add `127.0.0.1 docket.local` to your hosts file.
-2. Create a certificate with [mkcert](https://github.com/FiloSottile/mkcert): `mkcert -install && mkcert docket.local`.
-3. Serve Docket over HTTPS at that name, and add `https://docket.local/connect/callback` to the redirect URIs.
+If localhost is refused, give your machine an HTTPS name. The steps are the same as for Threads, so follow
+[Local HTTPS for Threads](#local-https-for-threads) and register `https://docket.local:3000/connect/callback` in Facebook Login → Settings.
 
 ## 8. App id, secret and environment variables
 
@@ -98,6 +95,84 @@ The pasted token is exchanged for the Pages' tokens and then discarded; it is ne
 Instagram fetches each image by its public URL, so media storage must be a publicly readable bucket. See
 [storage.md](storage.md).
 
-## Threads (added by the meta-threads entry)
+## Threads
 
-_Placeholder. The Threads setup steps are added by the meta-threads entry._
+Threads uses its own app id and secret, separate from the Meta app above, but it lives in the same Meta app dashboard.
+Live Threads connect, renewal and publishing are **verified with mocks only**. Items marked **unverified** have not been
+confirmed against the live service.
+
+### Threads: add the use case
+
+1. In the [Meta for Developers](https://developers.facebook.com/apps) dashboard open your app (or create one) and add the
+   **Access the Threads API** use case.
+2. Under the use case's permissions, add the two Docket needs: `threads_basic` and `threads_content_publish`.
+3. Open the use case's settings and copy the **Threads app ID** and **Threads app secret**. These are **not** the Meta
+   App ID and App Secret from step 8: the Threads use case has its own pair.
+
+### Threads: testers
+
+While the app is in development mode only invited accounts can connect.
+
+1. In **App roles → Roles** add each Threads account as a **Threads Tester**.
+2. Each person accepts the invite in Threads under **Settings → Account → Website permissions**.
+
+If Threads refuses the login, a missing acceptance is the first thing to check.
+
+### Threads: redirect addresses
+
+In the Threads use case's settings add `https://<host>/connect/callback` for production and
+`https://docket.local:3000/connect/callback` for local use (see [Local HTTPS for Threads](#local-https-for-threads)).
+
+- Threads refuses `http://` and `localhost` addresses. Docket checks this before sending you there and shows a reason and a link here.
+- **Port (R8, unverified):** the dashboard may refuse a non-default port such as `:3000`. If it does, run Docket on 443 (with
+  `sudo`, or a port forward from 443 to 3000) and register `https://docket.local/connect/callback` instead.
+- **Uninstall and delete callback fields (R8, unverified):** the dashboard may insist on these. Docket builds no such endpoint;
+  enter the deployment's base address (for example `https://docket.local:3000`).
+
+### Threads: environment variables
+
+| Variable | Meaning |
+|---|---|
+| `THREADS_APP_ID` | The Threads app ID. |
+| `THREADS_APP_SECRET` | The Threads app secret. Set both or neither: one without the other is a startup error. |
+| `THREADS_GRAPH_BASE` | Optional. Graph address for Threads. Default `https://graph.threads.com`. Must be `https` with no path. |
+
+Leave `THREADS_APP_ID` and `THREADS_APP_SECRET` empty to switch Threads off.
+
+### Threads: pasting a token instead (unverified, U2)
+
+If the redirect flow cannot work, paste a token:
+
+1. In the dashboard open the Threads use case and find the **User Token Generator** (**unverified (U2)**: its location may differ).
+2. Generate a token for your tester account with `threads_basic` and `threads_content_publish`.
+3. In Docket open Accounts, choose Threads and paste it.
+
+Docket first tries to exchange it for a long-lived token, then to renew it, and otherwise saves it as it is with an estimated
+expiry shown on the account. Whichever form is saved is encrypted; a token saved as it was pasted is treated as long-lived.
+
+### Local HTTPS for Threads
+
+This is the owner's chosen approach for local development (a hosts name and a trusted local certificate, not a tunnel).
+Media still needs a public bucket: Threads fetches each image by URL ([storage.md](storage.md)).
+
+1. **Hosts entry.** Add `127.0.0.1 docket.local` to your hosts file:
+   - macOS and Linux: `/etc/hosts` (edit with `sudo`).
+   - Windows: `C:\Windows\System32\drivers\etc\hosts` (edit as Administrator).
+2. **mkcert.** Install [mkcert](https://github.com/FiloSottile/mkcert) (a developer tool you install; Docket does not depend on it), then:
+   ```sh
+   mkcert -install
+   mkdir -p certificates
+   mkcert -key-file certificates/docket.local-key.pem -cert-file certificates/docket.local.pem docket.local
+   ```
+   `certificates/` is git-ignored.
+3. **Public address.** Set `BETTER_AUTH_URL=https://docket.local:3000` in `.env`.
+4. **Start over HTTPS.** Run `pnpm dev:https`. It runs `next dev` with `--experimental-https`, your key and certificate, and `-H docket.local`.
+5. **Register the callback.** Add `https://docket.local:3000/connect/callback` in the Threads use case (see above).
+6. Open `https://docket.local:3000`, sign in and choose Connect with Threads.
+
+**Troubleshooting**
+
+- *Browser certificate warning:* run `mkcert -install` again and restart the browser; check the certificate was made for `docket.local`.
+- *Connection refused or name not found:* check the hosts entry, that `pnpm dev:https` is running, and the port in the address.
+  If Threads refuses the port, use 443 as described above.
+- *Signed out after changing the address:* the sign-in cookie belongs to the host. Sign in again at `https://docket.local:3000`.

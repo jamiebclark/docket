@@ -21,7 +21,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     case "chooser":
       return go(`/p/${outcome.projectSlug}/accounts/connect/${outcome.attemptId}`);
     case "accounts":
-      return go(`/p/${outcome.projectSlug}/accounts?connect=${outcome.code}`);
+      return go(`/p/${outcome.projectSlug}/accounts?connect=${outcome.code}&group=${encodeURIComponent(outcome.groupKey)}`);
     default:
       return go("/connect/invalid");
   }

@@ -4,6 +4,7 @@ import type { ConnectCandidate } from "@/providers/types";
 import { saveConnectedAccountSchema } from "@/lib/validation/scheduling";
 import * as clock from "../dal/clock";
 import { lookupByStateHash, purgeExpiredConnectAttempts } from "../dal/connect-attempts";
+import { redirectUriProblem } from "@/providers/connect";
 import { ForbiddenError, NotFoundError } from "../dal/errors";
 import { forProject, type ProjectScope } from "../dal/scope";
 import { decryptSecret, encryptSecret } from "../crypto/secrets";
@@ -31,6 +32,10 @@ export interface ConnectGroupView {
   setupDoc: string | null;
   redirectUri: string;
   paste: { label: string; help: string } | null;
+  /** configured && the callback address meets the group's requirement (G10). */
+  available: boolean;
+  /** Set when configured but the callback address does not qualify. */
+  unavailable: { reason: string; doc: string | null } | null;
 }
 
 export interface CandidateView {
@@ -72,16 +77,22 @@ export function redirectUriFor(): string {
 /** Every registered group, configured or not. */
 export async function listConnectGroups(scope: ProjectScope): Promise<ConnectGroupView[]> {
   require(scope, "view");
-  return listRegisteredGroups().map(({ group, providers }) => ({
+  return listRegisteredGroups().map(({ group, providers }) => {
+    const configured = isGroupConfigured(group.key);
+    const problem = configured ? redirectUriProblem(group, redirectUriFor()) : null;
+    return {
     key: group.key,
     displayName: group.displayName,
     providerNames: providers.map((p) => p.displayName),
     providerKeys: providers.map((p) => p.key),
-    configured: isGroupConfigured(group.key),
+    configured,
     setupDoc: group.setupDoc ?? null,
     redirectUri: redirectUriFor(),
     paste: group.pasteToken ? { label: group.pasteToken.field.label, help: group.pasteToken.help } : null,
-  }));
+    available: configured && problem === null,
+    unavailable: problem === null ? null : { reason: problem, doc: group.redirectRequirement?.doc ?? null },
+    };
+  });
 }
 
 export async function startOAuthConnect(
@@ -94,6 +105,8 @@ export async function startOAuthConnect(
   const entry = findConnectGroup(groupKey);
   if (!entry) throw new NotFoundError("That connection is not available.");
   if (!isGroupConfigured(groupKey)) throw new NotFoundError("That connection is not configured.");
+  const problem = redirectUriProblem(entry.group, redirectUriFor());
+  if (problem !== null) throw new ForbiddenError(problem);
   const now = await clock.now();
   await purgeExpiredConnectAttempts(now);
   const { token: state, tokenHash } = generateInvitationToken();
@@ -250,7 +263,7 @@ export async function chooseConnectCandidates(
 
 export type CallbackOutcome =
   | { kind: "chooser"; projectSlug: string; attemptId: string }
-  | { kind: "accounts"; projectSlug: string; code: "cancelled" | "platform_error" | "exchange_failed" | "no_candidates" | "too_many" | "not_allowed" }
+  | { kind: "accounts"; projectSlug: string; groupKey: string; code: "cancelled" | "platform_error" | "exchange_failed" | "no_candidates" | "too_many" | "not_allowed" }
   | { kind: "invalid" };
 
 const INVALID: CallbackOutcome = { kind: "invalid" };
@@ -277,7 +290,7 @@ export async function handleOAuthCallback(
     if (error instanceof NotFoundError) return INVALID;
     throw error;
   }
-  if (!scope.can({ account: ["manage"] })) return { kind: "accounts", projectSlug: found.projectSlug, code: "not_allowed" };
+  if (!scope.can({ account: ["manage"] })) return { kind: "accounts", projectSlug: found.projectSlug, groupKey: found.groupKey, code: "not_allowed" };
   const now = await clock.now();
   // Expiry and reuse are decided by this single conditional UPDATE, so parallel callbacks cannot both pass.
   if (!(await scope.connectAttempts.consumeState(found.id, { ...caller, now }))) return INVALID;
@@ -285,6 +298,7 @@ export async function handleOAuthCallback(
   const back = (code: Extract<CallbackOutcome, { kind: "accounts" }>["code"]): CallbackOutcome => ({
     kind: "accounts",
     projectSlug: found.projectSlug,
+    groupKey: found.groupKey,
     code,
   });
   const finish = async (outcome: CallbackOutcome) => {

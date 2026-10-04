@@ -1,8 +1,8 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
-import { countText } from "@/providers/text";
-import type { PostType, TextCountingRule, ValidationIssue } from "@/providers/types";
+import { countText, countingRuleName } from "@/providers/text";
+import type { PostType, ValidationIssue } from "@/providers/types";
 import { inferPostType } from "@/providers/validation";
 import { postInputSchema } from "@/lib/validation/scheduling";
 import * as clock from "../../dal/clock";
@@ -23,7 +23,7 @@ export interface TargetCheck {
   effectiveText: string;
   count: number;
   limit: number | null;
-  countingRule: TextCountingRule | null;
+  countingRule: string | null;
   postType: PostType | null;
   issues: ValidationIssue[];
   canSchedule: boolean;
@@ -76,7 +76,7 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
       effectiveText,
       count: rule ? countText(effectiveText, rule) : 0,
       limit: provider?.capabilities.text.maxLength ?? null,
-      countingRule: rule,
+      countingRule: rule ? countingRuleName(rule) : null,
       postType: provider ? inferPostType({ text: effectiveText, media }) : null,
       issues,
       canSchedule: !!provider && account.status === "active" && !issues.some((i) => i.severity === "error"),

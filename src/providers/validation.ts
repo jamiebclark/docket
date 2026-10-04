@@ -1,4 +1,4 @@
-import { countText } from "./text";
+import { countText, countingUnit } from "./text";
 import type { PostContent, PostType, ProviderCapabilities, ValidationIssue } from "./types";
 
 export function inferPostType(content: PostContent): "text" | "image" | "carousel" {
@@ -27,7 +27,7 @@ export function validateAgainstCapabilities(
   const { countingRule, maxLength } = caps.text;
   const count = countText(content.text, countingRule);
   if (count > maxLength) {
-    const unit = countingRule === "graphemes" ? "graphemes" : countingRule === "code_points" ? "characters" : "bytes";
+    const unit = countingUnit(countingRule);
     issues.push({
       severity: "error",
       code: "text_too_long",

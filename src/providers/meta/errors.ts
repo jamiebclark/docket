@@ -21,7 +21,7 @@ export function classifyGraphError(e: GraphError): GraphClass {
   return "rejected";
 }
 
-const SECRET_PARAMS = /\b(access_token|client_secret|code|fb_exchange_token)=[^&\s"']*/gi;
+const SECRET_PARAMS = /\b(access_token|client_secret|code|fb_exchange_token|refresh_token)=[^&\s"']*/gi;
 
 /** Replaces known secrets and secret-bearing query values; caps at 500 chars. */
 export function scrub(text: string, secrets: readonly string[]): string {

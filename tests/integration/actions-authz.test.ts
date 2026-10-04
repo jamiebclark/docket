@@ -122,6 +122,11 @@ const CASES: Case[] = [
   },
   { name: "startOAuthConnectAction", manage: true, run: (s) => accountActions.startOAuthConnectAction(s, { groupKey: "throwaway" }) },
   {
+    name: "pasteConnectTokenAction (unavailable group)",
+    manage: true,
+    run: (s) => accountActions.pasteConnectTokenAction(s, { groupKey: "throwaway-strict", token: "T".repeat(20) }),
+  },
+  {
     name: "chooseConnectCandidatesAction",
     manage: true,
     run: (s, f) => accountActions.chooseConnectCandidatesAction(s, { attemptId: f.attemptId, selected: ["tw-page:authz"] }),

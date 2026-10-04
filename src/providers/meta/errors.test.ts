@@ -94,4 +94,10 @@ describe("graphSummary and scrub", () => {
     expect(scrub("code=abc&client_secret=zzz", [])).toBe("code=[redacted]&client_secret=[redacted]");
     expect(scrub("x".repeat(600), []).length).toBe(500);
   });
+  it("redacts every secret-bearing parameter", () => {
+    const text = "access_token=A1&client_secret=B2&code=C3&refresh_token=D4&fb_exchange_token=E5&keep=yes";
+    expect(scrub(text, [])).toBe(
+      "access_token=[redacted]&client_secret=[redacted]&code=[redacted]&refresh_token=[redacted]&fb_exchange_token=[redacted]&keep=yes",
+    );
+  });
 });

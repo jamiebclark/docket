@@ -1,6 +1,7 @@
 export interface MetaApp {
   graphBase: string;
-  version: string;
+  /** Null → no version segment in any URL (a product whose Graph host is unversioned). */
+  version: string | null;
 }
 
 export interface GraphError {
@@ -26,6 +27,8 @@ export interface GraphRequestInput {
   params?: Record<string, string>;
   /** Sent as `access_token`. */
   token?: string;
+  /** Skips the version segment for this request, whatever the app's version. */
+  unversioned?: true;
   signal: AbortSignal;
 }
 
@@ -110,7 +113,7 @@ export function graphRequest(app: MetaApp, req: GraphRequestInput): Promise<Grap
   if (!validPath(req.path)) throw new Error("Invalid Graph path");
   const params = new URLSearchParams(req.params ?? {});
   if (req.token) params.set("access_token", req.token);
-  const base = `${app.graphBase}/${app.version}${req.path}`;
+  const base = `${app.graphBase}${app.version && !req.unversioned ? `/${app.version}` : ""}${req.path}`;
   if (req.method === "GET") return send(`${base}?${params.toString()}`, { method: "GET", signal: req.signal });
   return send(base, {
     method: "POST",

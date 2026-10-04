@@ -14,6 +14,8 @@ export type AppliedRefresh =
   | { kind: "refused"; reason: string } // definitive: the account is now `needs_reauth`
   | { kind: "transient"; reason: string; retryAt?: Date }; // the account stays `active`
 
+const MAX_TRANSIENT_HOLD_MS = 24 * 3_600_000;
+
 /**
  * The one place a refresh outcome becomes a row change, shared by the scheduled section and publish-time refresh.
  * Always releases the refresh lease held under `token`.
@@ -24,6 +26,7 @@ export async function applyRefreshResult(
   token: string,
   result: RefreshResult,
   secrets: readonly string[],
+  opts: { holdTransient?: boolean } = {},
 ): Promise<AppliedRefresh> {
   const at = await clock.now();
   if (result.ok) {
@@ -41,8 +44,14 @@ export async function applyRefreshResult(
   }
   if (result.transient) {
     const reason = redact(result.reason, secrets);
+    // The scheduled section parks the account until `retryAt` (at most a day), so the next tick does not re-ask.
+    const hold =
+      opts.holdTransient && result.retryAt && result.retryAt.getTime() > at.getTime()
+        ? new Date(Math.min(result.retryAt.getTime(), at.getTime() + MAX_TRANSIENT_HOLD_MS))
+        : undefined;
     const kept = await repos.accounts.recordRefresh(account.id, token, {
       lastError: `Renewing credentials failed temporarily: ${reason}`,
+      ...(hold ? { refreshLeaseUntil: hold } : {}),
     });
     if (!kept) return { kind: "lost" };
     return { kind: "transient", reason, ...(result.retryAt ? { retryAt: result.retryAt } : {}) };

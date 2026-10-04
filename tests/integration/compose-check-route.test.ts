@@ -1,3 +1,4 @@
+import { countingRuleName } from "@/providers/text";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({ current: null as { user: { id: string } } | null }));
@@ -94,7 +95,7 @@ describe("POST compose/check", () => {
 
   it("counts emoji ZWJ sequences, combining marks and multi-byte text by the provider's rule", async () => {
     const t = await setup();
-    const rule = blueskyLikeProvider.capabilities.text.countingRule;
+    const rule = countingRuleName(blueskyLikeProvider.capabilities.text.countingRule) as "graphemes" | "code_points" | "utf8_bytes";
     const family = "👨‍👩‍👧‍👦"; // one grapheme, 7 code points, 25 UTF-8 bytes
     const combined = "é"; // one grapheme, 2 code points
     const text = `${family}${combined}日本`;

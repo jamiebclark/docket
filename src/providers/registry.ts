@@ -3,10 +3,11 @@ import { blueskyProvider } from "./bluesky";
 import { facebookProvider } from "./facebook";
 import { instagramProvider } from "./instagram";
 import { mockProvider } from "./mock";
+import { threadsProvider } from "./threads";
 import type { OAuthConnectGroup, SocialProvider } from "./types";
 
 // Adding a provider = one line here (plus its folder under src/providers/<key>/).
-export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider, instagramProvider as SocialProvider];
+export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider, instagramProvider as SocialProvider, threadsProvider as SocialProvider];
 
 export function findProvider(key: string): SocialProvider | undefined {
   return providers.find((p) => p.key === key);

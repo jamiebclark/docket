@@ -7,6 +7,7 @@ import { Cell, Row, Table } from "@/components/ui/Table";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
+import { findConnectGroup } from "@/providers/registry";
 import * as connect from "@/server/services/connect";
 import * as slots from "@/server/services/slots";
 import { ConnectGroupSection } from "./ConnectGroupSection";
@@ -35,16 +36,25 @@ const CONNECT_BANNER: Record<string, string> = {
   not_allowed: "Only project owners and admins can connect accounts.",
 };
 
+const HINTED_CODES: ReadonlySet<string> = new Set(["platform_error", "exchange_failed", "no_candidates"]);
+
 export default async function AccountsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ projectSlug: string }>;
-  searchParams?: Promise<{ connect?: string | string[] }>;
+  searchParams?: Promise<{ connect?: string | string[]; group?: string | string[] }>;
 }) {
   const { projectSlug } = await params;
-  const connectParam = (await searchParams)?.connect;
-  const banner = typeof connectParam === "string" ? CONNECT_BANNER[connectParam] : undefined;
+  const query = await searchParams;
+  const connectParam = query?.connect;
+  const baseBanner = typeof connectParam === "string" ? CONNECT_BANNER[connectParam] : undefined;
+  // The hint comes from the registered group, never from platform text; an unknown group value shows nothing.
+  const hint =
+    typeof connectParam === "string" && typeof query?.group === "string" && HINTED_CODES.has(connectParam)
+      ? findConnectGroup(query.group)?.group.callbackHint
+      : undefined;
+  const banner = baseBanner && hint ? `${baseBanner} ${hint}` : baseBanner;
   let scope;
   try {
     scope = await forProject(await getSession(), projectSlug);
@@ -83,6 +93,7 @@ export default async function AccountsPage({
           redirectUri={g.redirectUri}
           canManage={canManage}
           paste={g.paste}
+          unavailable={g.unavailable}
         />
       ))}
       {canManage && mockEnabled ? <ConnectMockForm slug={projectSlug} /> : null}
@@ -123,6 +134,11 @@ export default async function AccountsPage({
               <p className="text-sm text-foreground/70">
                 Connected <LocalTime value={account.connectedAt} timeZone={timeZone} />
               </p>
+              {account.notes.map((note, i) => (
+                <p key={i} className="text-sm">
+                  {note}
+                </p>
+              ))}
               {canManage && isMock ? (
                 <div className="flex flex-wrap items-end gap-4">
                   {account.status === "needs_reauth" ? <ReconnectMockButton slug={projectSlug} id={account.id} /> : null}
@@ -131,8 +147,17 @@ export default async function AccountsPage({
               ) : null}
               {canManage && account.status === "needs_reauth"
                 ? groups
-                    .filter((g) => g.configured && g.providerKeys.includes(account.providerKey))
+                    .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
                     .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
+                : null}
+              {canManage && account.status === "needs_reauth"
+                ? groups
+                    .filter((g) => g.unavailable && g.paste && g.providerKeys.includes(account.providerKey))
+                    .map((g) => (
+                      <p key={g.key} className="text-sm">
+                        Paste a new token in Connect {g.displayName} to reconnect.
+                      </p>
+                    ))
                 : null}
               {canManage && account.status === "needs_reauth"
                 ? credentialProviders

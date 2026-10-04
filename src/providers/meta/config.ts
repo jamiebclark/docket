@@ -17,24 +17,33 @@ const SECRET_HEX = /^[0-9a-f]{32}$/i;
 const SECRET_LOOSE = /^\S{16,128}$/;
 const DIGITS = /^\d+$/;
 
-function read(source: Source, name: string): string | null {
+/** Trimmed value of `name`, or null when unset or blank. */
+export function readEnv(source: Source, name: string): string | null {
   const value = source[name]?.trim();
   return value ? value : null;
+}
+
+export function isAppId(value: string): boolean {
+  return APP_ID.test(value);
+}
+
+export function isAppSecret(value: string): boolean {
+  return SECRET_HEX.test(value) || SECRET_LOOSE.test(value);
 }
 
 /** Pure. `config: null` means not configured (neither id nor secret). Issues carry names only. */
 export function parseMetaEnv(source: Source): { config: MetaConfig | null; issues: ProviderEnvIssue[] } {
   const issues: ProviderEnvIssue[] = [];
-  const appId = read(source, "META_APP_ID");
-  const appSecret = read(source, "META_APP_SECRET");
-  const version = read(source, "META_GRAPH_VERSION");
-  const configId = read(source, "META_LOGIN_CONFIG_ID");
+  const appId = readEnv(source, "META_APP_ID");
+  const appSecret = readEnv(source, "META_APP_SECRET");
+  const version = readEnv(source, "META_GRAPH_VERSION");
+  const configId = readEnv(source, "META_LOGIN_CONFIG_ID");
 
   if (appSecret && !appId) issues.push({ name: "META_APP_ID", reason: "required when META_APP_SECRET is set" });
-  else if (appId && !APP_ID.test(appId)) issues.push({ name: "META_APP_ID", reason: "must be the numeric app id" });
+  else if (appId && !isAppId(appId)) issues.push({ name: "META_APP_ID", reason: "must be the numeric app id" });
 
   if (appId && !appSecret) issues.push({ name: "META_APP_SECRET", reason: "required when META_APP_ID is set" });
-  else if (appSecret && !(SECRET_HEX.test(appSecret) || SECRET_LOOSE.test(appSecret))) {
+  else if (appSecret && !isAppSecret(appSecret)) {
     issues.push({ name: "META_APP_SECRET", reason: "must be the app secret from the dashboard" });
   }
 
@@ -50,7 +59,7 @@ export function parseMetaEnv(source: Source): { config: MetaConfig | null; issue
   }
 
   const valid =
-    appId && appSecret && APP_ID.test(appId) && (SECRET_HEX.test(appSecret) || SECRET_LOOSE.test(appSecret));
+    appId && appSecret && isAppId(appId) && isAppSecret(appSecret);
   if (!valid) return { config: null, issues };
   return {
     config: {
@@ -72,6 +81,6 @@ export function requireMetaConfig(): MetaConfig {
 
 /** Graph version only, so publishing works whenever the version is valid. */
 export function graphVersion(): string {
-  const v = read(process.env, "META_GRAPH_VERSION");
+  const v = readEnv(process.env, "META_GRAPH_VERSION");
   return v && GRAPH_VERSION_PATTERN.test(v) ? v : DEFAULT_GRAPH_VERSION;
 }

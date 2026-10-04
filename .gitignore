@@ -47,3 +47,6 @@ next-env.d.ts
 specs/*/.pipeline/
 .specify/roadmaps/*.state.json
 .specify/feature.json
+
+# local HTTPS certificates (pnpm dev:https)
+certificates/

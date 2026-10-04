@@ -132,6 +132,23 @@ then open Accounts and choose Facebook Pages and Instagram. Pick the Pages and l
 - **Removing Docket's access**: Removing an account in Docket deletes the stored tokens. To revoke access entirely, open
   Facebook Settings → Business Integrations (or Apps and Websites) and remove the app.
 
+## Connecting Threads
+
+Threads has its own app id and secret. Follow [docs/meta-setup.md](docs/meta-setup.md), set `THREADS_APP_ID` and
+`THREADS_APP_SECRET`, then open Accounts and choose Threads.
+
+- **What is stored**: only the long-lived access token (with its issue and expiry times), encrypted like every other
+  credential. The short-lived token and the authorization code are never stored.
+- **60-day token, renewed automatically**: the token lasts about 60 days. Docket renews it ahead of expiry, and only once it is
+  at least 24 hours old.
+- **Needs reconnecting**: Threads rejected the stored token (it expired, or you removed access). Docket stops publishing to that
+  account until you connect it again from Accounts.
+- **HTTPS is required**: Threads refuses `http://` and `localhost` callbacks. For local use see
+  [Local HTTPS for Threads](docs/meta-setup.md#local-https-for-threads) (`pnpm dev:https`).
+- **Needs a public bucket**: Threads fetches images by URL, so [media storage](#media-storage) must be publicly readable.
+- **Removing Docket's access**: removing an account in Docket deletes the stored token. To revoke access entirely, open Threads
+  Settings → Account → Website permissions and remove the app.
+
 ## Project-owned tables
 Every table that belongs to a project must be listed in the project-owned
 registry with its scope column, and every query on it must filter on that

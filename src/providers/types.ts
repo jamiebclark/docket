@@ -1,7 +1,17 @@
 import type { z } from "zod";
 
 export type PostType = "text" | "image" | "carousel" | "video" | "story" | "reel"; // only the first three are used now
-export type TextCountingRule = "graphemes" | "code_points" | "utf8_bytes";
+export type BuiltInCountingRule = "graphemes" | "code_points" | "utf8_bytes";
+export interface CustomCountingRule {
+  kind: "custom";
+  /** `[a-z0-9-]+`, shown as `TargetCheck.countingRule`. */
+  name: string;
+  /** Plural unit for messages: "Text is 501 characters; the limit is 500." */
+  unit: string;
+  /** Pure and total; never throws; returns a non-negative integer. */
+  count(text: string): number;
+}
+export type TextCountingRule = BuiltInCountingRule | CustomCountingRule;
 
 export interface ProviderCapabilities {
   text: { maxLength: number; countingRule: TextCountingRule };
@@ -99,6 +109,19 @@ export interface OAuthConnectGroup {
     issues(source: Readonly<Record<string, string | undefined>>): ProviderEnvIssue[];
     configured(source: Readonly<Record<string, string | undefined>>): boolean;
   };
+  /** Callback-address requirement; a group whose address does not qualify is shown as unavailable (G10). */
+  redirectRequirement?: {
+    /** Refuse non-https: callback addresses. */
+    https: boolean;
+    /** Refuse localhost, *.localhost, IPv4 and IPv6 literals. */
+    publicHost: boolean;
+    /** Shown as is, e.g. "Threads needs an HTTPS address that is not localhost." */
+    reason: string;
+    /** Repo-relative doc path with optional #anchor. */
+    doc?: string;
+  };
+  /** Static, non-secret. Appended to the accounts banner after a failed or refused callback for this group (G12). */
+  callbackHint?: string;
   /** Pure. The absolute URL of the platform's login dialog. */
   authorizationUrl(input: { state: string; redirectUri: string }): string;
   /** Server-side code exchange → candidates. Must not throw for expected refusals. */
@@ -238,4 +261,6 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   /** Pure and total. `settings` is the account's parsed settings (a step can depend on them). */
   stepFor(state: State | null, settings: Settings, content: StepContent): StepInfo;
   advance(ctx: PublishContext): Promise<StepResult>;
+  /** Pure. Non-secret notes shown on the account card. Never receives credentials. A throw or a non-array → []. */
+  accountNotes?(input: { settings: Settings; credentialsExpireAt: Date | null }): string[];
 }
