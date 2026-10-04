@@ -27,7 +27,6 @@ export async function applyRefreshResult(
 ): Promise<AppliedRefresh> {
   const at = await clock.now();
   if (result.ok) {
-    const known = [...secrets, ...secretValues(result.credentials)];
     const ciphertext = encryptCredentials(account.id, result.credentials);
     const kept = await repos.accounts.recordRefresh(account.id, token, {
       credentialsEncrypted: ciphertext,
@@ -35,7 +34,7 @@ export async function applyRefreshResult(
       lastRefreshedAt: at,
       lastError: null,
       ...(result.displayName && result.displayName !== account.displayName
-        ? { displayName: redact(result.displayName, known) }
+        ? { displayName: redact(result.displayName, secrets) }
         : {}),
     });
     return kept ? { kind: "refreshed", credentials: result.credentials, ciphertext } : { kind: "lost" };

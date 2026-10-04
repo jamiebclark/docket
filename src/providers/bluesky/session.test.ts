@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakePds, mintJwt, type FakePds } from "../../../tests/helpers/fake-pds";
-import { connectAccount, jwtExp, needsRefresh } from "./session";
+import { connectAccount, jwtExp, needsRefresh, refreshCredentials } from "./session";
 
 const now = new Date("2026-01-01T00:00:00Z");
 const CREATE = "/xrpc/com.atproto.server.createSession";
@@ -106,5 +106,72 @@ describe("jwtExp / needsRefresh", () => {
     expect(needsRefresh(creds(new Date(now.getTime() + 6 * 60_000)), now)).toBe(false);
     expect(needsRefresh(creds("opaque"), now)).toBe(false);
     expect(needsRefresh({ nope: 1 }, now)).toBe(false);
+  });
+});
+
+describe("refreshCredentials", () => {
+  const REFRESH = "/xrpc/com.atproto.server.refreshSession";
+  const stored = { accessJwt: "old-access", refreshJwt: "old-refresh", did: "did:plc:alice", handle: "alice.bsky.social" };
+  const refresh = (credentials: unknown = stored) =>
+    refreshCredentials({
+      account: { id: "a1", externalId: "did:plc:alice", settings: { pdsUrl: "https://bsky.social" } },
+      credentials,
+      now,
+      signal: new AbortController().signal,
+    });
+
+  it("rotates both tokens, authorises with the refresh JWT and follows a handle change", async () => {
+    const next = session({ handle: "alice.example.com" });
+    pds.route("POST", REFRESH, { json: next });
+    expect(await refresh()).toEqual({
+      ok: true,
+      credentials: { accessJwt: next.accessJwt, refreshJwt: next.refreshJwt, did: "did:plc:alice", handle: "alice.example.com" },
+      expiresAt: new Date("2026-03-01T00:00:00Z"),
+      displayName: "alice.example.com",
+    });
+    expect(pds.callsTo("POST", REFRESH)).toHaveLength(1);
+    expect(pds.callsTo("POST", REFRESH)[0]!.headers.authorization).toBe("Bearer old-refresh");
+  });
+
+  it("falls back to now + 60 d when the new refresh JWT has no exp", async () => {
+    pds.route("POST", REFRESH, { json: session({ refreshJwt: "opaque" }) });
+    const result = await refresh();
+    expect(result).toMatchObject({ ok: true, expiresAt: new Date(now.getTime() + 60 * 86_400_000) });
+  });
+
+  it("treats a different DID as a definitive failure", async () => {
+    pds.route("POST", REFRESH, { json: session({ did: "did:plc:mallory" }) });
+    const result = await refresh();
+    expect(result).toEqual({ ok: false, reason: "The server returned a different account." });
+  });
+
+  it("treats unreadable stored credentials as definitive", async () => {
+    expect(await refresh({ nope: 1 })).toEqual({ ok: false, reason: "Stored credentials are unreadable." });
+    expect(pds.requests).toHaveLength(0);
+  });
+
+  it.each([
+    [401, "AuthenticationRequired"],
+    [400, "ExpiredToken"],
+    [400, "InvalidToken"],
+    [400, "AccountTakedown"],
+  ])("refuses definitively on %i %s", async (status, error) => {
+    pds.route("POST", REFRESH, { status, json: { error } });
+    const result = await refresh();
+    expect(result).toMatchObject({ ok: false });
+    expect(result).not.toHaveProperty("transient");
+    expect((result as { reason: string }).reason).toContain(error);
+    expect((result as { reason: string }).reason).toContain("Reconnect the account");
+  });
+
+  it("is transient on a 5xx, a dropped connection and a 429 (with retryAt)", async () => {
+    pds.route("POST", REFRESH, { status: 503, json: { error: "Unavailable" } });
+    expect(await refresh()).toMatchObject({ ok: false, transient: true, reason: expect.stringContaining("503") });
+
+    pds.route("POST", REFRESH, { mode: "pre-send-failure", code: "ECONNREFUSED" });
+    expect(await refresh()).toMatchObject({ ok: false, transient: true, reason: "Could not renew the Bluesky session (no response)." });
+
+    pds.route("POST", REFRESH, { status: 429, headers: { "retry-after": "90" }, json: { error: "RateLimitExceeded" } });
+    expect(await refresh()).toMatchObject({ ok: false, transient: true, retryAt: new Date(now.getTime() + 90_000) });
   });
 });

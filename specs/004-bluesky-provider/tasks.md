@@ -144,9 +144,9 @@ description: "Task list for the Bluesky provider (004)"
 
 **Independent Test**: `pnpm vitest run src/providers/bluesky/session.test.ts tests/integration/bluesky/sessions.test.ts`
 
-- [ ] T044 [US5] Implement `refreshCredentials` and `needsRefresh` in `src/providers/bluesky/session.ts` per contracts/bluesky.md §4 (DID mismatch definitive, definitive refusal rows, transient with `retryAt`, never throws, handle change → `displayName`) and wire them in `index.ts`
-- [ ] T045 [US5] Extend `session.test.ts`: refresh success with rotation, DID mismatch, each definitive row, transient rows, `jwtExp`/`needsRefresh` edges (5-minute threshold, unparseable → false)
-- [ ] T046 [US5] Write `tests/integration/bluesky/sessions.test.ts` through `runTick`/`runTokenRefresh`: proactive refresh persists rotated tokens and publishes with one refresh request; reactive `ExpiredToken` on create → retryable, refresh, next tick publishes with exactly one successful `createRecord`; refusal → `needs_reauth` with readable reason and next-tick `account_unavailable`; transient refresh → retryable and account stays active; handle change updates display name; scheduled section renews an idle account near refresh-JWT expiry; reconnect restores `active`
+- [X] T044 [US5] Implement `refreshCredentials` and `needsRefresh` in `src/providers/bluesky/session.ts` per contracts/bluesky.md §4 (DID mismatch definitive, definitive refusal rows, transient with `retryAt`, never throws, handle change → `displayName`) and wire them in `index.ts`
+- [X] T045 [US5] Extend `session.test.ts`: refresh success with rotation, DID mismatch, each definitive row, transient rows, `jwtExp`/`needsRefresh` edges (5-minute threshold, unparseable → false)
+- [X] T046 [US5] Write `tests/integration/bluesky/sessions.test.ts` through `runTick`/`runTokenRefresh`: proactive refresh persists rotated tokens and publishes with one refresh request; reactive `ExpiredToken` on create → retryable, refresh, next tick publishes with exactly one successful `createRecord`; refusal → `needs_reauth` with readable reason and next-tick `account_unavailable`; transient refresh → retryable and account stays active; handle change updates display name; scheduled section renews an idle account near refresh-JWT expiry; reconnect restores `active`
 
 ---
 
