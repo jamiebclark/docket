@@ -1,11 +1,23 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
+vi.hoisted(() => {
+  process.env.BETTER_AUTH_URL = "https://docket.local:3000";
+});
+
 import * as connect from "../../../src/server/services/connect";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb, testDb } from "../../helpers/db";
 import { facebookSetup, PAGE_ID, PAGE_TOKEN } from "../../helpers/facebook-publish";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { sessionFor } from "../../helpers/connect-group";
+import { eq } from "drizzle-orm";
+import { socialAccounts } from "../../../src/server/db/schema/accounts";
+import { randomUUID } from "node:crypto";
+import { runTokenRefresh } from "../../../src/server/scheduler/token-refresh";
+import { decryptCredentials } from "../../../src/server/services/accounts";
+import { forSchedulerProject } from "../../../src/server/dal/scheduler";
+import { atTime } from "../../helpers/clock";
+import { scriptThreads, threadsSetup, THREADS_TOKEN } from "../../helpers/threads-publish";
 import { postsEnv } from "../../helpers/posts-env";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
@@ -124,5 +136,102 @@ describe("Meta credentials never leak", () => {
       expect(await plaintextColumnsContaining(secret), `column holds ${secret}`).toEqual([]);
     }
     for (const r of fake.requests.filter((x) => x.method === "POST")) expect(r.path).not.toContain("EAA");
+  });
+});
+
+// FR-033 / SC-008: the same guarantee for Threads, across connect, paste, renewal and every advance path.
+const T_SECRET = "threads-secret-fake-6666aaaa";
+const T_CODE = "tcode-fake-7777bbbb";
+const T_SHORT = "THQW-fake-short-8888cccc";
+const T_LONG = "THQW-fake-long-9999dddd";
+const T_PASTED = "THQW-fake-pasted-1010eeee";
+const T_RENEWED = "THQW-fake-renewed-2020ffff";
+const T_ALL = [T_SECRET, T_CODE, T_SHORT, T_LONG, T_PASTED, T_RENEWED, THREADS_TOKEN];
+const REFRESH_CONFIG = {
+  timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
+  backoffBaseMs: 1_000, backoffMaxMs: 60_000, maxPublishDurationMs: 3_600_000, refreshWindowMs: 72 * 3_600_000,
+  refreshMaxAccounts: 1000, batchSize: 4,
+};
+const DAY = 86_400_000;
+
+describe("Threads credentials never leak", () => {
+  it("keeps every secret out of results, console and plaintext columns, and keeps credential timestamps numeric", async () => {
+    vi.stubEnv("THREADS_APP_ID", "424242");
+    vi.stubEnv("THREADS_APP_SECRET", T_SECRET);
+    vi.stubEnv("THREADS_GRAPH_BASE", "https://graph.threads.test");
+    vi.stubEnv("BETTER_AUTH_URL", "https://docket.local:3000");
+    const output = captureConsole();
+    const seen: string[] = [];
+    const env = await postsEnv();
+    const session = await sessionFor(env.owner.id);
+    const me = { kind: "ok" as const, body: { id: "9001", username: "docket" } };
+
+    // OAuth: start -> callback -> chooser -> choose.
+    fake.on("POST", "/oauth/access_token", { kind: "ok", body: { access_token: T_SHORT } });
+    fake.on("GET", "/access_token", { kind: "ok", body: { access_token: T_LONG, expires_in: 5_184_000 } });
+    fake.on("GET", "/v1.0/me", me);
+    const started = await connect.startOAuthConnect(env.scope, { groupKey: "threads" }, session);
+    seen.push(JSON.stringify(started));
+    const state = new URL(started.url).searchParams.get("state")!;
+    const cb = await connect.handleOAuthCallback(new URLSearchParams({ state, code: T_CODE }), {
+      userId: env.owner.id,
+      sessionId: session.sessionId,
+    });
+    seen.push(JSON.stringify(cb));
+    if (cb.kind !== "chooser") throw new Error(`expected chooser, got ${cb.kind}`);
+    seen.push(JSON.stringify(await connect.getConnectChoice(env.scope, cb.attemptId, session)));
+    seen.push(JSON.stringify(await connect.chooseConnectCandidates(env.scope, { attemptId: cb.attemptId, selected: ["threads:9001"] }, session)));
+
+    // Paste: exchange refused and renew refused (error text echoes the token), then an accepted paste.
+    const echo = { kind: "graph_error" as const, code: 190, message: `Invalid OAuth access token ${T_PASTED}`, status: 400 };
+    fake.on("GET", "/access_token", echo);
+    fake.on("GET", "/refresh_access_token", echo);
+    seen.push(JSON.stringify(await connect.pasteConnectToken(env.scope, { groupKey: "threads", token: T_PASTED }, session)));
+    fake.on("GET", "/access_token", { kind: "ok", body: { access_token: T_LONG, expires_in: 5_184_000 } });
+    fake.on("GET", "/v1.0/me", me);
+    const pasted = await connect.pasteConnectToken(env.scope, { groupKey: "threads", token: T_PASTED }, session);
+    seen.push(JSON.stringify(pasted));
+    if (pasted.ok) seen.push(JSON.stringify(await connect.getConnectChoice(env.scope, pasted.attemptId, session)));
+
+    // Renewal: success, then a refusal that echoes the old token.
+    const now = new Date();
+    const aged = await threadsSetup(storage, { issuedAt: new Date(now.getTime() - 50 * DAY), expiresAt: new Date(now.getTime() + 2 * DAY) });
+    fake.on("GET", "/refresh_access_token", { kind: "ok", body: { access_token: T_RENEWED, expires_in: 5_184_000 } });
+    const renewed = await atTime(now, () => runTokenRefresh({ config: REFRESH_CONFIG, tickId: randomUUID(), startedAt: now }));
+    seen.push(JSON.stringify(renewed));
+    const [acct] = await testDb().select().from(socialAccounts).where(eq(socialAccounts.id, aged.accountId));
+    const creds = decryptCredentials(acct!.id, acct!.credentialsEncrypted) as Record<string, unknown>;
+    expect(creds.accessToken).toBe(T_RENEWED);
+    for (const k of ["issuedAt", "expiresAt"]) expect(typeof creds[k], `${k} stays a number`).toBe("number");
+    const old = await threadsSetup(storage, { issuedAt: new Date(now.getTime() - 50 * DAY), expiresAt: new Date(now.getTime() + 2 * DAY) });
+    fake.on("GET", "/refresh_access_token", { kind: "graph_error", code: 190, message: `Invalid OAuth access token ${THREADS_TOKEN}`, status: 400 });
+    seen.push(JSON.stringify(await atTime(now, () => runTokenRefresh({ config: REFRESH_CONFIG, tickId: randomUUID(), startedAt: now }))));
+    seen.push(JSON.stringify((await testDb().select().from(socialAccounts).where(eq(socialAccounts.id, old.accountId)))[0]));
+
+    // Advance paths: success, a Graph error that echoes the token, and an ambiguous publish.
+    const advance = async (setupScript: () => void, label: string) => {
+      fake.reset();
+      setupScript();
+      const s = await threadsSetup(storage, { text: label });
+      for (let i = 0; i < 6; i++) await s.tick(await s.afterNext(1_000));
+      seen.push(JSON.stringify(await s.row()));
+      seen.push(JSON.stringify(await forSchedulerProject(s.projectId).targets.get(s.targetId)));
+    };
+    await advance(() => scriptThreads(fake).create(["1001"]).status("1001", ["FINISHED"]).quota(3).publish("th_1"), "ok");
+    await advance(
+      () => fake.on("POST", "/v1.0/17841400000000001/threads", { kind: "graph_error", code: 190, message: `Invalid token ${THREADS_TOKEN}`, status: 401 }),
+      "bad",
+    );
+    await advance(
+      () => scriptThreads(fake).create(["1002"]).status("1002", ["FINISHED"]).quota(3).publish({ kind: "reset_mid_body" }),
+      "ambiguous",
+    );
+
+    const blob = `${seen.join("\n")}\n${output()}`;
+    for (const secret of T_ALL) {
+      expect(blob, `leaked ${secret}`).not.toContain(secret);
+      expect(await plaintextColumnsContaining(secret), `column holds ${secret}`).toEqual([]);
+    }
+    for (const r of fake.requests.filter((x) => x.method === "POST")) expect(r.path).not.toContain("THQW");
   });
 });

@@ -148,8 +148,8 @@ description: "Task list for the Threads provider (006)"
 
 ## Phase 10: Secrets and scope (cross-cutting verification, FR-033, SC-008, SC-009)
 
-- [ ] T043 Extend `tests/integration/meta/no-secrets.test.ts` to Threads: run connect, callback, paste, renewal and every advance path (including failures and ambiguous) with distinctive fake tokens/secret/code, then assert none appear in responses, rendered pages, logs, `publish_attempts`, step state, `last_error`, thrown messages or snapshots; also assert the DB holds the token only inside encrypted credentials and that timestamps in credentials are numbers (not redacted as strings)
-- [ ] T044 [P] Add a scope check test (extend `tests/integration/scope-check.test.ts` or add `tests/integration/threads/scope.test.ts`): no raw DB client import under `src/providers/threads/**` (lint rule) and no new table; run `pnpm db:check` and confirm no migration was generated
+- [x] T043 Extend `tests/integration/meta/no-secrets.test.ts` to Threads: run connect, callback, paste, renewal and every advance path (including failures and ambiguous) with distinctive fake tokens/secret/code, then assert none appear in responses, rendered pages, logs, `publish_attempts`, step state, `last_error`, thrown messages or snapshots; also assert the DB holds the token only inside encrypted credentials and that timestamps in credentials are numbers (not redacted as strings)
+- [x] T044 [P] Add a scope check test (extend `tests/integration/scope-check.test.ts` or add `tests/integration/threads/scope.test.ts`): no raw DB client import under `src/providers/threads/**` (lint rule) and no new table; run `pnpm db:check` and confirm no migration was generated
 
 ---
 
