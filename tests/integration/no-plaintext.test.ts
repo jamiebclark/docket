@@ -245,3 +245,48 @@ describe("an app password is never stored, returned or logged", () => {
     }
   });
 });
+
+describe("Meta tokens are ciphertext only", () => {
+  it("keeps the Page token out of every column except credentials_encrypted and candidates_encrypted", async () => {
+    const [{ createFakeGraph }, connect, { sessionFor }, { postsEnv }, { clearRecordedQueries }] = await Promise.all([
+      import("../helpers/fake-graph"),
+      import("../../src/server/services/connect"),
+      import("../helpers/connect-group"),
+      import("../helpers/posts-env"),
+      import("../setup/scope-recorder"),
+    ]);
+    const PAGE_TOKEN = "EAAG-canary-page-token-7";
+    vi.stubEnv("META_APP_ID", "12345");
+    vi.stubEnv("META_APP_SECRET", "canary-app-secret-8");
+    vi.stubEnv("META_GRAPH_VERSION", "v26.0");
+    const fake = createFakeGraph();
+    fake.install();
+    try {
+      fake.on("GET", "/v26.0/oauth/access_token", [
+        { kind: "ok", body: { access_token: "short" } },
+        { kind: "ok", body: { access_token: "long" } },
+      ]);
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [{ id: "100", name: "Acme", access_token: PAGE_TOKEN }] } });
+      const env = await postsEnv();
+      const session = await sessionFor(env.owner.id);
+      const { url } = await connect.startOAuthConnect(env.scope, { groupKey: "meta" }, session);
+      const state = new URL(url).searchParams.get("state")!;
+      const out = await connect.handleOAuthCallback(new URLSearchParams({ state, code: "c" }), { userId: env.owner.id, sessionId: session.sessionId });
+      if (out.kind !== "chooser") throw new Error("expected chooser");
+      // Pending: the token exists only inside candidates_encrypted.
+      const pending = await testDb().execute(sql`select to_jsonb(a) - 'candidates_encrypted' as r from connect_attempts a where id = ${out.attemptId}`);
+      expect(JSON.stringify(pending.rows)).not.toContain(PAGE_TOKEN);
+      const chosen = await connect.chooseConnectCandidates(env.scope, { attemptId: out.attemptId, selected: ["facebook:100"] }, session);
+      expect(chosen.ok).toBe(true);
+      const saved = await testDb().execute(sql`select to_jsonb(a) - 'credentials_encrypted' as r from social_accounts a where project_id = ${env.project.id}`);
+      expect(saved.rows.length).toBe(1);
+      expect(JSON.stringify(saved.rows)).not.toContain(PAGE_TOKEN);
+      const cipher = await testDb().execute(sql`select credentials_encrypted as c from social_accounts where project_id = ${env.project.id}`);
+      expect(String((cipher.rows[0] as { c: string }).c)).not.toContain(PAGE_TOKEN);
+      clearRecordedQueries();
+    } finally {
+      fake.uninstall();
+      vi.unstubAllEnvs();
+    }
+  });
+});

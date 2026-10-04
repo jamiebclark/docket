@@ -1,12 +1,13 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { and, eq } from "drizzle-orm";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../helpers/actions")).sessionModule);
 vi.mock("next/cache", async () => (await import("../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../helpers/actions")).navigationModule);
 
+import AccountsPage from "../../src/app/p/[projectSlug]/accounts/page";
 import { ConnectCredentialsForm } from "../../src/app/p/[projectSlug]/accounts/ConnectCredentialsForm";
 import { socialAccounts } from "../../src/server/db/schema/accounts";
 import { ConflictError, ForbiddenError } from "../../src/server/dal/errors";
@@ -113,5 +114,42 @@ describe("credentials connect section", () => {
     expect(input("pdsUrl")).toMatch(/value="https:\/\/bsky\.social"/);
     expect(html).toContain('role="alert"');
     expect(html).toContain("Server (PDS) address");
+  });
+});
+
+describe("accounts page with the Meta connect group", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  async function renderFor(env: Awaited<ReturnType<typeof postsEnv>>) {
+    const { sessionModule } = await import("../helpers/actions");
+    const original = sessionModule.getSession;
+    sessionModule.getSession = (async () => ({ user: { id: env.owner.id }, session: { id: "s" } })) as never;
+    try {
+      return renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) }));
+    } finally {
+      sessionModule.getSession = original;
+    }
+  }
+
+  it("renders the Meta group once, with a paste form, and no credential form for Facebook or Instagram", async () => {
+    vi.stubEnv("META_APP_ID", "12345");
+    vi.stubEnv("META_APP_SECRET", "app-secret-value-0000");
+    const html = await renderFor(await postsEnv());
+    expect(html.match(/id="connect-group-meta-heading"/g)).toHaveLength(1);
+    expect(html).toContain("Connect Facebook Pages and Instagram");
+    expect(html).toContain('id="connect-group-meta-token"');
+    expect(html).not.toContain("connect-facebook-heading");
+    expect(html).not.toContain("connect-instagram-heading");
+    expect(html).not.toMatch(/id="connect-(facebook|instagram)-new-/);
+  });
+
+  it("shows the not-configured state with the setup guide and redirect address, and no connect button", async () => {
+    vi.stubEnv("META_APP_ID", "");
+    vi.stubEnv("META_APP_SECRET", "");
+    const html = await renderFor(await postsEnv());
+    expect(html.match(/id="connect-group-meta-heading"/g)).toHaveLength(1);
+    expect(html).toContain("is not configured on this server");
+    expect(html).toContain("connect-group-meta-redirect");
+    expect(html).not.toContain('id="connect-group-meta-token"');
   });
 });
