@@ -20,6 +20,7 @@ import { postingSlots, socialAccounts } from "./accounts";
 import { user } from "./auth";
 import { mediaAssets } from "./media";
 import { generationSeries } from "./generation";
+import { generationJobItems } from "./jobs";
 import { schedulingPolicy } from "./policy-enums";
 import { projects } from "./projects";
 
@@ -64,6 +65,7 @@ export const posts = pgTable(
     schedulingPolicy: schedulingPolicy("scheduling_policy"),
     seriesId: uuid("series_id"),
     seriesPosition: smallint("series_position"),
+    generationJobItemId: uuid("generation_job_item_id"),
     reviewedByUserId: uuid("reviewed_by_user_id").references(() => user.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     rejectionReason: text("rejection_reason"),
@@ -91,6 +93,14 @@ export const posts = pgTable(
       columns: [t.projectId, t.seriesId],
       foreignColumns: [generationSeries.projectId, generationSeries.id],
     }),
+    foreignKey({
+      name: "posts_generation_job_item_fk",
+      columns: [t.projectId, t.generationJobItemId],
+      foreignColumns: [generationJobItems.projectId, generationJobItems.id],
+    }),
+    uniqueIndex("posts_generation_job_item_uq")
+      .on(t.generationJobItemId)
+      .where(sql`${t.generationJobItemId} IS NOT NULL AND ${t.deletedAt} IS NULL`),
     index("posts_review_queue_idx")
       .on(t.projectId, t.reviewState, t.createdAt.desc())
       .where(sql`${t.deletedAt} IS NULL`),
