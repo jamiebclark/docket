@@ -113,6 +113,27 @@ describe("openapi.json", () => {
     expect(op.responses["401"].headers["X-Request-Id"]).toBeTruthy();
   });
 
+  it("gives every error response (status >= 400) the shared Error schema, codes and headers", () => {
+    let checked = 0;
+    for (const { path, method, op } of operations()) {
+      for (const [status, res] of Object.entries<any>(op.responses)) {
+        if (Number(status) < 400) continue;
+        const label = `${method.toUpperCase()} ${path} ${status}`;
+        expect(res.content?.["application/json"]?.schema?.$ref, label).toBe("#/components/schemas/Error");
+        expect(res.description, label).toContain("Codes:");
+        expect(res.headers?.["X-Request-Id"], label).toBeTruthy();
+        if (status === "429" || status === "503") expect(res.headers?.["Retry-After"], label).toBeTruthy();
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+    const generate = operations().find((o) => o.op.operationId === "generatePost")!.op;
+    expect(generate.responses["503"].description).toContain("No model configured");
+    expect(generate.responses["200"].content["application/json"].schema).toEqual(
+      generate.responses["201"].content["application/json"].schema,
+    );
+  });
+
   it("changes when an operation's schema changes", () => {
     const fixture = defineOperation({
       id: "testFixture",

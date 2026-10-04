@@ -42,11 +42,16 @@ function codesFor(status: number): string {
     .join(", ");
 }
 
-function errorResponse(status: number) {
-  const headers: Record<string, { description: string; schema: z.ZodType }> = { "X-Request-Id": REQUEST_ID_HEADER };
+/**
+ * The shared error response for `status`: the Error schema, the codes that map to it, and its headers.
+ * `own` is the operation's own description of the status, which replaces the generic one.
+ */
+function errorResponse(status: number, own?: string, extraHeaders: Record<string, { description: string; schema: z.ZodType }> = {}) {
+  const headers: Record<string, { description: string; schema: z.ZodType }> = { "X-Request-Id": REQUEST_ID_HEADER, ...extraHeaders };
   if (status === 429 || status === 503) headers["Retry-After"] = RETRY_AFTER_HEADER;
+  const lead = (own ?? ERROR_DESCRIPTIONS[status] ?? "Error").replace(/\.$/, "");
   return {
-    description: `${ERROR_DESCRIPTIONS[status] ?? "Error"}. Codes: ${codesFor(status)}.`,
+    description: `${lead}. Codes: ${codesFor(status)}.`,
     content: { "application/json": { schema: ErrorSchema } },
     headers,
   };
@@ -68,6 +73,10 @@ function buildOperation(op: AnyApiOperation): ZodOpenApiOperationObject {
   for (const [status, r] of Object.entries(op.responses)) {
     const headers: Record<string, { description: string; schema: z.ZodType }> = { "X-Request-Id": REQUEST_ID_HEADER };
     if (op.idempotent) headers["Idempotent-Replayed"] = REPLAYED_HEADER;
+    if (Number(status) >= 400) {
+      responses[status] = errorResponse(Number(status), r.description, headers);
+      continue;
+    }
     responses[status] = {
       description: r.description,
       ...(r.schema ? { content: { "application/json": { schema: r.schema } } } : {}),

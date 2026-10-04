@@ -23,6 +23,13 @@ const body = z.object({
 });
 
 /** Model output that was unusable: the caller may retry with a new key. The rest is temporary or configuration. */
+const GeneratedSchema = z.object({
+  post: PostSchema,
+  decision: z.object({ reviewState: z.string(), queue: z.boolean(), reason: z.string() }),
+  queued: z.array(TargetResultSchema),
+  problems: z.array(z.object({ code: z.string(), message: z.string() })),
+});
+
 const UNUSABLE = new Set(["invalid_output", "refused", "incomplete", "bad_request"]);
 
 export const generateOperations = [
@@ -37,16 +44,8 @@ export const generateOperations = [
       "Needs `generate`; `approvalPolicy: auto_approve` also needs `auto_approve`. Auto-approve with add_to_queue needs `confirmUnreviewedQueue: true`.",
     body: { kind: "json", schema: body },
     responses: {
-      201: {
-        description: "The generated post",
-        schema: z.object({
-          post: PostSchema,
-          decision: z.object({ reviewState: z.string(), queue: z.boolean(), reason: z.string() }),
-          queued: z.array(TargetResultSchema),
-          problems: z.array(z.object({ code: z.string(), message: z.string() })),
-        }),
-      },
-      200: { description: "The post this request already made" },
+      201: { description: "The generated post", schema: GeneratedSchema },
+      200: { description: "The post this request already made", schema: GeneratedSchema },
       400: { description: "Invalid request or confirmation required" },
       422: { description: "The model's output was unusable" },
       503: { description: "No model configured, or the model is unavailable" },
