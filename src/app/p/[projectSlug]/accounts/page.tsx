@@ -30,6 +30,7 @@ const CONNECT_BANNER: Record<string, string> = {
   platform_error: "The platform returned an error. Nothing changed. Try again.",
   exchange_failed: "Could not finish signing in. Check the app id, secret and redirect address in the setup guide.",
   no_candidates: "No accounts were found for this login. Check the permissions you granted and try again.",
+  too_many: "That login found too many accounts to list. Narrow the permissions you granted and try again.",
   not_allowed: "Only project owners and admins can connect accounts.",
 };
 

@@ -3,11 +3,11 @@ import { findConnectGroup, listConnectGroups as listRegisteredGroups } from "@/p
 import type { ConnectCandidate } from "@/providers/types";
 import { saveConnectedAccountSchema } from "@/lib/validation/scheduling";
 import * as clock from "../dal/clock";
-import { purgeExpiredConnectAttempts } from "../dal/connect-attempts";
+import { lookupByStateHash, purgeExpiredConnectAttempts } from "../dal/connect-attempts";
 import { ForbiddenError, NotFoundError } from "../dal/errors";
-import type { ProjectScope } from "../dal/scope";
+import { forProject, type ProjectScope } from "../dal/scope";
 import { decryptSecret, encryptSecret } from "../crypto/secrets";
-import { generateInvitationToken } from "../crypto/tokens";
+import { generateInvitationToken, hashInvitationToken, isWellFormedToken } from "../crypto/tokens";
 import { getEnv } from "../env";
 import { isGroupConfigured } from "../provider-env";
 import { saveConnectedAccountTx, type AccountView } from "./accounts";
@@ -15,6 +15,7 @@ import { saveConnectedAccountTx, type AccountView } from "./accounts";
 export const CONNECT_ATTEMPT_MINUTES = 10;
 export const MAX_CANDIDATES = 500;
 const MAX_CANDIDATES_BYTES = 1_000_000;
+const EXCHANGE_TIMEOUT_MS = 15_000;
 const NOT_VALID = "This connection attempt has expired or is not valid. Start again.";
 
 export interface ConnectSession {
@@ -243,4 +244,75 @@ export async function chooseConnectCandidates(
     // A concurrent connect of the same account won the insert; the second pass updates it in place.
     return run();
   }
+}
+
+export type CallbackOutcome =
+  | { kind: "chooser"; projectSlug: string; attemptId: string }
+  | { kind: "accounts"; projectSlug: string; code: "cancelled" | "platform_error" | "exchange_failed" | "no_candidates" | "too_many" | "not_allowed" }
+  | { kind: "invalid" };
+
+const INVALID: CallbackOutcome = { kind: "invalid" };
+
+/**
+ * The platform's redirect back. Order matters (research D5): nothing reaches the platform until the state
+ * is well formed, known, unexpired, unused, bound to this user and session, still permitted, and consumed.
+ */
+export async function handleOAuthCallback(
+  params: URLSearchParams,
+  caller: { userId: string; sessionId: string },
+): Promise<CallbackOutcome> {
+  const state = params.get("state");
+  if (!isWellFormedToken(state)) return INVALID;
+  const found = await lookupByStateHash(hashInvitationToken(state));
+  if (!found) return INVALID;
+  if (found.userId !== caller.userId || found.sessionId !== caller.sessionId) return INVALID;
+  const entry = findConnectGroup(found.groupKey);
+  if (!entry) return INVALID;
+  let scope: ProjectScope;
+  try {
+    scope = await forProject({ user: { id: caller.userId } }, found.projectSlug);
+  } catch (error) {
+    if (error instanceof NotFoundError) return INVALID;
+    throw error;
+  }
+  if (!scope.can({ account: ["manage"] })) return { kind: "accounts", projectSlug: found.projectSlug, code: "not_allowed" };
+  const now = await clock.now();
+  // Expiry and reuse are decided by this single conditional UPDATE, so parallel callbacks cannot both pass.
+  if (!(await scope.connectAttempts.consumeState(found.id, { ...caller, now }))) return INVALID;
+
+  const back = (code: Extract<CallbackOutcome, { kind: "accounts" }>["code"]): CallbackOutcome => ({
+    kind: "accounts",
+    projectSlug: found.projectSlug,
+    code,
+  });
+  const finish = async (outcome: CallbackOutcome) => {
+    await scope.connectAttempts.complete(found.id, now);
+    return outcome;
+  };
+
+  const platformError = params.has("error") || params.has("error_reason") || params.has("error_description");
+  if (platformError) {
+    const described = entry.group.describeCallbackError?.(params);
+    return finish(back(described?.code ?? "platform_error"));
+  }
+  const code = params.get("code");
+  if (!code) return finish(back("platform_error"));
+
+  let result;
+  try {
+    result = await entry.group.exchangeCode({
+      code,
+      redirectUri: redirectUriFor(),
+      now,
+      signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
+    });
+  } catch {
+    return finish(back("exchange_failed"));
+  }
+  if (!result.ok) return finish(back("exchange_failed"));
+  if (result.candidates.length === 0) return finish(back("no_candidates"));
+  const ciphertext = encryptCandidates(found.id, result.candidates, result.notices);
+  if (!ciphertext) return finish(back("too_many"));
+  if (!(await scope.connectAttempts.storeCandidates(found.id, ciphertext))) return INVALID;
+  return { kind: "chooser", projectSlug: found.projectSlug, attemptId: found.id };
 }
