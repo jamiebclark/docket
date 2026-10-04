@@ -108,13 +108,20 @@ function hop(url: URL, opts: Required<Omit<FetchOptions, "maxRedirects">>, deadl
     const remaining = deadline - Date.now();
     if (remaining <= 0) return reject(new UrlFetchError("url_timeout", "The image took too long to download."));
     const req = send(url, { method: "GET", headers: { accept: "image/*", "user-agent": "Docket" }, lookup: guardedLookup(opts.addressPolicy) as never });
-    const timer = setTimeout(() => req.destroy(new UrlFetchError("url_timeout", "The image took too long to download.")), remaining);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      req.destroy(new UrlFetchError("url_timeout", "The image took too long to download."));
+    }, remaining);
     req.on("response", (res) => {
-      res.on("close", () => clearTimeout(timer));
+      // The body read has its own deadline timer; a second one here would race it and
+      // destroy the socket first, surfacing a generic error instead of url_timeout.
+      clearTimeout(timer);
       resolve(res);
     });
     req.on("error", (err) => {
       clearTimeout(timer);
+      if (timedOut) return reject(new UrlFetchError("url_timeout", "The image took too long to download."));
       reject(err instanceof UrlFetchError ? err : new UrlFetchError("url_fetch_failed", "The image could not be downloaded."));
     });
     req.end();
