@@ -36,7 +36,7 @@ const FIELD_RANK = (field: string): number =>
  */
 export async function validateTargetContent(
   tx: Pick<ProjectScope, "media">,
-  account: AccountRecord,
+  account: Pick<AccountRecord, "providerKey">,
   content: TargetContent,
   opts: { preview?: boolean } = {},
 ): Promise<ValidationIssue[] | null> {

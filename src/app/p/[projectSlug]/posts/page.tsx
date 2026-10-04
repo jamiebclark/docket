@@ -30,6 +30,7 @@ const LABELS: Record<(typeof POST_LIST_STATUSES)[number], string> = {
   published: "Published",
   partially_failed: "Partially failed",
   failed: "Failed",
+  rejected: "Rejected",
   needs_decision: "Needs your decision",
 };
 

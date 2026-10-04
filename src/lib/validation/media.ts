@@ -54,6 +54,7 @@ export const POST_LIST_STATUSES = [
   "published",
   "partially_failed",
   "failed",
+  "rejected",
   "needs_decision",
 ] as const;
 

@@ -9,7 +9,7 @@ const EXCERPT_GRAPHEMES = 140;
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 const listSchema = z.object({
-  status: z.enum(["draft", "needs_review", "approved", "scheduled", "publishing", "published", "partially_failed", "failed", "needs_decision"] satisfies (PostRecord["status"] | "needs_decision")[]).optional(),
+  status: z.enum(["draft", "needs_review", "approved", "scheduled", "publishing", "published", "partially_failed", "failed", "rejected", "needs_decision"] satisfies (PostRecord["status"] | "needs_decision")[]).optional(),
   page: z.coerce.number().int().min(1).max(100_000).default(1),
 });
 
