@@ -14,6 +14,13 @@ const ENV = vi.hoisted(() => {
     S3_ENDPOINT: "http://127.0.0.1:1",
     OPENAI_API_KEY: "sk-scan-openai-0a1b2c3d4e5f60718293a4b5c6d7e8f9",
     ANTHROPIC_API_KEY: "sk-ant-scan-1f2e3d4c5b6a79880a1b2c3d4e5f6071",
+    META_APP_ID: "730194628105",
+    META_APP_SECRET: "scanmetaappsecret9c1e7a40b2d5f836",
+    THREADS_APP_ID: "481726350917",
+    THREADS_APP_SECRET: "scanthreadsappsecret5b8e2c90d4a1f7",
+    THREADS_GRAPH_BASE: "https://graph.threads.test",
+    // Meta and Threads refuse a callback address that is not public HTTPS, so the scanned run uses one.
+    BETTER_AUTH_URL: "https://docket.scan.test",
   };
   Object.assign(process.env, values);
   return values;
@@ -29,27 +36,33 @@ vi.mock("next/navigation", async () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import { eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import AccountsPage from "../../../src/app/p/[projectSlug]/accounts/page";
 import ApiKeysPage from "../../../src/app/p/[projectSlug]/settings/api-keys/page";
 import MembersPage from "../../../src/app/p/[projectSlug]/settings/members/page";
 import WebhooksPage from "../../../src/app/p/[projectSlug]/settings/webhooks/page";
 import FailuresPage from "../../../src/app/p/[projectSlug]/failures/page";
 import { POST as composeCheck } from "../../../src/app/p/[projectSlug]/compose/check/route";
-import { POST as authPost } from "../../../src/app/api/auth/[...all]/route";
+import { GET as authGet, POST as authPost } from "../../../src/app/api/auth/[...all]/route";
 import { GET as health } from "../../../src/app/api/health/route";
 import { POST as tickPost } from "../../../src/app/api/internal/tick/route";
-import { membershipAuditLog } from "../../../src/server/db/schema";
+import { connectAttempts, installState, membershipAuditLog, session as sessionTable, user } from "../../../src/server/db/schema";
 import { publishAttempts } from "../../../src/server/db/schema/attempts";
 import { postTargets } from "../../../src/server/db/schema/posts";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
+import * as connect from "../../../src/server/services/connect";
+import * as posts from "../../../src/server/services/posts";
+import * as setup from "../../../src/server/services/setup";
+import * as slots from "../../../src/server/services/slots";
 import * as invitations from "../../../src/server/services/invitations";
 import { createApiKey } from "../../../src/server/services/api-keys";
 import { setStorageForTests } from "../../../src/server/storage";
 import { api } from "../../helpers/api";
 import { closeDb, testDb } from "../../helpers/db";
+import { addMember } from "../../helpers/factories";
+import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
@@ -135,8 +148,12 @@ const ENV_SECRETS: Secret[] = [
   { name: "S3_ACCESS_KEY_ID", value: ENV.S3_ACCESS_KEY_ID },
   { name: "OPENAI_API_KEY", value: ENV.OPENAI_API_KEY },
   { name: "ANTHROPIC_API_KEY", value: ENV.ANTHROPIC_API_KEY },
+  { name: "META_APP_SECRET", value: ENV.META_APP_SECRET },
+  { name: "THREADS_APP_SECRET", value: ENV.THREADS_APP_SECRET },
 ];
 
+const SETUP_EMAIL = "scan-owner@example.com";
+const SETUP_PASSWORD = "scan-setup-password-e3b9c1d70a42f865";
 const DID = "did:plc:ewvi7nxzyoun6zhxrhs64oiz";
 const APP_PASSWORD = "abcd-efgh-ijkl-mnop";
 const ACCESS = mintJwt(new Date(Date.now() + 60_000));
@@ -157,16 +174,53 @@ describe("secret scan (FR-020, SC-005)", () => {
 
   it("finds no secret in any output across a full run", async () => {
     await parkAllDueTargets();
-    const env = await webhookEnv(["post.published", "post.failed"]);
+    const db = testDb();
     const pieces: Piece[] = [];
     captureOutput(pieces);
+
+    // First-run setup through the setup service. Files run serially per database, and setup needs it empty of accounts.
+    await db.delete(user);
+    await db.delete(installState);
+    expect(await setup.isAvailable()).toBe(true);
+    const created = await setup.createFirstUser({ name: "Scan Owner", email: SETUP_EMAIL, password: SETUP_PASSWORD });
+    pieces.push({ place: "service result: setup", text: JSON.stringify(created) });
+    pieces.push({ place: "service result: setup again", text: JSON.stringify(await setup.createFirstUser({ name: "Late", email: "late@example.com", password: SETUP_PASSWORD }).catch((e: unknown) => String(e))) });
+
+    // A real sign-in through the auth handler, so a real session token exists.
+    const signIn = await authPost(
+      new Request(`${ENV.BETTER_AUTH_URL}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: ENV.BETTER_AUTH_URL, "x-forwarded-for": "192.0.2.202" },
+        body: JSON.stringify({ email: SETUP_EMAIL, password: SETUP_PASSWORD }),
+      }),
+    );
+    expect(signIn.status).toBe(200);
+    const [sessionRow] = await db.select().from(sessionTable).where(eq(sessionTable.userId, created.userId));
+    expect(sessionRow?.token.length).toBeGreaterThan(20);
+    const sessionToken = sessionRow!.token;
+    // The token's own appearances, asserted and then taken out by location (the rest of each response is scanned):
+    // the sign-in Set-Cookie, and the JSON fields in which Better Auth hands the caller its own token
+    // (docs/security.md, "Session token in auth responses").
+    const setCookie = signIn.headers.getSetCookie().join("\n");
+    expect(decodeURIComponent(setCookie)).toContain(`session_token=${sessionToken}.`);
+    const signInBody = (await signIn.json()) as { token?: string };
+    expect(signInBody.token).toBe(sessionToken);
+    delete signInBody.token;
+    const signInHeaders = [...signIn.headers.entries()].filter(([k]) => k !== "set-cookie").map(([k, v]) => `${k}: ${v}`);
+    pieces.push({ place: "POST /api/auth/sign-in/email (real user)", text: `${signIn.status}\n${signInHeaders.join("\n")}\n${JSON.stringify(signInBody)}` });
+    const cookie = setCookie.split("\n").map((c) => c.split(";")[0]).join("; ");
+    const signedIn = { sessionId: sessionRow!.id };
+
+    const env = await webhookEnv(["post.published", "post.failed"]);
+    await addMember(env.project.id, created.userId, "owner");
+    const scope = await env.as({ id: created.userId });
 
     // Credentials: a Bluesky account connected through the fake PDS (app password, access and refresh tokens).
     const pds = createFakePds();
     pds.route("POST", "/xrpc/com.atproto.server.createSession", { json: { accessJwt: ACCESS, refreshJwt: REFRESH, did: DID, handle: "me.bsky.social" } });
     pds.route("POST", "/xrpc/com.atproto.server.refreshSession", { json: { accessJwt: NEW_ACCESS, refreshJwt: NEW_REFRESH, did: DID, handle: "me.bsky.social" } });
     vi.stubGlobal("fetch", pds.fetch);
-    const connected = await accounts.connectWithCredentials(env.scope, {
+    const connected = await accounts.connectWithCredentials(scope, {
       providerKey: "bluesky",
       fields: { handle: "me.bsky.social", appPassword: APP_PASSWORD, pdsUrl: "" },
     });
@@ -178,19 +232,56 @@ describe("secret scan (FR-020, SC-005)", () => {
     vi.stubGlobal("fetch", bad.fetch);
     pieces.push({
       place: "action result: wrong password",
-      text: JSON.stringify(await accounts.connectWithCredentials(env.scope, { providerKey: "bluesky", fields: { handle: "me.bsky.social", appPassword: APP_PASSWORD, pdsUrl: "" } })),
+      text: JSON.stringify(await accounts.connectWithCredentials(scope, { providerKey: "bluesky", fields: { handle: "me.bsky.social", appPassword: APP_PASSWORD, pdsUrl: "" } })),
     });
+
+    // Meta and Threads sign-in, bound to the real session, with token exchanges whose errors echo the app secret.
+    const graph = createFakeGraph();
+    graph.install();
+    graph.on("GET", "/v26.0/oauth/access_token", { kind: "graph_error", code: 1, message: `Error validating client secret ${ENV.META_APP_SECRET}` });
+    graph.on("POST", "/oauth/access_token", { kind: "graph_error", code: 1, message: `Error validating client secret ${ENV.THREADS_APP_SECRET}` });
+    for (const groupKey of ["meta", "threads"]) {
+      const started = await connect.startOAuthConnect(scope, { groupKey }, signedIn);
+      pieces.push({ place: `service result: ${groupKey} start`, text: JSON.stringify(started) });
+      const state = new URL(started.url).searchParams.get("state")!;
+      const outcome = await connect.handleOAuthCallback(new URLSearchParams({ state, code: `scan-${groupKey}-code` }), { userId: created.userId, ...signedIn });
+      expect(outcome).toMatchObject({ kind: "accounts", code: "exchange_failed" });
+      pieces.push({ place: `service result: ${groupKey} callback`, text: JSON.stringify(outcome) });
+    }
+    // Each exchange did send the app secret, to the platform only.
+    expect(graph.requests.filter((r) => Object.values(r.params).includes(ENV.META_APP_SECRET) || Object.values(r.params).includes(ENV.THREADS_APP_SECRET))).toHaveLength(2);
+    graph.uninstall();
     vi.stubGlobal("fetch", pds.fetch);
 
-    // Publishing: a success and a rejection whose message echoes a token.
-    for (const script of [{ json: { uri: `at://${DID}/app.bsky.feed.post/3k`, cid: "bafyreib2rxk3rybk3aobmv5cjuql3bm2twh4jo5uxgf5kpqcsgzmq2vz2m" } }, { status: 400, json: { error: "InvalidRequest", message: `bad ${NEW_ACCESS}` } }]) {
+    // Publishing: a success, a rejection whose message echoes a token, and two unknown outcomes.
+    const scripts = [
+      { json: { uri: `at://${DID}/app.bsky.feed.post/3k`, cid: "bafyreib2rxk3rybk3aobmv5cjuql3bm2twh4jo5uxgf5kpqcsgzmq2vz2m" } },
+      { status: 400, json: { error: "InvalidRequest", message: `bad ${NEW_ACCESS}` } },
+      { status: 502, json: { error: "UpstreamFailure", message: `upstream ${NEW_ACCESS}` } },
+      { status: 502, json: { error: "UpstreamFailure", message: `upstream ${NEW_REFRESH}` } },
+    ];
+    const targetIds: string[] = [];
+    for (const script of scripts) {
       pds.route("POST", "/xrpc/com.atproto.repo.createRecord", script);
-      await createDueTarget(env.project.id, connected.account.id, { baseText: "hello" });
+      targetIds.push((await createDueTarget(env.project.id, connected.account.id, { baseText: "hello" })).target.id);
       await runTick({ config: {} });
     }
 
+    // Resolving the unknown outcomes: one published with a link, one not published and requeued.
+    const [, , publishedLater, notPublished] = targetIds as [string, string, string, string];
+    const ambiguous = await db.select({ id: postTargets.id, status: postTargets.status }).from(postTargets).where(and(eq(postTargets.projectId, env.project.id), inArray(postTargets.id, [publishedLater, notPublished])))
+      .orderBy(asc(postTargets.createdAt));
+    expect(ambiguous.map((t) => t.status)).toEqual(["ambiguous", "ambiguous"]);
+    await slots.addSlot(scope, { accountId: connected.account.id, weekday: 1, localTime: "09:00" });
+    const resolved = [
+      await posts.resolveAmbiguous(scope, publishedLater, { outcome: "published", url: "https://bsky.app/profile/me.bsky.social/post/3k" }),
+      await posts.resolveAmbiguous(scope, notPublished, { outcome: "not_published", requeue: true }),
+    ];
+    expect(resolved.map((r) => r.status)).toEqual(["published", "scheduled"]);
+    pieces.push({ place: "service result: resolve", text: JSON.stringify(resolved) });
+
     // One-time secrets: asserted here, then kept out of the corpus by never adding these responses to it.
-    const apiKey = await createApiKey(env.scope, { name: "scan", permissions: ["read"], rateLimitPerMinute: 60, expiry: "never" });
+    const apiKey = await createApiKey(scope, { name: "scan", permissions: ["read"], rateLimitPerMinute: 60, expiry: "never" });
     expect(apiKey.secret.length).toBeGreaterThan(20);
     expect(env.secret.startsWith("whsec_")).toBe(true);
     const oneTime: Secret[] = [
@@ -198,7 +289,7 @@ describe("secret scan (FR-020, SC-005)", () => {
       { name: "webhook secret", value: env.secret },
     ];
     let inviteToken = "";
-    await invitations.create(env.scope, { email: "scan-invitee@example.com", role: "editor" }, {
+    await invitations.create(scope, { email: "scan-invitee@example.com", role: "editor" }, {
       async deliver(input) {
         inviteToken = new URL(input.acceptUrl).searchParams.get("token") ?? input.acceptUrl;
         return { kind: "manual_link", url: input.acceptUrl, expiresAt: input.invitation.expiresAt };
@@ -215,8 +306,8 @@ describe("secret scan (FR-020, SC-005)", () => {
     // The signature header is the only appearance of the webhook secret's influence, and it is an HMAC.
     expect(env.receiver.requests[0]!.headers["docket-signature"]).toBeTruthy();
 
-    // Route handlers.
-    session.current = { user: { id: env.owner.id }, session: { id: "00000000-0000-4000-8000-000000000000" } };
+    // Route handlers. Pages and session routes see the real signed-in user and session.
+    session.current = { user: { id: created.userId }, session: { id: sessionRow!.id } };
     const slug = env.project.slug;
     const routeCalls: [string, () => Promise<Response>][] = [
       ["GET /api/v1/posts", async () => rebuilt(await api("GET", "/posts", { key: apiKey.secret }))],
@@ -232,18 +323,37 @@ describe("secret scan (FR-020, SC-005)", () => {
           }),
       ],
       [
-        "POST /api/auth/sign-in/email",
+        "POST /api/auth/sign-in/email (unknown user)",
         async () =>
           authPost(
-            new Request("http://localhost:3000/api/auth/sign-in/email", {
+            new Request(`${ENV.BETTER_AUTH_URL}/api/auth/sign-in/email`, {
               method: "POST",
-              headers: { "content-type": "application/json", origin: "http://localhost:3000", "x-forwarded-for": "192.0.2.201" },
+              headers: { "content-type": "application/json", origin: ENV.BETTER_AUTH_URL, "x-forwarded-for": "192.0.2.201" },
               body: JSON.stringify({ email: "nobody@example.com", password: "long-enough-password" }),
+            }),
+          ),
+      ],
+      [
+        "POST /api/auth/sign-in/email (wrong password)",
+        async () =>
+          authPost(
+            new Request(`${ENV.BETTER_AUTH_URL}/api/auth/sign-in/email`, {
+              method: "POST",
+              headers: { "content-type": "application/json", origin: ENV.BETTER_AUTH_URL, "x-forwarded-for": "192.0.2.203" },
+              body: JSON.stringify({ email: SETUP_EMAIL, password: `${SETUP_PASSWORD}-wrong` }),
             }),
           ),
       ],
     ];
     for (const [place, call] of routeCalls) pieces.push(await responsePiece(place, await call()));
+    // The signed-in session route returns the caller's own token as `session.token`.
+    const current = await authGet(new Request(`${ENV.BETTER_AUTH_URL}/api/auth/get-session`, { headers: { cookie } }));
+    const currentBody = (await current.json()) as { session: { token?: string; userId: string } };
+    expect(currentBody.session.userId).toBe(created.userId);
+    expect(currentBody.session.token).toBe(sessionToken);
+    delete currentBody.session.token;
+    const currentHeaders = [...current.headers.entries()].map(([k, v]) => `${k}: ${v}`).join("\n");
+    pieces.push({ place: "GET /api/auth/get-session (signed in)", text: `${current.status}\n${currentHeaders}\n${JSON.stringify(currentBody)}` });
 
     // Rendered pages.
     const params = { params: Promise.resolve({ projectSlug: slug }) };
@@ -259,10 +369,10 @@ describe("secret scan (FR-020, SC-005)", () => {
     }
 
     // Stored rows.
-    const db = testDb();
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });
     pieces.push({ place: "post_targets", text: JSON.stringify(await db.select().from(postTargets).where(eq(postTargets.projectId, env.project.id))) });
     pieces.push({ place: "membership_audit_log", text: JSON.stringify(await db.select().from(membershipAuditLog).where(eq(membershipAuditLog.projectId, env.project.id))) });
+    pieces.push({ place: "connect_attempts", text: JSON.stringify(await db.select().from(connectAttempts).where(eq(connectAttempts.projectId, env.project.id))) });
     const accountRows = await db.select().from(socialAccounts).where(eq(socialAccounts.projectId, env.project.id));
     pieces.push({ place: "social_accounts", text: JSON.stringify(accountRows.map((r) => ({ ...r, credentialsEncrypted: undefined }))) });
     for (const delivery of await env.scope.webhooks.listDeliveries(env.endpoint.id, { limit: 50 })) {
@@ -273,6 +383,8 @@ describe("secret scan (FR-020, SC-005)", () => {
     const credentials: Secret[] = [
       { name: "bluesky app password", value: APP_PASSWORD },
       ...[ACCESS, REFRESH, NEW_ACCESS, NEW_REFRESH].map((value, i) => ({ name: `bluesky token ${i + 1}`, value })),
+      { name: "setup password", value: SETUP_PASSWORD },
+      { name: "session token", value: sessionToken },
     ];
     // Something was captured from every kind of place, so an empty corpus cannot pass.
     expect(new Set(pieces.map((p) => p.place.split(":")[0])).size).toBeGreaterThan(6);
