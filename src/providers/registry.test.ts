@@ -18,6 +18,15 @@ describe("provider registry", () => {
     expect(new Set(keys).size).toBe(keys.length);
     for (const key of keys) expect(key).toMatch(/^[a-z0-9-]+$/);
   });
+  it("gives every custom counting rule a valid name and a zero count for empty text", () => {
+    for (const p of listProviders()) {
+      const rule = p.capabilities.text.countingRule;
+      if (typeof rule === "string") continue;
+      expect(rule.name, p.key).toMatch(/^[a-z0-9-]+$/);
+      expect(rule.unit, p.key).not.toBe("");
+      expect(rule.count(""), p.key).toBe(0);
+    }
+  });
   it("declares consistent media constraints for every provider", () => {
     for (const p of listProviders()) expect(() => mediaConstraintsOf(p.capabilities), p.key).not.toThrow();
   });

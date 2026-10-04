@@ -1,7 +1,17 @@
 import type { z } from "zod";
 
 export type PostType = "text" | "image" | "carousel" | "video" | "story" | "reel"; // only the first three are used now
-export type TextCountingRule = "graphemes" | "code_points" | "utf8_bytes";
+export type BuiltInCountingRule = "graphemes" | "code_points" | "utf8_bytes";
+export interface CustomCountingRule {
+  kind: "custom";
+  /** `[a-z0-9-]+`, shown as `TargetCheck.countingRule`. */
+  name: string;
+  /** Plural unit for messages: "Text is 501 characters; the limit is 500." */
+  unit: string;
+  /** Pure and total; never throws; returns a non-negative integer. */
+  count(text: string): number;
+}
+export type TextCountingRule = BuiltInCountingRule | CustomCountingRule;
 
 export interface ProviderCapabilities {
   text: { maxLength: number; countingRule: TextCountingRule };
