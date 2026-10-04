@@ -21,6 +21,8 @@ export interface GraphRequest {
   method: string;
   /** Path only, e.g. `/v21.0/123/feed`. Never carries the query string or token. */
   path: string;
+  /** Host only, e.g. `graph.threads.net`. */
+  host: string;
   /** Query and form params with `access_token` replaced by `[redacted]`. */
   params: Record<string, string>;
   /** Whether an access token was sent (header, query or body). */
@@ -144,7 +146,7 @@ export function createFakeGraph(): FakeGraph {
         const url = new URL(request ? request.url : String(input));
         const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
         const { params, token } = await readParams(url, init);
-        const entry: GraphRequest = { method, path: url.pathname, params, hadToken: token };
+        const entry: GraphRequest = { method, path: url.pathname, host: url.host, params, hadToken: token };
         requests.push(entry);
         const route = routes.get(`${method} ${url.pathname}`);
         let reply = fallbackReply;

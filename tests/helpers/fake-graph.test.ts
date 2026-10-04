@@ -15,7 +15,7 @@ describe("fake Graph", () => {
     const res = await fetch(url("/v21.0/me", "?fields=id&access_token=SECRETTOKEN"));
     expect(await res.json()).toEqual({ id: "1" });
     expect(graph.requests).toEqual([
-      { method: "GET", path: "/v21.0/me", params: { fields: "id", access_token: "[redacted]" }, hadToken: true },
+      { method: "GET", path: "/v21.0/me", host: "graph.example.test", params: { fields: "id", access_token: "[redacted]" }, hadToken: true },
     ]);
     expect(JSON.stringify(graph.requests)).not.toContain("SECRETTOKEN");
   });

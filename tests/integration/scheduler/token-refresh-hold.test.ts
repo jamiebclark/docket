@@ -55,7 +55,7 @@ const tick = (when: Date) => atTime(when, () => runTokenRefresh({ config: CONFIG
 
 describe("transient refresh results hold the account until retryAt (G11)", () => {
   it("does not reclaim before retryAt, and reclaims after the clock passes it", async () => {
-    const { id, projectId } = await dueAccount({ ok: false, transient: true, reason: "rate limited", retryAt: at(2) });
+    const { id } = await dueAccount({ ok: false, transient: true, reason: "rate limited", retryAt: at(2) });
     await tick(at(0));
     expect(calls.get(id)).toBe(1);
     await tick(at(1));
