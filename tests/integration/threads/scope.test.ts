@@ -22,7 +22,7 @@ describe("Threads provider scope", () => {
   });
 
   it("adds no table named for Threads", () => {
-    const tables = Object.values(schema)
+    const tables = (Object.values(schema) as unknown[])
       .filter((v): v is PgTable => is(v, PgTable))
       .map((t) => getTableName(t));
     expect(tables.length).toBeGreaterThan(0);
