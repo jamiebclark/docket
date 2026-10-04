@@ -12,7 +12,34 @@ export interface SchedulerConfig {
   refreshWindowMs: number;
   refreshMaxAccounts: number;
   batchSize: number;
+  /** Generation jobs (008): items claimed per tick, and the time a model call needs to be worth starting. */
+  jobMaxItems?: number;
+  jobMinCallMs?: number;
+  jobPersistReserveMs?: number;
+  jobMaxAttempts?: number;
+  jobBackoffBaseMs?: number;
+  jobBackoffMaxMs?: number;
 }
+
+/** The generation-jobs settings with defaults filled in (older hand-built configs omit them). */
+export function jobConfig(config: SchedulerConfig) {
+  return {
+    maxItems: config.jobMaxItems ?? 2,
+    minCallMs: config.jobMinCallMs ?? JOB_MIN_CALL_MS,
+    persistReserveMs: config.jobPersistReserveMs ?? JOB_PERSIST_RESERVE_MS,
+    maxAttempts: config.jobMaxAttempts ?? JOB_ITEM_MAX_ATTEMPTS,
+    backoffBaseMs: config.jobBackoffBaseMs ?? JOB_BACKOFF_BASE_MS,
+    backoffMaxMs: config.jobBackoffMaxMs ?? JOB_BACKOFF_MAX_MS,
+    leaseMs: config.leaseMs,
+    timeBudgetMs: config.timeBudgetMs,
+  };
+}
+
+export const JOB_MIN_CALL_MS = 8_000;
+export const JOB_PERSIST_RESERVE_MS = 3_000;
+export const JOB_ITEM_MAX_ATTEMPTS = 3;
+export const JOB_BACKOFF_BASE_MS = 60_000;
+export const JOB_BACKOFF_MAX_MS = 900_000;
 
 type EnvLike = Pick<
   Env,
@@ -25,6 +52,7 @@ type EnvLike = Pick<
   | "PUBLISH_BACKOFF_MAX_SECONDS"
   | "PUBLISH_MAX_DURATION_HOURS"
   | "TOKEN_REFRESH_WINDOW_HOURS"
+  | "GENERATION_TICK_MAX_ITEMS"
 >;
 
 /** `overrides` is for tests. */
@@ -41,6 +69,12 @@ export function schedulerConfig(env: EnvLike, overrides: Partial<SchedulerConfig
     refreshWindowMs: env.TOKEN_REFRESH_WINDOW_HOURS * 3_600_000,
     refreshMaxAccounts: 5,
     batchSize: 4,
+    jobMaxItems: env.GENERATION_TICK_MAX_ITEMS,
+    jobMinCallMs: JOB_MIN_CALL_MS,
+    jobPersistReserveMs: JOB_PERSIST_RESERVE_MS,
+    jobMaxAttempts: JOB_ITEM_MAX_ATTEMPTS,
+    jobBackoffBaseMs: JOB_BACKOFF_BASE_MS,
+    jobBackoffMaxMs: JOB_BACKOFF_MAX_MS,
     ...overrides,
   };
 }

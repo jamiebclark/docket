@@ -4,6 +4,7 @@ import { SetupUnavailableError } from "../dal/errors";
 import { formatEnvIssues, parseEnv } from "../env";
 import { providerEnvIssues } from "../provider-env";
 import { parseLlmConfig } from "../llm/config";
+import { JOB_MIN_CALL_MS, JOB_PERSIST_RESERVE_MS } from "../scheduler/config";
 
 export interface StartupDeps {
   env: Record<string, string | undefined>;
@@ -40,6 +41,13 @@ export async function runStartup(overrides: Partial<StartupDeps> = {}): Promise<
   const llm = parseLlmConfig(deps.env);
   if (!llm.ok) {
     deps.log(`Docket: generation disabled (${llm.problems.map((p) => `${p.name}: ${p.reason}`).join("; ")})`);
+  }
+
+  const neededMs = JOB_MIN_CALL_MS + JOB_PERSIST_RESERVE_MS;
+  if (llm.ok && env.SCHEDULER_TICK_BUDGET_SECONDS * 1000 < neededMs) {
+    deps.log(
+      `Docket: generation jobs cannot run (SCHEDULER_TICK_BUDGET_SECONDS=${env.SCHEDULER_TICK_BUDGET_SECONDS} is below ${Math.ceil(neededMs / 1000)})`,
+    );
   }
 
   // scripts/prestart.mjs migrates before the server loads; don't repeat it.

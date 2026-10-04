@@ -21,8 +21,10 @@ export function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 function summaryLine(result: unknown, ms: number): string {
-  const counts = (result as { publishing?: { counts?: Record<string, number> } } | null)?.publishing?.counts ?? {};
-  return `Docket scheduler: tick ${ms}ms published=${counts.done ?? 0} failed=${counts.failed ?? 0} ambiguous=${counts.ambiguous ?? 0} deferred=${counts.deferred ?? 0}`;
+  const sections = result as { publishing?: { counts?: Record<string, number> }; generation?: { counts?: Record<string, number> } } | null;
+  const counts = sections?.publishing?.counts ?? {};
+  const gen = sections?.generation?.counts ?? {};
+  return `Docket scheduler: tick ${ms}ms published=${counts.done ?? 0} failed=${counts.failed ?? 0} ambiguous=${counts.ambiguous ?? 0} deferred=${counts.deferred ?? 0} generated=${gen.done ?? 0} gen_failed=${gen.failed ?? 0}`;
 }
 
 /**
