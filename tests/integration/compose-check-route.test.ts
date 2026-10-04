@@ -9,13 +9,16 @@ import { atTime } from "../helpers/clock";
 import { closeDb } from "../helpers/db";
 import { fakeSession } from "../helpers/auth";
 import { createProjectWithMembers } from "../helpers/factories";
+import { blueskyProvider } from "../../src/providers/bluesky";
 import { blueskyLikeProvider, registerTestProvider } from "../helpers/provider-fixtures";
+import { createMediaAsset } from "../helpers/scheduling";
 import { postsEnv } from "../helpers/posts-env";
 import { forProject } from "../../src/server/dal/scope";
 import * as accounts from "../../src/server/services/accounts";
 import * as slots from "../../src/server/services/slots";
 
 registerTestProvider(blueskyLikeProvider);
+registerTestProvider(blueskyProvider);
 
 afterAll(async () => {
   await closeDb();
@@ -128,5 +131,80 @@ describe("POST compose/check", () => {
     expect(checked.issues.filter((i: { severity: string }) => i.severity === "error").map((i: { code: string }) => i.code)).toEqual(
       queuedCodes,
     );
+  });
+
+  describe("a Bluesky target", () => {
+    const FAMILY = "👨‍👩‍👧‍👦";
+    async function bluesky() {
+      const t = await setup();
+      const account = await accounts.saveConnectedAccount(t.env.scope, {
+        providerKey: "bluesky",
+        externalAccountId: `did:plc:${Math.random().toString(36).slice(2, 10)}`,
+        displayName: "Real Bsky",
+        settings: {},
+      });
+      return { ...t, bsky: account };
+    }
+    const check = async (t: Awaited<ReturnType<typeof bluesky>>, body: Record<string, unknown>) => {
+      const json = await (await call(t.env.project.slug, { targets: [{ accountId: t.bsky.id }], ...body })).json();
+      return json.data.targets[0];
+    };
+
+    it("counts graphemes and flags text_too_long at 301", async () => {
+      const t = await bluesky();
+      const flag = "🇯🇵"; // 1 grapheme, 8 bytes: 300 stay under the byte limit
+      const ok = await check(t, { baseText: flag.repeat(300) });
+      expect(ok).toMatchObject({ count: 300, limit: 300, countingRule: "graphemes", canSchedule: true });
+      const over = await check(t, { baseText: flag.repeat(301) });
+      expect(over.count).toBe(301);
+      expect(over.canSchedule).toBe(false);
+      expect(over.issues).toContainEqual(expect.objectContaining({ code: "text_too_long", severity: "error" }));
+    });
+
+    it("blocks text_too_many_bytes in the check and when queueing", async () => {
+      const t = await bluesky();
+      const text = FAMILY.repeat(121); // 121 graphemes, 3,025 bytes
+      const checked = await check(t, { baseText: text });
+      expect(checked.canSchedule).toBe(false);
+      expect(checked.issues).toContainEqual(
+        expect.objectContaining({ code: "text_too_many_bytes", severity: "error", count: 3025, limit: 3000 }),
+      );
+      const scope = await forProject(fakeSession(t.env.owner.id), t.env.project.slug);
+      const draft = await posts.createDraft(scope, { baseText: text, targets: [{ accountId: t.bsky.id }] });
+      const [queued] = await atTime(new Date("2026-10-01T12:00:00Z"), () => posts.addToQueue(scope, draft.post.id));
+      expect(queued).toMatchObject({ ok: false, code: "validation" });
+      expect((queued as { issues: { code: string }[] }).issues.map((i) => i.code)).toContain("text_too_many_bytes");
+    });
+
+    it("flags too_many_images at 5", async () => {
+      const t = await bluesky();
+      const mediaIds = [];
+      for (let i = 0; i < 5; i++) mediaIds.push((await createMediaAsset(t.env.project.id, { mimeType: "image/jpeg", altText: "a" })).id);
+      const over = await check(t, { baseText: "hi", mediaIds });
+      expect(over.canSchedule).toBe(false);
+      expect(over.issues).toContainEqual(expect.objectContaining({ code: "too_many_images", count: 5, limit: 4 }));
+      const four = await check(t, { baseText: "hi", mediaIds: mediaIds.slice(0, 4) });
+      expect(four.issues.map((i: { code: string }) => i.code)).not.toContain("too_many_images");
+    });
+
+    it("explains how an oversized or WebP image will be adapted", async () => {
+      const t = await bluesky();
+      const insert = (mimeType: string, byteSize: number) =>
+        t.env.scope.media.insert({
+          storageKey: `projects/${t.env.project.id}/media/${crypto.randomUUID()}/original`,
+          publicUrl: "https://media.example.test/x",
+          mimeType,
+          byteSize,
+          width: 1200,
+          height: 900,
+          altText: "a",
+        });
+      const webp = await insert("image/webp", 50_000);
+      const big = await insert("image/jpeg", 3_000_000);
+      const res = await check(t, { baseText: "hi", mediaIds: [webp.id, big.id] });
+      const notes = res.issues.filter((i: { severity: string }) => i.severity !== "error").map((i: { code: string }) => i.code);
+      expect(notes.some((c: string) => c.startsWith("media_will_"))).toBe(true);
+      expect(res.issues.filter((i: { code: string }) => i.code === "mime_not_allowed")).toEqual([]);
+    });
   });
 });

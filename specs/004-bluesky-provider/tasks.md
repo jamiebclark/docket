@@ -133,8 +133,8 @@ description: "Task list for the Bluesky provider (004)"
 
 **Independent Test**: `pnpm vitest run src/providers/bluesky/validate.test.ts tests/integration/compose-check-route.test.ts`
 
-- [ ] T042 [P] [US4] Implement `src/providers/bluesky/validate.ts` (`validateAgainstCapabilities` plus blocking `text_too_many_bytes` with count/limit) and `validate.test.ts`: 300 vs 301 graphemes from ZWJ families/skin tones/flags/combining marks, 3,000 vs 3,001 bytes, 4 vs 5 images, 2,000,000 vs 2,000,001 bytes, text-only valid, `empty_post`, unfixable image blocking error
-- [ ] T043 [US4] Extend `tests/integration/compose-check-route.test.ts` with a Bluesky target (grapheme count, `text_too_long` at 301, `text_too_many_bytes` blocking in every gate, `too_many_images`, adaptation notes)
+- [x] T042 [P] [US4] Implement `src/providers/bluesky/validate.ts` (`validateAgainstCapabilities` plus blocking `text_too_many_bytes` with count/limit) and `validate.test.ts`: 300 vs 301 graphemes from ZWJ families/skin tones/flags/combining marks, 3,000 vs 3,001 bytes, 4 vs 5 images, 2,000,000 vs 2,000,001 bytes, text-only valid, `empty_post`, unfixable image blocking error
+- [x] T043 [US4] Extend `tests/integration/compose-check-route.test.ts` with a Bluesky target (grapheme count, `text_too_long` at 301, `text_too_many_bytes` blocking in every gate, `too_many_images`, adaptation notes)
 
 ---
 
