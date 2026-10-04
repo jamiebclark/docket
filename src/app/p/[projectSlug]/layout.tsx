@@ -10,6 +10,7 @@ import { getSession } from "@/server/auth/session";
 import { now } from "@/server/dal/clock";
 import { listAccountsNeedingReauth } from "@/server/services/accounts";
 import * as projects from "@/server/services/projects";
+import { countReviewQueue } from "@/server/services/review";
 import { getSchedulerHealth } from "@/server/services/scheduler-health";
 
 /** Project shell: resolves membership on every request; non-members see the same 404 as a missing project. */
@@ -33,6 +34,7 @@ export default async function ProjectLayout({
   const mine = await projects.listMine(session);
   const health = await getSchedulerHealth(scope);
   const reauth = await listAccountsNeedingReauth(scope);
+  const reviewCount = await countReviewQueue(scope);
   const at = await now();
   const timezone = scope.project.timezone;
 
@@ -50,7 +52,7 @@ export default async function ProjectLayout({
       <SchedulerHealth variant="banner" health={health} now={at} timezone={timezone} />
       <ReauthBanner accounts={reauth} projectSlug={scope.project.slug} canManage={scope.can({ account: ["manage"] })} />
       <div className="flex flex-1">
-        <LeftNav projectSlug={scope.project.slug} />
+        <LeftNav projectSlug={scope.project.slug} reviewCount={reviewCount} />
         <main id="main" className="flex-1 p-6">
           {children}
         </main>

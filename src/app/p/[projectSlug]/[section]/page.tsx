@@ -3,8 +3,6 @@ import type { Metadata } from "next";
 
 const PLACEHOLDERS: Record<string, string> = {
   jobs: "Jobs",
-  review: "Review",
-  voice: "Voice",
 };
 
 type Props = { params: Promise<{ projectSlug: string; section: string }> };

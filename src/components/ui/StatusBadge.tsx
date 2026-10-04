@@ -11,6 +11,7 @@ const STATUSES: Record<string, { label: string; tone: Tone }> = {
   published: { label: "Published", tone: "success" },
   partially_failed: { label: "Partly failed", tone: "danger" },
   failed: { label: "Failed", tone: "danger" },
+  rejected: { label: "Rejected", tone: "neutral" },
   cancelled: { label: "Cancelled", tone: "neutral" },
   ambiguous: { label: "Needs your decision", tone: "warning" },
   needs_decision: { label: "Needs your decision", tone: "warning" },
