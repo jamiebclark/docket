@@ -34,6 +34,17 @@ export const mediaSearchParamsSchema = z.object({
 });
 export type MediaSearchParams = z.infer<typeof mediaSearchParamsSchema>;
 
+/** URL flags (`?unused=1`) → the boolean filter `listMedia` takes. The one place they meet (F1). */
+export function toMediaListInput(p: MediaSearchParams) {
+  return {
+    ...(p.tag ? { tag: p.tag } : {}),
+    ...(p.unused ? { unused: true } : {}),
+    ...(p.missingAlt ? { missingAlt: true } : {}),
+    ...(p.q ? { q: p.q } : {}),
+    ...(p.page ? { page: p.page } : {}),
+  };
+}
+
 export const POST_LIST_STATUSES = [
   "draft",
   "needs_review",

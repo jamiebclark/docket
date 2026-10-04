@@ -24,6 +24,7 @@ export type NewMedia = Pick<typeof mediaAssets.$inferInsert, "storageKey" | "pub
       | "thumbnailUrl"
       | "originalFilename"
       | "tags"
+      | "id"
     >
   >;
 export type VariantRow = MediaVariantRow;
