@@ -45,11 +45,10 @@ describe("listPageCandidates", () => {
     expect(r.ok && r.candidates[0]?.notes).toEqual(["No Instagram professional account is linked."]);
   });
 
-  it("explains an empty list", async () => {
+  it("reports an empty list as no candidates, not a failed sign-in (F1)", async () => {
     fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [] } });
     const r = await run();
-    expect(r.ok).toBe(false);
-    expect(!r.ok && r.message).toContain("pages_show_list");
+    expect(r).toEqual({ ok: true, candidates: [] });
   });
 
   it("adds a notice when the listing is truncated", async () => {

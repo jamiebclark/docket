@@ -4,8 +4,6 @@ import { graphList, type MetaApp } from "./graph";
 
 const MAX_PAGES = 5; // first request + 4 follows (R9): at most 500 Pages at limit=100
 
-const NO_PAGES =
-  "No Facebook Pages were found for this login. The token needs pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic and instagram_content_publish.";
 
 interface PageEntry {
   id?: unknown;
@@ -70,7 +68,7 @@ export async function listPageCandidates(
       });
     }
   }
-  if (candidates.length === 0) return { ok: false, message: NO_PAGES };
+  // No Pages is "no accounts", not a failed sign-in: the callback shows the permissions banner (F1).
   return {
     ok: true,
     candidates,
