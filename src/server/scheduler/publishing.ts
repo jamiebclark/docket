@@ -202,6 +202,20 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 /** Media could not be resolved before the provider call; the target fails with no call made. */
 class MediaUnavailable extends Error {}
 
+/**
+ * Media preparation failed or overran the tick budget. It runs before any provider call,
+ * so the step cannot have published: always retryable, never ambiguous (F3).
+ */
+class MediaNotReady extends Error {}
+
+function withinBudget<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new MediaNotReady("Preparing media took too long; will retry.")), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function execute(
   lease: Leased,
   config: SchedulerConfig,
@@ -241,7 +255,11 @@ async function execute(
     // Text-only posts (the common case) skip it.
     let media = loaded.media;
     if (loaded.media.length > 0) {
-      const resolved = await resolvePublishMedia(repos, target.id, provider);
+      // Storage calls can hang; leave room for the provider call inside the tick deadline.
+      const budget = Math.max(1_000, deadline - (await clock.now()).getTime() - config.providerTimeoutMs);
+      const resolved = await withinBudget(resolvePublishMedia(repos, target.id, provider), budget).catch((e: unknown) => {
+        throw e instanceof MediaNotReady ? e : new MediaNotReady("Preparing media failed; will retry.");
+      });
       if (!resolved.ok) throw new MediaUnavailable(resolved.error);
       media = resolved.media;
     }
@@ -272,6 +290,8 @@ async function execute(
   } catch (error) {
     if (error instanceof MediaUnavailable) {
       result = { kind: "fatal_error", error: error.message };
+    } else if (error instanceof MediaNotReady) {
+      result = { kind: "retryable_error", error: error.message };
     } else {
       // A lost or failed call: whether the step could have published decides the outcome (D5).
       const message = redact(error instanceof Error ? error.message : "The provider call failed.", secrets);
