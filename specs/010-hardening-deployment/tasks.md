@@ -196,3 +196,10 @@
 - **MVP**: Phase 1, Phase 2, US1 (failures view). It delivers the owner's most urgent need and is demonstrable with the mock provider.
 - **Then**: US2 and US3 (both P1, mostly independent), US4, US5, US6.
 - **Honesty rule**: anything needing Docker or a browser that the headless run cannot do stays marked `🛑 BLOCKED` or "NOT VERIFIED"; never tick it on assumption.
+
+---
+
+## Phase 10: Review remediation
+
+- [ ] T076 Extend the end-to-end secret scan so it covers everything FR-020 names. Seed distinctive `META_APP_ID`/`META_APP_SECRET` and `THREADS_APP_ID`/`THREADS_APP_SECRET`. Sign in for real through the auth handler and scan the session token everywhere except its own `Set-Cookie`, asserting that one appearance separately. Drive first-user setup and `resolveAmbiguous` (published with a URL, and not-published with requeue) inside the scanned run. Bring the "Secrets in …" rows of `docs/security.md` into line with what the test covers — review F1 (MAJOR), tests/integration/security/secret-scan.test.ts:5-20, tests/integration/security/secret-scan.test.ts:158-279, docs/security.md:9-10
+- [ ] T077 Make every `docs/limits.md` row cite a test that breaks exactly that limit with the provider's own values and asserts the documented outcome (refusal, adaptation or deferral, with no platform request). Where none exists, add rows to `tests/integration/limits/enforcement.test.ts`: per-provider planner refusals and adaptations through `mediaConstraintsOf(provider.capabilities)`/`planImage` (bytes, formats, min/max width, min/max aspect), a format row, an account-level publish-limit deferral for Facebook and the mock, and Instagram's text-length row. Then make `tests/integration/docs/limits-inventory.test.ts` require a quoted fragment on every row and match it against a real `it(`/`describe(` title or a generated `"<providerKey>: <field>"` name, not raw file text — review F2 (MAJOR), docs/limits.md:22, docs/limits.md:31-37, docs/limits.md:49-54, docs/limits.md:82-85, tests/integration/docs/limits-inventory.test.ts:96-101
