@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../helpers/actions")).sessionModule);
@@ -6,16 +7,20 @@ vi.mock("next/navigation", async () => (await import("../helpers/actions")).navi
 
 import * as accountActions from "../../src/app/p/[projectSlug]/accounts/actions";
 import * as calendarActions from "../../src/app/p/[projectSlug]/calendar/actions";
+import * as generateActions from "../../src/app/p/[projectSlug]/generate/actions";
 import * as composeActions from "../../src/app/p/[projectSlug]/compose/actions";
 import * as mediaActions from "../../src/app/p/[projectSlug]/media/actions";
 import * as postActions from "../../src/app/p/[projectSlug]/posts/actions";
+import { setLlmForTests } from "../../src/server/llm";
+import { generateSingle } from "../../src/server/services/generation/single";
 import * as posts from "../../src/server/services/posts";
 import * as media from "../../src/server/services/media";
 import { setStorageForTests } from "../../src/server/storage";
 import { actAs, RedirectSignal } from "../helpers/actions";
 import { atTime } from "../helpers/clock";
 import { closeDb } from "../helpers/db";
-import { createSession, createUser } from "../helpers/factories";
+import { createFakeLlm } from "../helpers/fake-llm";
+import { createSession, createUser, createVoiceProfile } from "../helpers/factories";
 import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterThrowaway } from "../helpers/connect-group";
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
@@ -66,9 +71,21 @@ async function fixtures(env: Env) {
   if (!upload.ok) throw new Error("fixture upload failed");
   const form = new FormData();
   form.set("file", new File([new Uint8Array(await png())], "b.png", { type: "image/png" }));
+  const fakeOk = () => ({ ok: { variants: { mock: { text: "Generated text" } } } });
+  const voice = await createVoiceProfile(env.project.id);
+  const generated = await generateSingle(
+    env.scope,
+    { requestId: randomUUID(), voiceProfileId: voice.id, brief: "Fixture", targetAccountIds: [account.id] },
+    createFakeLlm([fakeOk()]),
+  );
+  if (!generated.ok) throw new Error("fixture generation failed");
+  // The actions under test use the configured provider; give each call its own scripted answers.
+  setLlmForTests(createFakeLlm([fakeOk(), fakeOk()]));
   const attemptId = await readyAttempt(env.scope, await sessionFor(env.owner.id), pageCandidate("authz", "Authz", false));
   return {
     attemptId,
+    voiceProfileId: voice.id,
+    generatedPostId: generated.postId,
     accountId: account.id,
     slotId: slots[0]!.id,
     targetId: a.targetId,
@@ -93,6 +110,21 @@ const CASES: Case[] = [
   { name: "previewExplicitTimeAction", run: (s, f) => composeActions.previewExplicitTimeAction(s, { postId: f.draftId, local: "2030-01-01T10:00" }) },
   { name: "scheduleAtAction", run: (s, f) => composeActions.scheduleAtAction(s, { postId: f.draftId, at: "2030-01-01T10:00:00Z" }) },
   { name: "publishNowAction", run: (s, f) => composeActions.publishNowAction(s, { postId: f.draftId }) },
+  {
+    name: "generateSingleAction",
+    run: (s, f) =>
+      generateActions.generateSingleAction(s, {
+        requestId: randomUUID(),
+        voiceProfileId: f.voiceProfileId,
+        brief: "A brief",
+        targetAccountIds: [f.accountId],
+      }),
+  },
+  { name: "regenerateAction", run: (s, f) => generateActions.regenerateAction(s, { postId: f.generatedPostId, instruction: "Shorter" }) },
+  {
+    name: "updatePostVariantsAction",
+    run: (s, f) => generateActions.updatePostVariantsAction(s, { postId: f.generatedPostId, edits: [{ providerKey: "mock", text: "Edited" }] }),
+  },
   { name: "retryTargetAction", run: (s, f) => postActions.retryTargetAction(s, { targetId: f.targetId }) },
   { name: "cancelTargetAction", run: (s, f) => postActions.cancelTargetAction(s, { targetId: f.targetId }) },
   { name: "resolveTargetAction", run: (s, f) => postActions.resolveTargetAction(s, { targetId: f.targetId, outcome: "failed" }) },
@@ -182,6 +214,38 @@ describe("every server action × role (SC-009, SC-011)", () => {
     const r = await call(CASES[0]!, env.project.slug, await fixtures(env));
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/^(not_found|unauthenticated)$/);
+  });
+});
+
+describe("generate actions", () => {
+  it("never put the LLM key in a result, even when the provider rejects it", async () => {
+    const key = "sk-FAKE-authz-llm-key-0123456789";
+    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_MODEL", "fake-model");
+    vi.stubEnv("OPENAI_API_KEY", key);
+    setLlmForTests(null);
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response(JSON.stringify({ error: { message: `Incorrect API key provided: ${key}` } }), { status: 401 }),
+    );
+    try {
+      const env = await postsEnv();
+      const account = await env.account();
+      const voice = await createVoiceProfile(env.project.id);
+      actAs(env.owner, (await createSession(env.owner.id)).id);
+      const r = await generateActions.generateSingleAction(env.project.slug, {
+        requestId: randomUUID(),
+        voiceProfileId: voice.id,
+        brief: "A brief",
+        targetAccountIds: [account.id],
+      });
+      expect(r).toMatchObject({ ok: true, data: { ok: false, kind: "auth" } });
+      expect(JSON.stringify(r)).not.toContain(key);
+      expect(JSON.stringify(await env.scope.generationFailures.listRecent(5))).not.toContain(key);
+    } finally {
+      vi.unstubAllEnvs();
+      setLlmForTests(null);
+    }
   });
 });
 

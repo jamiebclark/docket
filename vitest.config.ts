@@ -8,7 +8,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],
     passWithNoTests: true,
     globalSetup: "tests/setup/global-setup.ts",
     // worker-db.ts must stay first: it points each worker at its own database clone.
