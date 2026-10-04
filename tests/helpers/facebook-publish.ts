@@ -14,13 +14,18 @@ export const PAGE_ID = "1234567890";
 export const PAGE_TOKEN = "EAAB-page-token-0123456789abcdef";
 
 /** A project with a connected Facebook Page account and one due target carrying `imageCount` JPEGs. */
-export async function facebookSetup(storage: MemoryStorage, text: string, imageCount: number) {
+export function facebookSetup(storage: MemoryStorage, text: string, imageCount: number) {
+  return metaSetup("facebook", PAGE_ID, storage, text, imageCount);
+}
+
+/** The same for any Meta provider; `externalId` is the Page or Instagram account id. */
+export async function metaSetup(providerKey: "facebook" | "instagram", externalId: string, storage: MemoryStorage, text: string, imageCount: number) {
   const ctx = await createProjectWithMembers();
   const projectId = ctx.project.id;
   const account = await forSchedulerProject(projectId).accounts.upsertConnected({
-    providerKey: "facebook",
-    displayName: "Docket Page",
-    externalAccountId: PAGE_ID,
+    providerKey,
+    displayName: providerKey === "facebook" ? "Docket Page" : "Docket Page · Instagram",
+    externalAccountId: externalId,
     settings: {},
     credentialsEncrypted: null,
     credentialsExpiresAt: null,
