@@ -55,3 +55,8 @@ export function occurrencesBetween(
   }
   return [...byInstant.values()].sort((a, b) => Temporal.Instant.compare(a.instant, b.instant));
 }
+
+/** A project-zone wall-clock `YYYY-MM-DDTHH:MM` to an instant, by Temporal `compatible`: a gap moves later, an overlap takes the earlier offset. */
+export function resolveLocalDateTime(timeZone: string, local: string): Temporal.Instant {
+  return Temporal.PlainDateTime.from(local).toZonedDateTime(timeZone, { disambiguation: "compatible" }).toInstant();
+}
