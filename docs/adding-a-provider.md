@@ -22,13 +22,37 @@ The contract lives in `src/providers/types.ts`; the `mock` provider
 | `key` | Lowercase `[a-z0-9-]+`, unique. Stored in `social_accounts.provider_key`. |
 | `displayName` | Shown in the UI. |
 | `capabilities` | Limits the shared validator checks (section 3). |
-| `defaultPublishLimit?` | `{ count, windowSeconds }` (section 8). |
+| `defaultPublishLimit?` | One `{ count, windowSeconds }` or an array of them that all apply (G14). Read through `providerPublishLimits` (section 8). |
 | `connect` | How an account is connected (section 4). |
 | `settingsSchema` | Zod schema for non-secret per-account settings (section 5). |
+| `connectAccount?(input)` | Credential connect: verify the fields and return the account to store (G1, section 4). |
+| `needsRefresh?(credentials, now)` | True when credentials should be renewed before this publish. Requires `refreshCredentials` (G2, section 9). |
 | `refreshCredentials?` | Renew credentials before they expire (section 9). |
 | `validate(content, caps)` | Returns `ValidationIssue[]`. Usually `validateAgainstCapabilities`, plus provider-specific codes. |
-| `stepFor(state, settings)` | Pure, total: names the next step and says whether it `mayPublish` (section 6). |
+| `stepFor(state, settings, content)` | Pure, total: names the next step and says whether it `mayPublish` (section 6). |
 | `advance(ctx)` | Does one bounded unit of work and returns a `StepResult` (section 7). |
+| `accountNotes?(input)` | Non-secret notes for the account card (G13, section 4). |
+
+### Generic hooks index
+
+Each optional member above was added as a generic change; `docs/decisions.md` records why and how to reverse it.
+
+| Change | Hook | Section |
+|---|---|---|
+| G1 | `connectAccount?`, optional credential fields | 4 |
+| G2 | `needsRefresh?`, `credentialsExpired` | 7, 9 |
+| G3 | transient `RefreshResult` | 9 |
+| G4 | `stepFor(state, settings, content)` | 6 |
+| G5 | OAuth candidates and the chooser | 4 |
+| G6 | `pasteToken` | 4 |
+| G7 | `credentialsInvalid` | 7 |
+| G8 | provider-declared `environment` | 4 |
+| G9 | custom counting rule | 3 |
+| G10 | `redirectRequirement` | 4 |
+| G11 | held refresh (`retryAt`) | 9 |
+| G12 | `callbackHint` | 4 |
+| G13 | `accountNotes?` | 4 |
+| G14 | `defaultPublishLimit` as an array | 8 |
 
 ## 3. Capabilities and counting rules
 
@@ -45,8 +69,11 @@ When the platform's rule is none of these, declare `countingRule: { kind: "custo
 `TargetCheck.countingRule` carries (a string, never the function) and `unit` is the word in messages ("500 units"). Threads uses
 this: an emoji grapheme counts its UTF-8 bytes and every other character counts per code point.
 
+A custom rule is a `CustomCountingRule` with `kind`, `name`, `unit` and `count`.
+
 Use the rule the platform itself uses. `capabilities.media` sets `maxImages` (0 = none), `allowedMimeTypes`,
-`maxBytesPerFile` and `required`. `textOnlyAllowed` and `postTypes` finish the picture.
+`maxBytesPerFile` and `required`. `textOnlyAllowed` and `postTypes` finish the picture. `text.maxLength` is the limit in the
+chosen `countingRule`'s unit.
 Everything is checked by `validateAgainstCapabilities` in `src/providers/validation.ts`.
 
 ### Declaring media constraints
@@ -66,11 +93,12 @@ Derived variants are generated at compose time and cached by constraint hash. Fi
 
 ## 4. Connect strategies and where credentials live
 
-`connect` is one of `oauth`, `credentials` (named fields, e.g. a handle and app password) or `manual-token`.
+`connect` is one of `oauth` (a group, below), `credentials` (named fields, e.g. a handle and app password) or `manual-token` (a pasted token, with fields).
+These are the `ConnectStrategy` values.
 Whatever the flow, it ends by calling `accounts.saveConnectedAccount`. Credentials are encrypted at rest.
 The engine decrypts them and passes them to `advance` as `ctx.account.credentials`; a provider never touches storage.
 
-Credential fields may be `optional`, with a `defaultValue` and `placeholder`. When the app password (or any one-time secret) must
+Each `CredentialField` has a `name`, a `label`, `secret` and optional `help`. A field may also be `optional`, with a `defaultValue` and `placeholder`. When the app password (or any one-time secret) must
 not be kept, implement `connectAccount({ fields, ... })`: it exchanges the fields for what should be stored (for Bluesky, session
 tokens) and returns `{ ok: true, account: { externalId, displayName, settings, credentials, expiresAt } }` or `{ ok: false, message, field?, retryAt? }`.
 The generic accounts form and `connectWithCredentials` call it; the typed fields themselves are never saved.
@@ -78,9 +106,11 @@ The generic accounts form and `connectWithCredentials` call it; the typed fields
 ### OAuth groups, candidates and the paste fallback
 
 An `oauth` strategy carries an `OAuthConnectGroup` (`src/providers/types.ts`). Providers that share one app (Facebook and Instagram)
-share one group. The group supplies `authorizationUrl`, a server-side `exchangeCode` and optionally `describeCallbackError`.
+share one group. A group has a unique `key` and a `displayName`. It supplies `authorizationUrl({ state, redirectUri })`, a server-side
+`exchangeCode({ code, redirectUri, now, signal })` and optionally `describeCallbackError`. Both take `redirectUri`, and `code` is
+the platform's authorization code.
 Neither exchange saves anything: each returns **candidates** (`ConnectCandidate`: provider key, external id, display name, settings,
-credentials, expiry). A candidate may name a `parent` (an Instagram account sits under its Page) and carry `notes`.
+credentials, expiry), and the `providerKey` says which provider the candidate becomes. A candidate may name a `parent` (an Instagram account sits under its Page) and carry `notes`.
 Candidates are held encrypted in `connect_attempts` until the user picks one in the chooser, which then calls
 `accounts.saveConnectedAccount` (G5).
 
@@ -114,14 +144,14 @@ If you are unsure, it is a credential.
 ## 6. `stepFor`, `mayPublish` and state
 
 A publish can take several steps (create a container, wait for processing, publish it).
-`stepFor(state, settings)` returns `{ name, mayPublish }` for the step that `advance` would run next.
+`stepFor(state, settings, content)` returns `{ name, mayPublish }` for the step that `advance` would run next.
 
 - It must be **pure and total**. It returns an answer for every state, including `null` (first step).
 - `mayPublish: true` marks a step whose request can make the post public.
 - `state` is whatever a `continue` result returned. The engine stores it between ticks as plain jsonb and hands it back.
 - If the engine loses track of a step (killed tick, provider throws, timeout), `mayPublish` decides: true means `ambiguous`, false means retry.
 
-`stepFor(state, settings, content)` also receives `content: { text, mediaCount }`, so a provider can choose a different first step
+The third argument is `content: { text, mediaCount }` (G4), so a provider can choose a different first step
 for a post with images. `advance` receives `ctx.step`, the name of the step the engine decided on, and should run exactly that step.
 
 ## 7. Each `StepResult`
@@ -162,6 +192,11 @@ Set `defaultPublishLimit` (e.g. Instagram `{ count: 100, windowSeconds: 86400 }`
 targets over the limit wait rather than fail. An account can override it with its own limit.
 The provider does no counting.
 
+`defaultPublishLimit` may also be an array when a platform has several windows (Bluesky declares an hourly and a daily cap, G14, G16).
+All of them apply and the strictest wins per window. Always read the value through `providerPublishLimits` in `src/providers/limits.ts`,
+never directly. Every content and rate limit Docket enforces, with its source and whether it is approximate, is listed in
+[docs/limits.md](limits.md); add a row there when you declare a new one.
+
 ## 9. `refreshCredentials` and `needs_reauth`
 
 Implement `refreshCredentials({ account, credentials, now, signal })` for expiring tokens. The engine calls it ahead of
@@ -169,12 +204,28 @@ expiry. Return `{ ok: true, credentials, expiresAt }` to store the new credentia
 A failure marks the account `needs_reauth`: its targets stop publishing until the user reconnects.
 Do not throw for an expected refusal; return `ok: false`.
 
+**Refresh hold.** G11 parks the refresh lease until `retryAt` (up to 24 hours). A provider that both returns a transient `retryAt`
+and defines `needsRefresh` would see the publish-time refresh as `busy` and release its targets until the hold ends. If your
+platform has a "too young to renew" rule like Threads, either leave `needsRefresh` undefined or make it return false inside that
+window (Threads does not define it).
+
 A transient failure may carry `retryAt`. The scheduled refresh then parks the account's refresh lease until then (capped at 24 hours)
 instead of retrying every tick (G11). Threads uses this for a token younger than 24 hours, which the platform will not renew yet.
 
 Optional extras: `needsRefresh(credentials, now)` lets the engine renew ahead of a publish when the access token is about to expire
 (Bluesky: within 5 minutes of the JWT's `exp`). A failure with `transient: true` (and optionally `retryAt`) keeps the account
 `active` instead of marking `needs_reauth`. A successful result may carry `displayName`, which updates the account's name.
+
+## What the engine checks for you
+
+You do not re-implement these in a provider (G15):
+
+- **Publish-time validation.** On a target's first step the engine re-runs `validate` over the resolved content before reading
+  credentials. A post that was valid when scheduled but breaks a limit now (a deploy lowered it, an image changed) fails with
+  `Can't publish to <platform>: <message>` and no platform call.
+- **Pre-call failures are never ambiguous.** Anything that fails before a request is sent (validation, a missing credential, an
+  unreachable host) is a plain failure or retry, never `ambiguous`.
+- **Rate deferral.** A target over `defaultPublishLimit` waits for the window; it does not fail and does not reach `advance`.
 
 ## 10. Testing with mocked HTTP only
 
@@ -208,10 +259,10 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
   `com.atproto.server.createSession`, stores the session tokens, DID and handle, and drops the app password.
 - **Publish-time refresh.** `needsRefresh` is true within 5 minutes of the access JWT's expiry, which is the common case for an idle
   account, so the engine refreshes under a lease before `advance`. If the create call still answers `ExpiredToken`, the provider
-  returns `retryable_error` with `credentialsExpired: true` and the next tick refreshes. A refused refresh marks `needs_reauth`;
+  returns `retryable_error` with `credentialsExpired: true` and the engine refreshes in the same tick, then retries. A refused refresh marks `needs_reauth`;
   a 5xx or network failure is `transient`.
 - **Multi-step images.** `stepFor` uses `content.mediaCount`: a text post goes straight to `create_post` (`mayPublish`), a post with
-  images runs one non-publishing `upload_image` step per image (state holds `blob.ipld()` refs), then `create_post`.
+  images runs one non-publishing `upload_image` step per image (state holds each `BlobRef#toJSON()` result), then `create_post`.
 - **Outcomes.** Connection refused / DNS failure is `retryable_error`; 4xx on create is `fatal_error`; timeout, reset or an
   unparseable 2xx after sending `createRecord` is `ambiguous`; 429 uses `Retry-After` for `notBefore`.
 - **Dual text limit.** Posts are limited to 300 graphemes and 3000 UTF-8 bytes; `validate` reports both, and the byte overflow is

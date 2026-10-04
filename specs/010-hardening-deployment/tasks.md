@@ -163,9 +163,9 @@
 
 - [ ] T069 [US6] Write `tests/integration/docs/provider-guide.test.ts`: parse `src/providers/types.ts` with the installed `typescript` compiler API and fail if any provider-contract member (including G1–G14) is not mentioned in `docs/adding-a-provider.md`, or if a 004 F5 contradiction returns (D33)
 - [ ] T070 [US6] Refresh `docs/adding-a-provider.md` per contracts/docs-and-config.md §7: every required/optional member, capabilities and counting, connect strategies, step machine and results, limits with a pointer to `docs/limits.md`, refresh and `needs_reauth` (006 F7 note), no-secrets rule, mocked-HTTP testing, worked examples; resolve every 004 F5 contradiction
-- [ ] T071 [US6] Rewrite `README.md` in FR-039 order (features, quick start, configuration, architecture overview, links to docs, adding a provider, testing and contributing); link to `docs/deployment.md` instead of duplicating; every command and path must exist (D34)
-- [ ] T072 [US6] Add a README check to the docs tests: every relative link and every `pnpm` script it mentions resolves; run `pnpm vitest run tests/integration/docs`
-- [ ] T073 [US6] Complete the "010 — Hardening" section of `docs/decisions.md` with every decision, G14/G15 and judgement call made during the build (FR-041)
+- [X] T071 [US6] Rewrite `README.md` in FR-039 order (features, quick start, configuration, architecture overview, links to docs, adding a provider, testing and contributing); link to `docs/deployment.md` instead of duplicating; every command and path must exist (D34)
+- [X] T072 [US6] Add a README check to the docs tests: every relative link and every `pnpm` script it mentions resolves; run `pnpm vitest run tests/integration/docs`
+- [X] T073 [US6] Complete the "010 — Hardening" section of `docs/decisions.md` with every decision, G14/G15 and judgement call made during the build (FR-041)
 
 ---
 
