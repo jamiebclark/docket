@@ -127,7 +127,9 @@ describe("SC-012: no stored credentials in attempts, errors, summaries or listin
       for (const [i, postId] of postIds.entries()) {
         surfaces.push(JSON.stringify(await posts.getPost(scope, postId)));
         surfaces.push(JSON.stringify(await posts.listAttempts(scope, targetIds[i]!)));
+        surfaces.push(JSON.stringify(await posts.getPostView(scope, postId))); // post detail page (SC-011)
       }
+      surfaces.push(JSON.stringify(await posts.listPosts(scope, {})));
       surfaces.push(logged.join("\n"));
       const stored = await runCrossProject("test: scan stored rows for credentials", async () => {
         const db = testDb();
@@ -143,6 +145,52 @@ describe("SC-012: no stored credentials in attempts, errors, summaries or listin
     } finally {
       advance.mockRestore();
       spies.forEach((s) => s.mockRestore());
+    }
+  });
+});
+
+describe("SC-011: storage credentials never reach media results, logs or rendered output", () => {
+  it("keeps the access key and secret out of upload/library/delete results and logs", async () => {
+    const { TEST_S3_CONFIG, createMemoryStorage } = await import("../helpers/storage");
+    const { setStorageForTests } = await import("../../src/server/storage");
+    const media = await import("../../src/server/services/media");
+    const { png, corruptBytes } = await import("../helpers/images");
+    const { postsEnv } = await import("../helpers/posts-env");
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { MediaCard } = await import("../../src/components/media/MediaCard");
+
+    const logged: string[] = [];
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation((...args: unknown[]) => {
+        logged.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+      }),
+    );
+    const storage = createMemoryStorage();
+    // Every object operation fails with a message that echoes the credentials, as an SDK error could.
+    const leak = `AccessDenied key=${TEST_S3_CONFIG.accessKeyId} secret=${TEST_S3_CONFIG.secretAccessKey}`;
+    setStorageForTests(storage);
+    try {
+      const { scope } = await postsEnv();
+      const ok = await media.uploadMedia(scope, { file: { name: "a.png", bytes: await png() } });
+      const rejected = await media.uploadMedia(scope, { file: { name: "b.jpg", bytes: corruptBytes() } });
+      if (!ok.ok) throw new Error("upload failed");
+      storage.delete = async () => {
+        throw new Error(leak);
+      };
+      const list = await media.listMedia(scope);
+      const detail = await media.getMedia(scope, ok.asset.id);
+      const impact = await media.deleteMediaImpact(scope, ok.asset.id);
+      const deleted = await media.deleteMedia(scope, ok.asset.id);
+      const html = renderToStaticMarkup(createElement(MediaCard, { item: list.items[0]! }));
+      const everything = JSON.stringify([ok, rejected, list, detail, impact, deleted]) + html + logged.join("\n");
+      for (const secret of [TEST_S3_CONFIG.accessKeyId, TEST_S3_CONFIG.secretAccessKey]) {
+        expect(everything).not.toContain(secret);
+      }
+      expect(logged.length).toBeGreaterThan(0);
+    } finally {
+      setStorageForTests(undefined);
+      for (const s of spies) s.mockRestore();
     }
   });
 });
