@@ -2,11 +2,37 @@ import { randomUUID } from "node:crypto";
 import type { RefreshResult, SocialProvider } from "../../providers/types";
 import * as clock from "../dal/clock";
 import { forSchedulerProject, type ClaimedAccount } from "../dal/scheduler";
+import { emitEvent } from "../services/webhooks/emit";
 import { decryptCredentials, encryptCredentials } from "../services/accounts";
 import type { SchedulerConfig } from "./config";
 import { redact, secretValues } from "./redact";
 
 type Repos = ReturnType<typeof forSchedulerProject>;
+
+type RefreshPatch = Parameters<Repos["accounts"]["recordRefresh"]>[2];
+
+/** `recordRefresh`; a move from `active` to `needs_reauth` emits `account.needs_reauth` in the same transaction. Returns whether the row changed. */
+export async function recordRefreshEmitting(repos: Repos, id: string, token: string, patch: RefreshPatch): Promise<boolean> {
+  if (patch.status !== "needs_reauth") return (await repos.accounts.recordRefresh(id, token, patch)).changed;
+  return repos.transaction(async (tx) => {
+    const r = await tx.accounts.recordRefresh(id, token, patch);
+    if (r.changed && r.previousStatus === "active") await emitEvent(tx, "account.needs_reauth", { accountId: id });
+    return r.changed;
+  });
+}
+
+/** `markCredentialsInvalid` with the same emission rule. */
+export async function markInvalidEmitting(
+  repos: Repos,
+  id: string,
+  opts: { expectedCiphertext: string | null; reason: string },
+): Promise<boolean> {
+  return repos.transaction(async (tx) => {
+    const r = await tx.accounts.markCredentialsInvalid(id, opts);
+    if (r.changed && r.previousStatus === "active") await emitEvent(tx, "account.needs_reauth", { accountId: id });
+    return r.changed;
+  });
+}
 
 export type AppliedRefresh =
   | { kind: "refreshed"; credentials: unknown; ciphertext: string }
@@ -31,7 +57,7 @@ export async function applyRefreshResult(
   const at = await clock.now();
   if (result.ok) {
     const ciphertext = encryptCredentials(account.id, result.credentials);
-    const kept = await repos.accounts.recordRefresh(account.id, token, {
+    const kept = await recordRefreshEmitting(repos, account.id, token, {
       credentialsEncrypted: ciphertext,
       credentialsExpiresAt: result.expiresAt,
       lastRefreshedAt: at,
@@ -49,7 +75,7 @@ export async function applyRefreshResult(
       opts.holdTransient && result.retryAt && result.retryAt.getTime() > at.getTime()
         ? new Date(Math.min(result.retryAt.getTime(), at.getTime() + MAX_TRANSIENT_HOLD_MS))
         : undefined;
-    const kept = await repos.accounts.recordRefresh(account.id, token, {
+    const kept = await recordRefreshEmitting(repos, account.id, token, {
       lastError: `Renewing credentials failed temporarily: ${reason}`,
       ...(hold ? { refreshLeaseUntil: hold } : {}),
     });
@@ -57,7 +83,7 @@ export async function applyRefreshResult(
     return { kind: "transient", reason, ...(result.retryAt ? { retryAt: result.retryAt } : {}) };
   }
   const reason = redact(result.reason, secrets);
-  const kept = await repos.accounts.recordRefresh(account.id, token, { status: "needs_reauth", lastError: reason });
+  const kept = await recordRefreshEmitting(repos, account.id, token, { status: "needs_reauth", lastError: reason });
   return kept ? { kind: "refused", reason } : { kind: "lost" };
 }
 

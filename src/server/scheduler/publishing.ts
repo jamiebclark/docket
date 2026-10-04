@@ -18,7 +18,7 @@ import { resolvePublishMedia } from "../services/media-variants";
 import { deferralTime, effectiveLimits } from "./limits";
 import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
-import { refreshForPublish } from "./credentials";
+import { markInvalidEmitting, refreshForPublish } from "./credentials";
 import { applyStepResult, recordStepResult } from "./record";
 
 export interface PublishingCounts {
@@ -386,8 +386,7 @@ async function execute(
     await refreshForPublish({ projectId: target.projectId, account, provider, seenCiphertext, config }).catch(() => undefined);
   }
   if (credentialsInvalidReason !== null) {
-    await repos.accounts
-      .markCredentialsInvalid(account.id, { expectedCiphertext: seenCiphertext, reason: credentialsInvalidReason })
+    await markInvalidEmitting(repos, account.id, { expectedCiphertext: seenCiphertext, reason: credentialsInvalidReason })
       .catch(() => console.error(`Docket: could not flag account ${account.providerKey} as needing reconnect`));
   }
   if (!applied) {

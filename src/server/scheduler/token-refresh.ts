@@ -4,7 +4,7 @@ import * as clock from "../dal/clock";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { claimRefreshAccounts, forSchedulerProject } from "../dal/scheduler";
 import { decryptCredentials } from "../services/accounts";
-import { applyRefreshResult } from "./credentials";
+import { applyRefreshResult, recordRefreshEmitting } from "./credentials";
 import type { SchedulerConfig } from "./config";
 import { redact, secretValues } from "./redact";
 
@@ -46,7 +46,7 @@ export async function runTokenRefresh(opts: {
     const repos = forSchedulerProject(account.projectId);
     if ((await clock.now()).getTime() + config.providerTimeoutMs > deadline) {
       // No budget left: give the lease back so another tick can take it.
-      await repos.accounts.recordRefresh(account.id, token, {});
+      await recordRefreshEmitting(repos, account.id, token, {});
       continue;
     }
     let secrets: string[] = [];
@@ -68,7 +68,7 @@ export async function runTokenRefresh(opts: {
     } catch (error) {
       const message = redact(error instanceof Error ? error.message : "Refreshing credentials failed.", secrets);
       try {
-        const kept = await repos.accounts.recordRefresh(account.id, token, { status: "needs_reauth", lastError: message });
+        const kept = await recordRefreshEmitting(repos, account.id, token, { status: "needs_reauth", lastError: message });
         if (kept) counts.failed++;
       } catch {
         // The lease expires on its own; the next tick retries.
