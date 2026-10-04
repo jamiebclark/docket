@@ -1,8 +1,10 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
 import type { ActionResult } from "@/lib/action-result";
 import { regeneratePost } from "@/server/services/generation/regenerate";
+import { planSeries, startSeries, writeSeriesPost } from "@/server/services/generation/series";
 import { generateSingle, type GenerateResult } from "@/server/services/generation/single";
 import * as posts from "@/server/services/posts";
 import { runAction } from "../run-action";
@@ -36,5 +38,25 @@ export async function updatePostVariantsAction(
     return { problems };
   });
   if (result.ok) refresh();
+  return result;
+}
+
+/** Planning saves nothing; a model failure is data, like single mode. */
+export async function planSeriesAction(slug: string, input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof planSeries>>>> {
+  return runAction(slug, (scope) => planSeries(scope, input));
+}
+
+export async function startSeriesAction(slug: string, input: unknown): Promise<ActionResult<{ seriesId: string }>> {
+  const result = await runAction(slug, (scope) => startSeries(scope, input));
+  if (result.ok) redirect(`/p/${slug}/generate/series/${result.data.seriesId}`);
+  return result;
+}
+
+export async function writeSeriesPostAction(
+  slug: string,
+  input: { seriesId: string; position: number },
+): Promise<ActionResult<GenerateResult & { position: number }>> {
+  const result = await runAction(slug, (scope) => writeSeriesPost(scope, input?.seriesId, input?.position));
+  if (result.ok && result.data.ok) refresh();
   return result;
 }

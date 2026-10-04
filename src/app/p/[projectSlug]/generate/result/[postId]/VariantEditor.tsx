@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState, useTransition } from "reac
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { counterText, fetchCheck, groupIssues, isOverLimit, SEVERITY_LABEL, type CheckResult } from "../../../compose/composer-logic";
+import { approveAction } from "../../../review/actions";
 import { updatePostVariantsAction } from "../../actions";
 import { CHECK_DEBOUNCE_MS, cardCheck, checkInputFor, createDebounce, type VariantCard } from "./variant-logic";
 
@@ -14,11 +15,13 @@ export interface VariantEditorProps {
   cards: VariantCard[];
   mediaIds: string[];
   canEdit: boolean;
+  /** Review-only: offers **Save and approve**, which approves the post with these texts. */
+  reviewing?: boolean;
   /** A check result to start from (server rendering and tests). */
   initialCheck?: CheckResult | null;
 }
 
-export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, initialCheck = null }: VariantEditorProps) {
+export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewing = false, initialCheck = null }: VariantEditorProps) {
   const router = useRouter();
   const uid = useId();
   const [texts, setTexts] = useState(() => Object.fromEntries(cards.map((c) => [c.providerKey, c.text])));
@@ -32,6 +35,18 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, initialC
     const d = debounce.current;
     return () => d.cancel();
   }, []);
+
+  // Show `used / limit` and issues from the first render, not only after an edit (F2).
+  useEffect(() => {
+    if (initialCheck) return;
+    let cancelled = false;
+    void fetchCheck(slug, checkInputFor(postId, cards, mediaIds)).then((r) => {
+      if (r && !cancelled) setCheck(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, postId, cards, mediaIds, initialCheck]);
 
   function edit(providerKey: string, text: string) {
     const next = { ...texts, [providerKey]: text };
@@ -51,6 +66,28 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, initialC
       });
       if (!r.ok) return setMessage(`Error: ${r.message}`);
       setMessage(r.data.problems.length > 0 ? "Saved. Some versions still have problems." : "Saved.");
+      router.refresh();
+    });
+  }
+
+  function saveAndApprove() {
+    start(async () => {
+      const r = await approveAction(slug, {
+        postId,
+        edits: live.map((c) => ({ providerKey: c.providerKey, text: c.text })),
+      });
+      if (!r.ok) return setMessage(`Error: ${r.message}`);
+      if (!r.data.ok) {
+        setMessage(`Error: ${r.data.message}`);
+        if (r.data.code === "already_reviewed") router.refresh();
+        return;
+      }
+      const unscheduled = r.data.queued.filter((q) => !q.ok);
+      setMessage(
+        unscheduled.length > 0
+          ? `Approved. Not scheduled: ${unscheduled.map((q) => (q.ok ? "" : q.message)).join(" ")}`
+          : "Approved.",
+      );
       router.refresh();
     });
   }
@@ -102,10 +139,15 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, initialC
         );
       })}
       {canEdit ? (
-        <div className="flex justify-end">
-          <Button onClick={save} pending={pending} pendingLabel="Saving…">
+        <div className="flex justify-end gap-2">
+          <Button variant={reviewing ? "secondary" : "primary"} onClick={save} pending={pending} pendingLabel="Saving…">
             Save
           </Button>
+          {reviewing ? (
+            <Button onClick={saveAndApprove} pending={pending} pendingLabel="Approving…">
+              Save and approve
+            </Button>
+          ) : null}
         </div>
       ) : null}
       <LiveRegion message={message} />

@@ -8,7 +8,10 @@ import { LiveRegion } from "@/components/ui/LiveRegion";
 import { Select } from "@/components/ui/Select";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { MediaView } from "@/server/services/media";
-import { generateSingleAction } from "./actions";
+import { generateSingleAction, planSeriesAction } from "./actions";
+import { SeriesPlanEditor } from "./SeriesPlanEditor";
+import { SERIES_COUNT_MAX, SERIES_COUNT_MIN, type Angle } from "./series-logic";
+import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "./PolicyPicker";
 import {
   APPROVAL_LABEL,
   SCHEDULING_LABEL,
@@ -30,10 +33,14 @@ export interface VoiceOption {
 
 export interface GenerateFormProps {
   slug: string;
+  /** `series` plans N angles first; the default writes one post. */
+  mode?: "single" | "series";
   profiles: VoiceOption[];
   accounts: AccountOption[];
   defaults: { approval: keyof typeof APPROVAL_LABEL; scheduling: keyof typeof SCHEDULING_LABEL };
   mediaEnabled: boolean;
+  /** The user's `generation:auto_approve` capability. */
+  canAutoApprove?: boolean;
   /** Starting state for server rendering and tests. */
   initial?: { pending?: boolean; error?: string };
 }
@@ -75,7 +82,7 @@ function TextArea(props: {
   );
 }
 
-export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled, initial }: GenerateFormProps) {
+export function GenerateForm({ slug, mode = "single", profiles, accounts, defaults, mediaEnabled, canAutoApprove = false, initial }: GenerateFormProps) {
   const router = useRouter();
   const uid = useId();
   const [voiceProfileId, setVoiceProfileId] = useState(profiles.find((p) => p.isDefault)?.id ?? profiles[0]?.id ?? "");
@@ -87,6 +94,9 @@ export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled,
   const [requestId, setRequestId] = useState("");
   const [error, setError] = useState(initial?.error ?? "");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [policy, setPolicy] = useState<PolicyChoice>({ approval: null, scheduling: null, confirmUnreviewedQueue: false });
+  const [count, setCount] = useState(5);
+  const [plan, setPlan] = useState<Angle[] | null>(null);
   const [pending, start] = useTransition();
   const busy = pending || initial?.pending === true;
 
@@ -94,19 +104,45 @@ export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled,
   const maxImages = maxImagesFor(selected);
   const needImage = platformsNeedingImage(selected, media.length);
 
+  const series = mode === "series";
+  const request = {
+    voiceProfileId,
+    brief,
+    sourceText: sourceText || null,
+    instructions: instructions || null,
+    targetAccountIds: chosen,
+    mediaIds: media.map((m) => m.id),
+    approval: policy.approval,
+    scheduling: policy.scheduling,
+    confirmUnreviewedQueue: isUnreviewedQueue(effectivePair(defaults, policy)) && policy.confirmUnreviewedQueue,
+  };
+
+  function submitPlan() {
+    setError("");
+    setFieldErrors({});
+    setPlan(null);
+    start(async () => {
+      const result = await planSeriesAction(slug, { ...request, count });
+      if (result.ok && result.data.ok) {
+        setPlan(result.data.angles);
+      } else if (!result.ok) {
+        setError(result.message);
+        setFieldErrors(result.fieldErrors ?? {});
+      } else if (!result.data.ok) {
+        setError(result.data.message);
+      }
+    });
+  }
+
   function submit(id: string) {
+    if (series) return submitPlan();
     setRequestId(id);
     setError("");
     setFieldErrors({});
     start(async () => {
       const result = await generateSingleAction(slug, {
         requestId: id,
-        voiceProfileId,
-        brief,
-        sourceText: sourceText || null,
-        instructions: instructions || null,
-        targetAccountIds: chosen,
-        mediaIds: media.map((m) => m.id),
+        ...request,
       });
       if (result.ok && result.data.ok) {
         router.push(`/p/${slug}/generate/result/${result.data.postId}`);
@@ -123,15 +159,21 @@ export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled,
   }
 
   return (
+    <>
     <form
       className="flex max-w-2xl flex-col gap-5"
-      aria-label="Generate a post"
+      aria-label={series ? "Plan a series" : "Generate a post"}
       onSubmit={(e) => {
         e.preventDefault();
         if (!busy) submit(requestId || freshRequestId());
       }}
     >
       <input type="hidden" name="requestId" value={requestId} />
+      {isUnreviewedQueue(defaults) ? (
+        <p role="note" className="rounded-md border-2 border-amber-700 p-2 text-sm font-semibold dark:border-amber-400">
+          This project is set to: {UNREVIEWED_QUEUE_LABEL}.
+        </p>
+      ) : null}
 
       <Select
         id={`${uid}-voice`}
@@ -152,7 +194,7 @@ export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled,
       <TextArea
         id={`${uid}-brief`}
         label="Brief"
-        hint="What the post is about. Required."
+        hint={series ? "What the series is about. Required." : "What the post is about. Required."}
         value={brief}
         max={LIMITS.brief}
         rows={4}
@@ -160,6 +202,27 @@ export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled,
         onChange={setBrief}
       />
       {fieldErrors.brief ? <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.brief}</p> : null}
+
+      {series ? (
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`${uid}-count`} className="text-sm font-medium">
+            Number of posts
+          </label>
+          <p className="text-xs text-foreground/70">
+            {SERIES_COUNT_MIN} to {SERIES_COUNT_MAX}. You can edit the plan before anything is written.
+          </p>
+          <input
+            id={`${uid}-count`}
+            type="number"
+            min={SERIES_COUNT_MIN}
+            max={SERIES_COUNT_MAX}
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            className="w-24 rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+          />
+          {fieldErrors.count ? <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.count}</p> : null}
+        </div>
+      ) : null}
 
       <details>
         <summary className="cursor-pointer text-sm font-medium">Add source text</summary>
@@ -234,9 +297,14 @@ export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled,
         ))}
       </fieldset>
 
-      <p className="text-sm text-foreground/80">
-        Review: {APPROVAL_LABEL[defaults.approval]}. Scheduling: {SCHEDULING_LABEL[defaults.scheduling]}. (Project defaults.)
-      </p>
+      <PolicyPicker
+        idPrefix={`${uid}-policy`}
+        defaults={defaults}
+        canAutoApprove={canAutoApprove}
+        value={policy}
+        onChange={setPolicy}
+        error={fieldErrors.confirmUnreviewedQueue ?? fieldErrors.approval}
+      />
 
       {error ? (
         <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
@@ -246,13 +314,20 @@ export function GenerateForm({ slug, profiles, accounts, defaults, mediaEnabled,
           </Button>
         </div>
       ) : null}
-      <LiveRegion message={busy ? "Generating…" : error ? `Error: ${error}` : ""} />
+      <LiveRegion message={busy ? (series ? "Planning…" : "Generating…") : error ? `Error: ${error}` : ""} />
 
       <div className="flex justify-end">
-        <Button type="submit" pending={busy} pendingLabel="Generating…" disabled={busy || chosen.length === 0}>
-          Generate
+        <Button
+          type="submit"
+          pending={busy}
+          pendingLabel={series ? "Planning…" : "Generating…"}
+          disabled={busy || chosen.length === 0}
+        >
+          {series ? "Plan series" : "Generate"}
         </Button>
       </div>
     </form>
+    {plan ? <SeriesPlanEditor slug={slug} request={{ ...request, count }} initialAngles={plan} /> : null}
+    </>
   );
 }

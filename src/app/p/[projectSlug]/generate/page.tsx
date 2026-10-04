@@ -109,17 +109,15 @@ export default async function GeneratePage({ params, searchParams }: Props) {
   return (
     <section className="flex flex-col gap-4">
       {heading}
-      {mode === "series" ? (
-        <EmptyState message="Series mode is coming soon. For now, generate a single post." />
-      ) : (
-        <GenerateForm
-          slug={projectSlug}
-          profiles={profiles.map((p) => ({ id: p.id, name: p.name, isDefault: p.id === defaultId }))}
-          accounts={options}
-          defaults={{ approval: scope.project.defaultApprovalPolicy, scheduling: scope.project.defaultSchedulingPolicy }}
-          mediaEnabled={getStorage() !== null}
-        />
-      )}
+      <GenerateForm
+        slug={projectSlug}
+        mode={mode}
+        profiles={profiles.map((p) => ({ id: p.id, name: p.name, isDefault: p.id === defaultId }))}
+        accounts={options}
+        defaults={{ approval: scope.project.defaultApprovalPolicy, scheduling: scope.project.defaultSchedulingPolicy }}
+        mediaEnabled={getStorage() !== null}
+        canAutoApprove={scope.can({ generation: ["auto_approve"] })}
+      />
       {failures.length > 0 ? (
         <section aria-labelledby="recent-failures" className="flex max-w-2xl flex-col gap-2">
           <h2 id="recent-failures" className="text-lg font-semibold">
