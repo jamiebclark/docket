@@ -26,6 +26,16 @@ export class ConflictError extends Error {
   }
 }
 
+/** `message` is shown to the user verbatim; `field` attaches it to a form field. */
+export class PolicyNotAllowedError extends Error {
+  readonly field?: string;
+  constructor(message: string, field?: string) {
+    super(message);
+    this.name = "PolicyNotAllowedError";
+    if (field !== undefined) this.field = field;
+  }
+}
+
 export class LastOwnerError extends Error {
   constructor(message = "A project must keep at least one owner.") {
     super(message);
