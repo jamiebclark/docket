@@ -79,3 +79,48 @@ export class ValidationIssuesError extends Error {
     this.issues = issues;
   }
 }
+
+/** The API key is missing, malformed, unknown, revoked, expired, or its project is gone. Maps to 401. */
+export class InvalidApiKeyError extends Error {
+  constructor(message = "Invalid API key") {
+    super(message);
+    this.name = "InvalidApiKeyError";
+  }
+}
+
+/** Items cannot be added to a job that is closed, finished or cancelled. */
+export class JobClosedError extends Error {
+  constructor(message = "This job is closed and accepts no more items.") {
+    super(message);
+    this.name = "JobClosedError";
+  }
+}
+
+export type ReservedMediaIssue = { index: number; mediaId: string; reason: "reserved" | "deleted" | "unknown" };
+
+/** Images in a job request are held by another job, deleted, or not in this project. */
+export class MediaReservedError extends Error {
+  readonly items: ReservedMediaIssue[];
+  constructor(items: ReservedMediaIssue[], message = "Some images cannot be used by this job.") {
+    super(message);
+    this.name = "MediaReservedError";
+    this.items = items;
+  }
+}
+
+export class JobItemLimitError extends Error {
+  constructor(message = "A job can have at most 500 items.") {
+    super(message);
+    this.name = "JobItemLimitError";
+  }
+}
+
+/** Fetching an image by URL failed (blocked address, redirect loop, timeout, too large, not an image). */
+export class UrlFetchError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "UrlFetchError";
+    this.code = code;
+  }
+}

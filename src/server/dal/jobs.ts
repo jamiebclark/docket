@@ -22,6 +22,9 @@ export type JobPatch = Partial<
     | "finishedAt"
     | "cancelledAt"
     | "cancelledByUserId"
+    | "cancelledByApiKeyId"
+    | "open"
+    | "closedAt"
     | "lastClaimedAt"
   >
 >;

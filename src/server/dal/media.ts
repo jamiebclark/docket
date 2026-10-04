@@ -20,6 +20,7 @@ export type NewMedia = Pick<typeof mediaAssets.$inferInsert, "storageKey" | "pub
       | "height"
       | "altText"
       | "createdByUserId"
+      | "createdByApiKeyId"
       | "thumbnailStorageKey"
       | "thumbnailUrl"
       | "originalFilename"

@@ -45,6 +45,8 @@ export interface TargetsRepo {
   update(id: string, patch: TargetPatch, guard?: TargetGuard): Promise<TargetRecord | null>;
   /** Instants held on the account in `[from, to]`. */
   heldInstants(accountId: string, from: Date, to: Date): Promise<Date[]>;
+  /** As `heldInstants`, with the holding target and post, for the API's free/taken view. */
+  heldOccurrences(accountId: string, from: Date, to: Date): Promise<{ at: Date; targetId: string; postId: string }[]>;
   /**
    * Takes the occurrence for the target inside a savepoint. `false` when another target holds it
    * (unique violation `23505`); the surrounding transaction stays usable. Also stamps the schedule
@@ -145,6 +147,21 @@ export function createTargetsRepo(db: Database, projectId: string): TargetsRepo 
           ),
         );
       return rows.map((r) => r.at!);
+    },
+    async heldOccurrences(accountId, from, to) {
+      const rows = await db
+        .select({ at: postTargets.slotOccurrenceAt, targetId: postTargets.id, postId: postTargets.postId })
+        .from(postTargets)
+        .where(
+          and(
+            eq(postTargets.projectId, projectId),
+            eq(postTargets.socialAccountId, accountId),
+            isNotNull(postTargets.slotOccurrenceAt),
+            gte(postTargets.slotOccurrenceAt, from),
+            lte(postTargets.slotOccurrenceAt, to),
+          ),
+        );
+      return rows.map((r) => ({ at: r.at!, targetId: r.targetId, postId: r.postId }));
     },
     async tryHoldOccurrence(targetId, instant, slotId) {
       try {

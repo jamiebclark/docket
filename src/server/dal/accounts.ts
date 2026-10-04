@@ -51,7 +51,7 @@ export interface AccountsRepo {
    * Internal (token refresh): applies `patch` and clears the refresh lease, only while `token` still holds it.
    * Returns false when the lease was lost.
    */
-  recordRefresh(id: string, token: string, patch: RefreshPatch): Promise<boolean>;
+  recordRefresh(id: string, token: string, patch: RefreshPatch): Promise<StatusChange>;
   /**
    * Internal (publish-time refresh): takes the refresh lease with one conditional UPDATE, only while the stored
    * ciphertext still equals `expectedCiphertext`. `changed` = someone refreshed; `busy` = leased; `unavailable` = removed, inactive, or no credentials.
@@ -66,9 +66,15 @@ export interface AccountsRepo {
    * ciphertext still equals `expectedCiphertext` and the account is not removed. One conditional UPDATE; no lock held.
    * Returns whether the row changed.
    */
-  markCredentialsInvalid(id: string, opts: { expectedCiphertext: string | null; reason: string }): Promise<boolean>;
+  markCredentialsInvalid(id: string, opts: { expectedCiphertext: string | null; reason: string }): Promise<StatusChange>;
   /** Internal: used only by the scheduler and token refresh. */
   getCredentialsCiphertext(id: string): Promise<string | null>;
+}
+
+/** `changed` = a row was updated; `previousStatus` = the status it had before (read under a row lock, so call inside a transaction). */
+export interface StatusChange {
+  changed: boolean;
+  previousStatus: "active" | "needs_reauth" | null;
 }
 
 function strip(row: AccountRow): AccountRecord {
@@ -78,6 +84,15 @@ function strip(row: AccountRow): AccountRecord {
 
 export function createAccountsRepo(db: Database, projectId: string): AccountsRepo {
   const mine = (id: string) => and(eq(socialAccounts.projectId, projectId), eq(socialAccounts.id, id));
+  const lockStatus = async (id: string): Promise<StatusChange["previousStatus"]> => {
+    const [row] = await db
+      .select({ status: socialAccounts.status })
+      .from(socialAccounts)
+      .where(mine(id))
+      .limit(1)
+      .for("update");
+    return row?.status === "active" || row?.status === "needs_reauth" ? row.status : null;
+  };
   return {
     async countUnpublishedPosts(accountId) {
       const [row] = await db
@@ -211,6 +226,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .where(mine(id));
     },
     async recordRefresh(id, token, patch) {
+      const previousStatus = await lockStatus(id);
       const rows = await db
         .update(socialAccounts)
         // The table requires lease_until and lease_owner to be both set or both null, so a held account keeps
@@ -218,7 +234,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .set({ ...patch, refreshLeaseUntil: patch.refreshLeaseUntil ?? null, refreshLeaseOwner: patch.refreshLeaseUntil ? token : null })
         .where(and(mine(id), eq(socialAccounts.refreshLeaseOwner, token)))
         .returning({ id: socialAccounts.id });
-      return rows.length > 0;
+      return { changed: rows.length > 0, previousStatus: rows.length > 0 ? previousStatus : null };
     },
     async acquireRefreshLease(id, token, opts) {
       const leaseUntil = new Date(opts.now.getTime() + opts.leaseMs);
@@ -250,6 +266,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
       return row.c !== opts.expectedCiphertext ? { kind: "changed" } : { kind: "busy" };
     },
     async markCredentialsInvalid(id, opts) {
+      const previousStatus = await lockStatus(id);
       const rows = await db
         .update(socialAccounts)
         .set({ status: "needs_reauth", lastError: opts.reason })
@@ -262,7 +279,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
           ),
         )
         .returning({ id: socialAccounts.id });
-      return rows.length > 0;
+      return { changed: rows.length > 0, previousStatus: rows.length > 0 ? previousStatus : null };
     },
     async getCredentialsCiphertext(id) {
       const [row] = await db

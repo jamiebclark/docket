@@ -2,12 +2,22 @@ import { and, eq } from "drizzle-orm";
 import { roles, type PermissionRequest, type Role } from "../auth/access";
 import { getDb, type Database } from "../db/client";
 import { runCrossProject } from "../db/cross-project";
-import { member, projects } from "../db/schema";
+import { member, projects, type ApiKeyPermission } from "../db/schema";
 import { createAccountsRepo, type AccountsRepo } from "./accounts";
 import { createAttemptsRepo, type AttemptsRepo } from "./attempts";
 import { createAuditRepo, type AuditRepo } from "./audit";
 import { createConnectAttemptsRepo, type ConnectAttemptsRepo } from "./connect-attempts";
-import { ForbiddenError, NotFoundError } from "./errors";
+import {
+  countRequest,
+  createApiKeysRepo,
+  findActiveKeyByHash,
+  hashApiKey,
+  isWellFormedApiKey,
+  type ApiKeysRepo,
+} from "./api-keys";
+import { createIdempotencyRepo, type IdempotencyRepo } from "./idempotency";
+import { createWebhooksRepo, type WebhooksRepo } from "./webhooks";
+import { ForbiddenError, InvalidApiKeyError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
 import { createJobItemsRepo, createJobsRepo, type JobItemsRepo, type JobsRepo } from "./jobs";
 import { createMediaRepo, type MediaRepo } from "./media";
@@ -31,7 +41,54 @@ export interface SessionLike {
 export type ApprovalPolicy = (typeof projects.$inferSelect)["defaultApprovalPolicy"];
 export type SchedulingPolicy = (typeof projects.$inferSelect)["defaultSchedulingPolicy"];
 
+/** Who is acting. Members and the job runner are the 007/008 actors; an API key is this entry's. */
+export type ScopeActor =
+  | { kind: "member" }
+  | { kind: "job_runner" }
+  | { kind: "api_key"; apiKeyId: string; name: string; permissions: readonly ApiKeyPermission[] };
+
+/** What a key permission lets `can()` answer true for (contracts/services.md). */
+// A permission that writes also sees what it wrote: the services read back, validate and check accounts, slots,
+// images and voices, so a key holding only `write_posts` still works (decisions.md, 009 API key grants).
+const SEES = {
+  project: ["view"],
+  account: ["view"],
+  slot: ["view"],
+  media: ["view"],
+  post: ["view"],
+  voice: ["view"],
+} as const satisfies PermissionRequest;
+
+const KEY_GRANTS: Record<ApiKeyPermission, PermissionRequest> = {
+  read: {
+    project: ["view"],
+    member: ["view"],
+    account: ["view"],
+    slot: ["view"],
+    media: ["view"],
+    post: ["view"],
+    voice: ["view"],
+  },
+  write_posts: { ...SEES, media: ["view", "edit"], post: ["view", "edit", "schedule"] },
+  generate: { ...SEES, generation: ["run"], post: ["view", "edit"] },
+  manage_jobs: { ...SEES, generation: ["run"], post: ["view", "edit"] },
+  auto_approve: { generation: ["auto_approve"] },
+};
+
+function keyCan(permissions: readonly ApiKeyPermission[], request: PermissionRequest): boolean {
+  const entries = Object.entries(request) as [string, readonly string[]][];
+  return entries.every(([resource, actions]) =>
+    actions.every((action) =>
+      permissions.some((p) => {
+        const granted = (KEY_GRANTS[p] as Record<string, readonly string[] | undefined>)[resource];
+        return granted?.includes(action) ?? false;
+      }),
+    ),
+  );
+}
+
 export interface ProjectScope {
+  readonly actor: ScopeActor;
   readonly project: {
     id: string;
     slug: string;
@@ -61,6 +118,9 @@ export interface ProjectScope {
   readonly generationFailures: GenerationFailuresRepo;
   readonly jobs: JobsRepo;
   readonly jobItems: JobItemsRepo;
+  readonly apiKeys: ApiKeysRepo;
+  readonly idempotency: IdempotencyRepo;
+  readonly webhooks: WebhooksRepo;
   readonly projects: {
     get(): Promise<ProjectRecord | null>;
     setDefaultVoiceProfile(profileId: string | null): Promise<void>;
@@ -115,13 +175,18 @@ export function createSchedulingRepos(exec: Database, projectId: string) {
     posts: createPostsRepo(exec, projectId),
     targets: createTargetsRepo(exec, projectId),
     attempts: createAttemptsRepo(exec, projectId),
+    webhooks: createWebhooksRepo(exec, projectId),
   };
 }
 
-function buildScope(exec: Database, data: ScopeData): ProjectScope {
+function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind: "member" }): ProjectScope {
   const scope: ProjectScope = {
     ...data,
-    can: (request) => roles[data.membership.role].authorize(request as never).success,
+    actor,
+    can:
+      actor.kind === "api_key"
+        ? (request) => keyCan(actor.permissions, request)
+        : (request) => roles[data.membership.role].authorize(request as never).success,
     audit: createAuditRepo(exec, data.project.id),
     members: createMembersRepo(exec, data.project.id),
     invitations: createInvitationsRepo(exec, data.project.id),
@@ -133,6 +198,8 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
     generationFailures: createGenerationFailuresRepo(exec, data.project.id),
     jobs: createJobsRepo(exec, data.project.id),
     jobItems: createJobItemsRepo(exec, data.project.id),
+    apiKeys: createApiKeysRepo(exec, data.project.id),
+    idempotency: createIdempotencyRepo(exec, data.project.id),
     ...createSchedulingRepos(exec, data.project.id),
     projects: {
       get: () => getProject(data.project.id, exec),
@@ -148,9 +215,15 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
           // snapshot taken before the lock was granted and miss a concurrent removal or demotion.
           await txExec.select({ id: projects.id }).from(projects).where(projectId).for("update");
         }
+        if (actor.kind === "api_key") {
+          // A revoked or expired key stops working mid-request: its own statement, like the lock above.
+          const valid = await createApiKeysRepo(txExec, data.project.id).isValid(actor.apiKeyId);
+          if (!valid) throw new InvalidApiKeyError();
+          return fn(buildScope(txExec, data, actor));
+        }
         // The job runner has no session: its membership is fixed, never re-resolved (research D11).
         const fresh = data.membership.memberId === JOB_RUNNER_MEMBER ? data : await resolve(txExec, data.membership.userId, projectId);
-        return fn(buildScope(txExec, fresh));
+        return fn(buildScope(txExec, fresh, actor));
       });
     },
   };
@@ -189,7 +262,45 @@ export async function forJobRunner(projectId: string, actorUserId: string | null
   );
   const project = rows[0];
   if (!project) throw new NotFoundError();
-  return buildScope(db, { project, membership: { memberId: JOB_RUNNER_MEMBER, userId: actorUserId ?? "", role: "editor" } });
+  return buildScope(
+    db,
+    { project, membership: { memberId: JOB_RUNNER_MEMBER, userId: actorUserId ?? "", role: "editor" } },
+    { kind: "job_runner" },
+  );
+}
+
+/**
+ * Authenticates a raw API key and counts the request against its rate limit (research D4).
+ * Throws InvalidApiKeyError for anything that is not an active key. The scope acts as an editor whose
+ * `can()` is narrowed to the key's permissions.
+ */
+export async function forApiKey(
+  rawKey: string,
+): Promise<{ scope: ProjectScope; rate: { count: number; limit: number; resetAt: Date } }> {
+  if (!isWellFormedApiKey(rawKey)) throw new InvalidApiKeyError();
+  const db = getDb();
+  const found = await crossProject("api: authenticate key", () => findActiveKeyByHash(db, hashApiKey(rawKey)));
+  if (!found) throw new InvalidApiKeyError();
+  const { key, project } = found;
+  const rate = await countRequest(db, project.id, key.id);
+  if (!rate) throw new InvalidApiKeyError();
+  const scope = buildScope(
+    db,
+    { project, membership: { memberId: "api-key:" + key.id, userId: key.createdByUserId ?? "", role: "editor" } },
+    { kind: "api_key", apiKeyId: key.id, name: key.name, permissions: key.permissions },
+  );
+  return { scope, rate };
+}
+
+/** Columns that record who made a row: the member, or the key (with the key's creator as the user). */
+export function actorColumns(scope: Pick<ProjectScope, "actor" | "membership">): {
+  createdByUserId: string | null;
+  createdByApiKeyId: string | null;
+} {
+  return {
+    createdByUserId: scope.membership.userId || null,
+    createdByApiKeyId: scope.actor.kind === "api_key" ? scope.actor.apiKeyId : null,
+  };
 }
 
 export function requireRole(scope: ProjectScope, ...allowed: Role[]): void {
