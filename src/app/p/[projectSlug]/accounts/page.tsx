@@ -134,6 +134,11 @@ export default async function AccountsPage({
               <p className="text-sm text-foreground/70">
                 Connected <LocalTime value={account.connectedAt} timeZone={timeZone} />
               </p>
+              {account.notes.map((note, i) => (
+                <p key={i} className="text-sm">
+                  {note}
+                </p>
+              ))}
               {canManage && isMock ? (
                 <div className="flex flex-wrap items-end gap-4">
                   {account.status === "needs_reauth" ? <ReconnectMockButton slug={projectSlug} id={account.id} /> : null}

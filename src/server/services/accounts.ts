@@ -28,6 +28,8 @@ export interface AccountView {
   settings: unknown;
   providerAvailable: boolean;
   connectedAt: Date;
+  /** From the provider's `accountNotes` hook (G13); plain text, at most 5 notes of 300 characters. */
+  notes: string[];
 }
 
 export interface ConnectableProvider {
@@ -55,6 +57,27 @@ const connectCredentialsSchema = z.object({
 const idSchema = z.uuid();
 const aad = (id: string) => `social_account:${id}`;
 
+const MAX_NOTES = 5;
+const MAX_NOTE_LENGTH = 300;
+
+/** Never decrypts credentials; a hook that throws or answers badly contributes nothing. */
+function notesFor(a: AccountRecord): string[] {
+  const provider = findProvider(a.providerKey);
+  if (!provider?.accountNotes) return [];
+  try {
+    const parsed = provider.settingsSchema.safeParse(a.settings);
+    if (!parsed.success) return [];
+    const notes = provider.accountNotes({ settings: parsed.data, credentialsExpireAt: a.credentialsExpiresAt });
+    if (!Array.isArray(notes)) return [];
+    return notes
+      .filter((n): n is string => typeof n === "string" && n !== "")
+      .slice(0, MAX_NOTES)
+      .map((n) => n.slice(0, MAX_NOTE_LENGTH));
+  } catch {
+    return [];
+  }
+}
+
 function view(a: AccountRecord): AccountView {
   const provider = findProvider(a.providerKey);
   return {
@@ -73,6 +96,7 @@ function view(a: AccountRecord): AccountView {
     settings: a.settings,
     providerAvailable: provider !== undefined,
     connectedAt: a.createdAt,
+    notes: notesFor(a),
   };
 }
 
