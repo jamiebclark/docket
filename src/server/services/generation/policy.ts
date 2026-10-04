@@ -1,5 +1,6 @@
 // generation/policy: how a generated post is reviewed and queued (contracts/services.md § Policy).
 import { z } from "zod";
+import { CONFIRM_UNREVIEWED_QUEUE_MESSAGE } from "@/lib/validation/policies";
 import { generationMetadataSchema } from "@/lib/validation/generation";
 import { NotFoundError, PolicyNotAllowedError, ConflictError } from "../../dal/errors";
 import type { ApprovalPolicy, ProjectScope, SchedulingPolicy } from "../../dal/scope";
@@ -35,7 +36,7 @@ export function decidePolicy(input: {
   return { reviewState: "approved", queue: false, reason: "Approved automatically" };
 }
 
-export const CONFIRM_UNREVIEWED_QUEUE_MESSAGE = "Confirm that posts will be approved and queued without review.";
+export { CONFIRM_UNREVIEWED_QUEUE_MESSAGE };
 
 export function resolvePolicies(
   scope: ProjectScope,

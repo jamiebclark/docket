@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { ActionResult } from "@/lib/action-result";
+import { UNREVIEWED_QUEUE_CONFIRM, UNREVIEWED_QUEUE_EXPLANATION, UNREVIEWED_QUEUE_LABEL } from "../generate/PolicyPicker";
 import { updateProjectSettings } from "./actions";
 
 const input =
@@ -20,6 +21,9 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
     updateProjectSettings,
     null,
   );
+  const [approval, setApproval] = useState(values.defaultApprovalPolicy);
+  const [scheduling, setScheduling] = useState(values.defaultSchedulingPolicy);
+  const unreviewed = approval === "auto_approve" && scheduling === "add_to_queue";
   const errors = state && !state.ok ? (state.fieldErrors ?? {}) : {};
   const formError = state && !state.ok && Object.keys(errors).length === 0 ? state.message : null;
   const err = (n: string) =>
@@ -77,7 +81,8 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
         Default approval
         <select
           name="defaultApprovalPolicy"
-          defaultValue={values.defaultApprovalPolicy}
+          value={approval}
+          onChange={(e) => setApproval(e.target.value as typeof approval)}
           disabled={!canEdit}
           className={input}
           {...a11y("defaultApprovalPolicy")}
@@ -91,7 +96,8 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
         Default scheduling
         <select
           name="defaultSchedulingPolicy"
-          defaultValue={values.defaultSchedulingPolicy}
+          value={scheduling}
+          onChange={(e) => setScheduling(e.target.value as typeof scheduling)}
           disabled={!canEdit}
           className={input}
           {...a11y("defaultSchedulingPolicy")}
@@ -101,6 +107,26 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
         </select>
         {err("defaultSchedulingPolicy")}
       </label>
+      {unreviewed ? (
+        <div className="flex flex-col gap-2 rounded-md border-2 border-amber-700 p-3 dark:border-amber-400">
+          <p className="text-sm font-semibold">{UNREVIEWED_QUEUE_LABEL}</p>
+          <p id="unreviewed-explain" className="text-xs text-foreground/80">
+            {UNREVIEWED_QUEUE_EXPLANATION}
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="confirmUnreviewedQueue"
+              required
+              disabled={!canEdit}
+              aria-describedby={errors.confirmUnreviewedQueue ? "confirmUnreviewedQueue-error" : "unreviewed-explain"}
+              aria-invalid={errors.confirmUnreviewedQueue ? true : undefined}
+            />
+            {UNREVIEWED_QUEUE_CONFIRM}
+          </label>
+          {err("confirmUnreviewedQueue")}
+        </div>
+      ) : null}
       {canEdit ? (
         <button
           type="submit"

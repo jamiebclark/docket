@@ -9,6 +9,7 @@ import type { LlmProvider } from "../../llm/types";
 import { prepareVariants } from "../media-variants";
 import { applyDerivedStatus, gate, lockPost } from "../posts";
 import { runGeneration } from "./core";
+import { decidePolicy } from "./policy";
 import { recordFailure } from "./failures";
 import {
   assertMediaFits,
@@ -136,20 +137,27 @@ export async function regeneratePost(
       if (!g.ok && g.code === "validation") blocking.push(g.message);
     }
     const fresh = (await tx.posts.get(id))!;
-    const forced = blocking.length > 0 && fresh.reviewState !== "needs_review";
-    const reviewState = forced ? "needs_review" : fresh.reviewState;
-    const reason = blocking[0] ? `Forced to review: ${blocking[0]}` : "Regenerated";
+    // New content is decided afresh by the one policy service (FR-022/FR-024): under
+    // review_required it always goes back to review, whatever state the old text had (F1).
+    // Regenerate never queues, so scheduling is evaluated as leave_as_draft.
+    const decision = decidePolicy({
+      approval: previous.policies.resolved.approval,
+      scheduling: "leave_as_draft",
+      blocking: blocking.map((message) => ({ providerKey: "", message })),
+    });
+    const reviewState = decision.reviewState;
+    const reason = decision.reason;
     const saved: GenerationRecord = {
       ...record,
       policies: {
         ...record.policies,
-        decision: { reviewState: reviewState === "approved" ? "approved" : "needs_review", queued: false, reason },
+        decision: { reviewState, queued: false, reason },
       },
     };
     const prior = lastRecord(fresh) ? ((fresh.generationMetadata as { records: GenerationRecord[] }).records) : [];
     await tx.posts.update(id, {
       generationMetadata: { v: 1, records: [...prior, saved] },
-      ...(forced ? { reviewState: "needs_review" as const } : {}),
+      reviewState,
     });
     await applyDerivedStatus(tx, id);
     return {

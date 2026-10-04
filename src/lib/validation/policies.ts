@@ -7,3 +7,5 @@ export const approvalPolicySchema = z.enum(APPROVAL_POLICIES, { error: "Choose a
 export const schedulingPolicySchema = z.enum(SCHEDULING_POLICIES, {
   error: "Choose a scheduling policy",
 });
+
+export const CONFIRM_UNREVIEWED_QUEUE_MESSAGE = "Confirm that posts will be approved and queued without review.";
