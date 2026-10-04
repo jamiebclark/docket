@@ -120,8 +120,8 @@ description: "Task list for the Bluesky provider (004)"
 
 **Independent Test**: `pnpm vitest run tests/integration/bluesky/ambiguous.test.ts`
 
-- [ ] T040 [US6] Extend `publish.test.ts` with every `publish`-kind row: hang until abort, reset mid-body, unparseable 2xx, 2xx missing `uri`, malformed `at://`, 5xx → `ambiguous`; 429 → retryable with `notBefore`; pre-send → retryable; 400 → `fatal_error` with truncated platform message and secrets removed
-- [ ] T041 [US6] Write `tests/integration/bluesky/ambiguous.test.ts` through `runTick`: each ambiguous scenario ends `ambiguous` with no further request on later ticks; 429 with `Retry-After: 120` sets `next_attempt_at` ≥ now + 120 s; 400 fails with reason; pre-send `ECONNREFUSED` is retryable
+- [X] T040 [US6] Extend `publish.test.ts` with every `publish`-kind row: hang until abort, reset mid-body, unparseable 2xx, 2xx missing `uri`, malformed `at://`, 5xx → `ambiguous`; 429 → retryable with `notBefore`; pre-send → retryable; 400 → `fatal_error` with truncated platform message and secrets removed
+- [X] T041 [US6] Write `tests/integration/bluesky/ambiguous.test.ts` through `runTick`: each ambiguous scenario ends `ambiguous` with no further request on later ticks; 429 with `Retry-After: 120` sets `next_attempt_at` ≥ now + 120 s; 400 fails with reason; pre-send `ECONNREFUSED` is retryable
 
 **Checkpoint**: safety properties hold
 

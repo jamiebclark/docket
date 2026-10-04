@@ -115,6 +115,39 @@ describe("create_post", () => {
     }
   });
 
+  it("is ambiguous on a 2xx that is unparseable or lacks a uri", async () => {
+    for (const script of [{ text: "<html>ok</html>" }, { json: { cid: CID } }, { json: {} }] as Parameters<FakePds["route"]>[2][]) {
+      pds.reset();
+      pds.route("POST", CREATE, script);
+      const result = await advance(ctx());
+      expect(result.kind).toBe("ambiguous");
+      noSecrets(result);
+    }
+  });
+
+  it("sets notBefore from Retry-After on a 429", async () => {
+    pds.route("POST", CREATE, { status: 429, headers: { "retry-after": "120" }, json: { error: "RateLimitExceeded" } });
+    const result = await advance(ctx());
+    expect(result).toMatchObject({ kind: "retryable_error" });
+    expect((result as { notBefore?: Date }).notBefore?.getTime()).toBe(now.getTime() + 120_000);
+  });
+
+  it("is retryable, not ambiguous, when nothing was sent", async () => {
+    pds.route("POST", CREATE, { mode: "pre-send-failure", code: "ECONNREFUSED" });
+    expect((await advance(ctx())).kind).toBe("retryable_error");
+  });
+
+  it("fails a 400 with a truncated platform message and no secrets", async () => {
+    const message = `${"x".repeat(500)} ${ACCESS}`;
+    pds.route("POST", CREATE, { status: 400, json: { error: "InvalidRecord", message } });
+    const result = await advance(ctx());
+    expect(result.kind).toBe("fatal_error");
+    const error = (result as { error: string }).error;
+    expect(error).toContain("InvalidRecord");
+    expect(error.length).toBeLessThan(400);
+    noSecrets(result);
+  });
+
   it("flags a rejected session for refresh", async () => {
     pds.route("POST", CREATE, { status: 400, json: { error: "ExpiredToken", message: "x" } });
     expect(await advance(ctx())).toMatchObject({ kind: "retryable_error", credentialsExpired: true });
