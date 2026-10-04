@@ -1,8 +1,8 @@
 import { scrub } from "../meta/errors";
-import type { OAuthConnectGroup } from "../types";
-import { THREADS_AUTHORIZE_URL, parseThreadsEnv, requireThreadsConfig } from "./config";
+import type { CandidatesResult, OAuthConnectGroup } from "../types";
+import { THREADS_AUTHORIZE_URL, THREADS_LONG_LIVED_SECONDS, parseThreadsEnv, requireThreadsConfig } from "./config";
 import type { ThreadsCredentials } from "./credentials";
-import { exchangeCode, exchangeLongLived, readProfile, type ThreadsCallFailure } from "./oauth";
+import { exchangeCode, exchangeLongLived, readProfile, refreshLongLived, type ThreadsCallFailure } from "./oauth";
 
 const PUBLISH_PERMISSION = "threads_content_publish";
 
@@ -14,7 +14,65 @@ function refused(f: ThreadsCallFailure, secrets: readonly string[]): { ok: false
   };
 }
 
-// The paste-token fallback is filled in by the paste tasks.
+const PASTE_HELP =
+  "Generate a Threads access token for your tester account (with threads_basic and threads_content_publish) in the Meta dashboard's Threads use case → User Token Generator, then paste it here. Unverified: where the generator lives may differ.";
+
+function candidateFor(
+  profile: { id: string; username: string | null },
+  credentials: ThreadsCredentials,
+  settings: Record<string, unknown>,
+): CandidatesResult {
+  return {
+    ok: true,
+    candidates: [
+      {
+        providerKey: "threads",
+        externalId: profile.id,
+        displayName: profile.username ? `@${profile.username}` : profile.id,
+        settings,
+        credentials,
+        expiresAt: new Date(credentials.expiresAt),
+      },
+    ],
+  };
+}
+
+/** Exchange → renewal → save as is (research D6). A transient failure at any stage stops the sequence. */
+async function exchangePastedToken(input: { token: string; now: Date; signal: AbortSignal }): Promise<CandidatesResult> {
+  const cfg = requireThreadsConfig();
+  const { token, signal } = input;
+  const unreachable = { ok: false as const, message: "Could not reach Threads to check that token. Nothing changed. Try again." };
+  const issuedAt = input.now.getTime();
+
+  const saveRenewed = async (accessToken: string, expiresInSeconds: number): Promise<CandidatesResult> => {
+    const profile = await readProfile(cfg, { token: accessToken, signal });
+    if (!profile.ok) return profile.transient ? unreachable : rejected;
+    const expiresAt = issuedAt + expiresInSeconds * 1000;
+    return candidateFor(profile, { v: 1, accessToken, issuedAt, expiresAt, expiryEstimated: false }, {});
+  };
+  const rejected = {
+    ok: false as const,
+    message: "That token was not accepted by Threads. Generate a new one for your tester account and paste it again.",
+  };
+
+  const long = await exchangeLongLived(cfg, { token, signal });
+  if (long.ok) return saveRenewed(long.token, long.expiresInSeconds);
+  if (long.transient) return unreachable;
+
+  const renewed = await refreshLongLived(cfg, { token, signal });
+  if (renewed.ok) return saveRenewed(renewed.token, renewed.expiresInSeconds);
+  if (renewed.transient) return unreachable;
+
+  const profile = await readProfile(cfg, { token, signal });
+  if (!profile.ok) return profile.transient ? unreachable : rejected;
+  const expiresAt = issuedAt + THREADS_LONG_LIVED_SECONDS * 1000;
+  return candidateFor(
+    profile,
+    { v: 1, accessToken: token, issuedAt, expiresAt, expiryEstimated: true },
+    { estimatedExpiry: new Date(expiresAt).toISOString() },
+  );
+}
+
 export const threadsConnectGroup: OAuthConnectGroup = {
   key: "threads",
   displayName: "Threads",
@@ -78,6 +136,11 @@ export const threadsConnectGroup: OAuthConnectGroup = {
         },
       ],
     };
+  },
+  pasteToken: {
+    field: { name: "accessToken", label: "Threads access token", secret: true },
+    help: PASTE_HELP,
+    exchange: exchangePastedToken,
   },
   describeCallbackError(params) {
     if (params.get("error") === "access_denied" || params.get("error_reason") === "user_denied") {
