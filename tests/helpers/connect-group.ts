@@ -16,7 +16,21 @@ export const throwawayGroup: OAuthConnectGroup = {
   exchangeCode: async (): Promise<CandidatesResult> => ({ ok: true, candidates: [] }),
 };
 
-function throwawayProvider(key: string, displayName: string): SocialProvider {
+/** A group whose callback address must be public HTTPS (G10); unavailable under the test env's http://localhost. */
+export const strictGroup: OAuthConnectGroup = {
+  ...throwawayGroup,
+  key: "throwaway-strict",
+  displayName: "Throwaway Strict",
+  callbackHint: "Check that the tester invite was accepted.",
+  redirectRequirement: { https: true, publicHost: true, reason: "Strict needs an HTTPS address that is not localhost.", doc: "docs/strict.md#https" },
+  pasteToken: {
+    field: { name: "token", label: "Strict token", secret: true },
+    help: "Paste a token.",
+    exchange: async () => ({ ok: true, candidates: [] }),
+  },
+};
+
+function throwawayProvider(key: string, displayName: string, group: OAuthConnectGroup = throwawayGroup): SocialProvider {
   return {
     key,
     displayName,
@@ -26,7 +40,7 @@ function throwawayProvider(key: string, displayName: string): SocialProvider {
       textOnlyAllowed: true,
       postTypes: ["text"],
     },
-    connect: { strategy: "oauth", group: throwawayGroup },
+    connect: { strategy: "oauth", group },
     settingsSchema: z.object({}).passthrough(),
     validate: () => [],
     stepFor: () => ({ name: "publish", mayPublish: true }),
@@ -34,7 +48,7 @@ function throwawayProvider(key: string, displayName: string): SocialProvider {
   };
 }
 
-const added = [throwawayProvider("tw-page", "Throwaway Page"), throwawayProvider("tw-photo", "Throwaway Photo")];
+const added = [throwawayProvider("tw-page", "Throwaway Page"), throwawayProvider("tw-photo", "Throwaway Photo"), throwawayProvider("tw-strict", "Throwaway Strict", strictGroup)];
 
 /** Registers the throwaway providers (idempotent). Call `unregisterThrowaway` in `afterAll`. */
 export function registerThrowaway(): void {

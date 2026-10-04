@@ -18,11 +18,13 @@ export interface ConnectGroupSectionProps {
   canManage: boolean;
   /** Present when the group accepts a token generated in the platform's own tools. */
   paste?: { label: string; help: string } | null;
+  /** Configured, but the callback address does not qualify (G10): the reason replaces the Connect button. */
+  unavailable?: { reason: string; doc: string | null } | null;
 }
 
 /** One "Connect <group>" section, rendered once per group even when two providers share it. */
 export function ConnectGroupSection(props: ConnectGroupSectionProps) {
-  const { slug, groupKey, displayName, providerNames, configured, setupDoc, redirectUri, canManage, paste } = props;
+  const { slug, groupKey, displayName, providerNames, configured, setupDoc, redirectUri, canManage, paste, unavailable } = props;
   const [token, setToken] = useState("");
   const [pasteMessage, setPasteMessage] = useState("");
   const [pastePending, startPaste] = useTransition();
@@ -65,16 +67,27 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
           </p>
           <CopyField id={`connect-group-${groupKey}-redirect`} label="Redirect address to register" value={redirectUri} />
         </div>
+      ) : unavailable && !canManage ? (
+        <p className="max-w-xl text-sm">{unavailable.reason}</p>
       ) : canManage ? (
         <div className="flex flex-col gap-2">
-          <div>
-            <Button type="button" onClick={begin} pending={pending} pendingLabel="Opening…">
-              Connect {displayName}
-            </Button>
-          </div>
-          <p role="alert" className="min-h-4 text-sm text-red-700 dark:text-red-400">
-            {message}
-          </p>
+          {unavailable ? (
+            <p className="max-w-xl text-sm">
+              {unavailable.reason}
+              {unavailable.doc ? <> See <code>{unavailable.doc}</code>.</> : null}
+            </p>
+          ) : (
+            <>
+              <div>
+                <Button type="button" onClick={begin} pending={pending} pendingLabel="Opening…">
+                  Connect {displayName}
+                </Button>
+              </div>
+              <p role="alert" className="min-h-4 text-sm text-red-700 dark:text-red-400">
+                {message}
+              </p>
+            </>
+          )}
           {paste ? (
             <form onSubmit={submitPaste} className="flex max-w-md flex-col gap-2" aria-label={`Paste a ${displayName} token`}>
               <Field

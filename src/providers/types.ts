@@ -109,6 +109,19 @@ export interface OAuthConnectGroup {
     issues(source: Readonly<Record<string, string | undefined>>): ProviderEnvIssue[];
     configured(source: Readonly<Record<string, string | undefined>>): boolean;
   };
+  /** Callback-address requirement; a group whose address does not qualify is shown as unavailable (G10). */
+  redirectRequirement?: {
+    /** Refuse non-https: callback addresses. */
+    https: boolean;
+    /** Refuse localhost, *.localhost, IPv4 and IPv6 literals. */
+    publicHost: boolean;
+    /** Shown as is, e.g. "Threads needs an HTTPS address that is not localhost." */
+    reason: string;
+    /** Repo-relative doc path with optional #anchor. */
+    doc?: string;
+  };
+  /** Static, non-secret. Appended to the accounts banner after a failed or refused callback for this group (G12). */
+  callbackHint?: string;
   /** Pure. The absolute URL of the platform's login dialog. */
   authorizationUrl(input: { state: string; redirectUri: string }): string;
   /** Server-side code exchange → candidates. Must not throw for expected refusals. */
