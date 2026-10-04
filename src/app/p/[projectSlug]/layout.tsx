@@ -8,6 +8,7 @@ import { NotFoundError } from "@/server/dal";
 import { forProject } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { now } from "@/server/dal/clock";
+import { countNeedsDecision } from "@/server/services/failures";
 import { listAccountsNeedingReauth } from "@/server/services/accounts";
 import * as projects from "@/server/services/projects";
 import { countReviewQueue } from "@/server/services/review";
@@ -35,6 +36,7 @@ export default async function ProjectLayout({
   const health = await getSchedulerHealth(scope);
   const reauth = await listAccountsNeedingReauth(scope);
   const reviewCount = await countReviewQueue(scope);
+  const failuresCount = await countNeedsDecision(scope);
   const at = await now();
   const timezone = scope.project.timezone;
 
@@ -52,7 +54,7 @@ export default async function ProjectLayout({
       <SchedulerHealth variant="banner" health={health} now={at} timezone={timezone} />
       <ReauthBanner accounts={reauth} projectSlug={scope.project.slug} canManage={scope.can({ account: ["manage"] })} />
       <div className="flex flex-1">
-        <LeftNav projectSlug={scope.project.slug} reviewCount={reviewCount} />
+        <LeftNav projectSlug={scope.project.slug} reviewCount={reviewCount} failuresCount={failuresCount} />
         <main id="main" className="flex-1 p-6">
           {children}
         </main>

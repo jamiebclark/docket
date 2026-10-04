@@ -44,28 +44,28 @@
 
 ### Tests for US1 (write first, expect failures)
 
-- [ ] T010 [P] [US1] Write `tests/integration/failures/list.test.ts`: ordering (ambiguous first, newest first), filters by status and account, pagination at 25, soft-deleted post exclusion, two-project isolation (SC-002)
-- [ ] T011 [P] [US1] Write `tests/integration/failures/attempts.test.ts`: full attempt log in time order, actor names for user actions, polling runs collapsed with a count by `groupAttemptRuns`
-- [ ] T012 [P] [US1] Write `tests/integration/failures/resolve.test.ts` and `tests/integration/posts/resolve-url.test.ts`: mark published with and without URL, refuse `javascript:`/`ftp:`/credentialed URLs with a field error, webhook `post.published` fires, derived post status recalculated
-- [ ] T013 [P] [US1] Write `tests/integration/failures/requeue.test.ts`: slot found → `scheduled` with `resolved_not_published` then `requeued {scheduledAt, slotId}`; no free slot → `failed` with `no_free_slot`; gate failure → unchanged `ConflictError`; "don't requeue" → `failed`
-- [ ] T014 [P] [US1] Write `tests/integration/failures/concurrency.test.ts`: 20 parallel resolve/requeue calls on one ambiguous target, exactly one succeeds, no occurrence held twice (SC-003)
-- [ ] T015 [P] [US1] Write `tests/integration/failures/retry.test.ts`: retry on an active account re-arms and resets the count; refused with an actionable message when the account needs reconnecting, was removed, or the provider is unavailable
-- [ ] T016 [P] [US1] Write `tests/integration/failures/authz.test.ts` and add rows to `tests/integration/actions-authz.test.ts`: non-member and other-project member get not-found for page and every action; API-key scope refused; stubbed `can()` scope without `post:schedule` refused
-- [ ] T017 [P] [US1] Write `tests/integration/failures/nav.test.ts`: badge shows the ambiguous count when above zero, uses one `count(*)` and no list load
-- [ ] T018 [P] [US1] Write `tests/integration/scheduler/pre-call-failures.test.ts`: credential decrypt failure and content/settings load failure before the provider call fail the target (never ambiguous); a failure after a may-publish step started stays ambiguous (FR-012)
+- [X] T010 [P] [US1] Write `tests/integration/failures/list.test.ts`: ordering (ambiguous first, newest first), filters by status and account, pagination at 25, soft-deleted post exclusion, two-project isolation (SC-002)
+- [X] T011 [P] [US1] Write `tests/integration/failures/attempts.test.ts`: full attempt log in time order, actor names for user actions, polling runs collapsed with a count by `groupAttemptRuns`
+- [X] T012 [P] [US1] Write `tests/integration/failures/resolve.test.ts` and `tests/integration/posts/resolve-url.test.ts`: mark published with and without URL, refuse `javascript:`/`ftp:`/credentialed URLs with a field error, webhook `post.published` fires, derived post status recalculated
+- [X] T013 [P] [US1] Write `tests/integration/failures/requeue.test.ts`: slot found → `scheduled` with `resolved_not_published` then `requeued {scheduledAt, slotId}`; no free slot → `failed` with `no_free_slot`; gate failure → unchanged `ConflictError`; "don't requeue" → `failed`
+- [X] T014 [P] [US1] Write `tests/integration/failures/concurrency.test.ts`: 20 parallel resolve/requeue calls on one ambiguous target, exactly one succeeds, no occurrence held twice (SC-003)
+- [X] T015 [P] [US1] Write `tests/integration/failures/retry.test.ts`: retry on an active account re-arms and resets the count; refused with an actionable message when the account needs reconnecting, was removed, or the provider is unavailable
+- [X] T016 [P] [US1] Write `tests/integration/failures/authz.test.ts` and add rows to `tests/integration/actions-authz.test.ts`: non-member and other-project member get not-found for page and every action; API-key scope refused; stubbed `can()` scope without `post:schedule` refused
+- [X] T017 [P] [US1] Write `tests/integration/failures/nav.test.ts`: badge shows the ambiguous count when above zero, uses one `count(*)` and no list load
+- [X] T018 [P] [US1] Write `tests/integration/scheduler/pre-call-failures.test.ts`: credential decrypt failure and content/settings load failure before the provider call fail the target (never ambiguous); a failure after a may-publish step started stays ambiguous (FR-012)
 
 ### Implementation for US1
 
-- [ ] T019 [US1] Implement `src/server/services/failures.ts` (`listFailures`, `countNeedsDecision`, `previewRequeue`, `groupAttemptRuns`) per contracts/services.md §1, with colocated unit tests for `groupAttemptRuns`
-- [ ] T020 [US1] Extend `resolveAmbiguous` in `src/server/services/posts/index.ts` to the input union (published with URL / not published + requeue / not published don't requeue) inside `withLockedTarget`, taking the slot through `allocateNextFree`; add `retryBlockedReason`; add the two new outcomes to the attempt writer (D2–D4, D8)
-- [ ] T021 [US1] Extend the post view in `src/server/services/posts/view.ts` with per-target `attemptCount` and the available actions computed from `retryBlockedReason`
-- [ ] T022 [US1] Classify engine failures before the provider call as non-ambiguous in `src/server/scheduler/publishing.ts` (fatal causes → `failed`, others → backoff), per contracts/services.md §4 (D22)
-- [ ] T023 [US1] Move `src/app/p/[projectSlug]/posts/[postId]/TargetActions.tsx` to `src/components/targets/TargetResolution.tsx` (shared dialogs: mark published with URL field, requeue with next-slot preview, don't requeue, retry) per contracts/ui.md §3; follow the `docket-ui` skill
-- [ ] T024 [US1] Update `src/app/p/[projectSlug]/posts/actions.ts`: `resolveTargetAction` takes the union, add `previewRequeueAction`, all through `runAction`
-- [ ] T025 [US1] Build `src/app/p/[projectSlug]/failures/page.tsx` and `loading.tsx`: table with rowgroup headers "Needs your decision" / "Failed", native `<details>` attempt logs rendered on the server, GET filter form (status, account) and pagination kept in the URL, empty and error states (contracts/ui.md §1)
-- [ ] T026 [US1] Add the Failures entry with ambiguous count to `src/components/shell/LeftNav.tsx` and pass `countNeedsDecision` from `src/app/p/[projectSlug]/layout.tsx` (FR-005)
-- [ ] T027 [US1] Update `src/app/p/[projectSlug]/posts/[postId]/page.tsx`: attempt count, "Who" column, `safeExternalHref` for the external link, `TargetResolution` (FR-011)
-- [ ] T028 [P] [US1] Write `tests/integration/failures/ui.test.tsx` per contracts/ui.md §6: labelled controls, keyboard-operable `<details>`/dialogs, focus management, live-region result text, four states (FR-013)
+- [X] T019 [US1] Implement `src/server/services/failures.ts` (`listFailures`, `countNeedsDecision`, `previewRequeue`, `groupAttemptRuns`) per contracts/services.md §1, with colocated unit tests for `groupAttemptRuns`
+- [X] T020 [US1] Extend `resolveAmbiguous` in `src/server/services/posts/index.ts` to the input union (published with URL / not published + requeue / not published don't requeue) inside `withLockedTarget`, taking the slot through `allocateNextFree`; add `retryBlockedReason`; add the two new outcomes to the attempt writer (D2–D4, D8)
+- [X] T021 [US1] Extend the post view in `src/server/services/posts/view.ts` with per-target `attemptCount` and the available actions computed from `retryBlockedReason`
+- [X] T022 [US1] Classify engine failures before the provider call as non-ambiguous in `src/server/scheduler/publishing.ts` (fatal causes → `failed`, others → backoff), per contracts/services.md §4 (D22)
+- [X] T023 [US1] Move `src/app/p/[projectSlug]/posts/[postId]/TargetActions.tsx` to `src/components/targets/TargetResolution.tsx` (shared dialogs: mark published with URL field, requeue with next-slot preview, don't requeue, retry) per contracts/ui.md §3; follow the `docket-ui` skill
+- [X] T024 [US1] Update `src/app/p/[projectSlug]/posts/actions.ts`: `resolveTargetAction` takes the union, add `previewRequeueAction`, all through `runAction`
+- [X] T025 [US1] Build `src/app/p/[projectSlug]/failures/page.tsx` and `loading.tsx`: table with rowgroup headers "Needs your decision" / "Failed", native `<details>` attempt logs rendered on the server, GET filter form (status, account) and pagination kept in the URL, empty and error states (contracts/ui.md §1)
+- [X] T026 [US1] Add the Failures entry with ambiguous count to `src/components/shell/LeftNav.tsx` and pass `countNeedsDecision` from `src/app/p/[projectSlug]/layout.tsx` (FR-005)
+- [X] T027 [US1] Update `src/app/p/[projectSlug]/posts/[postId]/page.tsx`: attempt count, "Who" column, `safeExternalHref` for the external link, `TargetResolution` (FR-011)
+- [X] T028 [P] [US1] Write `tests/integration/failures/ui.test.tsx` per contracts/ui.md §6: labelled controls, keyboard-operable `<details>`/dialogs, focus management, live-region result text, four states (FR-013)
 - [ ] T029 [US1] Run `pnpm vitest run tests/integration/failures tests/integration/posts tests/integration/scheduler tests/integration/actions-authz.test.ts`, then `pnpm tsc --noEmit`, and fix until green
 
 **Checkpoint**: US1 is independently usable and tested.

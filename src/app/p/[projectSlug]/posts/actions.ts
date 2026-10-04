@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import type { ActionResult } from "@/lib/action-result";
+import { previewRequeue, type RequeuePreview } from "@/server/services/failures";
 import * as posts from "@/server/services/posts";
 import { runAction } from "../run-action";
 
@@ -18,16 +19,24 @@ export async function cancelTargetAction(slug: string, input: { targetId: string
   return result;
 }
 
-export async function resolveTargetAction(
-  slug: string,
-  input: { targetId: string; outcome: "published" | "failed"; url?: string },
-): Promise<ActionResult<void>> {
-  const url = input?.url?.trim();
-  const result = await runAction(slug, (scope) =>
-    posts.resolveAmbiguous(scope, input?.targetId, input?.outcome === "published" ? { outcome: "published", ...(url ? { url } : {}) } : { outcome: input?.outcome }),
-  );
+type ResolveInput =
+  | { targetId: string; outcome: "published"; url?: string }
+  | { targetId: string; outcome: "not_published"; requeue: boolean; expected?: string };
+
+export async function resolveTargetAction(slug: string, input: ResolveInput): Promise<ActionResult<posts.ResolveResult>> {
+  const { targetId, ...rest } = input ?? ({} as ResolveInput);
+  const body =
+    rest.outcome === "published"
+      ? { outcome: "published", ...(rest.url?.trim() ? { url: rest.url.trim() } : {}) }
+      : rest;
+  const result = await runAction(slug, (scope) => posts.resolveAmbiguous(scope, targetId, body));
   if (result.ok) refresh();
   return result;
+}
+
+/** The slot a requeue would take. Reads only. */
+export async function previewRequeueAction(slug: string, input: { targetId: string }): Promise<ActionResult<RequeuePreview>> {
+  return runAction(slug, (scope) => previewRequeue(scope, input?.targetId));
 }
 
 /** Redirects to the list on success; on failure returns the result for the dialog to show. */

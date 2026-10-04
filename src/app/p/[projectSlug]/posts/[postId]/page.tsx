@@ -7,7 +7,9 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as posts from "@/server/services/posts";
-import { TargetActions } from "./TargetActions";
+import { TargetResolution } from "@/components/targets/TargetResolution";
+import { safeExternalHref } from "@/lib/safe-redirect";
+import { DeletePostButton } from "./DeletePostButton";
 
 export const metadata: Metadata = { title: "Post" };
 export const dynamic = "force-dynamic";
@@ -65,7 +67,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
               Edit
             </Link>
           ) : null}
-          <TargetActions slug={projectSlug} postId={view.post.id} canDelete={canDelete} deleteBlocked={view.deleteBlocked} />
+          <DeletePostButton slug={projectSlug} postId={view.post.id} canDelete={canDelete} deleteBlocked={view.deleteBlocked} />
         </div>
       </header>
 
@@ -126,12 +128,18 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
               <>
                 <dt className="font-medium">Link</dt>
                 <dd>
-                  <a href={t.externalUrl} rel="noopener noreferrer" target="_blank" className="underline">
-                    View on {t.providerName}
-                  </a>
+                  {safeExternalHref(t.externalUrl) ? (
+                    <a href={safeExternalHref(t.externalUrl)!} rel="noopener noreferrer" target="_blank" className="underline">
+                      View on {t.providerName}
+                    </a>
+                  ) : (
+                    t.externalUrl
+                  )}
                 </dd>
               </>
             ) : null}
+            <dt className="font-medium">Attempts</dt>
+            <dd>{t.attemptCount}</dd>
             {t.lastError ? (
               <>
                 <dt className="font-medium">Last error</dt>
@@ -152,7 +160,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
           ) : null}
 
           <div className="mt-3">
-            <TargetActions slug={projectSlug} targetId={t.id} accountName={t.accountName} status={t.status} canSchedule={canSchedule} />
+            <TargetResolution slug={projectSlug} targetId={t.id} accountName={t.accountName} status={t.status} actions={t.actions} canSchedule={canSchedule} variant="detail" />
           </div>
 
           <h3 className="mt-4 text-sm font-semibold">Attempts</h3>
@@ -163,7 +171,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
               <caption className="sr-only">Attempts for {t.accountName}</caption>
               <thead>
                 <tr className="border-b border-foreground/30">
-                  {["Time", "Step", "Outcome", "Request", "Response"].map((c) => (
+                  {["Time", "Step", "Outcome", "Who", "Request", "Response"].map((c) => (
                     <th key={c} scope="col" className="px-2 py-1 font-medium">
                       {c}
                     </th>
@@ -181,6 +189,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
                       {a.outcome.replaceAll("_", " ")}
                       {a.error ? <div className="text-red-700 dark:text-red-400">{a.error}</div> : null}
                     </td>
+                    <td className="px-2 py-1">{a.actor.kind === "member" ? a.actor.name : "System"}</td>
                     <td className="px-2 py-1">
                       <Pairs value={a.request} />
                     </td>

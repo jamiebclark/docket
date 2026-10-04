@@ -216,6 +216,12 @@ class MediaUnavailable extends Error {}
 /** The post row vanished after the claim; no provider call is made, and it can never have published (G4). */
 class PostGone extends Error {}
 
+/** Stored credentials failed to decrypt; fatal before any provider call (FR-012). */
+class CredentialsUnreadable extends Error {}
+
+/** The account's stored settings no longer parse; fatal before any provider call (FR-012). */
+class SettingsInvalid extends Error {}
+
 /**
  * Media preparation failed or overran the tick budget. It runs before any provider call,
  * so the step cannot have published: always retryable, never ambiguous (F3).
@@ -275,6 +281,8 @@ async function execute(
   let secrets: string[] = [];
   let result: StepResult | undefined;
   let seenCiphertext: string | null = null;
+  // Set immediately before `provider.advance`: only a failure after it can leave a post possibly published (FR-012).
+  let providerCalled = false;
   const startedMs = Date.now();
   try {
     const loaded = await repos.targets.effectiveContent(target.id);
@@ -293,7 +301,12 @@ async function execute(
     }
     const content = { text: loaded.text, media };
     seenCiphertext = await repos.accounts.getCredentialsCiphertext(account.id);
-    let credentials = decryptCredentials(account.id, seenCiphertext);
+    let credentials: ReturnType<typeof decryptCredentials>;
+    try {
+      credentials = decryptCredentials(account.id, seenCiphertext);
+    } catch {
+      throw new CredentialsUnreadable(`The account's stored credentials can't be read. Reconnect ${account.displayName}.`);
+    }
     secrets = secretValues(credentials);
 
     // Proactive refresh (G2): runs outside `advance`, so it is never covered by `inFlightMayPublish` (FR-023).
@@ -317,8 +330,14 @@ async function execute(
         };
       }
     }
-    const settings = provider.settingsSchema.parse(account.settings ?? {});
+    let settings: ReturnType<typeof provider.settingsSchema.parse>;
+    try {
+      settings = provider.settingsSchema.parse(account.settings ?? {});
+    } catch {
+      throw new SettingsInvalid("The account settings are invalid.");
+    }
     const signal = AbortSignal.timeout(config.providerTimeoutMs);
+    if (!result) providerCalled = true;
     result ??= await withTimeout(
       provider.advance({
         target: { id: target.id, scheduledAt: target.scheduledAt ?? new Date(), attempt: target.attemptCount + 1 },
@@ -339,10 +358,12 @@ async function execute(
       config.providerTimeoutMs,
     );
   } catch (error) {
-    if (error instanceof MediaUnavailable || error instanceof PostGone) {
+    if (error instanceof MediaUnavailable || error instanceof PostGone || error instanceof CredentialsUnreadable || error instanceof SettingsInvalid) {
       result = { kind: "fatal_error", error: error.message };
     } else if (error instanceof MediaNotReady) {
       result = { kind: "retryable_error", error: error.message };
+    } else if (!providerCalled) {
+      result = { kind: "retryable_error", error: "Publishing could not start; will retry." };
     } else {
       // A lost or failed call: whether the step could have published decides the outcome (D5).
       const message = redact(error instanceof Error ? error.message : "The provider call failed.", secrets);
