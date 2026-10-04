@@ -129,7 +129,13 @@ async function readBody(res: IncomingMessage, maxBytes: number, deadline: number
   }
   const chunks: Buffer[] = [];
   let size = 0;
-  const timer = setTimeout(() => res.destroy(new UrlFetchError("url_timeout", "The image took too long to download.")), Math.max(1, deadline - Date.now()));
+  // The stream may surface a generic close error rather than the one passed to destroy(),
+  // so remember that the deadline fired and report it as a timeout either way.
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    res.destroy(new UrlFetchError("url_timeout", "The image took too long to download."));
+  }, Math.max(1, deadline - Date.now()));
   try {
     for await (const chunk of res as AsyncIterable<Buffer>) {
       size += chunk.length;
@@ -140,6 +146,7 @@ async function readBody(res: IncomingMessage, maxBytes: number, deadline: number
       chunks.push(chunk);
     }
   } catch (err) {
+    if (timedOut) throw new UrlFetchError("url_timeout", "The image took too long to download.");
     if (err instanceof UrlFetchError) throw err;
     throw new UrlFetchError("url_fetch_failed", "The image could not be downloaded.");
   } finally {
