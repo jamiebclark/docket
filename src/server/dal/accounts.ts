@@ -22,6 +22,8 @@ export interface RefreshPatch {
   status?: "active" | "needs_reauth";
   lastError?: string | null;
   displayName?: string;
+  /** Keeps the account out of the scheduled claim until then (G11); the lease owner stays set to the releasing token because of the table's pair check. Default: released now. */
+  refreshLeaseUntil?: Date;
 }
 
 export type RefreshLeaseResult =
@@ -211,7 +213,9 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
     async recordRefresh(id, token, patch) {
       const rows = await db
         .update(socialAccounts)
-        .set({ ...patch, refreshLeaseUntil: null, refreshLeaseOwner: null })
+        // The table requires lease_until and lease_owner to be both set or both null, so a held account keeps
+        // the releasing token as its (inert) owner; the next claim overwrites it.
+        .set({ ...patch, refreshLeaseUntil: patch.refreshLeaseUntil ?? null, refreshLeaseOwner: patch.refreshLeaseUntil ? token : null })
         .where(and(mine(id), eq(socialAccounts.refreshLeaseOwner, token)))
         .returning({ id: socialAccounts.id });
       return rows.length > 0;

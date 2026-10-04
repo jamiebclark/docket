@@ -61,7 +61,7 @@ export async function runTokenRefresh(opts: {
         now: await clock.now(),
         signal: AbortSignal.timeout(config.providerTimeoutMs),
       });
-      const applied = await applyRefreshResult(repos, account, token, result, secrets);
+      const applied = await applyRefreshResult(repos, account, token, result, secrets, { holdTransient: true });
       if (applied.kind === "refreshed") counts.refreshed++;
       else if (applied.kind === "refused") counts.failed++;
       else if (applied.kind === "transient") counts.deferred++;

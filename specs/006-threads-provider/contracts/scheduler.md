@@ -13,7 +13,7 @@
 
 `applyRefreshResult(repos, account, token, result, secrets, opts?: { holdTransient?: boolean })`:
 
-- With `opts.holdTransient` and `result = { ok: false, transient: true, retryAt }`, `recordRefresh` writes `refresh_lease_until = min(retryAt, now + 24 h)` and `refresh_lease_owner = null` (instead of `null`/`null`), plus the usual `last_error`. The value is ignored when it is not later than `now`.
+- With `opts.holdTransient` and `result = { ok: false, transient: true, retryAt }`, `recordRefresh` writes `refresh_lease_until = min(retryAt, now + 24 h)` and keeps `refresh_lease_owner` set to the releasing token (the table requires both or neither; an inert owner is overwritten by the next claim) instead of `null`/`null`, plus the usual `last_error`. The value is ignored when it is not later than `now`.
 - Without `holdTransient` (publish-time refresh) the behaviour is unchanged.
 - `runTokenRefresh` passes `{ holdTransient: true }`.
 - `claimRefreshAccounts` is unchanged. It already excludes rows with `refresh_lease_until > now`.
