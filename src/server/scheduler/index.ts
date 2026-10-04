@@ -14,7 +14,7 @@ export interface TickSummary {
   startedAt: string;
   durationMs: number;
   publishing: SectionResult<PublishingCounts>;
-  tokenRefresh: SectionResult<{ refreshed: number; failed: number }>;
+  tokenRefresh: SectionResult<{ refreshed: number; failed: number; deferred: number }>;
 }
 
 /**
@@ -38,7 +38,7 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
   // The sections run concurrently under the same deadline (D7); each handles its own failure.
   const [publishing, tokenRefresh] = await Promise.all([
     section("publishing", () => runPublishing({ config, tickId, startedAt }), emptyPublishingCounts()),
-    section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0 }),
+    section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0 }),
   ]);
 
   return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh };

@@ -1,6 +1,7 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, ne, notInArray, or } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNotNull, isNull, lte, ne, notInArray, or } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
-import { postTargets, socialAccounts, type SocialAccountRow } from "../db/schema";
+import { postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
+import type { StepContent } from "../../providers/types";
 import { createAttemptsRepo, type AttemptEntry } from "./attempts";
 import { createSchedulingRepos, crossProject } from "./scope";
 import type { TargetPatch, TargetRecord } from "./targets";
@@ -24,6 +25,11 @@ export interface ClaimContext {
   now: Date;
   /** Targets of the account whose `publish_started_at` is later than `since` (limit counting, D8). */
   startedSince(accountId: string, since: Date, excludeTargetId?: string): Promise<Date[]>;
+  /**
+   * What `stepFor` may look at: the target's effective text (`override_text ?? base_text`) and its post's media count,
+   * pinned by `project_id`. `null` when the post row is gone.
+   */
+  contentShape(target: { id: string; projectId: string; postId: string }): Promise<StepContent | null>;
 }
 
 export interface ClaimDueOptions {
@@ -99,6 +105,20 @@ export function claimDueTargets(opts: ClaimDueOptions): Promise<ClaimedTarget[]>
               ),
             );
           return started.map((s) => s.at!);
+        },
+        async contentShape(target) {
+          const [head] = await exec
+            .select({ overrideText: postTargets.overrideText, baseText: posts.baseText })
+            .from(postTargets)
+            .innerJoin(posts, and(eq(posts.id, postTargets.postId), eq(posts.projectId, postTargets.projectId)))
+            .where(and(eq(postTargets.projectId, target.projectId), eq(postTargets.id, target.id)))
+            .limit(1);
+          if (!head) return null;
+          const [media] = await exec
+            .select({ n: count() })
+            .from(postMedia)
+            .where(and(eq(postMedia.projectId, target.projectId), eq(postMedia.postId, target.postId)));
+          return { text: head.overrideText ?? head.baseText, mediaCount: Number(media?.n ?? 0) };
         },
       };
 

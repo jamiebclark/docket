@@ -18,6 +18,7 @@ import { resolvePublishMedia } from "../services/media-variants";
 import { deferralTime, effectiveLimits } from "./limits";
 import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
+import { refreshForPublish } from "./credentials";
 import { applyStepResult, recordStepResult } from "./record";
 
 export interface PublishingCounts {
@@ -139,7 +140,16 @@ export async function runPublishing(opts: {
             [...attempts, { step: "engine", outcome: "account_unavailable", tickId, error: "Invalid account settings." }],
           );
         }
-        const info = provider.stepFor(target.stepState, settings);
+        const shape = await ctx.contentShape(target);
+        if (!shape) {
+          // The post is gone: nothing to publish, and no provider call is made (G4).
+          counts.failed++;
+          return finish(
+            { status: "failed", nextAttemptAt: null, lastError: "The post is no longer available." },
+            [...attempts, { step: "engine", outcome: "fatal_error", tickId, error: "The post is no longer available." }],
+          );
+        }
+        const info = provider.stepFor(target.stepState, settings, shape);
         const token = randomUUID();
         leased.set(target.id, {
           claimed: undefined as unknown as ClaimedTarget,
@@ -202,6 +212,9 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 /** Media could not be resolved before the provider call; the target fails with no call made. */
 class MediaUnavailable extends Error {}
 
+/** The post row vanished after the claim; no provider call is made, and it can never have published (G4). */
+class PostGone extends Error {}
+
 /**
  * Media preparation failed or overran the tick budget. It runs before any provider call,
  * so the step cannot have published: always retryable, never ambiguous (F3).
@@ -228,29 +241,43 @@ async function execute(
   const account = claimed.account;
   const repos = forSchedulerProject(target.projectId);
 
-  if ((await clock.now()).getTime() + config.providerTimeoutMs > deadline) {
+  const fitsDeadline = async () => (await clock.now()).getTime() + config.providerTimeoutMs <= deadline;
+
+  /** Gives the target back, uncounted: the attempt budget is untouched and one `released` attempt is recorded. */
+  const release = async (error?: string): Promise<void> => {
     const released = await repos.transaction(async (tx) => {
       const row = await tx.targets.update(
         target.id,
         { ...UNLEASED, ...lease.before, attemptCount: target.attemptCount },
         { leaseOwner: token },
       );
-      if (row) await tx.attempts.insert({ postTargetId: target.id, step: lease.step, outcome: "released", tickId, at: await clock.now() });
+      if (row) {
+        await tx.attempts.insert({
+          postTargetId: target.id,
+          step: lease.step,
+          outcome: "released",
+          tickId,
+          at: await clock.now(),
+          ...(error ? { error } : {}),
+        });
+      }
       return row !== null;
     });
     if (released) {
       counts.released++;
       await repos.transaction((tx) => applyDerivedStatus(tx, target.postId));
     }
-    return;
-  }
+  };
+
+  if (!(await fitsDeadline())) return release();
 
   let secrets: string[] = [];
-  let result: StepResult;
+  let result: StepResult | undefined;
+  let seenCiphertext: string | null = null;
   const startedMs = Date.now();
   try {
     const loaded = await repos.targets.effectiveContent(target.id);
-    if (!loaded) throw new Error("The post is no longer available.");
+    if (!loaded) throw new PostGone("The post is no longer available.");
     // Adapted media (FR-016): regenerates a vanished variant; a deleted original fails the target before any provider call.
     // Text-only posts (the common case) skip it.
     let media = loaded.media;
@@ -264,12 +291,34 @@ async function execute(
       media = resolved.media;
     }
     const content = { text: loaded.text, media };
-    const ciphertext = await repos.accounts.getCredentialsCiphertext(account.id);
-    const credentials = decryptCredentials(account.id, ciphertext);
+    seenCiphertext = await repos.accounts.getCredentialsCiphertext(account.id);
+    let credentials = decryptCredentials(account.id, seenCiphertext);
     secrets = secretValues(credentials);
+
+    // Proactive refresh (G2): runs outside `advance`, so it is never covered by `inFlightMayPublish` (FR-023).
+    if (provider.refreshCredentials && provider.needsRefresh?.(credentials, await clock.now())) {
+      if (!(await fitsDeadline())) return release();
+      const r = await refreshForPublish({ projectId: target.projectId, account, provider, seenCiphertext, config });
+      if (r.kind === "refreshed" || r.kind === "changed") {
+        credentials = r.credentials;
+        seenCiphertext = r.ciphertext;
+        secrets = [...secrets, ...secretValues(credentials)];
+        if (!(await fitsDeadline())) return release(); // persisted: the next tick publishes with it
+      } else if (r.kind === "busy") {
+        return release("Waiting for account credentials to be renewed.");
+      } else if (r.kind === "unavailable" || r.kind === "refused") {
+        return release("The account needs reconnecting.");
+      } else {
+        result = {
+          kind: "retryable_error",
+          error: "Could not renew the account's session; will retry.",
+          ...(r.retryAt ? { notBefore: r.retryAt } : {}),
+        };
+      }
+    }
     const settings = provider.settingsSchema.parse(account.settings ?? {});
     const signal = AbortSignal.timeout(config.providerTimeoutMs);
-    result = await withTimeout(
+    result ??= await withTimeout(
       provider.advance({
         target: { id: target.id, scheduledAt: target.scheduledAt ?? new Date(), attempt: target.attemptCount + 1 },
         account: {
@@ -281,6 +330,7 @@ async function execute(
         },
         content,
         postType: inferPostType(content),
+        step: { name: lease.step, mayPublish: lease.mayPublish },
         state: target.stepState,
         now: await clock.now(),
         signal,
@@ -288,7 +338,7 @@ async function execute(
       config.providerTimeoutMs,
     );
   } catch (error) {
-    if (error instanceof MediaUnavailable) {
+    if (error instanceof MediaUnavailable || error instanceof PostGone) {
       result = { kind: "fatal_error", error: error.message };
     } else if (error instanceof MediaNotReady) {
       result = { kind: "retryable_error", error: error.message };
@@ -301,7 +351,7 @@ async function execute(
 
   const now = await clock.now();
   const outcome = applyStepResult({
-    result,
+    result: result!,
     target: { attemptCount: target.attemptCount, stepState: target.stepState },
     now,
     config,
@@ -323,11 +373,16 @@ async function execute(
     now,
     secrets,
   });
+  // Reactive refresh (G2): after the result is recorded, so a slow refresh never holds back the target's own record.
+  // It only affects the account (a refusal flags `needs_reauth`); the next tick publishes with the new credentials.
+  if (result!.kind === "retryable_error" && result!.credentialsExpired && provider.refreshCredentials && (await fitsDeadline())) {
+    await refreshForPublish({ projectId: target.projectId, account, provider, seenCiphertext, config }).catch(() => undefined);
+  }
   if (!applied) {
     counts.staleResults++;
     return;
   }
-  switch (result.kind) {
+  switch (result!.kind) {
     case "done":
       counts.done++;
       break;

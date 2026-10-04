@@ -3,18 +3,21 @@ import { findProvider, listProviders } from "../../providers/registry";
 import * as clock from "../dal/clock";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { claimRefreshAccounts, forSchedulerProject } from "../dal/scheduler";
-import { decryptCredentials, encryptCredentials } from "../services/accounts";
+import { decryptCredentials } from "../services/accounts";
+import { applyRefreshResult } from "./credentials";
 import type { SchedulerConfig } from "./config";
 import { redact, secretValues } from "./redact";
 
 export interface RefreshCounts {
   refreshed: number;
   failed: number;
+  /** Transient failures: the account stays `active` and is retried. */
+  deferred: number;
 }
 
 /**
  * Refreshes credentials that expire within the window (D7). One account's failure never stops the
- * others; a failure flags the account `needs_reauth` with a redacted reason. Writes its own heartbeat
+ * others; a definitive failure flags the account `needs_reauth` with a redacted reason; a transient one keeps it `active`. Writes its own heartbeat
  * only when the section completes.
  */
 export async function runTokenRefresh(opts: {
@@ -23,7 +26,7 @@ export async function runTokenRefresh(opts: {
   startedAt: Date;
 }): Promise<RefreshCounts> {
   const { config } = opts;
-  const counts: RefreshCounts = { refreshed: 0, failed: 0 };
+  const counts: RefreshCounts = { refreshed: 0, failed: 0, deferred: 0 };
   const deadline = opts.startedAt.getTime() + config.timeBudgetMs;
   const token = randomUUID();
   const now = await clock.now();
@@ -58,23 +61,10 @@ export async function runTokenRefresh(opts: {
         now: await clock.now(),
         signal: AbortSignal.timeout(config.providerTimeoutMs),
       });
-      const at = await clock.now();
-      if (result.ok) {
-        secrets = [...secrets, ...secretValues(result.credentials)];
-        const kept = await repos.accounts.recordRefresh(account.id, token, {
-          credentialsEncrypted: encryptCredentials(account.id, result.credentials),
-          credentialsExpiresAt: result.expiresAt,
-          lastRefreshedAt: at,
-          lastError: null,
-        });
-        if (kept) counts.refreshed++;
-      } else {
-        const kept = await repos.accounts.recordRefresh(account.id, token, {
-          status: "needs_reauth",
-          lastError: redact(result.reason, secrets),
-        });
-        if (kept) counts.failed++;
-      }
+      const applied = await applyRefreshResult(repos, account, token, result, secrets);
+      if (applied.kind === "refreshed") counts.refreshed++;
+      else if (applied.kind === "refused") counts.failed++;
+      else if (applied.kind === "transient") counts.deferred++;
     } catch (error) {
       const message = redact(error instanceof Error ? error.message : "Refreshing credentials failed.", secrets);
       try {
