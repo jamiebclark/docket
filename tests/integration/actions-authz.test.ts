@@ -7,11 +7,14 @@ vi.mock("next/navigation", async () => (await import("../helpers/actions")).navi
 
 import * as accountActions from "../../src/app/p/[projectSlug]/accounts/actions";
 import * as calendarActions from "../../src/app/p/[projectSlug]/calendar/actions";
+import * as reviewActions from "../../src/app/p/[projectSlug]/review/actions";
 import * as generateActions from "../../src/app/p/[projectSlug]/generate/actions";
 import * as composeActions from "../../src/app/p/[projectSlug]/compose/actions";
 import * as mediaActions from "../../src/app/p/[projectSlug]/media/actions";
+import * as voiceActions from "../../src/app/p/[projectSlug]/voice/actions";
 import * as postActions from "../../src/app/p/[projectSlug]/posts/actions";
 import { setLlmForTests } from "../../src/server/llm";
+import { startSeries } from "../../src/server/services/generation/series";
 import { generateSingle } from "../../src/server/services/generation/single";
 import * as posts from "../../src/server/services/posts";
 import * as media from "../../src/server/services/media";
@@ -20,7 +23,7 @@ import { actAs, RedirectSignal } from "../helpers/actions";
 import { atTime } from "../helpers/clock";
 import { closeDb } from "../helpers/db";
 import { createFakeLlm } from "../helpers/fake-llm";
-import { createSession, createUser, createVoiceProfile } from "../helpers/factories";
+import { createPostInReview, createSession, createUser, createVoiceProfile } from "../helpers/factories";
 import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterThrowaway } from "../helpers/connect-group";
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
@@ -55,6 +58,8 @@ type Env = Awaited<ReturnType<typeof postsEnv>>;
 type Fx = Awaited<ReturnType<typeof fixtures>>;
 type Role = "owner" | "admin" | "editor" | "nonMember";
 
+const fakeOkPost = () => ({ ok: { variants: { mock: { text: "Generated text" } } } });
+
 /** Fresh entities per call, so a destructive action in one row never starves the next. */
 async function fixtures(env: Env) {
   const account = await env.account();
@@ -71,7 +76,7 @@ async function fixtures(env: Env) {
   if (!upload.ok) throw new Error("fixture upload failed");
   const form = new FormData();
   form.set("file", new File([new Uint8Array(await png())], "b.png", { type: "image/png" }));
-  const fakeOk = () => ({ ok: { variants: { mock: { text: "Generated text" } } } });
+  const fakeOk = fakeOkPost;
   const voice = await createVoiceProfile(env.project.id);
   const generated = await generateSingle(
     env.scope,
@@ -79,13 +84,26 @@ async function fixtures(env: Env) {
     createFakeLlm([fakeOk()]),
   );
   if (!generated.ok) throw new Error("fixture generation failed");
+  const reviewPosts = await Promise.all([1, 2, 3].map(() => createPostInReview(env.project.id, { accountIds: [account.id] })));
   // The actions under test use the configured provider; give each call its own scripted answers.
   setLlmForTests(createFakeLlm([fakeOk(), fakeOk()]));
   const attemptId = await readyAttempt(env.scope, await sessionFor(env.owner.id), pageCandidate("authz", "Authz", false));
   return {
     attemptId,
     voiceProfileId: voice.id,
+    seriesId: (
+      await startSeries(env.scope, {
+        voiceProfileId: voice.id,
+        brief: "Series fixture",
+        targetAccountIds: [account.id],
+        count: 2,
+        angles: [{ title: "One", description: "First" }],
+      })
+    ).seriesId,
+    voiceVersionId: (await env.scope.voiceVersions.getByNumber(voice.id, 1))!.id,
     generatedPostId: generated.postId,
+    reviewPostId: reviewPosts[0]!.post.id,
+    reviewPostIds: [reviewPosts[1]!.post.id, reviewPosts[2]!.post.id],
     accountId: account.id,
     slotId: slots[0]!.id,
     targetId: a.targetId,
@@ -120,10 +138,51 @@ const CASES: Case[] = [
         targetAccountIds: [f.accountId],
       }),
   },
+  {
+    name: "planSeriesAction",
+    run: (s, f) => {
+      setLlmForTests(createFakeLlm([{ ok: { angles: [{ title: "One", description: "First" }, { title: "Two", description: "Second" }] } }]));
+      return generateActions.planSeriesAction(s, { voiceProfileId: f.voiceProfileId, brief: "A brief", targetAccountIds: [f.accountId], count: 2 });
+    },
+  },
+  {
+    name: "startSeriesAction",
+    run: (s, f) =>
+      generateActions.startSeriesAction(s, {
+        voiceProfileId: f.voiceProfileId,
+        brief: "A brief",
+        targetAccountIds: [f.accountId],
+        count: 2,
+        angles: [{ title: "One", description: "First" }],
+      }),
+  },
+  {
+    name: "writeSeriesPostAction",
+    run: (s, f) => {
+      setLlmForTests(createFakeLlm([fakeOkPost()]));
+      return generateActions.writeSeriesPostAction(s, { seriesId: f.seriesId, position: 0 });
+    },
+  },
   { name: "regenerateAction", run: (s, f) => generateActions.regenerateAction(s, { postId: f.generatedPostId, instruction: "Shorter" }) },
+  { name: "approveAction", run: (s, f) => reviewActions.approveAction(s, { postId: f.reviewPostId }) },
+  { name: "rejectAction", run: (s, f) => reviewActions.rejectAction(s, { postId: f.reviewPostId, reason: "No" }) },
+  { name: "bulkApproveAction", run: (s, f) => reviewActions.bulkApproveAction(s, { postIds: f.reviewPostIds }) },
   {
     name: "updatePostVariantsAction",
     run: (s, f) => generateActions.updatePostVariantsAction(s, { postId: f.generatedPostId, edits: [{ providerKey: "mock", text: "Edited" }] }),
+  },
+  { name: "createVoiceAction", manage: true, run: (s) => voiceActions.createVoiceAction(s, { name: `Voice ${randomUUID()}`, content: {} }) },
+  {
+    name: "saveVoiceAction",
+    manage: true,
+    run: (s, f) => voiceActions.saveVoiceAction(s, { profileId: f.voiceProfileId, name: "Edited voice", content: { audience: "All" }, baseVersion: 1 }),
+  },
+  { name: "setDefaultVoiceAction", manage: true, run: (s, f) => voiceActions.setDefaultVoiceAction(s, { profileId: f.voiceProfileId }) },
+  { name: "archiveVoiceAction", manage: true, run: (s, f) => voiceActions.archiveVoiceAction(s, { profileId: f.voiceProfileId }) },
+  { name: "restoreVoiceAction", manage: true, run: (s, f) => voiceActions.restoreVoiceAction(s, { profileId: f.voiceProfileId }) },
+  {
+    name: "tryVoiceAction",
+    run: (s, f) => voiceActions.tryVoiceAction(s, { brief: "Say hi", providerKeys: ["mock"], versionId: f.voiceVersionId }),
   },
   { name: "retryTargetAction", run: (s, f) => postActions.retryTargetAction(s, { targetId: f.targetId }) },
   { name: "cancelTargetAction", run: (s, f) => postActions.cancelTargetAction(s, { targetId: f.targetId }) },
@@ -218,6 +277,22 @@ describe("every server action × role (SC-009, SC-011)", () => {
 });
 
 describe("generate actions", () => {
+  it("refuses an editor's auto-approve in the series actions with the policy message", async () => {
+    const env = await postsEnv();
+    const account = await env.account();
+    const voice = await createVoiceProfile(env.project.id);
+    actAs(env.editor, (await createSession(env.editor.id)).id);
+    const r = await generateActions.startSeriesAction(env.project.slug, {
+      voiceProfileId: voice.id,
+      brief: "A brief",
+      targetAccountIds: [account.id],
+      count: 2,
+      angles: [{ title: "One", description: "First" }],
+      approval: "auto_approve",
+    });
+    expect(r).toMatchObject({ ok: false, error: "forbidden", message: "Only owners and admins can auto-approve" });
+  });
+
   it("never put the LLM key in a result, even when the provider rejects it", async () => {
     const key = "sk-FAKE-authz-llm-key-0123456789";
     vi.stubEnv("LLM_PROVIDER", "openai");

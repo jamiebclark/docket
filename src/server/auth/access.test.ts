@@ -14,6 +14,8 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     slot: ["view", "manage"],
     media: ["view", "edit"],
     post: ["view", "edit", "schedule", "delete"],
+    voice: ["view", "manage"],
+    generation: ["run", "auto_approve"],
   },
   admin: {
     project: ["view", "update"],
@@ -24,6 +26,8 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     slot: ["view", "manage"],
     media: ["view", "edit"],
     post: ["view", "edit", "schedule", "delete"],
+    voice: ["view", "manage"],
+    generation: ["run", "auto_approve"],
   },
   editor: {
     project: ["view"],
@@ -32,6 +36,8 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     slot: ["view"],
     media: ["view", "edit"],
     post: ["view", "edit", "schedule", "delete"],
+    voice: ["view"],
+    generation: ["run"],
   },
 };
 

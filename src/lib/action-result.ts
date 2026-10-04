@@ -48,7 +48,12 @@ const ERROR_NAME_TO_CODE: Record<string, ErrorCode> = {
   EmailMismatchError: "email_mismatch",
   SetupUnavailableError: "setup_unavailable",
   ValidationIssuesError: "validation",
+  LlmNotConfiguredError: "conflict",
+  PolicyNotAllowedError: "forbidden",
 };
+
+/** Errors whose message is written for the user and safe to show, beyond the codes that always keep theirs. */
+const KEEPS_MESSAGE_NAMES = new Set(["PolicyNotAllowedError"]);
 
 const GENERIC_MESSAGE: Record<string, string> = {
   not_found: "Not found.",
@@ -70,7 +75,7 @@ export function failFromError(err: unknown): ActionResult<never> {
   const code = err instanceof Error ? ERROR_NAME_TO_CODE[err.name] : undefined;
   if (!code) throw err;
   // These carry a deliberate, user-facing message; the rest stay generic so nothing leaks.
-  const keepsMessage = code === "last_owner" || code === "conflict";
+  const keepsMessage = code === "last_owner" || code === "conflict" || (err instanceof Error && KEEPS_MESSAGE_NAMES.has(err.name));
   const message =
     keepsMessage && err instanceof Error && err.message
       ? err.message

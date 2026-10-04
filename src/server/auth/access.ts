@@ -1,6 +1,6 @@
 import { createAccessControl } from "better-auth/plugins/access";
 
-// Later features extend `statements` (accounts, slots, voice, api_keys, posts, generation).
+// Later features extend `statements` (api_keys).
 export const statements = {
   project: ["view", "update"],
   member: ["view", "remove", "remove_owner", "update_role", "transfer_ownership"],
@@ -10,6 +10,8 @@ export const statements = {
   slot: ["view", "manage"],
   media: ["view", "edit"],
   post: ["view", "edit", "schedule", "delete"],
+  voice: ["view", "manage"],
+  generation: ["run", "auto_approve"],
 } as const;
 
 export const ac = createAccessControl(statements);
@@ -23,6 +25,8 @@ export const owner = ac.newRole({
   slot: ["view", "manage"],
   media: ["view", "edit"],
   post: ["view", "edit", "schedule", "delete"],
+  voice: ["view", "manage"],
+  generation: ["run", "auto_approve"],
 });
 
 export const admin = ac.newRole({
@@ -34,6 +38,8 @@ export const admin = ac.newRole({
   slot: ["view", "manage"],
   media: ["view", "edit"],
   post: ["view", "edit", "schedule", "delete"],
+  voice: ["view", "manage"],
+  generation: ["run", "auto_approve"],
 });
 
 export const editor = ac.newRole({
@@ -43,6 +49,8 @@ export const editor = ac.newRole({
   slot: ["view"],
   media: ["view", "edit"],
   post: ["view", "edit", "schedule", "delete"],
+  voice: ["view"],
+  generation: ["run"],
 });
 
 export const roles = { owner, admin, editor } as const;
