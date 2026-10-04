@@ -80,7 +80,7 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
               <Field
                 id={`connect-group-${groupKey}-token`}
                 label={paste.label}
-                hint={`${paste.help} Needed permissions: pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic, instagram_content_publish.`}
+                hint={paste.help}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 type="password"

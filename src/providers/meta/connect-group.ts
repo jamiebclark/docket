@@ -43,7 +43,7 @@ export const metaConnectGroup: OAuthConnectGroup = {
   },
   pasteToken: {
     field: { name: "userToken", label: "User access token", secret: true },
-    help: "Generate a user access token in Graph API Explorer with the Pages and Instagram permissions, then paste it here.",
+    help: "Generate a user access token in Graph API Explorer with pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic and instagram_content_publish, then paste it here.",
     async exchange({ token, signal }) {
       return candidatesFromUserToken(requireMetaConfig(), token, signal);
     },
