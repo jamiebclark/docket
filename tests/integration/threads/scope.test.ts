@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { getTableName } from "drizzle-orm";
+import { getTableName, is } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "../../../src/server/db/schema";
 
@@ -22,7 +23,7 @@ describe("Threads provider scope", () => {
 
   it("adds no table named for Threads", () => {
     const tables = Object.values(schema)
-      .filter((v): v is Parameters<typeof getTableName>[0] => typeof v === "object" && v !== null && Symbol.for("drizzle:IsDrizzleTable") in v)
+      .filter((v): v is PgTable => is(v, PgTable))
       .map((t) => getTableName(t));
     expect(tables.length).toBeGreaterThan(0);
     expect(tables.filter((n) => /thread/i.test(n))).toEqual([]);
