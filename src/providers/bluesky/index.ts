@@ -1,0 +1,50 @@
+import type { SocialProvider, StepResult } from "../types";
+import { advance } from "./publish";
+import { connectAccount, needsRefresh, refreshCredentials } from "./session";
+import { DEFAULT_PDS_URL, blueskySettingsSchema, type BlueskySettings, type BlueskyState } from "./settings";
+import { stepForContent } from "./steps";
+import { validateBluesky } from "./validate";
+
+export const blueskyProvider: SocialProvider<BlueskySettings, BlueskyState> = {
+  key: "bluesky",
+  displayName: "Bluesky",
+  capabilities: {
+    text: { maxLength: 300, countingRule: "graphemes" },
+    media: {
+      maxImages: 4,
+      allowedMimeTypes: ["image/jpeg", "image/png"],
+      outputMimeType: "image/jpeg",
+      maxBytesPerFile: 2_000_000,
+      required: false,
+    },
+    textOnlyAllowed: true,
+    postTypes: ["text", "image", "carousel"],
+  },
+  connect: {
+    strategy: "credentials",
+    fields: [
+      { name: "handle", label: "Handle", secret: false, placeholder: "you.bsky.social", help: "Your Bluesky handle, without the @." },
+      {
+        name: "appPassword",
+        label: "App password",
+        secret: true,
+        help: "Create an app password in your Bluesky account settings. Do not use your main password.",
+      },
+      {
+        name: "pdsUrl",
+        label: "Server (PDS) address",
+        secret: false,
+        optional: true,
+        defaultValue: DEFAULT_PDS_URL,
+        help: "Leave as https://bsky.social unless you host your own server.",
+      },
+    ],
+  },
+  settingsSchema: blueskySettingsSchema,
+  connectAccount,
+  needsRefresh,
+  refreshCredentials,
+  validate: validateBluesky,
+  stepFor: (state, _settings, content) => stepForContent(state, content),
+  advance: (ctx) => advance(ctx) as Promise<StepResult>,
+};

@@ -1,3 +1,4 @@
+import type { RefreshResult, SocialProvider } from "../../../src/providers/types";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { readHeartbeats } from "../../../src/server/dal/heartbeats";
@@ -5,7 +6,18 @@ import { runTick } from "../../../src/server/scheduler";
 import { decryptCredentials, encryptCredentials } from "../../../src/server/services/accounts";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
+import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+
+// Per-account scripted refresh outcomes, so leftover accounts from other tests are unaffected.
+const scripted = new Map<string, RefreshResult>();
+registerTestProvider({
+  ...blueskyLikeProvider,
+  key: "scripted-scheduled-refresh",
+  displayName: "Scripted",
+  refreshCredentials: async ({ account }) =>
+    scripted.get(account.id) ?? { ok: true, credentials: { token: "fresh" }, expiresAt: new Date(Date.now() + 30 * 86_400_000) },
+} as SocialProvider);
 
 beforeEach(parkAllDueTargets);
 
@@ -74,5 +86,44 @@ describe("token refresh", () => {
     expect(refreshed.length).toBeLessThanOrEqual(5);
     expect(refreshed.length).toBeGreaterThanOrEqual(1);
     expect((await readHeartbeats()).map((h) => h.section)).toContain("token_refresh");
+  });
+
+  it("keeps the account active on a transient failure, records last_error, and retries next tick", async () => {
+    const { project } = await createProjectWithMembers();
+    const account = await createMockAccount(project.id, {}, { providerKey: "scripted-scheduled-refresh", credentialsExpiresAt: soon() });
+    const repos = forSchedulerProject(project.id);
+    await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { token: "old-secret-token" }), soon());
+    scripted.set(account.id, { ok: false, reason: "PDS unreachable", transient: true });
+
+    const first = await runTick({ config: { refreshMaxAccounts: 1000 } });
+    expect(first.tokenRefresh.counts.deferred).toBeGreaterThanOrEqual(1);
+    const after = await repos.accounts.get(account.id);
+    expect(after).toMatchObject({ status: "active" });
+    expect(after!.lastError).toContain("PDS unreachable");
+    expect(after!.lastError).not.toContain("old-secret-token");
+
+    scripted.delete(account.id);
+    const second = await runTick({ config: { refreshMaxAccounts: 1000 } });
+    expect(second.tokenRefresh.counts.refreshed).toBeGreaterThanOrEqual(1);
+    expect(await repos.accounts.get(account.id)).toMatchObject({ status: "active", lastError: null });
+  });
+
+  it("updates the display name when the refresh reports a new handle", async () => {
+    const { project } = await createProjectWithMembers();
+    const account = await createMockAccount(project.id, {}, {
+      providerKey: "scripted-scheduled-refresh",
+      displayName: "old.handle",
+      credentialsExpiresAt: soon(),
+    });
+    const repos = forSchedulerProject(project.id);
+    await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { token: "old-secret-token" }), soon());
+    scripted.set(account.id, {
+      ok: true,
+      credentials: { token: "fresh" },
+      expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      displayName: "new.handle",
+    });
+    await runTick({ config: { refreshMaxAccounts: 1000 } });
+    expect(await repos.accounts.get(account.id)).toMatchObject({ displayName: "new.handle", status: "active" });
   });
 });

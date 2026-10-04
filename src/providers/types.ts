@@ -38,6 +38,30 @@ export interface CredentialField {
   label: string;
   secret: boolean;
   help?: string;
+  /** Default false (required). */
+  optional?: boolean;
+  /** Used when the submitted value is empty. Requires `optional`; never on a secret field. */
+  defaultValue?: string;
+  placeholder?: string;
+}
+
+export type ConnectResult =
+  | {
+      ok: true;
+      account: {
+        externalId: string;
+        displayName: string;
+        settings: unknown;
+        credentials: unknown;
+        expiresAt: Date | null;
+      };
+    }
+  | { ok: false; message: string; field?: string; retryAt?: Date };
+
+/** What `stepFor` may look at. */
+export interface StepContent {
+  text: string;
+  mediaCount: number;
 }
 
 export type ConnectStrategy =
@@ -106,6 +130,8 @@ export interface PublishContext {
   };
   content: PostContent;
   postType: PostType;
+  /** The step the engine leased. */
+  step: StepInfo;
   /** Null on the first step. */
   state: unknown | null;
   /** The engine clock (DB time). */
@@ -122,14 +148,14 @@ export interface AttemptSummary {
 export type StepResult = (
   | { kind: "continue"; state: unknown; notBefore?: Date }
   | { kind: "done"; externalId: string; url?: string }
-  | { kind: "retryable_error"; error: string; notBefore?: Date }
+  | { kind: "retryable_error"; error: string; notBefore?: Date; credentialsExpired?: boolean }
   | { kind: "fatal_error"; error: string }
   | { kind: "ambiguous"; error: string }
 ) & { summary?: AttemptSummary };
 
 export type RefreshResult =
-  | { ok: true; credentials: unknown; expiresAt: Date | null }
-  | { ok: false; reason: string };
+  | { ok: true; credentials: unknown; expiresAt: Date | null; displayName?: string }
+  | { ok: false; reason: string; transient?: boolean; retryAt?: Date };
 
 export interface SocialProvider<Settings = unknown, State = unknown> {
   /** Lowercase `[a-z0-9-]+`, unique, stored in `social_accounts.provider_key`. */
@@ -140,6 +166,14 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   connect: ConnectStrategy;
   /** Non-secret per-account settings; `z.object({})` if none. */
   settingsSchema: z.ZodType<Settings>;
+  /** Connect by credentials: verify them and return the account. */
+  connectAccount?(input: {
+    fields: Readonly<Record<string, string>>;
+    now: Date;
+    signal: AbortSignal;
+  }): Promise<ConnectResult>;
+  /** True when the credentials should be refreshed before this publish. Requires `refreshCredentials`. */
+  needsRefresh?(credentials: unknown, now: Date): boolean;
   refreshCredentials?(input: {
     account: { id: string; externalId: string; settings: Settings };
     credentials: unknown;
@@ -148,6 +182,6 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   }): Promise<RefreshResult>;
   validate(content: PostContent, capabilities: ProviderCapabilities): ValidationIssue[];
   /** Pure and total. `settings` is the account's parsed settings (a step can depend on them). */
-  stepFor(state: State | null, settings: Settings): StepInfo;
+  stepFor(state: State | null, settings: Settings, content: StepContent): StepInfo;
   advance(ctx: PublishContext): Promise<StepResult>;
 }

@@ -139,6 +139,7 @@ describe("scope check against the real client", () => {
         excludeIds: [],
         decide: async (row, _account, ctx) => {
           await ctx.startedSince(row.socialAccountId, new Date(0));
+          await ctx.contentShape(row);
           return null;
         },
       });
@@ -149,6 +150,11 @@ describe("scope check against the real client", () => {
         leaseMs: 60_000,
         providerKeys: ["mock"],
         token: crypto.randomUUID(),
+      });
+      await repos.accounts.acquireRefreshLease(account.id, crypto.randomUUID(), {
+        now,
+        leaseMs: 60_000,
+        expectedCiphertext: "not-the-stored-value",
       });
       await repos.accounts.markRemoved(account.id, now);
       await repos.posts.softDelete(post.id, now);

@@ -63,6 +63,11 @@ Derived variants are generated at compose time and cached by constraint hash. Fi
 Whatever the flow, it ends by calling `accounts.saveConnectedAccount`. Credentials are encrypted at rest.
 The engine decrypts them and passes them to `advance` as `ctx.account.credentials`; a provider never touches storage.
 
+Credential fields may be `optional`, with a `defaultValue` and `placeholder`. When the app password (or any one-time secret) must
+not be kept, implement `connectAccount({ fields, ... })`: it exchanges the fields for what should be stored (for Bluesky, session
+tokens) and returns `{ ok: true, account: { externalId, displayName, settings, credentials, expiresAt } }` or `{ ok: false, message, field?, retryAt? }`.
+The generic accounts form and `connectWithCredentials` call it; the typed fields themselves are never saved.
+
 ## 5. Settings vs credentials
 
 - **Settings** are non-secret and stored as plain jsonb: a region, a page id, a mock behaviour. They are parsed by
@@ -80,6 +85,9 @@ A publish can take several steps (create a container, wait for processing, publi
 - `mayPublish: true` marks a step whose request can make the post public.
 - `state` is whatever a `continue` result returned. The engine stores it between ticks as plain jsonb and hands it back.
 - If the engine loses track of a step (killed tick, provider throws, timeout), `mayPublish` decides: true means `ambiguous`, false means retry.
+
+`stepFor(state, settings, content)` also receives `content: { text, mediaCount }`, so a provider can choose a different first step
+for a post with images. `advance` receives `ctx.step`, the name of the step the engine decided on, and should run exactly that step.
 
 ## 7. Each `StepResult`
 
@@ -107,6 +115,9 @@ Never return `retryable_error` from a `mayPublish` step unless you know the requ
 `advance` does **one** bounded unit of work: no polling loops, no sleeps. Return `continue` with `notBefore` instead.
 Honour `ctx.signal` on every network call.
 
+A `retryable_error` may set `credentialsExpired: true` when the platform said the access token has lapsed. The engine then
+refreshes the credentials before the retry (the result is still retryable, and nothing was published).
+
 ## 8. Publish limits
 
 Set `defaultPublishLimit` (e.g. Instagram `{ count: 100, windowSeconds: 86400 }`) and the engine enforces it:
@@ -119,6 +130,10 @@ Implement `refreshCredentials({ account, credentials, now, signal })` for expiri
 expiry. Return `{ ok: true, credentials, expiresAt }` to store the new credentials, or `{ ok: false, reason }`.
 A failure marks the account `needs_reauth`: its targets stop publishing until the user reconnects.
 Do not throw for an expected refusal; return `ok: false`.
+
+Optional extras: `needsRefresh(credentials, now)` lets the engine renew ahead of a publish when the access token is about to expire
+(Bluesky: within 5 minutes of the JWT's `exp`). A failure with `transient: true` (and optionally `retryAt`) keeps the account
+`active` instead of marking `needs_reauth`. A successful result may carry `displayName`, which updates the account's name.
 
 ## 10. Testing with mocked HTTP only
 
@@ -143,3 +158,20 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
 - `advance` maps each behaviour to a `StepResult`, sleeping `delayMs` through `ctx.signal`.
 - `refreshCredentials` succeeds or fails per the `refresh` setting.
 - Registered by a single line in `registry.ts`.
+
+## 13. Worked example: the `bluesky` provider
+
+`src/providers/bluesky/` is the first real provider using only the generic hooks above (the one registry line aside).
+
+- **Connect.** `connect` is `credentials` with `handle`, `appPassword` and an optional `pdsUrl`. `connectAccount` calls
+  `com.atproto.server.createSession`, stores the session tokens, DID and handle, and drops the app password.
+- **Publish-time refresh.** `needsRefresh` is true within 5 minutes of the access JWT's expiry, which is the common case for an idle
+  account, so the engine refreshes under a lease before `advance`. If the create call still answers `ExpiredToken`, the provider
+  returns `retryable_error` with `credentialsExpired: true` and the next tick refreshes. A refused refresh marks `needs_reauth`;
+  a 5xx or network failure is `transient`.
+- **Multi-step images.** `stepFor` uses `content.mediaCount`: a text post goes straight to `create_post` (`mayPublish`), a post with
+  images runs one non-publishing `upload_image` step per image (state holds `blob.ipld()` refs), then `create_post`.
+- **Outcomes.** Connection refused / DNS failure is `retryable_error`; 4xx on create is `fatal_error`; timeout, reset or an
+  unparseable 2xx after sending `createRecord` is `ambiguous`; 429 uses `Retry-After` for `notBefore`.
+- **Dual text limit.** Posts are limited to 300 graphemes and 3000 UTF-8 bytes; `validate` reports both, and the byte overflow is
+  an `error` so every gate blocks it. Links, mentions and hashtags become facets computed on UTF-8 byte offsets.

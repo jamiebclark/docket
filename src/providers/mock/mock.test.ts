@@ -10,12 +10,14 @@ function ctx(settings: Record<string, unknown>, over: Partial<PublishContext> = 
     account: { id: "a1", externalId: "ext", displayName: "Mock", settings: mockSettingsSchema.parse(settings), credentials: null },
     content: { text: "hello", media: [] },
     postType: "text",
+    step: { name: "publish", mayPublish: true },
     state: null,
     now,
     signal: new AbortController().signal,
     ...over,
   };
 }
+const content = { text: "hello", mediaCount: 0 };
 const parse = (s: Record<string, unknown>) => mockSettingsSchema.parse(s);
 
 describe("mock provider", () => {
@@ -35,18 +37,18 @@ describe("mock provider", () => {
   it("multi_step continues `steps` times, then publishes", async () => {
     const settings = { behaviour: "multi_step", steps: 2 };
     const s = parse(settings);
-    expect(mockProvider.stepFor(null, s)).toEqual({ name: "create_container", mayPublish: false });
+    expect(mockProvider.stepFor(null, s, content)).toEqual({ name: "create_container", mayPublish: false });
     const r1 = await mockProvider.advance(ctx(settings));
     expect(r1).toMatchObject({ kind: "continue", state: { done: 1 } });
-    expect(mockProvider.stepFor({ done: 1 }, s)).toEqual({ name: "create_container", mayPublish: false });
+    expect(mockProvider.stepFor({ done: 1 }, s, content)).toEqual({ name: "create_container", mayPublish: false });
     const r2 = await mockProvider.advance(ctx(settings, { state: { done: 1 } }));
     expect(r2).toMatchObject({ kind: "continue", state: { done: 2 } });
-    expect(mockProvider.stepFor({ done: 2 }, s)).toEqual({ name: "publish", mayPublish: true });
+    expect(mockProvider.stepFor({ done: 2 }, s, content)).toEqual({ name: "publish", mayPublish: true });
     expect((await mockProvider.advance(ctx(settings, { state: { done: 2 } }))).kind).toBe("done");
   });
 
   it("non-multi_step behaviours start with a publishing step", () => {
-    expect(mockProvider.stepFor(null, parse({}))).toEqual({ name: "publish", mayPublish: true });
+    expect(mockProvider.stepFor(null, parse({}), content)).toEqual({ name: "publish", mayPublish: true });
   });
 
   it("retryable fails the first failTimes attempts, then succeeds; always when omitted", async () => {

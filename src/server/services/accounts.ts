@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { findProvider, listProviders } from "@/providers/registry";
-import type { ProviderCapabilities, PublishLimit } from "@/providers/types";
+import type { CredentialField, ProviderCapabilities, PublishLimit } from "@/providers/types";
 import {
   connectMockSchema,
   publishLimitSchema,
@@ -12,6 +12,7 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { ProjectScope } from "../dal/scope";
 import { decryptSecret, encryptSecret } from "../crypto/secrets";
 import { getEnv } from "../env";
+import { redact } from "../scheduler/redact";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./posts/cancel";
 
 export interface AccountView {
@@ -34,7 +35,22 @@ export interface ConnectableProvider {
   displayName: string;
   connect: ReturnType<typeof listProviders>[number]["connect"];
   capabilities: ProviderCapabilities;
+  /** True when the provider connects through `connectAccount` (the generic credentials form). */
+  credentialConnect: boolean;
 }
+
+export type ConnectOutcome =
+  | { ok: true; account: AccountView }
+  | { ok: false; message: string; fieldErrors?: Record<string, string>; retryAt?: Date };
+
+const CONNECT_TIMEOUT_MS = 15_000;
+const MAX_FIELD_LENGTH = 2048;
+
+const connectCredentialsSchema = z.object({
+  providerKey: z.string().min(1).max(100),
+  fields: z.record(z.string(), z.string()),
+  accountId: z.uuid().optional(),
+});
 
 const idSchema = z.uuid();
 const aad = (id: string) => `social_account:${id}`;
@@ -74,7 +90,13 @@ export async function listConnectableProviders(scope: ProjectScope): Promise<Con
   const mockOn = getEnv().MOCK_PROVIDER_ENABLED;
   return listProviders()
     .filter((p) => p.key !== "mock" || mockOn)
-    .map((p) => ({ key: p.key, displayName: p.displayName, connect: p.connect, capabilities: p.capabilities }));
+    .map((p) => ({
+      key: p.key,
+      displayName: p.displayName,
+      connect: p.connect,
+      capabilities: p.capabilities,
+      credentialConnect: p.connectAccount !== undefined,
+    }));
 }
 
 export async function connectMock(scope: ProjectScope, input: unknown): Promise<AccountView> {
@@ -92,6 +114,104 @@ export async function connectMock(scope: ProjectScope, input: unknown): Promise<
     settings: parsed.settings ?? {},
     ...(credentialsExpireAt ? { credentials: { token: `mock-${crypto.randomUUID()}` }, credentialsExpireAt } : {}),
   });
+}
+
+/** Framework duties before `connectAccount` (providers.md G1): declared names only, trim non-secrets, defaults, required. */
+function buildFields(
+  declared: readonly CredentialField[],
+  submitted: Record<string, string>,
+): { values: Record<string, string> } | { fieldErrors: Record<string, string> } {
+  const values: Record<string, string> = {};
+  const fieldErrors: Record<string, string> = {};
+  for (const field of declared) {
+    const raw = submitted[field.name] ?? "";
+    let value = field.secret ? raw : raw.trim();
+    if (value === "") {
+      if (field.optional) value = field.defaultValue ?? "";
+      else {
+        fieldErrors[field.name] = `Enter ${field.label.toLowerCase()}.`;
+        continue;
+      }
+    }
+    if (value.length > MAX_FIELD_LENGTH) {
+      fieldErrors[field.name] = `${field.label} is too long.`;
+      continue;
+    }
+    values[field.name] = value;
+  }
+  return Object.keys(fieldErrors).length > 0 ? { fieldErrors } : { values };
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e && typeof e === "object" && depth < 4; e = (e as { cause?: unknown }).cause, depth++) {
+    if ((e as { code?: unknown }).code === "23505") return true;
+  }
+  return false;
+}
+
+/**
+ * Connect (or reconnect, with `accountId`) by credentials through the provider's `connectAccount`. Every refusal
+ * happens before any network call except the provider's own sign-in request, which runs outside a transaction.
+ */
+export async function connectWithCredentials(scope: ProjectScope, input: unknown): Promise<ConnectOutcome> {
+  const parsed = connectCredentialsSchema.parse(input);
+  require(scope, "manage");
+  const provider = findProvider(parsed.providerKey);
+  if (!provider?.connectAccount || provider.connect.strategy === "oauth") {
+    throw new NotFoundError("That provider is not available.");
+  }
+  if (provider.key === "mock" && !getEnv().MOCK_PROVIDER_ENABLED) throw new NotFoundError("That provider is not available.");
+  let existing: AccountRecord | null = null;
+  if (parsed.accountId) {
+    existing = await scope.accounts.get(parsed.accountId);
+    if (!existing || existing.removedAt) throw new NotFoundError();
+    if (existing.providerKey !== provider.key) throw new ConflictError("That account belongs to a different provider.");
+  }
+  const built = buildFields(provider.connect.fields, parsed.fields);
+  if ("fieldErrors" in built) return { ok: false, message: "Check the highlighted fields.", fieldErrors: built.fieldErrors };
+  const secrets = provider.connect.fields.filter((f) => f.secret).map((f) => built.values[f.name] ?? "").filter(Boolean);
+
+  let result;
+  try {
+    result = await provider.connectAccount({
+      fields: built.values,
+      now: await clock.now(),
+      signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
+    });
+  } catch {
+    return { ok: false, message: "Could not connect. Try again." };
+  }
+  if (!result.ok) {
+    const message = redact(result.message, secrets);
+    return {
+      ok: false,
+      message,
+      ...(result.field ? { fieldErrors: { [result.field]: message } } : {}),
+      ...(result.retryAt ? { retryAt: result.retryAt } : {}),
+    };
+  }
+  const { account } = result;
+  if (existing && account.externalId !== existing.externalAccountId) {
+    return {
+      ok: false,
+      message: `That is a different ${provider.displayName} account. Sign in as ${existing.displayName} to reconnect it, or connect it as a new account.`,
+    };
+  }
+  const save = () =>
+    saveConnectedAccount(scope, {
+      providerKey: provider.key,
+      externalAccountId: account.externalId,
+      displayName: account.displayName,
+      settings: account.settings,
+      credentials: account.credentials,
+      credentialsExpireAt: account.expiresAt,
+    });
+  try {
+    return { ok: true, account: await save() };
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    return { ok: true, account: await save() };
+  }
 }
 
 /** The one upsert every connect flow uses. A reconnect updates in place, reactivates and clears `last_error`. */

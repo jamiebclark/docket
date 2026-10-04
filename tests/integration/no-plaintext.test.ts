@@ -20,6 +20,8 @@ afterAll(async () => {
   await closeDb();
 });
 
+const APP_PASSWORD = "bsky-app-password-canary-3";
+
 const PASSWORD = "plaintext-canary-password-1";
 const SETUP_PASSWORD = "setup-canary-password-2";
 
@@ -191,6 +193,55 @@ describe("SC-011: storage credentials never reach media results, logs or rendere
     } finally {
       setStorageForTests(undefined);
       for (const s of spies) s.mockRestore();
+    }
+  });
+});
+
+describe("an app password is never stored, returned or logged", () => {
+  it("connect by credentials keeps the app password out of every row, result and log line", async () => {
+    const { createFakePds, mintJwt } = await import("../helpers/fake-pds");
+    const pds = createFakePds().route("POST", "/xrpc/com.atproto.server.createSession", {
+      json: {
+        accessJwt: mintJwt(new Date("2030-01-01T00:00:00Z")),
+        refreshJwt: mintJwt(new Date("2030-03-01T00:00:00Z")),
+        did: "did:plc:canary",
+        handle: "canary.bsky.social",
+      },
+    });
+    vi.stubGlobal("fetch", pds.fetch);
+    const logged: string[] = [];
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation((...args: unknown[]) => {
+        logged.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+      }),
+    );
+    try {
+      const ctx = await createProjectWithMembers();
+      const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+      const out = await accounts.connectWithCredentials(scope, {
+        providerKey: "bluesky",
+        fields: { handle: "canary.bsky.social", appPassword: APP_PASSWORD },
+      });
+      expect(out.ok).toBe(true);
+      expect(JSON.stringify(out)).not.toContain(APP_PASSWORD);
+      expect(JSON.stringify(await accounts.listAccounts(scope))).not.toMatch(/accessJwt|refreshJwt/);
+      expect(logged.join("\n")).not.toContain(APP_PASSWORD);
+      const dumps = await runCrossProject("test: scan all tables for the app password", async () => {
+        const db = testDb();
+        const tables = await db.execute<{ table_name: string }>(
+          sql`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`,
+        );
+        const hits: string[] = [];
+        for (const { table_name } of tables.rows) {
+          const dump = await db.execute<{ r: string }>(sql.raw(`select t::text as r from "${table_name}" t`));
+          if (dump.rows.some((row) => row.r.includes(APP_PASSWORD))) hits.push(table_name);
+        }
+        return hits;
+      });
+      expect(dumps).toEqual([]);
+    } finally {
+      spies.forEach((s) => s.mockRestore());
+      vi.unstubAllGlobals();
     }
   });
 });

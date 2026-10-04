@@ -21,7 +21,14 @@ export interface RefreshPatch {
   lastRefreshedAt?: Date;
   status?: "active" | "needs_reauth";
   lastError?: string | null;
+  displayName?: string;
 }
+
+export type RefreshLeaseResult =
+  | { kind: "acquired" }
+  | { kind: "changed" }
+  | { kind: "busy" }
+  | { kind: "unavailable" };
 
 export interface AccountsRepo {
   /** Distinct non-deleted posts with a draft/scheduled/publishing target on the account. */
@@ -43,6 +50,15 @@ export interface AccountsRepo {
    * Returns false when the lease was lost.
    */
   recordRefresh(id: string, token: string, patch: RefreshPatch): Promise<boolean>;
+  /**
+   * Internal (publish-time refresh): takes the refresh lease with one conditional UPDATE, only while the stored
+   * ciphertext still equals `expectedCiphertext`. `changed` = someone refreshed; `busy` = leased; `unavailable` = removed, inactive, or no credentials.
+   */
+  acquireRefreshLease(
+    id: string,
+    token: string,
+    opts: { now: Date; leaseMs: number; expectedCiphertext: string },
+  ): Promise<RefreshLeaseResult>;
   /** Internal: used only by the scheduler and token refresh. */
   getCredentialsCiphertext(id: string): Promise<string | null>;
 }
@@ -193,6 +209,35 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .where(and(mine(id), eq(socialAccounts.refreshLeaseOwner, token)))
         .returning({ id: socialAccounts.id });
       return rows.length > 0;
+    },
+    async acquireRefreshLease(id, token, opts) {
+      const leaseUntil = new Date(opts.now.getTime() + opts.leaseMs);
+      const won = await db
+        .update(socialAccounts)
+        .set({ refreshLeaseUntil: leaseUntil, refreshLeaseOwner: token })
+        .where(
+          and(
+            mine(id),
+            eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.removedAt),
+            // No `or`: the scope check treats a disjunction as unable to pin the project.
+            sql`coalesce(${socialAccounts.refreshLeaseUntil}, 'epoch'::timestamptz) <= ${opts.now}`,
+            eq(socialAccounts.credentialsEncrypted, opts.expectedCiphertext),
+          ),
+        )
+        .returning({ id: socialAccounts.id });
+      if (won.length > 0) return { kind: "acquired" };
+      const [row] = await db
+        .select({
+          status: socialAccounts.status,
+          removedAt: socialAccounts.removedAt,
+          c: socialAccounts.credentialsEncrypted,
+        })
+        .from(socialAccounts)
+        .where(mine(id))
+        .limit(1);
+      if (!row || row.removedAt !== null || row.status !== "active" || row.c === null) return { kind: "unavailable" };
+      return row.c !== opts.expectedCiphertext ? { kind: "changed" } : { kind: "busy" };
     },
     async getCredentialsCiphertext(id) {
       const [row] = await db
