@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MediaCard } from "@/components/media/MediaCard";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -8,6 +9,7 @@ import { firstParam, mediaSearchParamsSchema, toMediaListInput, type MediaSearch
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as media from "@/server/services/media";
+import { MediaSelection, SelectBox } from "./MediaSelection";
 import { MediaCardActions } from "./MediaCardActions";
 import { UploadDropzone } from "./UploadDropzone";
 
@@ -43,6 +45,8 @@ export default async function MediaPage({ params, searchParams }: Props) {
   }
   const status = await media.mediaStatus(scope);
   const canEdit = scope.can({ media: ["edit"] });
+  const canGenerate = scope.can({ generation: ["run"] });
+  const unusedCount = canGenerate && status.enabled ? (await scope.media.listIdsForSelection({ unusedOnly: true, limit: 501 })).length : 0;
   const filtered = !!(filter.tag || filter.unused || filter.missingAlt || filter.q);
   let list: Awaited<ReturnType<typeof media.listMedia>> | null = null;
   let failed = false;
@@ -83,6 +87,35 @@ export default async function MediaPage({ params, searchParams }: Props) {
             </button>
           </form>
           <FilterTabs label="Filter media" tabs={tabs} />
+          {canGenerate ? (
+            unusedCount > 0 ? (
+              <Link
+                href={`/p/${projectSlug}/jobs/new?source=media&mode=unused`}
+                className="self-start rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background"
+              >
+                Generate for all unused images ({unusedCount > 500 ? "500+" : unusedCount})
+              </Link>
+            ) : (
+              <span aria-disabled="true" className="self-start rounded-md border border-foreground/30 px-3 py-1.5 text-sm text-foreground/60">
+                No unused images to generate for
+              </span>
+            )
+          ) : null}
+          {canGenerate && (filter.tag || filter.missingAlt || filter.q) && list && list.total > 0 ? (
+            // FR-028: generate for the current filter or tag, not only checked images (F1).
+            <Link
+              href={`/p/${projectSlug}/jobs/new?${new URLSearchParams({
+                source: "media",
+                mode: "filter",
+                ...(filter.tag ? { tag: filter.tag } : {}),
+                ...(filter.missingAlt ? { missingAlt: "1" } : {}),
+                ...(filter.q ? { q: filter.q } : {}),
+              }).toString()}`}
+              className="self-start rounded-md border border-foreground/40 px-3 py-1.5 text-sm font-medium hover:bg-foreground/10"
+            >
+              Generate posts for these {list.total} images
+            </Link>
+          ) : null}
           {failed || !list ? (
             <p role="alert" className="text-sm text-red-700 dark:text-red-400">
               The library could not be loaded. Reload the page to try again.
@@ -90,11 +123,16 @@ export default async function MediaPage({ params, searchParams }: Props) {
           ) : list.items.length === 0 ? (
             <EmptyState message={filtered ? "No images match these filters." : "No images yet. Upload your first image above."} />
           ) : (
-            <>
+            <MediaSelection slug={projectSlug}>
               <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                 {list.items.map((item) => (
                   <li key={item.id}>
-                    <MediaCard item={item} actions={canEdit ? <MediaCardActions slug={projectSlug} item={item} /> : null} />
+                    <MediaCard
+                      item={item}
+                      actions={canEdit ? <MediaCardActions slug={projectSlug} item={item} /> : null}
+                      select={canGenerate && !item.reservedByJobId ? <SelectBox id={item.id} label={item.originalFilename ?? "image"} /> : null}
+                      jobHref={(jobId) => `/p/${projectSlug}/jobs/${jobId}`}
+                    />
                   </li>
                 ))}
               </ul>
@@ -104,7 +142,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
                 total={list.total}
                 hrefFor={(p) => hrefFor(projectSlug, filter, p)}
               />
-            </>
+            </MediaSelection>
           )}
         </>
       )}
