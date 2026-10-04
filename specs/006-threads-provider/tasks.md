@@ -169,8 +169,8 @@ description: "Task list for the Threads provider (006)"
 
 ## Phase 12: Polish and final gates
 
-- [ ] T050 Run the full gates once, synchronously: `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm db:check`; fix any failure and confirm Facebook, Instagram, Bluesky and scheduler suites pass with unchanged expectations (SC-009, SC-010). Record the result honestly in the final report as "verified with mocks only"
-- [ ] T051 Walk `specs/006-threads-provider/quickstart.md` §1–§6 as commands (each maps to a `pnpm vitest run <path>` already written above) and fix any drift between the quickstart and the tests; update quickstart text if a path or name changed
+- [X] T050 Run the full gates once, synchronously: `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm db:check`; fix any failure and confirm Facebook, Instagram, Bluesky and scheduler suites pass with unchanged expectations (SC-009, SC-010). Record the result honestly in the final report as "verified with mocks only"
+- [X] T051 Walk `specs/006-threads-provider/quickstart.md` §1–§6 as commands (each maps to a `pnpm vitest run <path>` already written above) and fix any drift between the quickstart and the tests; update quickstart text if a path or name changed
 - [ ] T052 [US8] 🛑 BLOCKED: needs a real machine with mkcert, a hosts-file edit and the Meta dashboard — owner walks `quickstart.md` §7 (local HTTPS at `https://docket.local:3000`, dashboard redirect registration incl. the R8 port question)
 - [ ] T053 🛑 BLOCKED: needs a real Threads app, an accepted tester account and a public media bucket — owner runs `quickstart.md` §8 as ONE survey (connect, paste fallback, renewal, text/image/carousel publish, `graph.threads.net` vs `.com` U1, token generator U2) and records "verified live on <date>" per item in `docs/decisions.md`
 

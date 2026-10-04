@@ -27,7 +27,7 @@ Expected:
 ## 2. Connect, paste and the HTTPS requirement (US1, US7, G10, G12, G13)
 
 ```bash
-pnpm vitest run src/providers/threads/oauth.test.ts src/providers/threads/connect-group.test.ts src/providers/threads/config.test.ts src/providers/connect.test.ts
+pnpm vitest run src/providers/threads/oauth.test.ts src/providers/threads/config.test.ts src/providers/connect.test.ts
 pnpm vitest run tests/integration/threads/connect.test.ts tests/integration/threads/paste.test.ts tests/integration/connect tests/integration/accounts-ui.test.ts tests/integration/actions-authz.test.ts
 ```
 
@@ -61,7 +61,7 @@ Expected:
 ## 4. Step machine and outcomes (US2, US3)
 
 ```bash
-pnpm vitest run src/providers/threads/steps.test.ts src/providers/threads/publish.test.ts src/providers/threads/quota.test.ts
+pnpm vitest run src/providers/threads/steps.test.ts src/providers/threads/quota.test.ts
 pnpm vitest run tests/integration/threads/publish-e2e.test.ts tests/integration/threads/carousel.test.ts tests/integration/threads/container-status.test.ts tests/integration/threads/outcomes.test.ts
 ```
 
@@ -76,7 +76,7 @@ Expected:
 ## 5. Limits (US6)
 
 ```bash
-pnpm vitest run tests/integration/threads/quota.test.ts tests/integration/threads/limits.test.ts
+pnpm vitest run tests/integration/threads/limits.test.ts
 ```
 
 Expected:
