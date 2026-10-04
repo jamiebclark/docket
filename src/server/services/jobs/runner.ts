@@ -328,6 +328,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
           record,
           schedulingPolicy: job.schedulingPolicy,
           createdByUserId: job.createdByUserId,
+          createdByApiKeyId: job.createdByApiKeyId,
           link: { generationJobItemId: item.id },
         });
         await refreshJobStatus(tx, job.id);

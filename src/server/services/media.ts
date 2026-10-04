@@ -4,7 +4,7 @@ import { registerAssetSchema } from "@/lib/validation/scheduling";
 import { tagsSchema } from "@/lib/validation/media";
 import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { MediaRepo, MediaRow } from "../dal/media";
-import type { ProjectScope } from "../dal/scope";
+import { actorColumns, type ProjectScope } from "../dal/scope";
 import { getEnv } from "../env";
 import { processUpload, type UploadRejection } from "../media/process";
 import { getStorage, mediaKeys, requireStorage } from "../storage";
@@ -22,7 +22,7 @@ export async function registerAsset(scope: ProjectScope, input: unknown): Promis
       width: parsed.width ?? null,
       height: parsed.height ?? null,
       ...(parsed.altText !== undefined ? { altText: parsed.altText } : {}),
-      createdByUserId: tx.membership.userId,
+      ...actorColumns(tx),
     });
   });
 }
@@ -116,15 +116,23 @@ export async function toView(
 
 export type UploadResult = { ok: true; asset: MediaView } | ({ ok: false } & UploadRejection);
 
-/** Rejections are returned, not thrown, so a batch can report per file. */
-export async function uploadMedia(
+export interface PreparedUpload {
+  id: string;
+  originalKey: string;
+  thumbKey: string;
+  original: { ext: string; body: Buffer; mimeType: string; bytes: number; width: number; height: number };
+  filename: string | null;
+}
+
+/** Processes the image and writes both objects to storage. Touches no table, so a retry is safe. */
+export async function prepareUpload(
   scope: ProjectScope,
-  input: { file: { name: string; bytes: Buffer } },
-): Promise<UploadResult> {
+  file: { name: string; bytes: Buffer },
+): Promise<PreparedUpload | ({ ok: false } & UploadRejection)> {
   need(scope, "edit");
   const storage = requireStorage();
   const { maxUploadBytes, maxPixels } = getEnv().media;
-  const out = await processUpload(input.file.bytes, { maxBytes: maxUploadBytes, maxPixels });
+  const out = await processUpload(file.bytes, { maxBytes: maxUploadBytes, maxPixels });
   if (!out.ok) return out;
   const id = randomUUID();
   const keys = mediaKeys(scope.project.id, id);
@@ -137,31 +145,58 @@ export async function uploadMedia(
     await storage.delete(originalKey).catch(() => undefined);
     throw err;
   }
-  const filename = input.file.name.split(/[\\/]/).pop()?.trim().slice(0, 255) || null;
+  const filename = file.name.split(/[\\/]/).pop()?.trim().slice(0, 255) || null;
+  return { id, originalKey, thumbKey, original: out.original, filename };
+}
+
+/** Removes the objects of an upload whose row was never written. */
+export async function discardPreparedUpload(prepared: PreparedUpload): Promise<void> {
+  const storage = getStorage();
+  if (!storage) return;
+  await Promise.all(
+    [prepared.originalKey, prepared.thumbKey].map((key) =>
+      storage.delete(key).catch(() => console.error(`media: orphaned object after failed insert: ${key}`)),
+    ),
+  );
+}
+
+/** Writes the row for a prepared upload. Runs inside the caller's transaction. */
+export async function commitUpload(
+  tx: ProjectScope,
+  prepared: PreparedUpload,
+  meta: { altText?: string; tags?: string[] } = {},
+): Promise<MediaView> {
+  need(tx, "edit");
+  const storage = requireStorage();
+  const row = await tx.media.insert({
+    id: prepared.id,
+    storageKey: prepared.originalKey,
+    publicUrl: storage.publicUrl(prepared.originalKey),
+    thumbnailStorageKey: prepared.thumbKey,
+    thumbnailUrl: storage.publicUrl(prepared.thumbKey),
+    mimeType: prepared.original.mimeType,
+    byteSize: prepared.original.bytes,
+    width: prepared.original.width,
+    height: prepared.original.height,
+    originalFilename: prepared.filename,
+    ...(meta.altText !== undefined ? { altText: meta.altText } : {}),
+    ...(meta.tags !== undefined ? { tags: meta.tags } : {}),
+    ...actorColumns(tx),
+  });
+  return toView(row);
+}
+
+/** Rejections are returned, not thrown, so a batch can report per file. */
+export async function uploadMedia(
+  scope: ProjectScope,
+  input: { file: { name: string; bytes: Buffer } },
+): Promise<UploadResult> {
+  const prepared = await prepareUpload(scope, input.file);
+  if (!("id" in prepared)) return prepared;
   try {
-    const row = await scope.transaction(async (tx) => {
-      need(tx, "edit");
-      return tx.media.insert({
-        id,
-        storageKey: originalKey,
-        publicUrl: storage.publicUrl(originalKey),
-        thumbnailStorageKey: thumbKey,
-        thumbnailUrl: storage.publicUrl(thumbKey),
-        mimeType: out.original.mimeType,
-        byteSize: out.original.bytes,
-        width: out.original.width,
-        height: out.original.height,
-        originalFilename: filename,
-        createdByUserId: tx.membership.userId,
-      });
-    });
-    return { ok: true, asset: await toView(row) };
+    return { ok: true, asset: await scope.transaction((tx) => commitUpload(tx, prepared)) };
   } catch (err) {
-    await Promise.all(
-      [originalKey, thumbKey].map((key) =>
-        storage.delete(key).catch(() => console.error(`media: orphaned object after failed insert: ${key}`)),
-      ),
-    );
+    await discardPreparedUpload(prepared);
     throw err;
   }
 }
@@ -172,6 +207,8 @@ const listSchema = z.object({
   missingAlt: z.boolean().optional(),
   q: z.string().max(100).optional(),
   page: z.number().int().min(1).optional(),
+  limit: z.number().int().min(1).max(101).optional(),
+  offset: z.number().int().min(0).optional(),
 });
 
 export async function listMedia(scope: ProjectScope, filter: unknown = {}) {
@@ -184,8 +221,8 @@ export async function listMedia(scope: ProjectScope, filter: unknown = {}) {
       ...(f.unused ? { unused: true } : {}),
       ...(f.missingAlt ? { missingAlt: true } : {}),
       ...(f.q ? { q: f.q } : {}),
-      limit: MEDIA_PAGE_SIZE,
-      offset: (page - 1) * MEDIA_PAGE_SIZE,
+      limit: f.limit ?? MEDIA_PAGE_SIZE,
+      offset: f.offset ?? (page - 1) * MEDIA_PAGE_SIZE,
     }),
     scope.media.listTags(),
   ]);

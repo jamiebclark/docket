@@ -1,5 +1,6 @@
 // jobs/sources: the registry of item sources. A new source is one file here and one line below (FR-005).
 import { NotFoundError } from "../../../dal/errors";
+import { apiSource } from "./api";
 import { csvSource } from "./csv";
 import { mediaSource } from "./media";
 import type { ItemSource } from "./types";
@@ -7,6 +8,7 @@ import type { ItemSource } from "./types";
 export const ITEM_SOURCES: Record<string, ItemSource<unknown>> = {
   media: mediaSource as ItemSource<unknown>,
   csv: csvSource as ItemSource<unknown>,
+  api: apiSource as ItemSource<unknown>,
 };
 
 export function sourceFor(kind: string): ItemSource<unknown> {

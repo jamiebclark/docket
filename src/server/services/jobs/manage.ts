@@ -1,9 +1,11 @@
 // jobs/manage: retry and cancel a job's items. Each runs in one transaction: permission, job lock, items, status.
 import * as clock from "../../dal/clock";
-import { NotFoundError } from "../../dal/errors";
+import { ConflictError, NotFoundError } from "../../dal/errors";
+import type { JobRecord } from "../../dal/jobs";
 import type { ProjectScope } from "../../dal/scope";
 import { need } from "../generation/single";
 import { refreshJobStatus } from "./status";
+import { emitEvent } from "../webhooks/emit";
 
 export type ManageResult = { changed: true; message: string } | { changed: false; message: string };
 
@@ -59,7 +61,27 @@ export async function cancelJob(scope: ProjectScope, jobId: string): Promise<Man
     }
     const now = await clock.now();
     const count = await tx.jobItems.cancelForJob(jobId, now);
-    await tx.jobs.update(jobId, { status: "cancelled", cancelledAt: now, cancelledByUserId: tx.membership.userId, finishedAt: now });
+    await tx.jobs.update(jobId, {
+      status: "cancelled",
+      open: false,
+      cancelledAt: now,
+      cancelledByUserId: tx.membership.userId || null,
+      cancelledByApiKeyId: tx.actor.kind === "api_key" ? tx.actor.apiKeyId : null,
+      finishedAt: now,
+    });
+    await emitEvent(tx, "job.finished", { jobId });
     return { changed: true, message: count === 1 ? "Cancelled 1 item." : `Cancelled ${count} items.`, count };
+  });
+}
+
+/** Closes an open job: no more items can be added, and it finishes once every item is done. Closing a closed job changes nothing. */
+export async function closeJob(scope: ProjectScope, jobId: string): Promise<JobRecord> {
+  need(scope, { generation: ["run"], post: ["edit"] });
+  return scope.transaction(async (tx) => {
+    const job = await lockJob(tx, jobId);
+    if (!job.open) return job;
+    if (job.itemCount === 0) throw new ConflictError("Add at least one item or cancel the job.");
+    await tx.jobs.update(jobId, { open: false, closedAt: await clock.now() });
+    return refreshJobStatus(tx, jobId);
   });
 }

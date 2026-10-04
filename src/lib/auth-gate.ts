@@ -2,11 +2,11 @@
 // session cookie is present, never that it is valid — pages and actions re-check.
 
 const PUBLIC_EXACT = new Set(["/login", "/setup", "/signup"]);
-const PUBLIC_PREFIXES = ["/api/auth/", "/api/health", "/api/internal/", "/_next/", "/favicon.ico"];
+const PUBLIC_PREFIXES = ["/api/auth/", "/api/health", "/api/internal/", "/api/v1/", "/_next/", "/favicon.ico"];
 
 export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;
-  if (pathname === "/api/auth") return true;
+  if (pathname === "/api/auth" || pathname === "/api/v1") return true;
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 

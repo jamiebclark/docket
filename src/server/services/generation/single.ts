@@ -17,7 +17,7 @@ import * as clock from "../../dal/clock";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { MediaRow } from "../../dal/media";
 import type { PostRecord } from "../../dal/posts";
-import type { ProjectScope } from "../../dal/scope";
+import { actorColumns, type ProjectScope } from "../../dal/scope";
 import type { LlmFailureKind, LlmProvider } from "../../llm/types";
 import type { PlannedTime } from "../queue";
 import type { TargetResult } from "../posts";
@@ -242,6 +242,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
         record,
         schedulingPolicy: policies.resolved.scheduling,
         createdByUserId: tx.membership.userId,
+        createdByApiKeyId: actorColumns(tx).createdByApiKeyId,
         link: { generationRequestId: parsed.requestId },
       });
     });

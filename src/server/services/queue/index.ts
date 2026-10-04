@@ -374,3 +374,59 @@ export async function listEmptySlots(scope: ProjectScope, input: unknown): Promi
   }
   return out.sort((x, y) => x.scheduledAt.localeCompare(y.scheduledAt) || x.accountId.localeCompare(y.accountId));
 }
+
+export const UPCOMING_MAX_DAYS = 60;
+
+export interface UpcomingOccurrence {
+  accountId: string;
+  slotId: string;
+  scheduledAt: string;
+  localTime: string;
+  free: boolean;
+  postId: string | null;
+  targetId: string | null;
+}
+
+const upcomingSchema = z.object({
+  accountId: uuid.optional(),
+  from: z.coerce.date().optional(),
+  days: z.number().int().min(1).max(UPCOMING_MAX_DAYS).default(14),
+});
+
+/** Free and taken occurrences of active slots from `max(from, now)` for `days` days, in time order. */
+export async function listUpcomingOccurrences(scope: ProjectScope, input: unknown = {}): Promise<UpcomingOccurrence[]> {
+  const opts = upcomingSchema.parse(input);
+  need(scope, { slot: ["view"] });
+  const now = await clock.now();
+  const from = opts.from && opts.from.getTime() > now.getTime() ? opts.from : now;
+  const to = new Date(from.getTime() + opts.days * 86_400_000);
+  const accountList = opts.accountId ? [await scope.accounts.get(opts.accountId)] : await scope.accounts.list();
+  const tz = scope.project.timezone;
+  const out: UpcomingOccurrence[] = [];
+  for (const account of accountList) {
+    if (!account) throw new NotFoundError();
+    const slots = await scope.slots.listActiveForAccount(account.id);
+    if (slots.length === 0) continue;
+    const held = new Map((await scope.targets.heldOccurrences(account.id, from, to)).map((h) => [h.at.getTime(), h]));
+    const found = occurrencesBetween(
+      slots,
+      tz,
+      Temporal.Instant.fromEpochMilliseconds(from.getTime()),
+      Temporal.Instant.fromEpochMilliseconds(to.getTime()),
+    );
+    for (const o of found) {
+      const at = new Date(o.instant.epochMilliseconds);
+      const h = held.get(at.getTime());
+      out.push({
+        accountId: account.id,
+        slotId: o.slotId,
+        scheduledAt: at.toISOString(),
+        localTime: plannedTime(at, o.slotId, tz).localTime,
+        free: !h,
+        postId: h?.postId ?? null,
+        targetId: h?.targetId ?? null,
+      });
+    }
+  }
+  return out.sort((x, y) => x.scheduledAt.localeCompare(y.scheduledAt) || x.accountId.localeCompare(y.accountId));
+}

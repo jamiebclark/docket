@@ -16,6 +16,8 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     post: ["view", "edit", "schedule", "delete"],
     voice: ["view", "manage"],
     generation: ["run", "auto_approve"],
+    api_key: ["manage"],
+    webhook: ["manage"],
   },
   admin: {
     project: ["view", "update"],
@@ -28,6 +30,8 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     post: ["view", "edit", "schedule", "delete"],
     voice: ["view", "manage"],
     generation: ["run", "auto_approve"],
+    api_key: ["manage"],
+    webhook: ["manage"],
   },
   editor: {
     project: ["view"],

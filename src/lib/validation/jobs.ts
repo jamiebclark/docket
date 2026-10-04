@@ -31,6 +31,8 @@ export type MediaSelection = z.infer<typeof mediaSelectionSchema>;
 export const jobSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("media"), selection: mediaSelectionSchema, includeUsed: z.boolean() }),
   z.object({ kind: z.literal("csv") }),
+  // Validated in full by the api source (`apiSourceInputSchema` in ./api); kept loose here so the modules do not import each other.
+  z.looseObject({ kind: z.literal("api") }),
 ]);
 export type JobSourceInput = z.infer<typeof jobSourceSchema>;
 

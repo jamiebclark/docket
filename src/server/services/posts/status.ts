@@ -1,5 +1,5 @@
-import type { ProjectScope } from "../../dal/scope";
 import type { PostRecord } from "../../dal/posts";
+import { emitEvent, type EmitRepos } from "../webhooks/emit";
 import type { TargetStatus as PostTargetStatus } from "../../dal/targets";
 
 type PostStatus = PostRecord["status"];
@@ -17,7 +17,7 @@ export function derivePostStatus(reviewState: ReviewState, statuses: readonly Po
   return "partially_failed";
 }
 
-type Repos = Pick<ProjectScope, "posts" | "targets">;
+type Repos = EmitRepos;
 
 /**
  * Locks the post (its own statement), re-reads its targets and writes `posts.status`.
@@ -28,6 +28,10 @@ export async function applyDerivedStatus(tx: Repos, postId: string): Promise<Pos
   if (!post) return null;
   const targets = await tx.targets.listForPost(postId);
   const status = derivePostStatus(post.reviewState, targets.map((t) => t.status));
-  if (status !== post.status) await tx.posts.setStatus(postId, status);
+  if (status !== post.status) {
+    await tx.posts.setStatus(postId, status);
+    if (status === "published") await emitEvent(tx, "post.published", { postId });
+    else if (status === "failed" || status === "partially_failed") await emitEvent(tx, "post.failed", { postId });
+  }
   return status;
 }

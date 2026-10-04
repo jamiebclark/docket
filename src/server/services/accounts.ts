@@ -12,7 +12,9 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { ProjectScope } from "../dal/scope";
 import { decryptSecret, encryptSecret } from "../crypto/secrets";
 import { getEnv } from "../env";
+import type { ApiAccount } from "@/lib/api/schemas";
 import { redact } from "../scheduler/redact";
+import { toApiAccount } from "./views/account";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./posts/cancel";
 
 export interface AccountView {
@@ -107,6 +109,12 @@ function require(scope: ProjectScope, permission: "view" | "manage"): void {
 export async function listAccounts(scope: ProjectScope): Promise<AccountView[]> {
   require(scope, "view");
   return (await scope.accounts.list()).map(view);
+}
+
+/** The API's account list: capabilities, no credentials or settings (FR-024, FR-026). */
+export async function listAccountsForApi(scope: ProjectScope): Promise<ApiAccount[]> {
+  require(scope, "view");
+  return (await scope.accounts.list()).map(toApiAccount);
 }
 
 export async function listConnectableProviders(scope: ProjectScope): Promise<ConnectableProvider[]> {

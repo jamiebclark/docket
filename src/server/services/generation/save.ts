@@ -37,6 +37,7 @@ export async function saveGeneratedPost(
     record: GenerationRecord;
     schedulingPolicy: SchedulingPolicy;
     createdByUserId: string | null;
+    createdByApiKeyId?: string | null;
     link: GeneratedPostLink;
   },
 ): Promise<string> {
@@ -47,6 +48,7 @@ export async function saveGeneratedPost(
   const post = await tx.posts.insert({
     baseText: variantOf(args.accounts[0]!),
     createdByUserId: args.createdByUserId,
+    createdByApiKeyId: args.createdByApiKeyId ?? null,
     origin: "generated",
     reviewState: "needs_review",
     schedulingPolicy: args.schedulingPolicy,
