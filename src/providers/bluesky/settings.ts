@@ -14,11 +14,21 @@ export const blueskyCredentialsSchema = z.object({
 });
 export type BlueskyCredentials = z.infer<typeof blueskyCredentialsSchema>;
 
+/**
+ * Bluesky's write budget: 5,000 points/hour and 35,000 points/day, a create costing 3 points, so
+ * `floor(points ÷ 3)` posts. APPROXIMATE (research U3: the source page did not load), and the points
+ * are shared with any other app writing to the account. Enforced as declared.
+ */
+export const BLUESKY_DEFAULT_PUBLISH_LIMITS = [
+  { count: 1_666, windowSeconds: 3_600 },
+  { count: 11_666, windowSeconds: 86_400 },
+] as const;
+
 export const blueskyStateSchema = z.object({
   v: z.literal(1),
   /** handle (normalised) → DID, or null when it did not resolve. Absent = not resolved yet. */
   mentions: z.record(z.string(), z.string().nullable()).optional(),
-  /** One per uploaded image, in post order (`BlobRef#ipld()`). */
+  /** One per uploaded image, in post order (the blob returned by `uploadBlob`, as plain JSON). */
   blobs: z
     .array(
       z.object({

@@ -13,6 +13,7 @@ import {
 import type { TargetPatch, TargetRecord } from "../dal/targets";
 import { decryptCredentials } from "../services/accounts";
 import { applyDerivedStatus } from "../services/posts/status";
+import { validateResolvedContent } from "../services/posts/validate";
 import type { SchedulerConfig } from "./config";
 import { resolvePublishMedia } from "../services/media-variants";
 import { providerPublishLimits } from "../../providers/limits";
@@ -216,6 +217,9 @@ class MediaUnavailable extends Error {}
 /** The post row vanished after the claim; no provider call is made, and it can never have published (G4). */
 class PostGone extends Error {}
 
+/** The resolved content no longer passes the provider's validation; fatal before credentials are read (G15). */
+class ContentInvalid extends Error {}
+
 /** Stored credentials failed to decrypt; fatal before any provider call (FR-012). */
 class CredentialsUnreadable extends Error {}
 
@@ -283,6 +287,7 @@ async function execute(
   let seenCiphertext: string | null = null;
   // Set immediately before `provider.advance`: only a failure after it can leave a post possibly published (FR-012).
   let providerCalled = false;
+  let validationFailed = false;
   const startedMs = Date.now();
   try {
     const loaded = await repos.targets.effectiveContent(target.id);
@@ -300,6 +305,15 @@ async function execute(
       media = resolved.media;
     }
     const content = { text: loaded.text, media };
+    // G15: a capability lowered after scheduling must not reach the platform. Runs on the first step only,
+    // before credentials are read.
+    if (target.stepState === null) {
+      const refusal = validateResolvedContent(provider, content).find((i) => i.severity === "error");
+      if (refusal) {
+        validationFailed = true;
+        throw new ContentInvalid(`Can't publish to ${provider.displayName}: ${refusal.message}`);
+      }
+    }
     seenCiphertext = await repos.accounts.getCredentialsCiphertext(account.id);
     let credentials: ReturnType<typeof decryptCredentials>;
     try {
@@ -358,7 +372,7 @@ async function execute(
       config.providerTimeoutMs,
     );
   } catch (error) {
-    if (error instanceof MediaUnavailable || error instanceof PostGone || error instanceof CredentialsUnreadable || error instanceof SettingsInvalid) {
+    if (error instanceof MediaUnavailable || error instanceof PostGone || error instanceof ContentInvalid || error instanceof CredentialsUnreadable || error instanceof SettingsInvalid) {
       result = { kind: "fatal_error", error: error.message };
     } else if (error instanceof MediaNotReady) {
       result = { kind: "retryable_error", error: error.message };
@@ -393,7 +407,7 @@ async function execute(
     postId: target.postId,
     targetId: target.id,
     token,
-    step: lease.step,
+    step: validationFailed ? "engine-validate" : lease.step,
     outcome,
     requestSummary: { ...(result.summary?.request ?? {}), ...(lateBySeconds !== undefined ? { lateBySeconds } : {}) },
     responseSummary: result.summary?.response ?? {},

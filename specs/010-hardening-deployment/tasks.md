@@ -77,13 +77,13 @@
 **Goal**: every limit in a written inventory has a passing test proving zero platform requests.
 **Independent test**: `pnpm vitest run tests/integration/limits tests/integration/docs/limits-inventory.test.ts`.
 
-- [ ] T030 [US2] Run the publish-time validation (G15) on the first step in `src/server/scheduler/publishing.ts` via `validateResolvedContent` before credentials are read; on failure append `fatal_error` on step `engine-validate` and fail the target with `Can't publish to <platform>: <message>`; log G15 in `docs/decisions.md`
-- [ ] T031 [P] [US2] Declare Bluesky's two approximate publish limits as an array in `src/providers/bluesky/index.ts` / `settings.ts` and fix the BlobRef doc comment, marking the values approximate per research F16/U3
-- [ ] T032 [US2] Audit every shipped provider's declared limits (text length and counting, media count/carousel minimum, bytes, formats, dimensions/aspect, alt text, media-required, publish rate, login rate) against `docs/research/` and record gaps and NEEDS RESEARCH items (U2, U3) in a scratch list inside `docs/limits.md`
-- [ ] T033 [US2] Write `docs/limits.md`: one table per provider with value, source (research file or "interim, UNVERIFIED" + decision number), enforcement point, proving test (FR-014, FR-018); no entry may be "unenforced"
-- [ ] T034 [US2] Write `tests/integration/limits/enforcement.test.ts`: table-driven, one row per inventory entry, fetch spy that fails on any platform host call, asserts both the scheduling-time rejection and the publish-time `failed`/deferral outcome with no attempt counted for rate limits (D14, D15); include the Bluesky "publish does not create a session" test (FR-019)
-- [ ] T035 [US2] Write `tests/integration/docs/limits-inventory.test.ts`: every inventory row names an existing test file and matches `providerPublishLimits`/capabilities (D13)
-- [ ] T036 [US2] Fix any enforcement gap the new tests expose, in the shared validation path or the engine (not in provider folders unless declaring limits), and re-run `pnpm vitest run tests/integration/limits tests/integration/docs/limits-inventory.test.ts src/providers`
+- [x] T030 [US2] Run the publish-time validation (G15) on the first step in `src/server/scheduler/publishing.ts` via `validateResolvedContent` before credentials are read; on failure append `fatal_error` on step `engine-validate` and fail the target with `Can't publish to <platform>: <message>`; log G15 in `docs/decisions.md`
+- [x] T031 [P] [US2] Declare Bluesky's two approximate publish limits as an array in `src/providers/bluesky/index.ts` / `settings.ts` and fix the BlobRef doc comment, marking the values approximate per research F16/U3
+- [x] T032 [US2] Audit every shipped provider's declared limits (text length and counting, media count/carousel minimum, bytes, formats, dimensions/aspect, alt text, media-required, publish rate, login rate) against `docs/research/` and record gaps and NEEDS RESEARCH items (U2, U3) in a scratch list inside `docs/limits.md`
+- [x] T033 [US2] Write `docs/limits.md`: one table per provider with value, source (research file or "interim, UNVERIFIED" + decision number), enforcement point, proving test (FR-014, FR-018); no entry may be "unenforced"
+- [x] T034 [US2] Write `tests/integration/limits/enforcement.test.ts`: table-driven, one row per inventory entry, fetch spy that fails on any platform host call, asserts both the scheduling-time rejection and the publish-time `failed`/deferral outcome with no attempt counted for rate limits (D14, D15); include the Bluesky "publish does not create a session" test (FR-019)
+- [x] T035 [US2] Write `tests/integration/docs/limits-inventory.test.ts`: every inventory row names an existing test file and matches `providerPublishLimits`/capabilities (D13)
+- [x] T036 [US2] Fix any enforcement gap the new tests expose, in the shared validation path or the engine (not in provider folders unless declaring limits), and re-run `pnpm vitest run tests/integration/limits tests/integration/docs/limits-inventory.test.ts src/providers`
 
 **Checkpoint**: US2 complete.
 
