@@ -160,8 +160,8 @@ description: "Task list for the Facebook Pages and Instagram providers (005)"
 
 **Independent Test**: simulated 150 queued targets produce at most 100 publish requests in a window.
 
-- [ ] T056 [US5] Write `tests/integration/instagram/quota.test.ts`: platform quota full → `retryable_error` with `notBefore` ≈ +1 h, no publish request, usage in the attempt summary; unreadable/failed/unparseable quota → publishing proceeds, summary says quota unknown; `PUBLISH_MAX_ATTEMPTS` quota refusals in a row fail the target (accepted, plan note 10); wait past 23 h age recreates containers (no publish was sent)
-- [ ] T057 [P] [US5] Write `tests/integration/instagram/limits.test.ts`: the provider's default 100/86400 s is enforced by the existing engine counter (101st target waits with no provider call), an account-level override still works, and a 150-target run never sends a 101st publish (SC-006)
+- [x] T056 [US5] Write `tests/integration/instagram/quota.test.ts`: platform quota full → `retryable_error` with `notBefore` ≈ +1 h, no publish request, usage in the attempt summary; unreadable/failed/unparseable quota → publishing proceeds, summary says quota unknown; `PUBLISH_MAX_ATTEMPTS` quota refusals in a row fail the target (accepted, plan note 10); wait past 23 h age recreates containers (no publish was sent)
+- [x] T057 [P] [US5] Write `tests/integration/instagram/limits.test.ts`: the provider's default 100/86400 s is enforced by the existing engine counter (101st target waits with no provider call), an account-level override still works, and a 150-target run never sends a 101st publish (SC-006)
 
 ---
 
