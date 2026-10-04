@@ -207,4 +207,49 @@ describe("POST compose/check", () => {
       expect(res.issues.filter((i: { code: string }) => i.code === "mime_not_allowed")).toEqual([]);
     });
   });
+
+  describe("Meta targets", () => {
+    async function meta() {
+      const t = await setup();
+      const connect = (providerKey: string, name: string) =>
+        accounts.saveConnectedAccount(t.env.scope, {
+          providerKey,
+          externalAccountId: `${providerKey}-${Math.random().toString(36).slice(2, 8)}`,
+          displayName: name,
+          settings: {},
+        });
+      return { ...t, fb: await connect("facebook", "Page"), ig: await connect("instagram", "Gram") };
+    }
+    type Meta = Awaited<ReturnType<typeof meta>>;
+    const checkAll = async (t: Meta, body: Record<string, unknown>) => {
+      const json = await (
+        await call(t.env.project.slug, { targets: [{ accountId: t.fb.id }, { accountId: t.ig.id }], ...body })
+      ).json();
+      return json.data.targets as { accountId: string; canSchedule: boolean; issues: { severity: string; code: string }[] }[];
+    };
+
+    it("blocks Instagram with exactly one issue when there is no image, and lets Facebook text-only through", async () => {
+      const t = await meta();
+      const targets = await checkAll(t, { baseText: "hello" });
+      const fb = targets.find((x) => x.accountId === t.fb.id)!;
+      const ig = targets.find((x) => x.accountId === t.ig.id)!;
+      expect(fb.issues.filter((i) => i.severity === "error")).toEqual([]);
+      expect(fb.canSchedule).toBe(true);
+      expect(ig.issues.filter((i) => i.severity === "error")).toHaveLength(1);
+      expect(ig.issues.filter((i) => i.severity === "error")[0]).toMatchObject({ code: "media_required" });
+      expect(ig.canSchedule).toBe(false);
+    });
+
+    it("lists each provider's own issues per target", async () => {
+      const t = await meta();
+      const image = await createMediaAsset(t.env.project.id, { mimeType: "image/png", altText: "a" });
+      const targets = await checkAll(t, { baseText: "x".repeat(2201), mediaIds: [image.id] });
+      const ig = targets.find((x) => x.accountId === t.ig.id)!;
+      const fb = targets.find((x) => x.accountId === t.fb.id)!;
+      expect(ig.issues.map((i) => i.code)).toContain("text_too_long");
+      expect(fb.issues.map((i) => i.code)).not.toContain("text_too_long");
+      expect(ig.canSchedule).toBe(false);
+      expect(fb.canSchedule).toBe(true);
+    });
+  });
 });

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { UnknownProviderError } from "./errors";
 import { mediaConstraintsOf } from "./media";
-import { findProvider, getProvider, listProviders } from "./registry";
+import { readFileSync } from "node:fs";
+import { findConnectGroup, findProvider, getProvider, listConnectGroups, listProviders } from "./registry";
 
 describe("provider registry", () => {
   it("finds the mock provider", () => {
@@ -50,5 +51,37 @@ describe("provider registry", () => {
         expect(step.mayPublish, p.key).toBeTypeOf("boolean");
       }
     }
+  });
+  describe("connect groups", () => {
+    const groups = listConnectGroups();
+    it("uses well-formed, unique group keys and one group object per key", () => {
+      const keys = groups.map((g) => g.group.key);
+      expect(new Set(keys).size).toBe(keys.length);
+      for (const key of keys) expect(key).toMatch(/^[a-z0-9-]+$/);
+      for (const p of listProviders()) {
+        if (p.connect.strategy !== "oauth") continue;
+        expect(findConnectGroup(p.connect.group.key)?.group, p.key).toBe(p.connect.group);
+      }
+    });
+    it("gives oauth providers no connectAccount", () => {
+      for (const p of listProviders()) {
+        if (p.connect.strategy === "oauth") expect(p.connectAccount, p.key).toBeUndefined();
+      }
+    });
+    it("only groups carry pasteToken, and its field is secret", () => {
+      for (const p of listProviders()) expect(p.connect, p.key).not.toHaveProperty("pasteToken");
+      for (const { group } of groups) {
+        if (group.pasteToken) expect(group.pasteToken.field.secret, group.key).toBe(true);
+      }
+    });
+    it("documents every environment variable in .env.example", () => {
+      const example = readFileSync(".env.example", "utf8");
+      for (const { group } of groups) {
+        for (const v of group.environment.variables) {
+          expect(v.name, group.key).toMatch(/^[A-Z][A-Z0-9_]*$/);
+          expect(example, `${group.key}: ${v.name}`).toMatch(new RegExp(`^#?\\s*${v.name}=`, "m"));
+        }
+      }
+    });
   });
 });

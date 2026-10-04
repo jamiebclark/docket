@@ -19,6 +19,7 @@ export const projectOwnedTables = [
   { table: "post_media", scopeColumn: "project_id" },
   { table: "post_targets", scopeColumn: "project_id" },
   { table: "publish_attempts", scopeColumn: "project_id" },
+  { table: "connect_attempts", scopeColumn: "project_id" },
 ] as const satisfies readonly ProjectOwnedTable[];
 
 export const notProjectOwned = [

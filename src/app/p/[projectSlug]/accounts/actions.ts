@@ -1,8 +1,11 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
+import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
+import * as connect from "@/server/services/connect";
 import * as slots from "@/server/services/slots";
 import { runAction } from "../run-action";
 
@@ -88,4 +91,54 @@ export async function deleteSlotAction(slug: string, input: { id: string }): Pro
     await slots.deleteSlot(scope, input?.id);
     return null;
   });
+}
+
+/** The session id comes from the server, never from the client. */
+async function sessionBinding(): Promise<connect.ConnectSession | null> {
+  const session = await getSession();
+  return session ? { sessionId: session.session.id } : null;
+}
+
+/** Redirects to the platform's login dialog on success (the redirect runs outside the action's error handling). */
+export async function startOAuthConnectAction(slug: string, input: { groupKey: string }): Promise<ActionResult<never>> {
+  const binding = await sessionBinding();
+  if (!binding) return fail("unauthenticated", "Sign in to continue.");
+  const result = await runAction(slug, (scope) => connect.startOAuthConnect(scope, { groupKey: input?.groupKey }, binding));
+  if (!result.ok) return result;
+  redirect(result.data.url);
+}
+
+export async function chooseConnectCandidatesAction(
+  slug: string,
+  input: { attemptId: string; selected: string[] },
+): Promise<ActionResult<{ saved: number }>> {
+  const binding = await sessionBinding();
+  if (!binding) return fail("unauthenticated", "Sign in to continue.");
+  const result = await runAction(slug, async (scope) => {
+    const outcome = await connect.chooseConnectCandidates(
+      scope,
+      { attemptId: input?.attemptId, selected: Array.isArray(input?.selected) ? input.selected : [] },
+      binding,
+    );
+    return outcome;
+  });
+  if (!result.ok) return result;
+  if (!result.data.ok) return fail("validation", result.data.message);
+  refresh();
+  redirect(`/p/${slug}/accounts`);
+}
+
+/** Never echoes `input.token`; redirects to the chooser on success. */
+export async function pasteConnectTokenAction(
+  slug: string,
+  input: { groupKey: string; token: string },
+): Promise<ActionResult<never>> {
+  const binding = await sessionBinding();
+  if (!binding) return fail("unauthenticated", "Sign in to continue.");
+  const result = await runAction(slug, (scope) =>
+    connect.pasteConnectToken(scope, { groupKey: input?.groupKey, token: input?.token }, binding),
+  );
+  if (!result.ok) return result;
+  if (!result.data.ok) return fail("validation", result.data.message);
+  redirect(`/p/${slug}/accounts/connect/${result.data.attemptId}`);
 }

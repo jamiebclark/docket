@@ -119,6 +119,19 @@ If an account shows **Needs reconnecting**, Bluesky refused to renew its session
 Open Accounts and enter an app password again. Removing the account deletes the stored tokens, but revoking the app password
 is done in Bluesky.
 
+## Connecting Facebook Pages and Instagram
+
+One Meta app you create covers both. Follow [docs/meta-setup.md](docs/meta-setup.md), set `META_APP_ID` and `META_APP_SECRET`,
+then open Accounts and choose Facebook Pages and Instagram. Pick the Pages and linked Instagram accounts to connect.
+
+- **What is stored**: each Page's access token (and the Instagram account's link to its Page), encrypted like every other
+  credential. Your own Facebook login token is never stored.
+- **Needs reconnecting**: Meta rejected a stored token (you changed your password, removed the app, or lost your role on it).
+  Docket stops publishing to that account until you connect it again from Accounts.
+- **Instagram needs a public bucket**: Instagram fetches images by URL, so [media storage](#media-storage) must be publicly readable.
+- **Removing Docket's access**: Removing an account in Docket deletes the stored tokens. To revoke access entirely, open
+  Facebook Settings → Business Integrations (or Apps and Websites) and remove the app.
+
 ## Project-owned tables
 Every table that belongs to a project must be listed in the project-owned
 registry with its scope column, and every query on it must filter on that

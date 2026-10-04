@@ -59,6 +59,12 @@ export interface AccountsRepo {
     token: string,
     opts: { now: Date; leaseMs: number; expectedCiphertext: string },
   ): Promise<RefreshLeaseResult>;
+  /**
+   * Internal (scheduler): flags the account `needs_reauth` with a secret-free reason, only while the stored
+   * ciphertext still equals `expectedCiphertext` and the account is not removed. One conditional UPDATE; no lock held.
+   * Returns whether the row changed.
+   */
+  markCredentialsInvalid(id: string, opts: { expectedCiphertext: string | null; reason: string }): Promise<boolean>;
   /** Internal: used only by the scheduler and token refresh. */
   getCredentialsCiphertext(id: string): Promise<string | null>;
 }
@@ -238,6 +244,21 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .limit(1);
       if (!row || row.removedAt !== null || row.status !== "active" || row.c === null) return { kind: "unavailable" };
       return row.c !== opts.expectedCiphertext ? { kind: "changed" } : { kind: "busy" };
+    },
+    async markCredentialsInvalid(id, opts) {
+      const rows = await db
+        .update(socialAccounts)
+        .set({ status: "needs_reauth", lastError: opts.reason })
+        .where(
+          and(
+            mine(id),
+            isNull(socialAccounts.removedAt),
+            // Null-safe equality without `not`/`or` (the scope check treats those as unable to pin the project).
+            sql`coalesce(${socialAccounts.credentialsEncrypted}, '') = ${opts.expectedCiphertext ?? ""}`,
+          ),
+        )
+        .returning({ id: socialAccounts.id });
+      return rows.length > 0;
     },
     async getCredentialsCiphertext(id) {
       const [row] = await db

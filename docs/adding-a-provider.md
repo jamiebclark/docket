@@ -68,6 +68,21 @@ not be kept, implement `connectAccount({ fields, ... })`: it exchanges the field
 tokens) and returns `{ ok: true, account: { externalId, displayName, settings, credentials, expiresAt } }` or `{ ok: false, message, field?, retryAt? }`.
 The generic accounts form and `connectWithCredentials` call it; the typed fields themselves are never saved.
 
+### OAuth groups, candidates and the paste fallback
+
+An `oauth` strategy carries an `OAuthConnectGroup` (`src/providers/types.ts`). Providers that share one app (Facebook and Instagram)
+share one group. The group supplies `authorizationUrl`, a server-side `exchangeCode` and optionally `describeCallbackError`.
+Neither exchange saves anything: each returns **candidates** (`ConnectCandidate`: provider key, external id, display name, settings,
+credentials, expiry). A candidate may name a `parent` (an Instagram account sits under its Page) and carry `notes`.
+Candidates are held encrypted in `connect_attempts` until the user picks one in the chooser, which then calls
+`accounts.saveConnectedAccount` (G5).
+
+`pasteToken` is the fallback for when the redirect cannot work: a secret `field`, some `help` text and an `exchange` that returns the
+same candidates. The pasted token is never stored (G6).
+
+A group declares its own environment in `environment` (`variables`, `issues(source)`, `configured(source)`) and an optional `setupDoc`.
+Startup merges those issues with the core ones, so no provider variable belongs in `src/server/env.ts` (G8).
+
 ## 5. Settings vs credentials
 
 - **Settings** are non-secret and stored as plain jsonb: a region, a page id, a mock behaviour. They are parsed by
@@ -114,6 +129,9 @@ for a post with images. `advance` receives `ctx.step`, the name of the step the 
 Never return `retryable_error` from a `mayPublish` step unless you know the request was not sent.
 `advance` does **one** bounded unit of work: no polling loops, no sleeps. Return `continue` with `notBefore` instead.
 Honour `ctx.signal` on every network call.
+
+A `fatal_error` may set `credentialsInvalid: true` when the platform rejected the token and no refresh exists (Page tokens). The
+engine then flags the account `needs_reauth`, conditionally on the ciphertext it used, and does not retry (G7).
 
 A `retryable_error` may set `credentialsExpired: true` when the platform said the access token has lapsed. The engine then
 refreshes the credentials before the retry (the result is still retryable, and nothing was published).
@@ -175,3 +193,21 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
   unparseable 2xx after sending `createRecord` is `ambiguous`; 429 uses `Retry-After` for `notBefore`.
 - **Dual text limit.** Posts are limited to 300 graphemes and 3000 UTF-8 bytes; `validate` reports both, and the byte overflow is
   an `error` so every gate blocks it. Links, mentions and hashtags become facets computed on UTF-8 byte offsets.
+
+## 14. Worked example: the `instagram` provider
+
+`src/providers/instagram/` publishes through a **polling step machine**; its state is persisted between ticks.
+
+- **Steps.** `instagramStepFor` is pure and total. A single image runs `create_container`; a carousel runs `create_item_N` per
+  image, then `create_carousel`. Both then run `check_status`, `check_quota` and finally `publish`, the only `mayPublish: true` step.
+- **Polling without sleeping.** `check_status` does one read. If the container is still `IN_PROGRESS` it returns `continue` with the
+  same state and a `notBefore` (`checkIntervalMs(checks)`); the engine schedules the next check in a later tick. The first check
+  waits `FIRST_CHECK_DELAY_MS` after creation. No loop, no sleep.
+- **State.** `state.ts` holds the container ids, `ready`, `quotaChecked`, `checks` and `recreations`. `validState` rejects state that
+  does not fit the current media count, so a changed post restarts from the first create step.
+- **Recreation.** An `EXPIRED` container, or one older than `CONTAINER_SAFE_AGE_MS`, is rebuilt: `recreate` returns `continue`
+  with fresh state, up to `MAX_RECREATIONS`, then fails.
+- **Quota.** `check_quota` reads the 100-per-24-hour publishing limit. When it is spent it returns `retryable_error` with
+  `notBefore` of `QUOTA_RETRY_MS` (nothing was published, so this is safe); otherwise it returns `continue` with `quotaChecked: true`.
+- **Outcomes.** Only the `publish` call can be `ambiguous`; every earlier step is `retryable_error` on transient failures.
+  A revoked token is `fatal_error` with `credentialsInvalid: true`.

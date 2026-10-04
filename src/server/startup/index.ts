@@ -2,6 +2,7 @@ import { runMigrations } from "../db/migrate";
 import { bootstrapFirstUser } from "../dal/install";
 import { SetupUnavailableError } from "../dal/errors";
 import { formatEnvIssues, parseEnv } from "../env";
+import { providerEnvIssues } from "../provider-env";
 
 export interface StartupDeps {
   env: Record<string, string | undefined>;
@@ -27,8 +28,9 @@ export async function runStartup(overrides: Partial<StartupDeps> = {}): Promise<
   const deps = { ...defaults(), ...overrides };
 
   const parsed = parseEnv(deps.env);
-  if (!parsed.ok) {
-    console.error(formatEnvIssues(parsed.issues));
+  const issues = [...(parsed.ok ? [] : parsed.issues), ...providerEnvIssues(deps.env)];
+  if (!parsed.ok || issues.length > 0) {
+    console.error(formatEnvIssues(issues));
     return deps.exit(1);
   }
   const env = parsed.env;

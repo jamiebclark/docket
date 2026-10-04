@@ -7,9 +7,12 @@ import { Cell, Row, Table } from "@/components/ui/Table";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
+import * as connect from "@/server/services/connect";
 import * as slots from "@/server/services/slots";
+import { ConnectGroupSection } from "./ConnectGroupSection";
 import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
+import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
 import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
 
@@ -23,8 +26,25 @@ const STATUS: Record<accounts.AccountView["status"], { label: string; tone: "suc
   needs_reauth: { label: "Needs reconnecting", tone: "danger" },
 };
 
-export default async function AccountsPage({ params }: { params: Promise<{ projectSlug: string }> }) {
+const CONNECT_BANNER: Record<string, string> = {
+  cancelled: "Connecting was cancelled. Nothing changed.",
+  platform_error: "The platform returned an error. Nothing changed. Try again.",
+  exchange_failed: "Could not finish signing in. Check the app id, secret and redirect address in the setup guide.",
+  no_candidates: "No accounts were found for this login. Check the permissions you granted and try again.",
+  too_many: "That login found too many accounts to list. Narrow the permissions you granted and try again.",
+  not_allowed: "Only project owners and admins can connect accounts.",
+};
+
+export default async function AccountsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectSlug: string }>;
+  searchParams?: Promise<{ connect?: string | string[] }>;
+}) {
   const { projectSlug } = await params;
+  const connectParam = (await searchParams)?.connect;
+  const banner = typeof connectParam === "string" ? CONNECT_BANNER[connectParam] : undefined;
   let scope;
   try {
     scope = await forProject(await getSession(), projectSlug);
@@ -40,11 +60,31 @@ export default async function AccountsPage({ params }: { params: Promise<{ proje
   const credentialProviders = providers.flatMap((p) =>
     p.key !== "mock" && p.credentialConnect && p.connect.strategy !== "oauth" ? [{ ...p, fields: [...p.connect.fields] }] : [],
   );
+  const groups = await connect.listConnectGroups(scope);
   const withSlots = await Promise.all(list.map(async (account) => ({ account, slots: await slots.listSlots(scope, account.id) })));
 
   return (
     <section className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Accounts</h1>
+      {banner ? (
+        <p role="alert" className="rounded-md border border-foreground/30 p-3 text-sm">
+          {banner}
+        </p>
+      ) : null}
+      {groups.map((g) => (
+        <ConnectGroupSection
+          key={g.key}
+          slug={projectSlug}
+          groupKey={g.key}
+          displayName={g.displayName}
+          providerNames={g.providerNames}
+          configured={g.configured}
+          setupDoc={g.setupDoc}
+          redirectUri={g.redirectUri}
+          canManage={canManage}
+          paste={g.paste}
+        />
+      ))}
       {canManage && mockEnabled ? <ConnectMockForm slug={projectSlug} /> : null}
       {canManage
         ? credentialProviders.map((p) => (
@@ -89,6 +129,11 @@ export default async function AccountsPage({ params }: { params: Promise<{ proje
                   <MockBehaviourForm slug={projectSlug} id={account.id} behaviour={behaviour} />
                 </div>
               ) : null}
+              {canManage && account.status === "needs_reauth"
+                ? groups
+                    .filter((g) => g.configured && g.providerKeys.includes(account.providerKey))
+                    .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
+                : null}
               {canManage && account.status === "needs_reauth"
                 ? credentialProviders
                     .filter((p) => p.key === account.providerKey)

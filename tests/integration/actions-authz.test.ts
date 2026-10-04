@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../helpers/actions")).sessionModule);
 vi.mock("next/cache", async () => (await import("../helpers/actions")).cacheModule);
@@ -15,13 +15,16 @@ import { setStorageForTests } from "../../src/server/storage";
 import { actAs, RedirectSignal } from "../helpers/actions";
 import { atTime } from "../helpers/clock";
 import { closeDb } from "../helpers/db";
-import { createUser } from "../helpers/factories";
+import { createSession, createUser } from "../helpers/factories";
+import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterThrowaway } from "../helpers/connect-group";
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
 import { createMemoryStorage } from "../helpers/storage";
 import { createFakePds, mintJwt, type FakePds } from "../helpers/fake-pds";
 
+beforeAll(registerThrowaway);
 afterAll(async () => {
+  unregisterThrowaway();
   setStorageForTests(undefined);
   await closeDb();
 });
@@ -63,7 +66,9 @@ async function fixtures(env: Env) {
   if (!upload.ok) throw new Error("fixture upload failed");
   const form = new FormData();
   form.set("file", new File([new Uint8Array(await png())], "b.png", { type: "image/png" }));
+  const attemptId = await readyAttempt(env.scope, await sessionFor(env.owner.id), pageCandidate("authz", "Authz", false));
   return {
+    attemptId,
     accountId: account.id,
     slotId: slots[0]!.id,
     targetId: a.targetId,
@@ -115,6 +120,12 @@ const CASES: Case[] = [
         fields: { handle: "authz.bsky.social", appPassword: "authz-app-password-1", pdsUrl: "" },
       }),
   },
+  { name: "startOAuthConnectAction", manage: true, run: (s) => accountActions.startOAuthConnectAction(s, { groupKey: "throwaway" }) },
+  {
+    name: "chooseConnectCandidatesAction",
+    manage: true,
+    run: (s, f) => accountActions.chooseConnectCandidatesAction(s, { attemptId: f.attemptId, selected: ["tw-page:authz"] }),
+  },
   { name: "reconnectMockAction", manage: true, run: (s, f) => accountActions.reconnectMockAction(s, { id: f.accountId }) },
   { name: "setMockBehaviourAction", manage: true, run: (s, f) => accountActions.setMockBehaviourAction(s, { id: f.accountId, settings: {} }) },
   { name: "removeAccountAction", manage: true, run: (s, f) => accountActions.removeAccountAction(s, { id: f.accountId }) },
@@ -145,7 +156,7 @@ describe("every server action × role (SC-009, SC-011)", () => {
     const who: Record<Role, { id: string }> = { owner: env.owner, admin: env.admin, editor: env.editor, nonMember: outsider };
 
     for (const role of ["nonMember", "editor", "admin", "owner"] as const) {
-      actAs(who[role]);
+      actAs(who[role], (await createSession(who[role].id)).id);
       const f = await fixtures(env);
       const r = await call(c, env.project.slug, f);
       expect(r.text, `${c.name} as ${role} leaked a secret`).not.toMatch(SECRET);

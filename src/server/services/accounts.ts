@@ -90,6 +90,7 @@ export async function listConnectableProviders(scope: ProjectScope): Promise<Con
   const mockOn = getEnv().MOCK_PROVIDER_ENABLED;
   return listProviders()
     .filter((p) => p.key !== "mock" || mockOn)
+    .filter((p) => p.connect.strategy !== "oauth")
     .map((p) => ({
       key: p.key,
       displayName: p.displayName,
@@ -214,32 +215,38 @@ export async function connectWithCredentials(scope: ProjectScope, input: unknown
   }
 }
 
+type SaveConnectedInput = z.infer<typeof saveConnectedAccountSchema>;
+
+/** The upsert inside the caller's transaction, so the chooser can save several accounts atomically. */
+export async function saveConnectedAccountTx(tx: ProjectScope, parsed: SaveConnectedInput): Promise<AccountView> {
+  require(tx, "manage");
+  const provider = findProvider(parsed.providerKey);
+  if (!provider) throw new NotFoundError("That provider is not available.");
+  const settings = provider.settingsSchema.parse(parsed.settings ?? {});
+  const row = await tx.accounts.upsertConnected({
+    providerKey: parsed.providerKey,
+    displayName: parsed.displayName,
+    externalAccountId: parsed.externalAccountId,
+    settings,
+    credentialsEncrypted: null,
+    credentialsExpiresAt: parsed.credentialsExpireAt ?? null,
+    connectedByUserId: tx.membership.userId,
+  });
+  let result = row;
+  if (parsed.credentials !== undefined && parsed.credentials !== null) {
+    // The AAD binds the ciphertext to the row id, which only exists after the upsert.
+    const ciphertext = encryptSecret(JSON.stringify(parsed.credentials), { aad: aad(row.id) });
+    result = await tx.accounts.setCredentials(row.id, ciphertext, parsed.credentialsExpireAt ?? null);
+  }
+  return view(result);
+}
+
 /** The one upsert every connect flow uses. A reconnect updates in place, reactivates and clears `last_error`. */
 export async function saveConnectedAccount(scope: ProjectScope, input: unknown): Promise<AccountView> {
   const parsed = saveConnectedAccountSchema.parse(input);
   require(scope, "manage");
-  const provider = findProvider(parsed.providerKey);
-  if (!provider) throw new NotFoundError("That provider is not available.");
-  const settings = provider.settingsSchema.parse(parsed.settings ?? {});
-  return scope.transaction(async (tx) => {
-    require(tx, "manage");
-    const row = await tx.accounts.upsertConnected({
-      providerKey: parsed.providerKey,
-      displayName: parsed.displayName,
-      externalAccountId: parsed.externalAccountId,
-      settings,
-      credentialsEncrypted: null,
-      credentialsExpiresAt: parsed.credentialsExpireAt ?? null,
-      connectedByUserId: tx.membership.userId,
-    });
-    let result = row;
-    if (parsed.credentials !== undefined && parsed.credentials !== null) {
-      // The AAD binds the ciphertext to the row id, which only exists after the upsert.
-      const ciphertext = encryptSecret(JSON.stringify(parsed.credentials), { aad: aad(row.id) });
-      result = await tx.accounts.setCredentials(row.id, ciphertext, parsed.credentialsExpireAt ?? null);
-    }
-    return view(result);
-  });
+  if (!findProvider(parsed.providerKey)) throw new NotFoundError("That provider is not available.");
+  return scope.transaction((tx) => saveConnectedAccountTx(tx, parsed));
 }
 
 export async function updateAccountSettings(scope: ProjectScope, accountId: string, settings: unknown): Promise<void> {
