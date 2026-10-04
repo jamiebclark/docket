@@ -1,8 +1,20 @@
+import { scrub } from "../meta/errors";
 import type { OAuthConnectGroup } from "../types";
 import { THREADS_AUTHORIZE_URL, parseThreadsEnv, requireThreadsConfig } from "./config";
+import type { ThreadsCredentials } from "./credentials";
+import { exchangeCode, exchangeLongLived, readProfile, type ThreadsCallFailure } from "./oauth";
 
-// Placeholder: the environment, authorization URL and callback wording are final; the code exchange and the
-// paste-token fallback are filled in by the connect tasks.
+const PUBLISH_PERMISSION = "threads_content_publish";
+
+function refused(f: ThreadsCallFailure, secrets: readonly string[]): { ok: false; message: string } {
+  if (f.transient) return { ok: false, message: "Threads could not be reached. Nothing changed. Try again." };
+  return {
+    ok: false,
+    message: `Could not finish signing in with Threads (${scrub(f.reason, secrets)}). Check THREADS_APP_ID, THREADS_APP_SECRET, the redirect address and that the account accepted the tester invite (docs/meta-setup.md).`,
+  };
+}
+
+// The paste-token fallback is filled in by the paste tasks.
 export const threadsConnectGroup: OAuthConnectGroup = {
   key: "threads",
   displayName: "Threads",
@@ -33,8 +45,39 @@ export const threadsConnectGroup: OAuthConnectGroup = {
     url.searchParams.set("state", state);
     return url.toString();
   },
-  async exchangeCode() {
-    return { ok: false, message: "Connecting Threads is not available yet." };
+  async exchangeCode({ code, redirectUri, signal }) {
+    const cfg = requireThreadsConfig();
+    const secrets = [cfg.appSecret, code];
+    const short = await exchangeCode(cfg, { code, redirectUri, signal });
+    if (!short.ok) return refused(short, secrets);
+    secrets.push(short.token);
+    const long = await exchangeLongLived(cfg, { token: short.token, signal });
+    if (!long.ok) return refused(long, secrets);
+    secrets.push(long.token);
+    const profile = await readProfile(cfg, { token: long.token, signal });
+    if (!profile.ok) return refused(profile, secrets);
+
+    const issuedAt = Date.now();
+    const expiresAt = issuedAt + long.expiresInSeconds * 1000;
+    const credentials: ThreadsCredentials = { v: 1, accessToken: long.token, issuedAt, expiresAt, expiryEstimated: false };
+    const notes =
+      short.granted && !short.granted.includes(PUBLISH_PERMISSION)
+        ? ["Publishing permission was not granted. Connect again and allow it."]
+        : undefined;
+    return {
+      ok: true,
+      candidates: [
+        {
+          providerKey: "threads",
+          externalId: profile.id,
+          displayName: profile.username ? `@${profile.username}` : profile.id,
+          settings: {},
+          credentials,
+          expiresAt: new Date(expiresAt),
+          ...(notes ? { notes } : {}),
+        },
+      ],
+    };
   },
   describeCallbackError(params) {
     if (params.get("error") === "access_denied" || params.get("error_reason") === "user_denied") {
