@@ -108,6 +108,17 @@ describe("open jobs over HTTP", () => {
     expect((await api("GET", `/jobs/${other}`, { key: e.key })).json.itemCount).toBe(0);
   });
 
+  it("refuses an appended item whose rendered instructions are too long, naming it, and adds nothing", async () => {
+    const e = await setup();
+    const id = (await e.create()).json.id as string;
+    const long = { fields: { product: "x".repeat(12_000), price: "$1" } };
+    const r = await e.add(id, [item(1), long]);
+    expect(r.status).toBe(400);
+    expect(r.json.error.code).toBe("validation_failed");
+    expect(JSON.stringify(r.json.error)).toContain("items.1");
+    expect((await api("GET", `/jobs/${id}`, { key: e.key })).json.itemCount).toBe(0);
+  });
+
   it("will not close an empty open job", async () => {
     const e = await setup();
     const id = (await e.create()).json.id as string;

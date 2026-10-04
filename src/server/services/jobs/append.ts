@@ -5,7 +5,7 @@ import { z } from "zod";
 import { ConflictError, JobClosedError, JobItemLimitError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
 import { assertMediaFits, distinctProviderKeys, isUniqueViolation, loadAccounts, need } from "../generation/single";
-import { insertItems } from "./create";
+import { assertRenderedFits, insertItems } from "./create";
 import { assertApiMediaAvailable, prepareApiItems } from "./sources/api";
 
 export interface AppendResult {
@@ -33,6 +33,7 @@ export async function appendItems(scope: ProjectScope, jobId: string, input: unk
         throw new JobItemLimitError(`A job can have at most ${JOB_ITEMS_MAX} items; this one has ${job.itemCount}.`);
       }
       const items = prepareApiItems(job.templateFields, parsed.items, job.itemCount);
+      assertRenderedFits(job.template, items, (i) => `items.${i}`, "too_long");
       if (items.some((i) => i.mediaAssetId !== null)) {
         assertMediaFits(distinctProviderKeys(await loadAccounts(tx, job.targetAccountIds)), 1);
         await assertApiMediaAvailable(tx, items);

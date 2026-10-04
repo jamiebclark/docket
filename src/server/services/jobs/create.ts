@@ -48,15 +48,30 @@ function checkTemplate(kind: string, template: string, prepared: PreparedSource)
       `Unknown ${what}: ${unknown.join(", ")}. Available: ${prepared.fields.join(", ") || "none"}`,
     );
   }
-  for (const item of prepared.items) {
+  assertRenderedFits(template, prepared.items, () => "template");
+}
+
+/**
+ * Refuses the first item whose rendered instructions exceed `JOB_RENDERED_INSTRUCTIONS_MAX`, so every stored item
+ * renders to instructions the generation record accepts. `field(i)` names the offending item in the issue.
+ * Shared by `createJob` and `appendItems`.
+ */
+export function assertRenderedFits(
+  template: string,
+  items: readonly SourceItem[],
+  field: (index: number) => string,
+  code = "template",
+): void {
+  items.forEach((item, i) => {
     const n = renderTemplate(template, item.fields, { mark: true }).length;
     if (n > JOB_RENDERED_INSTRUCTIONS_MAX) {
       throw issue(
-        "template",
+        field(i),
         `${item.label}: the instructions would be ${n} characters; the limit is ${JOB_RENDERED_INSTRUCTIONS_MAX.toLocaleString("en-US")}`,
+        code,
       );
     }
-  }
+  });
 }
 
 /** Appends items to a job, numbering positions from the current count. Call inside a transaction. */
