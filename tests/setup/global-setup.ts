@@ -10,7 +10,7 @@ function dbName(url: string): string {
 export default async function setup(): Promise<void> {
   // Explicit opt-out for unit-only runs where no database is reachable. Never set in CI.
   if (process.env.DOCKET_SKIP_DB_SETUP === "1") return;
-  const url = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
   if (!url) {
     throw new Error("DATABASE_URL must point at a database whose name ends in _test.");
   }

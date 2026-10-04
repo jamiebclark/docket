@@ -13,8 +13,10 @@ import {
 import type { TargetPatch, TargetRecord } from "../dal/targets";
 import { decryptCredentials } from "../services/accounts";
 import { applyDerivedStatus } from "../services/posts/status";
+import { validateResolvedContent } from "../services/posts/validate";
 import type { SchedulerConfig } from "./config";
 import { resolvePublishMedia } from "../services/media-variants";
+import { providerPublishLimits } from "../../providers/limits";
 import { deferralTime, effectiveLimits } from "./limits";
 import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
@@ -118,7 +120,7 @@ export async function runPublishing(opts: {
         const firstStep = target.stepState === null;
         if (firstStep) {
           // Both the provider default and the account's own limit apply (D8).
-          const deferUntil = await deferralTime(effectiveLimits(provider.defaultPublishLimit, account), now, (since) =>
+          const deferUntil = await deferralTime(effectiveLimits(providerPublishLimits(provider), account), now, (since) =>
             ctx.startedSince(account.id, since, target.id), // a target's own earlier start never counts against it
           );
           if (deferUntil) {
@@ -215,6 +217,15 @@ class MediaUnavailable extends Error {}
 /** The post row vanished after the claim; no provider call is made, and it can never have published (G4). */
 class PostGone extends Error {}
 
+/** The resolved content no longer passes the provider's validation; fatal before credentials are read (G15). */
+class ContentInvalid extends Error {}
+
+/** Stored credentials failed to decrypt; fatal before any provider call (FR-012). */
+class CredentialsUnreadable extends Error {}
+
+/** The account's stored settings no longer parse; fatal before any provider call (FR-012). */
+class SettingsInvalid extends Error {}
+
 /**
  * Media preparation failed or overran the tick budget. It runs before any provider call,
  * so the step cannot have published: always retryable, never ambiguous (F3).
@@ -274,6 +285,9 @@ async function execute(
   let secrets: string[] = [];
   let result: StepResult | undefined;
   let seenCiphertext: string | null = null;
+  // Set immediately before `provider.advance`: only a failure after it can leave a post possibly published (FR-012).
+  let providerCalled = false;
+  let validationFailed = false;
   const startedMs = Date.now();
   try {
     const loaded = await repos.targets.effectiveContent(target.id);
@@ -291,8 +305,22 @@ async function execute(
       media = resolved.media;
     }
     const content = { text: loaded.text, media };
+    // G15: a capability lowered after scheduling must not reach the platform. Runs on the first step only,
+    // before credentials are read.
+    if (target.stepState === null) {
+      const refusal = validateResolvedContent(provider, content).find((i) => i.severity === "error");
+      if (refusal) {
+        validationFailed = true;
+        throw new ContentInvalid(`Can't publish to ${provider.displayName}: ${refusal.message}`);
+      }
+    }
     seenCiphertext = await repos.accounts.getCredentialsCiphertext(account.id);
-    let credentials = decryptCredentials(account.id, seenCiphertext);
+    let credentials: ReturnType<typeof decryptCredentials>;
+    try {
+      credentials = decryptCredentials(account.id, seenCiphertext);
+    } catch {
+      throw new CredentialsUnreadable(`The account's stored credentials can't be read. Reconnect ${account.displayName}.`);
+    }
     secrets = secretValues(credentials);
 
     // Proactive refresh (G2): runs outside `advance`, so it is never covered by `inFlightMayPublish` (FR-023).
@@ -316,8 +344,14 @@ async function execute(
         };
       }
     }
-    const settings = provider.settingsSchema.parse(account.settings ?? {});
+    let settings: ReturnType<typeof provider.settingsSchema.parse>;
+    try {
+      settings = provider.settingsSchema.parse(account.settings ?? {});
+    } catch {
+      throw new SettingsInvalid("The account settings are invalid.");
+    }
     const signal = AbortSignal.timeout(config.providerTimeoutMs);
+    if (!result) providerCalled = true;
     result ??= await withTimeout(
       provider.advance({
         target: { id: target.id, scheduledAt: target.scheduledAt ?? new Date(), attempt: target.attemptCount + 1 },
@@ -338,10 +372,12 @@ async function execute(
       config.providerTimeoutMs,
     );
   } catch (error) {
-    if (error instanceof MediaUnavailable || error instanceof PostGone) {
+    if (error instanceof MediaUnavailable || error instanceof PostGone || error instanceof ContentInvalid || error instanceof CredentialsUnreadable || error instanceof SettingsInvalid) {
       result = { kind: "fatal_error", error: error.message };
     } else if (error instanceof MediaNotReady) {
       result = { kind: "retryable_error", error: error.message };
+    } else if (!providerCalled) {
+      result = { kind: "retryable_error", error: "Publishing could not start; will retry." };
     } else {
       // A lost or failed call: whether the step could have published decides the outcome (D5).
       const message = redact(error instanceof Error ? error.message : "The provider call failed.", secrets);
@@ -371,7 +407,7 @@ async function execute(
     postId: target.postId,
     targetId: target.id,
     token,
-    step: lease.step,
+    step: validationFailed ? "engine-validate" : lease.step,
     outcome,
     requestSummary: { ...(result.summary?.request ?? {}), ...(lateBySeconds !== undefined ? { lateBySeconds } : {}) },
     responseSummary: result.summary?.response ?? {},

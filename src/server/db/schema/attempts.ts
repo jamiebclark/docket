@@ -23,6 +23,8 @@ export const publishAttemptOutcome = pgEnum("publish_attempt_outcome", [
   "resolved_published",
   "resolved_failed",
   "retry_requested",
+  "resolved_not_published",
+  "requeued",
 ]);
 
 /** Append-only: the DAL exposes insert and list only (FR-006). */

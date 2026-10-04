@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import type { ValidationIssue } from "@/providers/types";
-import { atSchema, baseTextSchema, POST_MEDIA_MAX, postInputSchema, postTargetInputSchema } from "@/lib/validation/scheduling";
+import { atSchema, baseTextSchema, externalUrlSchema, POST_MEDIA_MAX, postInputSchema, postTargetInputSchema } from "@/lib/validation/scheduling";
 import type { AccountRecord } from "../../dal/accounts";
 import * as clock from "../../dal/clock";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
@@ -637,52 +637,131 @@ export async function cancelTarget(scope: ProjectScope, targetId: string): Promi
   });
 }
 
+/** Null when a failed target may be retried; otherwise the reason, in the words the user sees (D8). */
+export function retryBlockedReason(account: AccountRecord | null, providerRegistered: boolean): string | null {
+  if (!account) return "This account was removed, so the post can't be retried.";
+  if (account.status !== "active") return `${account.displayName} needs to be reconnected before this post can be retried.`;
+  if (!providerRegistered) return `The provider for ${account.displayName} is no longer available.`;
+  return null;
+}
+
 export async function retryTarget(scope: ProjectScope, targetId: string): Promise<void> {
   await withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, _post, target, now) => {
-    if (target.status !== "failed") throw new ConflictError("Only a failed post can be retried.");
+    if (target.status === "publishing") throw new ConflictError("Publishing in progress. Try again in a moment.");
+    if (target.status !== "failed") throw new ConflictError("This post is no longer failed.");
     const account = await tx.accounts.get(target.socialAccountId);
-    if (!account || account.status !== "active" || !findProvider(account.providerKey)) {
-      throw new ConflictError("Reconnect the account before retrying.");
-    }
-    await tx.targets.update(
+    const blocked = retryBlockedReason(account, !!account && !!findProvider(account.providerKey));
+    if (blocked) throw new ConflictError(blocked);
+    const updated = await tx.targets.update(
       target.id,
       { status: "scheduled", attemptCount: 0, stepState: null, firstStepAt: null, publishStartedAt: null, nextAttemptAt: now, lastError: null },
       { statuses: ["failed"] },
     );
+    if (!updated) throw new ConflictError("This post is no longer failed.");
     await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "retry_requested", actorUserId: tx.membership.userId, at: now });
   });
 }
 
-const resolveSchema = z.discriminatedUnion("outcome", [
-  z.object({ outcome: z.literal("published"), url: z.url().optional() }),
-  z.object({ outcome: z.literal("failed") }),
+const publishedResolution = z.object({ outcome: z.literal("published"), url: externalUrlSchema.optional() });
+const resolveSchema = z.union([
+  publishedResolution,
+  z.object({ outcome: z.literal("not_published"), requeue: z.literal(true), expected: z.iso.datetime().optional() }),
+  z.object({ outcome: z.literal("not_published"), requeue: z.literal(false) }),
+  z.object({ outcome: z.literal("failed") }).transform(() => ({ outcome: "not_published" as const, requeue: false as const })),
 ]);
 
-export async function resolveAmbiguous(scope: ProjectScope, targetId: string, input: unknown): Promise<void> {
-  const resolution = resolveSchema.parse(input);
-  await withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, _post, target, now) => {
-    if (target.status !== "ambiguous") throw new ConflictError("Only an unconfirmed post can be resolved.");
-    const common = { resolvedByUserId: tx.membership.userId, resolvedAt: now };
+export type ResolveResult =
+  | { status: "published" }
+  | { status: "scheduled"; scheduledAt: string; localTime: string; slotId: string; changedFromPreview: boolean }
+  | { status: "failed"; reason: "not_requeued" | "no_free_slot"; message: string };
+
+const NOT_REQUEUED = "Marked not published by a team member. Retry or schedule it.";
+const NO_FREE_SLOT = "Not published — no free posting slot. Retry or schedule it.";
+
+/** FR-007, FR-008, FR-010: confirms what happened to an ambiguous target and, if wanted, requeues it. */
+export async function resolveAmbiguous(scope: ProjectScope, targetId: string, input: unknown): Promise<ResolveResult> {
+  // A union reports a bad link as one opaque issue; parse the "published" shape alone so the error names `url`.
+  const resolution = (input as { outcome?: unknown } | null)?.outcome === "published" ? publishedResolution.parse(input) : resolveSchema.parse(input);
+  return withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, _post, target, now): Promise<ResolveResult> => {
+    if (target.status !== "ambiguous") throw new ConflictError("This post was already resolved.");
+    const actor = tx.membership.userId;
+    const common = { resolvedByUserId: actor, resolvedAt: now };
+    const lost = () => new ConflictError("This post was already resolved.");
     if (resolution.outcome === "published") {
-      await tx.targets.update(
+      const done = await tx.targets.update(
         target.id,
         { ...common, status: "published", publishedAt: now, externalUrl: resolution.url ?? null, lastError: null },
         { statuses: ["ambiguous"] },
       );
-    } else {
-      await tx.targets.update(
+      if (!done) throw lost();
+      await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_published", actorUserId: actor, at: now });
+      return { status: "published" };
+    }
+    if (!resolution.requeue) {
+      const done = await tx.targets.update(
         target.id,
-        { ...common, status: "failed", lastError: "Marked failed by a team member." },
+        { ...common, status: "failed", lastError: NOT_REQUEUED },
         { statuses: ["ambiguous"] },
       );
+      if (!done) throw lost();
+      await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_failed", actorUserId: actor, at: now });
+      return { status: "failed", reason: "not_requeued", message: NOT_REQUEUED };
     }
+    const g = await gate(tx, target);
+    if (!g.ok) throw new ConflictError(g.message);
+    const slot = await allocateNextFree(tx, { id: target.id, accountId: target.socialAccountId }, { after: now });
+    if (!slot.ok) {
+      const done = await tx.targets.update(
+        target.id,
+        { ...common, status: "failed", lastError: NO_FREE_SLOT },
+        { statuses: ["ambiguous"] },
+      );
+      if (!done) throw lost();
+      await tx.attempts.insert({
+        postTargetId: target.id,
+        step: "user",
+        outcome: "resolved_not_published",
+        error: "no_free_slot",
+        actorUserId: actor,
+        at: now,
+      });
+      return { status: "failed", reason: "no_free_slot", message: NO_FREE_SLOT };
+    }
+    const done = await tx.targets.update(
+      target.id,
+      {
+        ...common,
+        status: "scheduled",
+        attemptCount: 0,
+        lastError: null,
+        stepState: null,
+        inFlightStep: null,
+        inFlightMayPublish: null,
+        firstStepAt: null,
+        publishStartedAt: null,
+        externalId: null,
+        externalUrl: null,
+      },
+      { statuses: ["ambiguous"] },
+    );
+    if (!done) throw lost();
+    await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_not_published", actorUserId: actor, at: now });
     await tx.attempts.insert({
       postTargetId: target.id,
       step: "user",
-      outcome: resolution.outcome === "published" ? "resolved_published" : "resolved_failed",
-      actorUserId: tx.membership.userId,
-      at: now,
+      outcome: "requeued",
+      requestSummary: { scheduledAt: slot.planned.scheduledAt, slotId: slot.slotId },
+      actorUserId: actor,
+      at: new Date(now.getTime() + 1),
     });
+    return {
+      status: "scheduled",
+      scheduledAt: slot.planned.scheduledAt,
+      localTime: slot.planned.localTime,
+      slotId: slot.slotId,
+      changedFromPreview:
+        resolution.expected !== undefined && new Date(resolution.expected).getTime() !== slot.instant.getTime(),
+    };
   });
 }
 

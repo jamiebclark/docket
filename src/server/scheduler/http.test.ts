@@ -6,11 +6,11 @@ const req = (headers: Record<string, string> = {}) =>
   new Request("http://localhost/api/internal/tick", { method: "POST", headers });
 
 describe("handleTickRequest", () => {
-  it("404s without running when no secret is configured", async () => {
+  it("401s without running when no secret is configured", async () => {
     const runTick = vi.fn();
     const res = await handleTickRequest(req({ authorization: `Bearer ${SECRET}` }), { secret: undefined, runTick });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: "not_found" });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "unauthorized" });
     expect(runTick).not.toHaveBeenCalled();
   });
 

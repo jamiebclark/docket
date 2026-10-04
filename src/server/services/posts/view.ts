@@ -5,20 +5,12 @@ import { ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
 import type { ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
+import { targetActions, toAttemptViews, type AttemptEntryView, type FailureActions } from "../failures";
 import { getMedia } from "../media";
 import { plannedTime } from "../queue";
 import { hasLiveLease } from "./cancel";
 
-export interface AttemptView {
-  id: string;
-  at: Date;
-  step: string;
-  outcome: string;
-  /** Already redacted when written. */
-  request: Record<string, unknown>;
-  response: Record<string, unknown>;
-  error: string | null;
-}
+export type AttemptView = AttemptEntryView;
 
 export interface PostViewTarget {
   id: string;
@@ -33,6 +25,8 @@ export interface PostViewTarget {
   publishedAt: Date | null;
   lastError: string | null;
   inProgress: boolean;
+  attemptCount: number;
+  actions: FailureActions;
   attempts: AttemptView[];
 }
 
@@ -52,6 +46,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
   const post = await scope.posts.get(id);
   if (!post) throw new NotFoundError();
   const now = await clock.now();
+  const canSchedule = scope.can({ post: ["schedule"] });
   const accounts = new Map((await scope.accounts.list()).map((a) => [a.id, a]));
   const targets = await scope.targets.listForPost(id);
   const views = await Promise.all(
@@ -70,15 +65,9 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
         publishedAt: t.publishedAt,
         lastError: t.lastError,
         inProgress: hasLiveLease(t, now),
-        attempts: (await scope.attempts.listForTarget(t.id)).map((a) => ({
-          id: a.id,
-          at: a.createdAt,
-          step: a.step,
-          outcome: a.outcome,
-          request: (a.requestSummary ?? {}) as Record<string, unknown>,
-          response: (a.responseSummary ?? {}) as Record<string, unknown>,
-          error: a.error,
-        })),
+        attemptCount: t.attemptCount,
+        actions: targetActions(canSchedule, t.status, account ?? null),
+        attempts: await toAttemptViews(scope, await scope.attempts.listForTarget(t.id)),
       };
     }),
   );

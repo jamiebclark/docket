@@ -207,7 +207,11 @@ const CASES: Case[] = [
   },
   { name: "retryTargetAction", run: (s, f) => postActions.retryTargetAction(s, { targetId: f.targetId }) },
   { name: "cancelTargetAction", run: (s, f) => postActions.cancelTargetAction(s, { targetId: f.targetId }) },
-  { name: "resolveTargetAction", run: (s, f) => postActions.resolveTargetAction(s, { targetId: f.targetId, outcome: "failed" }) },
+  {
+    name: "resolveTargetAction",
+    run: (s, f) => postActions.resolveTargetAction(s, { targetId: f.targetId, outcome: "not_published", requeue: false }),
+  },
+  { name: "previewRequeueAction", run: (s, f) => postActions.previewRequeueAction(s, { targetId: f.targetId }) },
   { name: "deletePostAction", run: (s, f) => postActions.deletePostAction(s, { postId: f.draftId }) },
   {
     name: "moveToOccurrenceAction",

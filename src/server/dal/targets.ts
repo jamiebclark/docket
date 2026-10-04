@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, gt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, count, eq, gte, inArray, isNotNull, isNull, lte, gt, ne, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { mediaAssets, postMedia, postTargets, posts, type PostTargetRow } from "../db/schema";
 
@@ -30,7 +30,21 @@ export interface RangeTarget {
   baseText: string;
 }
 
+export interface AttentionOptions {
+  statuses: readonly ("ambiguous" | "failed")[];
+  accountId?: string;
+  limit: number;
+  offset: number;
+}
+
 export interface TargetsRepo {
+  /**
+   * Targets needing a person (`ambiguous` first, then newest-entered), with the base text of their
+   * live post, plus the total matching `opts` before paging.
+   */
+  listAttention(opts: AttentionOptions): Promise<{ rows: (TargetRecord & { baseText: string })[]; total: number }>;
+  /** Counts of `ambiguous` and `failed` targets of live posts in the project. */
+  countAttention(): Promise<{ ambiguous: number; failed: number }>;
   /**
    * Non-cancelled targets whose `scheduled_at` (or `published_at` once published) falls in
    * `[from, to)`, with the base text of their non-deleted post. Ordered by that instant, then id.
@@ -70,7 +84,50 @@ function isUniqueViolation(error: unknown): boolean {
 
 export function createTargetsRepo(db: Database, projectId: string): TargetsRepo {
   const mine = (id: string) => and(eq(postTargets.projectId, projectId), eq(postTargets.id, id));
+  const attentionWhere = (statuses: readonly ("ambiguous" | "failed")[], accountId?: string) =>
+    and(
+      eq(postTargets.projectId, projectId),
+      inArray(postTargets.status, [...statuses]),
+      accountId ? eq(postTargets.socialAccountId, accountId) : undefined,
+    );
+  const livePost = and(
+    eq(posts.id, postTargets.postId),
+    eq(posts.projectId, postTargets.projectId),
+    isNull(posts.deletedAt),
+  );
   return {
+    async listAttention(opts) {
+      if (opts.statuses.length === 0) return { rows: [], total: 0 };
+      const where = attentionWhere(opts.statuses, opts.accountId);
+      const found = await db
+        .select({ target: postTargets, baseText: posts.baseText })
+        .from(postTargets)
+        .innerJoin(posts, livePost)
+        .where(where)
+        .orderBy(
+          desc(sql`(${postTargets.status} = 'ambiguous')`),
+          desc(postTargets.updatedAt),
+          asc(postTargets.id),
+        )
+        .limit(opts.limit)
+        .offset(opts.offset);
+      const [totalRow] = await db
+        .select({ n: count() })
+        .from(postTargets)
+        .innerJoin(posts, livePost)
+        .where(where);
+      return { rows: found.map((r) => ({ ...r.target, baseText: r.baseText })), total: totalRow?.n ?? 0 };
+    },
+    async countAttention() {
+      const rows = await db
+        .select({ status: postTargets.status, n: count() })
+        .from(postTargets)
+        .innerJoin(posts, livePost)
+        .where(attentionWhere(["ambiguous", "failed"]))
+        .groupBy(postTargets.status);
+      const n = (status: string) => rows.find((r) => r.status === status)?.n ?? 0;
+      return { ambiguous: n("ambiguous"), failed: n("failed") };
+    },
     async listInRange(from, to, accountId) {
       const at = sql`CASE WHEN ${postTargets.status} = 'published' THEN ${postTargets.publishedAt} ELSE ${postTargets.scheduledAt} END`;
       const rows = await db

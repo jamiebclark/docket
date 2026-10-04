@@ -215,8 +215,7 @@ function toStorage(e: {
   };
 }
 
-const schema = z
-  .object({
+const base = z.object({
     DATABASE_URL: url("PostgreSQL"),
     DATABASE_URL_DIRECT: z.string().optional(),
     DATABASE_POOL_MAX: int(1, 100, 10),
@@ -278,8 +277,33 @@ const schema = z
         ctx.addIssue({ code: "custom", message: "must be true or false" });
         return z.NEVER;
       }),
-  })
-  .transform((e) => ({
+    NODE_ENV: z
+      .string()
+      .optional()
+      .refine((v) => !v || ["development", "production", "test"].includes(v), {
+        error: "must be one of: development, production, test",
+      }),
+    PORT: z
+      .string()
+      .optional()
+      .refine((v) => !v || (/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 65535), {
+        error: "must be an integer from 1 to 65535",
+      }),
+    HOSTNAME: z
+      .string()
+      .optional()
+      .refine((v) => !v || !/\s/.test(v), { error: "must not contain whitespace" }),
+  });
+
+/** Every variable the core schema reads (research D26); the coverage test checks this against the code. */
+export const ENV_VARIABLES: readonly string[] = Object.keys(base.shape);
+
+/** Empty means unset (FR-033): the one rule for which database URL migrations use. */
+export function directUrlOf(source: Record<string, string | undefined>): string | undefined {
+  return source.DATABASE_URL_DIRECT || source.DATABASE_URL || undefined;
+}
+
+const schema = base.transform((e) => ({
     ...e,
     storage: toStorage(e),
     media: { maxUploadBytes: e.MEDIA_MAX_UPLOAD_MB * 1024 * 1024, maxPixels: e.MEDIA_MAX_MEGAPIXELS * 1_000_000 },

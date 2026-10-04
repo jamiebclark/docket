@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeRedirect } from "./safe-redirect";
+import { safeExternalHref, safeRedirect } from "./safe-redirect";
 
 describe("safeRedirect", () => {
   it("accepts same-origin relative paths", () => {
@@ -18,4 +18,17 @@ describe("safeRedirect", () => {
     expect(safeRedirect(undefined)).toBe("/");
     expect(safeRedirect(42)).toBe("/");
   });
+});
+
+describe("safeExternalHref", () => {
+  it("returns http(s) links", () => {
+    expect(safeExternalHref("https://example.com/a")).toBe("https://example.com/a");
+  });
+
+  it.each(["javascript:alert(1)", "data:text/html,x", "//evil.com", "/relative", "https://u:p@example.com", "", null, 5])(
+    "returns null for %j",
+    (value) => {
+      expect(safeExternalHref(value)).toBeNull();
+    },
+  );
 });

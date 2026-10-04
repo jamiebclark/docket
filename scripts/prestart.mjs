@@ -1,12 +1,14 @@
-// Container entrypoint: apply database migrations, then start the HTTP server (FR-004).
-// Migrating here, before `server.js` is loaded, means a failed migration exits 1 before
-// anything listens. Env validation and first-account creation stay in src/server/startup,
-// which skips the migration this script already did (DOCKET_PREMIGRATED=1).
+// Container entrypoint: validate configuration, apply database migrations, then start the HTTP
+// server (FR-004, FR-031). Both happen here, before `server.js` is loaded, so bad configuration
+// or a failed migration exits 1 before anything listens or migrates. First-account creation stays
+// in src/server/startup, which skips the migration this script already did (DOCKET_PREMIGRATED=1).
 import { pathToFileURL } from "node:url";
+import { formatEnvIssues } from "../src/server/env";
+import { validateConfiguration } from "../src/server/startup/validate";
 
 const PG_URL = /^postgres(ql)?:\/\//;
 
-/** Whether this script should migrate: only with a usable URL; bad env is reported by startup. */
+/** Whether this script should migrate: with a usable URL (empty means unset, FR-033). */
 export function migrationUrl(env) {
   if (env.MIGRATE_ON_START === "false") return null;
   const url = env.DATABASE_URL_DIRECT || env.DATABASE_URL;
@@ -31,9 +33,15 @@ async function defaultMigrate(url) {
 export async function prestart({
   env = process.env,
   migrate = defaultMigrate,
+  validate = validateConfiguration,
   log = console.log,
   error = console.error,
 } = {}) {
+  const validation = validate(env);
+  if (!validation.ok) {
+    error(formatEnvIssues(validation.issues));
+    return false;
+  }
   const url = migrationUrl(env);
   if (!url) return true;
   try {

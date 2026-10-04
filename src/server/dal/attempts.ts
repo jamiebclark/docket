@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { publishAttempts, type PublishAttemptRow } from "../db/schema";
 
@@ -23,6 +23,8 @@ export interface AttemptEntry {
 export interface AttemptsRepo {
   insert(entry: AttemptEntry): Promise<void>;
   listForTarget(postTargetId: string): Promise<AttemptRow[]>;
+  /** Attempts of every given target, in `created_at, id` order. */
+  listForTargets(postTargetIds: readonly string[]): Promise<AttemptRow[]>;
 }
 
 export function createAttemptsRepo(db: Database, projectId: string): AttemptsRepo {
@@ -41,6 +43,19 @@ export function createAttemptsRepo(db: Database, projectId: string): AttemptsRep
         actorUserId: entry.actorUserId ?? null,
         createdAt: entry.at,
       });
+    },
+    async listForTargets(postTargetIds) {
+      if (postTargetIds.length === 0) return [];
+      return db
+        .select()
+        .from(publishAttempts)
+        .where(
+          and(
+            eq(publishAttempts.projectId, projectId),
+            inArray(publishAttempts.postTargetId, [...postTargetIds]),
+          ),
+        )
+        .orderBy(asc(publishAttempts.createdAt), asc(publishAttempts.id));
     },
     async listForTarget(postTargetId) {
       return db

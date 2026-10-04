@@ -239,7 +239,8 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   key: string;
   displayName: string;
   capabilities: ProviderCapabilities;
-  defaultPublishLimit?: PublishLimit;
+  /** One limit, or several that all apply (the strictest wins per window). Read through `providerPublishLimits`. */
+  defaultPublishLimit?: PublishLimit | readonly PublishLimit[];
   connect: ConnectStrategy;
   /** Non-secret per-account settings; `z.object({})` if none. */
   settingsSchema: z.ZodType<Settings>;

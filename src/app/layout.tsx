@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -6,7 +7,9 @@ export const metadata: Metadata = {
   description: "Multi-project social scheduler and post generator",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Every page renders per request, so Next can put the proxy's CSP nonce on its scripts.
+  await connection();
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">

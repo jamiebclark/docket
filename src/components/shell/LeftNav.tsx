@@ -10,14 +10,20 @@ export const NAV_SECTIONS = [
   { slug: "generate", label: "Generate" },
   { slug: "jobs", label: "Jobs" },
   { slug: "review", label: "Review" },
+  { slug: "failures", label: "Failures" },
   { slug: "media", label: "Media" },
   { slug: "accounts", label: "Accounts" },
   { slug: "voice", label: "Voice" },
   { slug: "settings", label: "Settings" },
 ] as const;
 
-/** Left navigation for a project; the active entry carries `aria-current="page"`. Review shows how many posts wait, as text. */
-export function LeftNav({ projectSlug, reviewCount = 0 }: { projectSlug: string; reviewCount?: number }) {
+function badge(slug: string, label: string, reviewCount: number, failuresCount: number): string {
+  const n = slug === "review" ? reviewCount : slug === "failures" ? failuresCount : 0;
+  return n > 0 ? `${label} (${n})` : label;
+}
+
+/** Left navigation for a project; the active entry carries `aria-current="page"`. Review and Failures show how many posts wait, as text. */
+export function LeftNav({ projectSlug, reviewCount = 0, failuresCount = 0 }: { projectSlug: string; reviewCount?: number; failuresCount?: number }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Project" className="w-48 shrink-0 border-r border-foreground/20 p-3">
@@ -34,7 +40,7 @@ export function LeftNav({ projectSlug, reviewCount = 0 }: { projectSlug: string;
                   active ? "bg-foreground/10 font-semibold" : ""
                 }`}
               >
-                {slug === "review" && reviewCount > 0 ? `${label} (${reviewCount})` : label}
+                {badge(slug, label, reviewCount, failuresCount)}
               </Link>
             </li>
           );

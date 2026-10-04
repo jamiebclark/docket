@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   atSchema,
+  externalUrlSchema,
   localTimeSchema,
   postInputSchema,
   publishLimitSchema,
@@ -59,4 +60,20 @@ describe("postInputSchema", () => {
     expect(postInputSchema.safeParse({ baseText: "x".repeat(20_001) }).success).toBe(false);
     expect(postInputSchema.safeParse({ mediaIds: ["x"] }).success).toBe(false);
   });
+});
+
+describe("externalUrlSchema", () => {
+  it("accepts http and https links", () => {
+    expect(externalUrlSchema.parse("https://x.com/a/status/1")).toBe("https://x.com/a/status/1");
+    expect(externalUrlSchema.safeParse("http://example.com").success).toBe(true);
+  });
+
+  it.each(["javascript:alert(1)", "data:text/html,hi", "ftp://example.com", "not a url", "https://u:p@example.com/", "https://user@example.com/", ""])(
+    "rejects %j with a field error",
+    (value) => {
+      const r = externalUrlSchema.safeParse(value);
+      expect(r.success).toBe(false);
+      if (!r.success) expect(r.error.issues[0]?.message).toBeTruthy();
+    },
+  );
 });

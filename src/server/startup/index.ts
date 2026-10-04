@@ -1,9 +1,9 @@
 import { runMigrations } from "../db/migrate";
 import { bootstrapFirstUser } from "../dal/install";
 import { SetupUnavailableError } from "../dal/errors";
-import { formatEnvIssues, parseEnv } from "../env";
-import { providerEnvIssues } from "../provider-env";
+import { formatEnvIssues } from "../env";
 import { parseLlmConfig } from "../llm/config";
+import { validateConfiguration } from "./validate";
 import { JOB_MIN_CALL_MS, JOB_PERSIST_RESERVE_MS } from "../scheduler/config";
 
 export interface StartupDeps {
@@ -29,19 +29,15 @@ const defaults = (): StartupDeps => ({
 export async function runStartup(overrides: Partial<StartupDeps> = {}): Promise<void> {
   const deps = { ...defaults(), ...overrides };
 
-  const parsed = parseEnv(deps.env);
-  const issues = [...(parsed.ok ? [] : parsed.issues), ...providerEnvIssues(deps.env)];
-  if (!parsed.ok || issues.length > 0) {
-    console.error(formatEnvIssues(issues));
+  const validation = validateConfiguration(deps.env);
+  if (!validation.ok) {
+    console.error(formatEnvIssues(validation.issues));
     return deps.exit(1);
   }
-  const env = parsed.env;
+  const env = validation.env;
+  for (const line of validation.disabled) deps.log(`Docket: ${line}`);
 
-  // Generation is optional: an unset or incomplete group is reported and startup carries on (never exits).
   const llm = parseLlmConfig(deps.env);
-  if (!llm.ok) {
-    deps.log(`Docket: generation disabled (${llm.problems.map((p) => `${p.name}: ${p.reason}`).join("; ")})`);
-  }
 
   const neededMs = JOB_MIN_CALL_MS + JOB_PERSIST_RESERVE_MS;
   if (llm.ok && env.SCHEDULER_TICK_BUDGET_SECONDS * 1000 < neededMs) {

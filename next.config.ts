@@ -13,9 +13,20 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: UPLOAD_BODY_LIMIT },
     proxyClientMaxBodySize: UPLOAD_BODY_LIMIT,
   },
-  // The sign-up URL carries the invitation token: never leak it through the Referer header.
+  // Static security headers (contracts/http-security.md §2). The runtime ones (CSP, HSTS) come from the proxy.
+  // The later rule wins: the sign-up URL carries the invitation token, so it never leaks through the Referer header.
   async headers() {
-    return [{ source: "/signup", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] }];
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+      { source: "/signup", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
+    ];
   },
 };
 

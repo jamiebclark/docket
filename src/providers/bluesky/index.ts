@@ -1,7 +1,7 @@
 import type { SocialProvider, StepResult } from "../types";
 import { advance } from "./publish";
 import { connectAccount, needsRefresh, refreshCredentials } from "./session";
-import { DEFAULT_PDS_URL, blueskySettingsSchema, type BlueskySettings, type BlueskyState } from "./settings";
+import { BLUESKY_DEFAULT_PUBLISH_LIMITS, DEFAULT_PDS_URL, blueskySettingsSchema, type BlueskySettings, type BlueskyState } from "./settings";
 import { stepForContent } from "./steps";
 import { validateBluesky } from "./validate";
 
@@ -40,6 +40,7 @@ export const blueskyProvider: SocialProvider<BlueskySettings, BlueskyState> = {
       },
     ],
   },
+  defaultPublishLimit: BLUESKY_DEFAULT_PUBLISH_LIMITS,
   settingsSchema: blueskySettingsSchema,
   connectAccount,
   needsRefresh,

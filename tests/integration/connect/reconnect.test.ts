@@ -135,7 +135,7 @@ describe("reconnecting a Facebook account through the chooser", () => {
     await testDb().update(socialAccounts).set({ status: "needs_reauth" }).where(and(eq(socialAccounts.projectId, env.project.id), eq(socialAccounts.id, account.id)));
 
     // While the account still needs reconnecting, retry is refused.
-    await expect(postsService.retryTarget(env.scope, target.id)).rejects.toThrow(/Reconnect the account/);
+    await expect(postsService.retryTarget(env.scope, target.id)).rejects.toThrow(/needs to be reconnected/);
 
     loginReturns([{ id: "100", name: "Acme", token: "NEW-PAGE-TOKEN" }]);
     const second = await signIn(env, session);
