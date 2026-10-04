@@ -1,0 +1,21 @@
+import { accountOperations } from "./accounts";
+import { generateOperations } from "./generate";
+import { jobOperations } from "./jobs";
+import { mediaOperations } from "./media";
+import { openApiOperations } from "./openapi";
+import { postOperations } from "./posts";
+import { slotOperations } from "./slots";
+
+export * from "./types";
+
+import type { AnyApiOperation } from "./types";
+
+export const OPERATIONS: readonly AnyApiOperation[] = [
+  ...accountOperations,
+  ...mediaOperations,
+  ...postOperations,
+  ...generateOperations,
+  ...slotOperations,
+  ...jobOperations,
+  ...openApiOperations,
+];
