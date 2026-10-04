@@ -75,6 +75,11 @@ export async function connectAccount(input: {
       if (err.status === 401) {
         return fail("Bluesky did not accept that handle or app password.", "appPassword");
       }
+      // 400 InvalidRequest is ambiguous: a PDS refusing a malformed handle, or a non-PDS host
+      // answering an empty 405. Name every place to look rather than guess.
+      if (err.status === 400) {
+        return fail("Bluesky rejected the sign-in. Check the handle, the app password and the server address.");
+      }
       if (err.status >= 400 && err.status < 500) {
         return fail(`${pdsUrl} did not answer as a Bluesky server (PDS). Check the address.`, "pdsUrl");
       }

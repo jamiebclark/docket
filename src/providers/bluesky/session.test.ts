@@ -65,7 +65,8 @@ describe("connectAccount", () => {
 
   const failureRows: [string, Parameters<FakePds["route"]>[2], RegExp, string | undefined][] = [
     ["401", { status: 401, json: { error: "AuthenticationRequired", message: "bad" } }, /did not accept/, "appPassword"],
-    ["400", { status: 400, json: { error: "InvalidRequest", message: "bad" } }, /did not accept/, "appPassword"],
+    ["400", { status: 400, json: { error: "InvalidRequest", message: "bad" } }, /handle, the app password and the server address/, undefined],
+    ["404 from a non-PDS host", { status: 404, json: { error: "XRPCNotSupported" } }, /did not answer as a Bluesky server/, "pdsUrl"],
     ["2fa", { status: 401, json: { error: "AuthFactorTokenRequired", message: "code" } }, /sign-in code/, "appPassword"],
     ["takedown", { status: 400, json: { error: "AccountTakedown", message: "x" } }, /suspended/, undefined],
     ["5xx", { status: 503, json: { error: "Unavailable" } }, /Could not reach a Bluesky server at https:\/\/bsky\.social/, "pdsUrl"],
