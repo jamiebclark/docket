@@ -1,10 +1,11 @@
 import type { AttemptErrorKind, AttemptOutcome, DeliveryRecord, EndpointRecord, EventRecord } from "../../dal/webhooks";
+import { UrlFetchError } from "../../dal/errors";
+import { postGuarded } from "../../net/safe-fetch";
 import { redact } from "../../scheduler/redact";
 import { activeSecrets } from "./endpoints";
 import { signatureHeader } from "./sign";
 
 const EXCERPT_CHARS = 1000;
-const READ_CAP_MS = 2000;
 
 function classify(error: unknown): AttemptErrorKind {
   const e = error as { name?: string; code?: string; cause?: { code?: string; name?: string } };
@@ -16,17 +17,8 @@ function classify(error: unknown): AttemptErrorKind {
   return "connect";
 }
 
-async function readExcerpt(res: Response, secrets: readonly string[]): Promise<string | null> {
-  try {
-    const text = await Promise.race([
-      res.text(),
-      new Promise<string>((resolve) => setTimeout(() => resolve(""), READ_CAP_MS).unref?.()),
-    ]);
-    void res.body?.cancel().catch(() => undefined);
-    return text ? redact(text.slice(0, EXCERPT_CHARS), secrets) : null;
-  } catch {
-    return null;
-  }
+function excerptOf(text: string, secrets: readonly string[]): string | null {
+  return text ? redact(text.slice(0, EXCERPT_CHARS), secrets) : null;
 }
 
 /**
@@ -46,10 +38,9 @@ export async function sendDelivery(input: {
   const rawBody = JSON.stringify(event.body);
   const timestamp = Math.floor(now.getTime() / 1000);
   try {
-    const res = await fetch(endpoint.url, {
-      method: "POST",
-      redirect: "manual",
-      signal: AbortSignal.timeout(input.timeoutMs),
+    const res = await postGuarded(endpoint.url, {
+      policy: "webhook",
+      timeoutMs: input.timeoutMs,
       headers: {
         "Content-Type": "application/json",
         "User-Agent": "Docket-Webhooks/1",
@@ -60,7 +51,7 @@ export async function sendDelivery(input: {
       },
       body: rawBody,
     });
-    const excerpt = await readExcerpt(res, secrets);
+    const excerpt = excerptOf(res.excerpt, secrets);
     const ok = res.status >= 200 && res.status < 300;
     return {
       statusCode: res.status,
@@ -73,7 +64,7 @@ export async function sendDelivery(input: {
   } catch (error) {
     return {
       statusCode: null,
-      errorKind: classify(error),
+      errorKind: error instanceof UrlFetchError && error.code === "url_not_allowed" ? "address_not_allowed" : classify(error),
       durationMs: Date.now() - started,
       responseExcerpt: null,
       ok: false,

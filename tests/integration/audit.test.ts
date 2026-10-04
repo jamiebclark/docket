@@ -4,6 +4,7 @@ import { forProject } from "../../src/server/dal/scope";
 import { createAuditRepo } from "../../src/server/dal/audit";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import { membershipAuditLog } from "../../src/server/db/schema";
+import { recordAudit } from "../../src/server/services/audit";
 import * as members from "../../src/server/services/members";
 import { fakeSession } from "../helpers/auth";
 import { closeDb, testDb } from "../helpers/db";
@@ -51,5 +52,28 @@ describe("membership audit", () => {
     expect(list).toHaveLength(2);
     expect(list[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(list[1]!.createdAt.getTime());
     expect(Object.keys(createAuditRepo(testDb(), ctx.project.id)).sort()).toEqual(["insert", "list"]);
+  });
+});
+
+describe("audit secret guard (FR-027)", () => {
+  it.each(["token", "inviteToken", "webhookUrl", "url", "password", "clientSecret", "Secret"])(
+    "the repo refuses a detail key named %s, so no write path can store it",
+    async (key) => {
+      const ctx = await createProjectWithMembers();
+      const owner = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+      const entry = { action: "role_change" as const, actorUserId: ctx.owner.id, details: { [key]: "x" } };
+      // The repository directly (what invitation code calls), and the service wrapper.
+      await expect(createAuditRepo((await import("../../src/server/db/client")).getDb(), ctx.project.id).insert(entry)).rejects.toThrow(/must not include/);
+      await expect(owner.audit.insert(entry)).rejects.toThrow(/must not include/);
+      await expect(recordAudit(owner, entry)).rejects.toThrow(/must not include/);
+      expect(await rowsFor(ctx.project.id)).toHaveLength(0);
+    },
+  );
+
+  it("accepts ordinary keys", async () => {
+    const ctx = await createProjectWithMembers();
+    const owner = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    await recordAudit(owner, { action: "role_change", actorUserId: ctx.owner.id, details: { host: "example.test", from: "a" } });
+    expect(await rowsFor(ctx.project.id)).toHaveLength(1);
   });
 });

@@ -7,6 +7,7 @@ import type { ProjectScope } from "../../dal/scope";
 import type { EndpointRecord } from "../../dal/webhooks";
 import { decryptSecret, encryptSecret } from "../../crypto/secrets";
 import { recordAudit } from "../audit";
+import { checkWebhookDestination } from "./destination";
 
 export const SECRET_PREFIX = "whsec_";
 export const ROTATION_OVERLAP_MS = 24 * 3_600_000;
@@ -75,9 +76,10 @@ export async function getEndpoint(scope: ProjectScope, id: string): Promise<Endp
 export async function createEndpoint(
   scope: ProjectScope,
   input: unknown,
-): Promise<{ endpoint: EndpointView; secret: string; httpWarning: boolean }> {
+): Promise<{ endpoint: EndpointView; secret: string; httpWarning: boolean; destinationWarning: string | null }> {
   const parsed = webhookEndpointSchema.parse(input);
   need(scope);
+  const { warning } = await checkWebhookDestination(parsed.url);
   const id = crypto.randomUUID();
   const secret = newSecret();
   const row = await scope.transaction(
@@ -103,13 +105,14 @@ export async function createEndpoint(
     },
     { lockProject: true },
   );
-  return { endpoint: toView(row, await clock.now(), null), secret, httpWarning: new URL(row.url).protocol === "http:" };
+  return { endpoint: toView(row, await clock.now(), null), secret, httpWarning: new URL(row.url).protocol === "http:", destinationWarning: warning };
 }
 
 export async function updateEndpoint(scope: ProjectScope, id: string, input: unknown): Promise<EndpointView> {
   const parsed = webhookEndpointSchema.parse(input);
   need(scope);
   if (!uuid.safeParse(id).success) throw new NotFoundError();
+  await checkWebhookDestination(parsed.url);
   return scope.transaction(async (tx) => {
     need(tx);
     const row = await tx.webhooks.updateEndpoint(id, parsed);

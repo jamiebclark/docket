@@ -5,6 +5,7 @@ import * as clock from "../dal/clock";
 import { InvalidApiKeyError } from "../dal/errors";
 import { forApiKey, type ProjectScope } from "../dal/scope";
 import { getEnv } from "../env";
+import { BodyTooLargeError, readBodyWithin } from "../http/body";
 import { readKey } from "./auth";
 import { ApiError, apiError, logUnexpected, mapServiceError, zodDetails } from "./errors";
 import type { AnyApiOperation } from "./operations";
@@ -22,15 +23,14 @@ function multipartLimit(): number {
   return getEnv().media.maxUploadBytes + MULTIPART_EXTRA;
 }
 
-/** Reads the body as bytes within `limit`, checking the declared length first. */
+/** Reads the body as bytes within `limit`, stopping as soon as it is crossed. */
 async function readBytes(request: Request, limit: number): Promise<Uint8Array> {
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > limit) {
-    throw apiError("payload_too_large", "The request body is too large.");
+  try {
+    return await readBodyWithin(request, limit);
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) throw apiError("payload_too_large", "The request body is too large.");
+    throw error;
   }
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > limit) throw apiError("payload_too_large", "The request body is too large.");
-  return bytes;
 }
 
 async function readBody(request: Request, op: AnyApiOperation): Promise<unknown> {

@@ -14,16 +14,22 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
   });
 }
 
-/** `POST /api/internal/tick` (FR-043). Pure apart from the injected `runTick`, so tests need no env. */
-export async function handleTickRequest(request: Request, deps: TickRequestDeps): Promise<Response> {
-  if (!deps.secret) return json(404, { error: "not_found" });
+/** Digest of a value nobody can present, so an unset secret still costs one comparison. */
+const UNSET = digest("tick-secret-not-configured");
 
+const refuse = () => json(401, { error: "unauthorized" }, { "www-authenticate": "Bearer" });
+
+/**
+ * `POST /api/internal/tick` (FR-043, FR-022). Pure apart from the injected `runTick`, so tests need no env.
+ * Every refusal (no secret configured, no or wrong bearer, secret in the query string) is the same response.
+ */
+export async function handleTickRequest(request: Request, deps: TickRequestDeps): Promise<Response> {
   const header = request.headers.get("authorization") ?? "";
   const match = /^Bearer (.+)$/.exec(header);
-  // Always compare, so every failure path costs the same.
-  const given = digest(match?.[1] ?? "");
-  const ok = timingSafeEqual(given, digest(deps.secret)) && match !== null;
-  if (!ok) return json(401, { error: "unauthorized" }, { "www-authenticate": "Bearer" });
+  // Always compare digests, so every failure path costs the same.
+  const matches = timingSafeEqual(digest(match?.[1] ?? ""), deps.secret ? digest(deps.secret) : UNSET);
+  const hasQuery = new URL(request.url).search !== "";
+  if (!deps.secret || match === null || !matches || hasQuery) return refuse();
 
   try {
     return json(200, await deps.runTick(), { "cache-control": "no-store" });

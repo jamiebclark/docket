@@ -96,26 +96,26 @@
 
 ### Tests first
 
-- [ ] T037 [P] [US3] Write `tests/integration/security/csrf.test.ts`: cross-origin and missing-Origin-with-session requests are refused with no effect for each surface type — server action, session route handler, auth endpoint (SC-006)
-- [ ] T038 [P] [US3] Write `tests/integration/security/headers.test.ts`: nosniff, frame refusal, referrer policy (signup stays `no-referrer`), CSP with nonce on a page, an API response and the health endpoint; HSTS only when the public URL is https
-- [ ] T039 [P] [US3] Extend `tests/integration/tick-endpoint.test.ts`: missing secret, wrong secret, secret in query string, no secret configured — all the identical response; presented value never logged
-- [ ] T040 [P] [US3] Write `src/server/http/body.test.ts` and `tests/integration/security/body-limit.test.ts`: a chunked body without length is rejected as soon as it crosses the limit without buffering the rest
-- [ ] T041 [P] [US3] Extend `src/server/net/safe-fetch.test.ts` for 6to4, Teredo, documentation ranges and IPv4-mapped refused addresses, plus connection-time (lookup) checking; write `tests/integration/webhooks/destination.test.ts` for save-time and delivery-time refusal (loopback, link-local, unspecified; `http` and private ranges still allowed) and the `address_not_allowed` error
-- [ ] T042 [P] [US3] Write a test in the DAL tests that every audit write path refuses secret-looking detail keys (token, url, password, secret) (FR-027)
-- [ ] T043 [P] [US3] Write `tests/integration/security/cookies.test.ts` for session cookie attributes and sign-in rate limiting, recording results for the findings record
+- [x] T037 [P] [US3] Write `tests/integration/security/csrf.test.ts`: cross-origin and missing-Origin-with-session requests are refused with no effect for each surface type — server action, session route handler, auth endpoint (SC-006)
+- [x] T038 [P] [US3] Write `tests/integration/security/headers.test.ts`: nosniff, frame refusal, referrer policy (signup stays `no-referrer`), CSP with nonce on a page, an API response and the health endpoint; HSTS only when the public URL is https
+- [x] T039 [P] [US3] Extend `tests/integration/tick-endpoint.test.ts`: missing secret, wrong secret, secret in query string, no secret configured — all the identical response; presented value never logged
+- [x] T040 [P] [US3] Write `src/server/http/body.test.ts` and `tests/integration/security/body-limit.test.ts`: a chunked body without length is rejected as soon as it crosses the limit without buffering the rest
+- [x] T041 [P] [US3] Extend `src/server/net/safe-fetch.test.ts` for 6to4, Teredo, documentation ranges and IPv4-mapped refused addresses, plus connection-time (lookup) checking; write `tests/integration/webhooks/destination.test.ts` for save-time and delivery-time refusal (loopback, link-local, unspecified; `http` and private ranges still allowed) and the `address_not_allowed` error
+- [x] T042 [P] [US3] Write a test in the DAL tests that every audit write path refuses secret-looking detail keys (token, url, password, secret) (FR-027)
+- [x] T043 [P] [US3] Write `tests/integration/security/cookies.test.ts` for session cookie attributes and sign-in rate limiting, recording results for the findings record
 
 ### Implementation
 
-- [ ] T044 [P] [US3] Add pure `src/lib/http/same-origin.ts` (+ test) and `src/lib/http/security-headers.ts` (+ test) per contracts/http-security.md §1–§2
-- [ ] T045 [US3] Wire the same-origin guard, per-request CSP nonce and HSTS into `src/proxy.ts`; add static headers to `next.config.ts` with the signup `Referrer-Policy` rule last; make `src/app/layout.tsx` async with `await connection()` (D16, D17); read the Next CSP and proxy docs first
-- [ ] T046 [P] [US3] Make the tick endpoint give one identical refusal with constant-time comparison in `src/server/scheduler/http.ts` (and its route); log the 404→401 change in `docs/decisions.md` (D18)
-- [ ] T047 [P] [US3] Implement `readBodyWithin` in `src/server/http/body.ts` and use it in `src/server/api/handle.ts` and `src/app/p/[projectSlug]/compose/check/route.ts` (D19)
-- [ ] T048 [US3] Extend `src/server/net/safe-fetch.ts`: extra refused ranges, mapped/compat IPv4, lookup-guarded `postGuarded`, new `webhook` policy; use it in `src/server/services/webhooks/deliver.ts`; add the save-time destination check in `src/server/services/webhooks/endpoints.ts` and `src/lib/validation/api.ts` (D20)
-- [ ] T049 [US3] Move the secret-key guard into `src/server/dal/audit.ts` insert and make `src/server/services/audit.ts` delegate to it (D21)
-- [ ] T050 [US3] Write `tests/integration/security/secret-scan.test.ts` per D23 and contracts/http-security.md §6: distinctive fake values for every secret, capture logs (web and worker), responses (body and headers), rendered pages, attempt logs, audit rows, webhook payloads, scan for raw/base64/URL-encoded forms, assert the one-time display separately, and include a self-check that deliberately logs a secret and expects the scan to fail (SC-005)
-- [ ] T051 [US3] Fix any leak the scan or the CSRF/headers tests expose
-- [ ] T052 [US3] Write `docs/security.md`: findings table (area, what was checked, finding, severity, fix or accepted reason, test) covering every area in FR-028, and `tests/integration/docs/security-findings.test.ts` asserting each row names an existing test and none is left open without a reason (SC-011)
-- [ ] T053 [US3] Run `pnpm vitest run tests/integration/security tests/integration/webhooks tests/integration/tick-endpoint.test.ts tests/integration/docs/security-findings.test.ts src/lib/http src/server` and `pnpm tsc --noEmit`
+- [x] T044 [P] [US3] Add pure `src/lib/http/same-origin.ts` (+ test) and `src/lib/http/security-headers.ts` (+ test) per contracts/http-security.md §1–§2
+- [x] T045 [US3] Wire the same-origin guard, per-request CSP nonce and HSTS into `src/proxy.ts`; add static headers to `next.config.ts` with the signup `Referrer-Policy` rule last; make `src/app/layout.tsx` async with `await connection()` (D16, D17); read the Next CSP and proxy docs first
+- [x] T046 [P] [US3] Make the tick endpoint give one identical refusal with constant-time comparison in `src/server/scheduler/http.ts` (and its route); log the 404→401 change in `docs/decisions.md` (D18)
+- [x] T047 [P] [US3] Implement `readBodyWithin` in `src/server/http/body.ts` and use it in `src/server/api/handle.ts` and `src/app/p/[projectSlug]/compose/check/route.ts` (D19)
+- [x] T048 [US3] Extend `src/server/net/safe-fetch.ts`: extra refused ranges, mapped/compat IPv4, lookup-guarded `postGuarded`, new `webhook` policy; use it in `src/server/services/webhooks/deliver.ts`; add the save-time destination check in `src/server/services/webhooks/endpoints.ts` and `src/lib/validation/api.ts` (D20)
+- [x] T049 [US3] Move the secret-key guard into `src/server/dal/audit.ts` insert and make `src/server/services/audit.ts` delegate to it (D21)
+- [x] T050 [US3] Write `tests/integration/security/secret-scan.test.ts` per D23 and contracts/http-security.md §6: distinctive fake values for every secret, capture logs (web and worker), responses (body and headers), rendered pages, attempt logs, audit rows, webhook payloads, scan for raw/base64/URL-encoded forms, assert the one-time display separately, and include a self-check that deliberately logs a secret and expects the scan to fail (SC-005)
+- [x] T051 [US3] Fix any leak the scan or the CSRF/headers tests expose
+- [x] T052 [US3] Write `docs/security.md`: findings table (area, what was checked, finding, severity, fix or accepted reason, test) covering every area in FR-028, and `tests/integration/docs/security-findings.test.ts` asserting each row names an existing test and none is left open without a reason (SC-011)
+- [x] T053 [US3] Run `pnpm vitest run tests/integration/security tests/integration/webhooks tests/integration/tick-endpoint.test.ts tests/integration/docs/security-findings.test.ts src/lib/http src/server` and `pnpm tsc --noEmit`
 
 **Checkpoint**: US3 complete.
 

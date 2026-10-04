@@ -3,7 +3,11 @@ import { ZodError } from "zod";
 import { fieldErrorsFromZod, type ErrorCode } from "@/lib/action-result";
 import { forProject } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
+import { BodyTooLargeError, readBodyWithin } from "@/server/http/body";
 import * as posts from "@/server/services/posts";
+
+/** The composer sends a few KB of text; anything near this is not the composer. */
+const CHECK_BODY_LIMIT = 256 * 1024;
 
 const HEADERS = { "Cache-Control": "no-store" };
 
@@ -17,8 +21,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
   }
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = JSON.parse(new TextDecoder().decode(await readBodyWithin(request, CHECK_BODY_LIMIT)));
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) {
+      return respond(413, { ok: false, error: "validation", message: "The request is too large." });
+    }
     return respond(400, { ok: false, error: "validation", fieldErrors: { form: "The request is not valid JSON." } });
   }
   try {
