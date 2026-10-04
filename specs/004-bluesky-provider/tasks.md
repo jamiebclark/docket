@@ -193,3 +193,9 @@ Then US3 (images), US6 (safety outcomes), US4 (validation), US5 (sessions), then
 - Pass `ctx.signal` on every call. Build the agent per call so `vi.stubGlobal("fetch", …)` still intercepts.
 - Store `blob.ipld()` in state, never the `BlobRef` instance.
 - Commit per task or logical group with conventional commits and explicit paths.
+
+---
+
+## Phase 10: Review remediation
+
+- [ ] T055 Map a non-PDS answer to `createSession` (HTTP 404 / `XRPCNotSupported`, and a 400/405 with no platform error body, i.e. the client's synthetic `InvalidRequest`) to the `pdsUrl` "Could not reach a Bluesky server at …" message instead of the credentials message, keeping 401 / `AuthenticationRequired` as "did not accept that handle or app password"; add both shapes to the connect failure tables in `src/providers/bluesky/session.test.ts` and `tests/integration/accounts-credentials-connect.test.ts:87-92` — review F1 (MAJOR), src/providers/bluesky/session.ts:72
