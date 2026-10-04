@@ -26,6 +26,7 @@ export interface ConnectGroupView {
   key: string;
   displayName: string;
   providerNames: string[];
+  providerKeys: string[];
   configured: boolean;
   setupDoc: string | null;
   redirectUri: string;
@@ -75,6 +76,7 @@ export async function listConnectGroups(scope: ProjectScope): Promise<ConnectGro
     key: group.key,
     displayName: group.displayName,
     providerNames: providers.map((p) => p.displayName),
+    providerKeys: providers.map((p) => p.key),
     configured: isGroupConfigured(group.key),
     setupDoc: group.setupDoc ?? null,
     redirectUri: redirectUriFor(),

@@ -12,6 +12,7 @@ import * as slots from "@/server/services/slots";
 import { ConnectGroupSection } from "./ConnectGroupSection";
 import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
+import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
 import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
 
@@ -127,6 +128,11 @@ export default async function AccountsPage({
                   <MockBehaviourForm slug={projectSlug} id={account.id} behaviour={behaviour} />
                 </div>
               ) : null}
+              {canManage && account.status === "needs_reauth"
+                ? groups
+                    .filter((g) => g.configured && g.providerKeys.includes(account.providerKey))
+                    .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
+                : null}
               {canManage && account.status === "needs_reauth"
                 ? credentialProviders
                     .filter((p) => p.key === account.providerKey)

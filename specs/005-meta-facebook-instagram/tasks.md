@@ -102,9 +102,9 @@ description: "Task list for the Facebook Pages and Instagram providers (005)"
 
 **Independent Test**: a 190 on any step sets `needs_reauth`; a chooser reconnect makes the account `active` with the new token.
 
-- [ ] T034 [US7] Ensure the shared `errors.ts` maps 190 (any subcode) to `fatal_error` with `credentialsInvalid: true` and a reason phrased as a reason ("Facebook says the access token is no longer valid (code 190/460).") because the engine prefixes `Reconnect <name> to publish:`; add the cases to `src/providers/meta/errors.test.ts`
-- [ ] T035 [US7] Update the accounts page for a `needs_reauth` Facebook/Instagram account: the card offers "Reconnect with Facebook" (start action) and the paste form; a reconnect where the Page is no longer managed shows "Page not found for this login" and leaves the account `needs_reauth`
-- [ ] T036 [US7] Write `tests/integration/connect/reconnect.test.ts` (meta group + fake-graph): reconnect via chooser updates the same row in place, status `active`, `last_error` cleared, new ciphertext; a failed target from a revoked token can be retried with the existing retry action after reconnect; missing Page leaves it `needs_reauth`
+- [x] T034 [US7] Ensure the shared `errors.ts` maps 190 (any subcode) to `fatal_error` with `credentialsInvalid: true` and a reason phrased as a reason ("Facebook says the access token is no longer valid (code 190/460).") because the engine prefixes `Reconnect <name> to publish:`; add the cases to `src/providers/meta/errors.test.ts`
+- [x] T035 [US7] Update the accounts page for a `needs_reauth` Facebook/Instagram account: the card offers "Reconnect with Facebook" (start action) and the paste form; a reconnect where the Page is no longer managed shows "Page not found for this login" and leaves the account `needs_reauth`
+- [x] T036 [US7] Write `tests/integration/connect/reconnect.test.ts` (meta group + fake-graph): reconnect via chooser updates the same row in place, status `active`, `last_error` cleared, new ciphertext; a failed target from a revoked token can be retried with the existing retry action after reconnect; missing Page leaves it `needs_reauth`
 
 ---
 

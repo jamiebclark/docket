@@ -41,6 +41,18 @@ describe("graphStepError", () => {
     expect(r).toMatchObject({ kind: "fatal_error", credentialsInvalid: true });
     expect(r?.kind === "fatal_error" && r.error).toBe("Facebook says the access token is no longer valid (code 190/463).");
   });
+  it("maps 190 to a fatal reason phrased for the engine's Reconnect prefix, for any subcode and step", () => {
+    for (const mayPublish of [true, false]) {
+      for (const subcode of [null, 460, 463, 467]) {
+        const r = graphStepError(graph({ code: 190, subcode }, 400), opts(mayPublish));
+        expect(r).toMatchObject({ kind: "fatal_error", credentialsInvalid: true });
+        const text = r?.kind === "fatal_error" ? r.error : "";
+        expect(text).toMatch(/^Facebook says the access token is no longer valid \(code 190(\/\d+)?\)\.$/);
+      }
+    }
+    const r = graphStepError(graph({ code: 190, subcode: 460 }, 400), opts(true));
+    expect(r?.kind === "fatal_error" && r.error).toBe("Facebook says the access token is no longer valid (code 190/460).");
+  });
   it("retries rate limits even on publish steps", () => {
     expect(graphStepError(graph({ code: 4 }), opts(true))?.kind).toBe("retryable_error");
   });
