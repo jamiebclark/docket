@@ -148,9 +148,9 @@ description: "Task list for the Facebook Pages and Instagram providers (005)"
 
 **Independent Test**: the matrix in spec US6 passes for Facebook feed/photo, Instagram publish and every non-publishing step.
 
-- [ ] T053 [US6] Write `tests/integration/facebook/outcomes.test.ts`: for `publish_feed`, `publish_photo` (mayPublish) and `upload_photo` (non-publishing) stub timeout-after-send, reset, 5xx, unparseable 2xx, 2xx missing id, rate-limit, validation/permission, code 190, pre-send failure; assert ambiguous vs retryable vs fatal per spec US6 and that no ambiguous target is retried by the next tick
-- [ ] T054 [US6] Write `tests/integration/instagram/outcomes.test.ts`: same matrix for `publish` (mayPublish) and for container create, `check_status` and `check_quota` (non-publishing); also "container expired" answered to publish → fatal, never recreated; lease recovery of a killed publish step is `recovered_ambiguous`
-- [ ] T055 [US6] Fix whatever the matrix exposes in `src/providers/facebook/publish.ts`, `src/providers/instagram/publish.ts` or `src/providers/meta/errors.ts` (rate-limit retryable on mayPublish steps only because a rate-limited request is refused; temporary/5xx/unparseable on mayPublish → ambiguous), re-running T053/T054 until green. If nothing needs fixing, say so in the commit
+- [x] T053 [US6] Write `tests/integration/facebook/outcomes.test.ts`: for `publish_feed`, `publish_photo` (mayPublish) and `upload_photo` (non-publishing) stub timeout-after-send, reset, 5xx, unparseable 2xx, 2xx missing id, rate-limit, validation/permission, code 190, pre-send failure; assert ambiguous vs retryable vs fatal per spec US6 and that no ambiguous target is retried by the next tick
+- [x] T054 [US6] Write `tests/integration/instagram/outcomes.test.ts`: same matrix for `publish` (mayPublish) and for container create, `check_status` and `check_quota` (non-publishing); also "container expired" answered to publish → fatal, never recreated; lease recovery of a killed publish step is `recovered_ambiguous`
+- [x] T055 [US6] Fix whatever the matrix exposes in `src/providers/facebook/publish.ts`, `src/providers/instagram/publish.ts` or `src/providers/meta/errors.ts` (rate-limit retryable on mayPublish steps only because a rate-limited request is refused; temporary/5xx/unparseable on mayPublish → ambiguous), re-running T053/T054 until green. If nothing needs fixing, say so in the commit
 
 ---
 
