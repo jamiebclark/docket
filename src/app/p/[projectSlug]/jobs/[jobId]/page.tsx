@@ -13,6 +13,7 @@ import { getJob, JOB_ITEMS_PAGE_SIZE, listJobItems } from "@/server/services/job
 import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { UNREVIEWED_QUEUE_LABEL } from "../../generate/PolicyPicker";
 import { CancelJobDialog } from "./CancelJobDialog";
+import { CloseJobDialog } from "./CloseJobDialog";
 import { JobItemsTable } from "./JobItemsTable";
 import { RetryButton } from "./RetryButtons";
 
@@ -62,6 +63,11 @@ export default async function JobPage({ params, searchParams }: Props) {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{job.sourceSummary}</h1>
         <StatusBadge status={job.status} />
+        {job.open && job.status !== "cancelled" ? (
+          <span className="rounded border border-blue-700 px-2 py-0.5 text-xs font-medium text-blue-800 dark:border-blue-400 dark:text-blue-300">
+            Open: accepting items
+          </span>
+        ) : null}
       </div>
       <div className="text-sm">
         <p>
@@ -126,6 +132,7 @@ export default async function JobPage({ params, searchParams }: Props) {
       {canRun && job.status !== "cancelled" ? (
         <div className="flex gap-2">
           {c.failed > 0 ? <RetryButton slug={projectSlug} jobId={jobId} count={c.failed} /> : null}
+          {job.open ? <CloseJobDialog slug={projectSlug} jobId={jobId} summary={job.sourceSummary} /> : null}
           {active ? <CancelJobDialog slug={projectSlug} jobId={jobId} summary={job.sourceSummary} /> : null}
         </div>
       ) : null}
