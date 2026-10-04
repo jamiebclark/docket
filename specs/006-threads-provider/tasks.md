@@ -196,3 +196,10 @@ description: "Task list for the Threads provider (006)"
 2. Add Phase 8 (outcome matrix) before declaring publishing done, since the ambiguity rule is the riskiest part.
 3. Then Phase 5 (paste), Phase 9 (limits), Phase 10 (secrets), Phase 11 (docs), Phase 12 (gates).
 4. Commit after each task or small group with explicit paths. Never report live behaviour as working; everything here is "verified with mocks only" (constitution II).
+
+---
+
+## Phase 13: Review remediation
+
+- [ ] T054 Make `tests/integration/threads/refresh.test.ts` independent of other test files: set `T0` to the real current time instead of 2030, replace the global `runTokenRefresh` count assertions with per-account assertions (row status, ciphertext, `last_refreshed_at`, `refresh_lease_until`, refresh requests carrying this account's token), then run the full `pnpm test` green — review F1 (BLOCKER), tests/integration/threads/refresh.test.ts:33, tests/integration/threads/refresh.test.ts:84
+- [ ] T055 Add an "expiry estimated" note to the candidate built for a pasted token saved as is, so the chooser shows it (US7 scenario 3), and extend `tests/integration/threads/paste.test.ts` case (c) to assert the note in `getConnectChoice`'s candidates — review F2 (MAJOR), src/providers/threads/connect-group.ts:69
