@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMetaEnv } from "./config";
+import { isAppId, isAppSecret, parseMetaEnv, readEnv } from "./config";
 
 const ID = "1234567890";
 const SECRET = "0123456789abcdef0123456789abcdef";
@@ -51,5 +51,19 @@ describe("parseMetaEnv", () => {
     const r = parseMetaEnv({ META_APP_ID: "bad-id-value", META_APP_SECRET: "sec ret" });
     expect(JSON.stringify(r.issues)).not.toContain("bad-id-value");
     expect(JSON.stringify(r.issues)).not.toContain("sec ret");
+  });
+});
+
+describe("exported env helpers", () => {
+  it("reads trimmed values and treats blanks as unset", () => {
+    expect(readEnv({ A: "  x " }, "A")).toBe("x");
+    expect(readEnv({ A: "   " }, "A")).toBeNull();
+    expect(readEnv({}, "A")).toBeNull();
+  });
+  it("validates app ids and secrets as Meta's parsing does", () => {
+    expect(isAppId("123456789")).toBe(true);
+    expect(isAppId("12ab")).toBe(false);
+    expect(isAppSecret("0123456789abcdef0123456789abcdef")).toBe(true);
+    expect(isAppSecret("short")).toBe(false);
   });
 });

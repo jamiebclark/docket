@@ -34,6 +34,29 @@ describe("graphRequest", () => {
     expect(fake.requests[0]?.params).toMatchObject({ message: "hi", access_token: "[redacted]" });
   });
 
+  it("builds URLs with the version, without it for a null version, and without it for one unversioned request", async () => {
+    const urls: string[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (u: RequestInfo | URL) => {
+      urls.push(String(u));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await graphRequest(app, { method: "GET", path: "/me", signal: signal() });
+      await graphRequest({ graphBase: "https://graph.threads.net", version: null }, { method: "GET", path: "/me", signal: signal() });
+      await graphRequest(app, { method: "GET", path: "/refresh_access_token", unversioned: true, signal: signal() });
+      await graphRequest({ graphBase: "https://graph.threads.net", version: "v1.0" }, { method: "POST", path: "/oauth/access_token", unversioned: true, signal: signal() });
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(urls).toEqual([
+      "https://graph.facebook.com/v26.0/me?",
+      "https://graph.threads.net/me?",
+      "https://graph.facebook.com/refresh_access_token?",
+      "https://graph.threads.net/oauth/access_token",
+    ]);
+  });
+
   it("rejects malformed ids in the path", () => {
     expect(() => graphRequest(app, { method: "GET", path: "/12/../x?y=1", signal: signal() })).toThrow();
     expect(() => graphRequest(app, { method: "GET", path: "/abc def", signal: signal() })).toThrow();
