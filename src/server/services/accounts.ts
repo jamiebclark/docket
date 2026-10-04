@@ -1,3 +1,4 @@
+import { providerPublishLimits } from "../../providers/limits";
 import { z } from "zod";
 import { findProvider, listProviders } from "@/providers/registry";
 import type { CredentialField, ProviderCapabilities, PublishLimit } from "@/providers/types";
@@ -309,11 +310,16 @@ export async function setPublishLimit(
     if (!account) throw new NotFoundError();
     await tx.accounts.setLimit(id, parsed);
     const warnings: string[] = [];
-    const def = findProvider(account.providerKey)?.defaultPublishLimit;
-    if (parsed && def && parsed.count / parsed.windowSeconds > def.count / def.windowSeconds) {
-      warnings.push(
-        `${account.displayName} cannot post faster than ${def.count} per ${def.windowSeconds} seconds on this platform, so that limit has no effect.`,
+    if (parsed) {
+      // Report the first default limit the account's own limit is looser than.
+      const def = providerPublishLimits(findProvider(account.providerKey)).find(
+        (d) => parsed.count / parsed.windowSeconds > d.count / d.windowSeconds,
       );
+      if (def) {
+        warnings.push(
+          `${account.displayName} cannot post faster than ${def.count} per ${def.windowSeconds} seconds on this platform, so that limit has no effect.`,
+        );
+      }
     }
     return { warnings };
   });

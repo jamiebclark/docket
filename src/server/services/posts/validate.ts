@@ -1,5 +1,5 @@
 import { findProvider } from "../../../providers/registry";
-import type { ValidationIssue } from "../../../providers/types";
+import type { PostContent, SocialProvider, ValidationIssue } from "../../../providers/types";
 import type { AccountRecord } from "../../dal/accounts";
 import type { MediaRow } from "../../dal/media";
 import type { ProjectScope } from "../../dal/scope";
@@ -30,6 +30,14 @@ const FIELD_RANK = (field: string): number =>
   field === "text" ? 0 : field === "postType" ? 1 : field === "media" ? 2 : 3 + Number(field.split(".")[1] ?? 0);
 
 /**
+ * Provider validation of already-resolved content. The single core of every content check
+ * (constitution IV): the scheduling gate and the publish engine both call it, so they word a refusal identically.
+ */
+export function validateResolvedContent(provider: SocialProvider, content: PostContent): ValidationIssue[] {
+  return provider.validate(content, provider.capabilities);
+}
+
+/**
  * The one validation path (FR-006–FR-017): adapted media → provider validation → the planner's notes and
  * refusals, merged in a stable order (text, postType, media, media.0, media.1 …). `null` when the provider
  * is not registered.
@@ -45,9 +53,7 @@ export async function validateTargetContent(
   const { media, issues: planIssues } = await adaptedMediaFor(tx, provider.capabilities, provider.displayName, content.assets, opts);
   // An image the planner already refused (or could not adapt) would only repeat itself as a provider error.
   const planned = new Set(planIssues.filter((i) => i.severity === "error").map((i) => i.field));
-  const providerIssues = provider
-    .validate({ text: content.text, media }, provider.capabilities)
-    .filter((i) => !planned.has(i.field));
+  const providerIssues = validateResolvedContent(provider, { text: content.text, media }).filter((i) => !planned.has(i.field));
   const unavailable: ValidationIssue[] =
     content.referenced > content.assets.length
       ? [{ severity: "error", code: "media_unavailable", message: "An image on this post has been deleted.", field: "media" }]

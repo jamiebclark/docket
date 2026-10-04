@@ -6,18 +6,18 @@ const at = (s: string) => new Date(`2026-01-01T${s}Z`);
 
 describe("effectiveLimits", () => {
   it("returns nothing when neither is set", () => {
-    expect(effectiveLimits(undefined, none)).toEqual([]);
+    expect(effectiveLimits([], none)).toEqual([]);
   });
   it("returns both so the stricter applies", () => {
     expect(
-      effectiveLimits({ count: 100, windowSeconds: 86400 }, { publishLimitCount: 2, publishLimitWindowSeconds: 3600 }),
+      effectiveLimits([{ count: 100, windowSeconds: 86400 }], { publishLimitCount: 2, publishLimitWindowSeconds: 3600 }),
     ).toEqual([
       { count: 100, windowSeconds: 86400 },
       { count: 2, windowSeconds: 3600 },
     ]);
   });
   it("ignores a half-set account limit", () => {
-    expect(effectiveLimits(undefined, { publishLimitCount: 2, publishLimitWindowSeconds: null })).toEqual([]);
+    expect(effectiveLimits([], { publishLimitCount: 2, publishLimitWindowSeconds: null })).toEqual([]);
   });
 });
 

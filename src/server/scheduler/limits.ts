@@ -6,9 +6,8 @@ export interface AccountLimitFields {
 }
 
 /** Every limit that applies to an account: the provider default and the account's own (the stricter one wins, D8). */
-export function effectiveLimits(providerDefault: PublishLimit | undefined, account: AccountLimitFields): PublishLimit[] {
-  const out: PublishLimit[] = [];
-  if (providerDefault) out.push(providerDefault);
+export function effectiveLimits(providerDefaults: readonly PublishLimit[], account: AccountLimitFields): PublishLimit[] {
+  const out: PublishLimit[] = [...providerDefaults];
   if (account.publishLimitCount !== null && account.publishLimitWindowSeconds !== null) {
     out.push({ count: account.publishLimitCount, windowSeconds: account.publishLimitWindowSeconds });
   }

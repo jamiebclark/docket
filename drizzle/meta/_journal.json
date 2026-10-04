@@ -50,6 +50,13 @@
       "when": 1791131982890,
       "tag": "0006_abnormal_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791145571556,
+      "tag": "0007_shallow_stephen_strange",
+      "breakpoints": true
     }
   ]
 }

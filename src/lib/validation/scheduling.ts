@@ -95,3 +95,20 @@ export const registerAssetSchema = z.object({
   byteSize: z.number().int().min(0),
   altText: z.string().max(2000).optional(),
 });
+
+/** A link to the published post: http(s) only, no embedded credentials. */
+export const externalUrlSchema = z
+  .string({ error: "Enter a link" })
+  .trim()
+  .max(2048, { error: "That link is too long" })
+  .refine(
+    (value) => {
+      try {
+        const u = new URL(value);
+        return (u.protocol === "http:" || u.protocol === "https:") && !u.username && !u.password;
+      } catch {
+        return false;
+      }
+    },
+    { error: "Enter a web link starting with http:// or https://, without a username or password" },
+  );

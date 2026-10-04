@@ -417,3 +417,9 @@ Generic changes to existing code (plan.md):
 13. `runTick()` gains a fourth section, `webhooks`, with its heartbeat; `TickSummary` gains `webhooks`. *Reverse:* remove the section; events stay in the outbox undelivered.
 14. Audit enum values for key and webhook changes, with labels in the activity list. *Reverse:* a migration dropping the enum values once no rows use them.
 15. `MediaRepo.reservedJobFor` so `GET /media/{id}` reports the reserving job (review F2). *Reverse:* delete it; the field is then always `null` on the single-asset read.
+
+## 010 — Hardening
+
+Baseline before any 010 change: `pnpm tsc --noEmit` clean, `pnpm lint` 0 errors (2 pre-existing `_ctx` unused-var warnings in `tests/integration/scheduler/`), `pnpm vitest run` 275 files passed, 1 skipped. No pre-existing failures.
+
+- **G14 multi-limit provider default** (`defaultPublishLimit?: PublishLimit | readonly PublishLimit[]`, read through `providerPublishLimits`). *What:* a provider may declare several default publish limits that all apply, such as a per-day and a per-hour cap; a single limit still works unchanged. *Why:* FR-016, the limits audit needs more than one window per provider. *Reverse:* narrow the type back to `PublishLimit`, delete `src/providers/limits.ts`, and pass the single limit to `effectiveLimits` again.

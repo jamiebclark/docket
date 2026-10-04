@@ -39,6 +39,7 @@ export const webhookAttemptError = pgEnum("webhook_attempt_error", [
   "http_status",
   "endpoint_disabled",
   "internal",
+  "address_not_allowed",
 ]);
 
 export const webhookEndpoints = pgTable(

@@ -205,6 +205,9 @@ export const postTargets = pgTable(
       .on(t.socialAccountId, t.scheduledAt)
       .where(sql`${t.status} = 'scheduled'`),
     index("post_targets_project_post_idx").on(t.projectId, t.postId),
+    index("post_targets_attention_idx")
+      .on(t.projectId, t.updatedAt.desc(), t.id)
+      .where(sql`${t.status} IN ('ambiguous','failed')`),
   ],
 );
 

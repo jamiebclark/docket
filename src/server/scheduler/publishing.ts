@@ -15,6 +15,7 @@ import { decryptCredentials } from "../services/accounts";
 import { applyDerivedStatus } from "../services/posts/status";
 import type { SchedulerConfig } from "./config";
 import { resolvePublishMedia } from "../services/media-variants";
+import { providerPublishLimits } from "../../providers/limits";
 import { deferralTime, effectiveLimits } from "./limits";
 import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
@@ -118,7 +119,7 @@ export async function runPublishing(opts: {
         const firstStep = target.stepState === null;
         if (firstStep) {
           // Both the provider default and the account's own limit apply (D8).
-          const deferUntil = await deferralTime(effectiveLimits(provider.defaultPublishLimit, account), now, (since) =>
+          const deferUntil = await deferralTime(effectiveLimits(providerPublishLimits(provider), account), now, (since) =>
             ctx.startedSince(account.id, since, target.id), // a target's own earlier start never counts against it
           );
           if (deferUntil) {

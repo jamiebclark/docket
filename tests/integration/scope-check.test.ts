@@ -135,6 +135,9 @@ describe("scope check against the real client", () => {
       await repos.targets.effectiveContent(t.id);
       await repos.attempts.insert({ postTargetId: t.id, step: "publish", outcome: "done", at: now });
       await repos.attempts.listForTarget(t.id);
+      await repos.attempts.listForTargets([t.id]);
+      await repos.targets.listAttention({ statuses: ["ambiguous", "failed"], limit: 5, offset: 0 });
+      await repos.targets.countAttention();
 
       await claimDueTargets({
         now: new Date(now.getTime() + 1000),
