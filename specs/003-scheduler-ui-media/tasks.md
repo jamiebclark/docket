@@ -100,12 +100,12 @@
 **Goal**: explicit-time scheduling with DST-aware preview, publish now, and editing existing posts under 002's rules.
 **Independent test**: `previewExplicitTime`/`resolveLocalDateTime` unit + integration tests and the schedule/publish-now action tests pass.
 
-- [ ] T037 [P] [US2] Unit tests for `resolveLocalDateTime(tz, local)` in `src/server/services/queue/occurrences.test.ts` using the same zones/dates as 002's DST tests (New York gap 02:30 on 2026-03-08, overlap 01:30 on 2026-11-01, London, Lord Howe), asserting the rule is Temporal `compatible` (gap → later, overlap → earlier)
-- [ ] T038 [P] [US2] `tests/integration/compose/schedule-preview.test.ts`: `previewExplicitTime` kinds `exact|gap|overlap`, `inPast`, near-queued warnings non-blocking
-- [ ] T039 [US2] Implement `resolveLocalDateTime` in `src/server/services/queue/occurrences.ts` and `previewExplicitTime` in `src/server/services/posts/compose.ts`
-- [ ] T040 [US2] Add `previewExplicitTimeAction`, `scheduleAtAction`, `publishNowAction` to `compose/actions.ts`
-- [ ] T041 [US2] Extend `compose/ScheduleDialogs.tsx` with the "Schedule…" dialog (`type=date` + `type=time` labelled with the zone, gap/overlap preview text e.g. "09:30 does not exist on that day; it will post at 10:30", past-time refusal) and the "Publish now…" confirmation naming accounts, with per-target outcomes
-- [ ] T042 [US2] Edit flow: make `compose/[postId]/page.tsx` + `Composer` re-validate all targets on save, disable content edits once any target has started publishing, and surface removed-account handling per 002; extend `tests/integration/compose/actions.test.ts` for edit-after-publishing refusal and per-target outcome reporting (FR-022, FR-023)
+- [x] T037 [P] [US2] Unit tests for `resolveLocalDateTime(tz, local)` in `src/server/services/queue/occurrences.test.ts` using the same zones/dates as 002's DST tests (New York gap 02:30 on 2026-03-08, overlap 01:30 on 2026-11-01, London, Lord Howe), asserting the rule is Temporal `compatible` (gap → later, overlap → earlier)
+- [x] T038 [P] [US2] `tests/integration/compose/schedule-preview.test.ts`: `previewExplicitTime` kinds `exact|gap|overlap`, `inPast`, near-queued warnings non-blocking
+- [x] T039 [US2] Implement `resolveLocalDateTime` in `src/server/services/queue/occurrences.ts` and `previewExplicitTime` in `src/server/services/posts/compose.ts`
+- [x] T040 [US2] Add `previewExplicitTimeAction`, `scheduleAtAction`, `publishNowAction` to `compose/actions.ts`
+- [x] T041 [US2] Extend `compose/ScheduleDialogs.tsx` with the "Schedule…" dialog (`type=date` + `type=time` labelled with the zone, gap/overlap preview text e.g. "09:30 does not exist on that day; it will post at 10:30", past-time refusal) and the "Publish now…" confirmation naming accounts, with per-target outcomes
+- [x] T042 [US2] Edit flow: make `compose/[postId]/page.tsx` + `Composer` re-validate all targets on save, disable content edits once any target has started publishing, and surface removed-account handling per 002; extend `tests/integration/compose/actions.test.ts` for edit-after-publishing refusal and per-target outcome reporting (FR-022, FR-023)
 
 ---
 
@@ -116,19 +116,19 @@
 
 ### Tests
 
-- [ ] T043 [P] [US3] `tests/integration/media/upload.test.ts`: accepted/rejected per file by contents (renamed SVG/HTML rejected, animated rejected, oversize rejected, corrupt rejected), EXIF/GPS stripped and upright dims stored (SC-003), thumbnail stored, keys under `projects/<pid>/`, storage-off → `StorageUnavailableError`, size checked before reading the body into a Buffer
-- [ ] T044 [P] [US3] `tests/integration/media/library.test.ts`: filters (tag, unused, missingAlt, q), pagination 24, tag normalisation and 20-tag cap, alt ≤ 2,000, role checks, cross-project ids → `NotFoundError`
-- [ ] T045 [P] [US3] `tests/integration/media/delete.test.ts`: refused when attached to a target scheduled/publishing/failed/ambiguous (lists posts), allowed otherwise with `affected` list, soft delete hides from `get`, objects deleted after commit and failures logged without secrets, concurrent delete vs attach (post-first lock order, no deadlock), published history shows "Image deleted" via `getIncludingDeleted`
+- [x] T043 [P] [US3] `tests/integration/media/upload.test.ts`: accepted/rejected per file by contents (renamed SVG/HTML rejected, animated rejected, oversize rejected, corrupt rejected), EXIF/GPS stripped and upright dims stored (SC-003), thumbnail stored, keys under `projects/<pid>/`, storage-off → `StorageUnavailableError`, size checked before reading the body into a Buffer
+- [x] T044 [P] [US3] `tests/integration/media/library.test.ts`: filters (tag, unused, missingAlt, q), pagination 24, tag normalisation and 20-tag cap, alt ≤ 2,000, role checks, cross-project ids → `NotFoundError`
+- [x] T045 [P] [US3] `tests/integration/media/delete.test.ts`: refused when attached to a target scheduled/publishing/failed/ambiguous (lists posts), allowed otherwise with `affected` list, soft delete hides from `get`, objects deleted after commit and failures logged without secrets, concurrent delete vs attach (post-first lock order, no deadlock), published history shows "Image deleted" via `getIncludingDeleted`
 
 ### Implementation
 
-- [ ] T046 [US3] Implement `src/server/services/media.ts`: `mediaStatus`, `uploadMedia` (rejections returned, not thrown), `listMedia`, `getMedia`, `updateMedia`, `deleteMediaImpact`, `deleteMedia` (research D10 lock order), update `updateAltText` to refuse deleted assets; `MediaView` falls back to `public_url` when `thumbnail_url` is null (plan note 8); `markUsed` on first attach
-- [ ] T047 [US3] Make `createDraft`/`updatePost` call `media.lockShared(ids)` after the post lock and treat deleted/other-project ids as `NotFoundError`
-- [ ] T048 [US3] `src/app/p/[projectSlug]/media/actions.ts`: `uploadMediaAction` (read `formData.get("file")` as `File`, check `file.size` before `arrayBuffer()`), `updateMediaAction`, `deleteMediaAction`, `deleteMediaImpactAction`
-- [ ] T049 [P] [US3] `media/{page.tsx,loading.tsx}` (filters/pagination as links, "Media storage is not set up" empty state, empty/error/populated states) and `src/components/media/MediaCard.tsx` (article, `alt={altText || ""}`, dims/size/type/tags, In use/Unused and Missing alt text badges)
-- [ ] T050 [US3] `media/UploadDropzone.tsx` (visible "Choose files" button, sequential uploads, per-file "uploading / accepted / rejected: reason" rows in a live region), `media/MediaEditDialog.tsx`, `media/DeleteMediaDialog.tsx` (loads impact first; blocked dialog links to posts, else confirmation naming affected posts)
-- [ ] T051 [US3] `src/components/media/MediaPicker.tsx` (dialog over `listMedia`, search/tag/unused filters as client state, inline upload, up/down reorder buttons, removal, inline alt editor, storage-disabled state) and wire it into the Composer's Media fieldset; add render tests for reorder buttons and the storage-disabled state
-- [ ] T052 [US3] Remove `media` (and `compose`, `calendar`, `posts`, `accounts` as their stories finish) from `PLACEHOLDERS` (T026); `tests/integration/no-plaintext.test.ts` extended to scan upload/library action results, logs and rendered output for storage credentials (SC-011)
+- [x] T046 [US3] Implement `src/server/services/media.ts`: `mediaStatus`, `uploadMedia` (rejections returned, not thrown), `listMedia`, `getMedia`, `updateMedia`, `deleteMediaImpact`, `deleteMedia` (research D10 lock order), update `updateAltText` to refuse deleted assets; `MediaView` falls back to `public_url` when `thumbnail_url` is null (plan note 8); `markUsed` on first attach
+- [x] T047 [US3] Make `createDraft`/`updatePost` call `media.lockShared(ids)` after the post lock and treat deleted/other-project ids as `NotFoundError`
+- [x] T048 [US3] `src/app/p/[projectSlug]/media/actions.ts`: `uploadMediaAction` (read `formData.get("file")` as `File`, check `file.size` before `arrayBuffer()`), `updateMediaAction`, `deleteMediaAction`, `deleteMediaImpactAction`
+- [x] T049 [P] [US3] `media/{page.tsx,loading.tsx}` (filters/pagination as links, "Media storage is not set up" empty state, empty/error/populated states) and `src/components/media/MediaCard.tsx` (article, `alt={altText || ""}`, dims/size/type/tags, In use/Unused and Missing alt text badges)
+- [x] T050 [US3] `media/UploadDropzone.tsx` (visible "Choose files" button, sequential uploads, per-file "uploading / accepted / rejected: reason" rows in a live region), `media/MediaEditDialog.tsx`, `media/DeleteMediaDialog.tsx` (loads impact first; blocked dialog links to posts, else confirmation naming affected posts)
+- [x] T051 [US3] `src/components/media/MediaPicker.tsx` (dialog over `listMedia`, search/tag/unused filters as client state, inline upload, up/down reorder buttons, removal, inline alt editor, storage-disabled state) and wire it into the Composer's Media fieldset; add render tests for reorder buttons and the storage-disabled state
+- [x] T052 [US3] Remove `media` (and `compose`, `calendar`, `posts`, `accounts` as their stories finish) from `PLACEHOLDERS` (T026); `tests/integration/no-plaintext.test.ts` extended to scan upload/library action results, logs and rendered output for storage credentials (SC-011)
 
 ---
 
@@ -137,11 +137,11 @@
 **Goal**: composer and scheduler judge and use per-platform adapted variants; publish uses the adapted file.
 **Independent test**: composer check shows info notes for fixable mismatches and errors for unfixable ones; scheduler passes the variant URL; deleted/vanished media fails cleanly without a provider call.
 
-- [ ] T053 [P] [US4] Tests in `tests/integration/media/variants.test.ts` (extend): adapted-media validation notes (info for fixable, error for unfixable such as aspect ratio), variants created before acceptance on queue/schedule/publish-now, repeated request reuses cache, constraint change → new variant, deleting an asset removes its variants and objects
-- [ ] T054 [US4] Change `src/server/scheduler/publishing.ts` `execute()` to build `content.media` from `resolvePublishMedia`; on `{ ok: false }` record `{ kind: "fatal_error", error }` via `recordStepResult` with no provider call; media resolution counts against the tick deadline (release the lease as 002 does)
-- [ ] T055 [US4] Scheduler tests in `tests/integration/` (alongside 002's scheduler tests): publish uses the variant URL; deleted media → fatal with no provider call; vanished object regenerated; deadline respected; a non-publishing first step (mock `multi_step`) that dies in resolution is retried (plan note 6); `src/server/scheduler/**` still imports no `next/*` (existing import-boundary test)
-- [ ] T056 [US4] Show adaptation notes and alt-text indicators in the Composer Preview cards (per target: images in order); extend `Composer` render test (T036) for note rendering
-- [ ] T057 [US4] Verify the worker bundle: run `pnpm build:worker` and assert `sharp` stays external (add a small script/test that greps the bundle output for a bundled-sharp marker or checks the esbuild metafile)
+- [X] T053 [P] [US4] Tests in `tests/integration/media/variants.test.ts` (extend): adapted-media validation notes (info for fixable, error for unfixable such as aspect ratio), variants created before acceptance on queue/schedule/publish-now, repeated request reuses cache, constraint change → new variant, deleting an asset removes its variants and objects
+- [X] T054 [US4] Change `src/server/scheduler/publishing.ts` `execute()` to build `content.media` from `resolvePublishMedia`; on `{ ok: false }` record `{ kind: "fatal_error", error }` via `recordStepResult` with no provider call; media resolution counts against the tick deadline (release the lease as 002 does)
+- [X] T055 [US4] Scheduler tests in `tests/integration/` (alongside 002's scheduler tests): publish uses the variant URL; deleted media → fatal with no provider call; vanished object regenerated; deadline respected; a non-publishing first step (mock `multi_step`) that dies in resolution is retried (plan note 6); `src/server/scheduler/**` still imports no `next/*` (existing import-boundary test)
+- [X] T056 [US4] Show adaptation notes and alt-text indicators in the Composer Preview cards (per target: images in order); extend `Composer` render test (T036) for note rendering
+- [X] T057 [US4] Verify the worker bundle: run `pnpm build:worker` and assert `sharp` stays external (add a small script/test that greps the bundle output for a bundled-sharp marker or checks the esbuild metafile)
 
 ---
 
@@ -152,19 +152,19 @@
 
 ### Tests
 
-- [ ] T058 [P] [US5] `tests/integration/queue/move-to-occurrence.test.ts`: success, each refusal message ("That slot belongs to another account.", "That slot is paused.", "That is not one of this slot's times…", published/deleted post), frees the previously held occurrence, and a 20-iteration race using its own real parallel pool with exactly one success and one "That slot was just taken." per iteration (SC-005, plan note 5)
-- [ ] T059 [P] [US5] `tests/integration/queue/pull-preview.test.ts`: `previewPullQueueForward` leaves no change (rolled back), matches `pullQueueForward` output, `expected` marks `differsFromPreview`; `listQueuedForAccount`
-- [ ] T060 [P] [US5] `tests/integration/calendar.test.ts`: month/week ranges in project zone incl. DST weeks, `getCalendar` filters by account, empty slots future-only and active-only, `movable` flags, prev/next/today, and a perf guard seeding 10 accounts / 300 posts / daily slots asserting a single range query + `listEmptySlots` (SC-006, assert query count rather than wall time)
+- [x] T058 [P] [US5] `tests/integration/queue/move-to-occurrence.test.ts`: success, each refusal message ("That slot belongs to another account.", "That slot is paused.", "That is not one of this slot's times…", published/deleted post), frees the previously held occurrence, and a 20-iteration race using its own real parallel pool with exactly one success and one "That slot was just taken." per iteration (SC-005, plan note 5)
+- [x] T059 [P] [US5] `tests/integration/queue/pull-preview.test.ts`: `previewPullQueueForward` leaves no change (rolled back), matches `pullQueueForward` output, `expected` marks `differsFromPreview`; `listQueuedForAccount`
+- [x] T060 [P] [US5] `tests/integration/calendar.test.ts`: month/week ranges in project zone incl. DST weeks, `getCalendar` filters by account, empty slots future-only and active-only, `movable` flags, prev/next/today, and a perf guard seeding 10 accounts / 300 posts / daily slots asserting a single range query + `listEmptySlots` (SC-006, assert query count rather than wall time)
 
 ### Implementation
 
-- [ ] T061 [US5] Implement `moveTargetToOccurrence` (post → targets lock order; reuse `tryHoldOccurrence` and the partial unique index), `previewPullQueueForward` (run `pullQueueForward` then roll back), `listQueuedForAccount` in `src/server/services/queue/index.ts`/`occurrences.ts`; add the optional `expected` to `pullQueueForward`
-- [ ] T062 [US5] Implement `src/server/services/calendar.ts` `getCalendar`
-- [ ] T063 [US5] `src/app/p/[projectSlug]/calendar/actions.ts` per contracts/ui.md (move to occurrence, next free, swap, listQueued, listEmptySlots, preview/pull forward)
-- [ ] T064 [P] [US5] `calendar/{page.tsx,loading.tsx}`: toolbar (heading with period and zone, Previous/Today/Next links, Month/Week links, account filter `<form method="get">`), month `<table>` with `<th scope="col">`, week columns with per-hour groups, empty-range `EmptyState` linking to Accounts
-- [ ] T065 [US5] `calendar/CalendarBoard.tsx`: post chip `<button>` (`draggable` when `movable`) opening a `Menu` (Open post, Move to slot…, Move to next free slot, Swap with…, Cancel); empty-slot dashed `<button>` drop target accepting only same-account chips; refusal announced; focus returns to the moved chip by `data-target-id` after refresh; live-region announcement "Moved to Tue 6 Oct 09:00 Europe/London"; stale-action message + `router.refresh()`
-- [ ] T066 [US5] `calendar/MoveDialogs.tsx`: Move to slot… (that account's upcoming empty slots), Swap with… (from `listQueuedForAccount`), Pull queue forward… confirmation listing preview moves
-- [ ] T067 [US5] Render tests for `CalendarBoard` (keyboard path: open menu → Move to slot… → pick slot invokes `moveToOccurrenceAction`; drop handler rejects other-account chips; announcer text), using mocked actions (SC-007 headless portion)
+- [x] T061 [US5] Implement `moveTargetToOccurrence` (post → targets lock order; reuse `tryHoldOccurrence` and the partial unique index), `previewPullQueueForward` (run `pullQueueForward` then roll back), `listQueuedForAccount` in `src/server/services/queue/index.ts`/`occurrences.ts`; add the optional `expected` to `pullQueueForward`
+- [x] T062 [US5] Implement `src/server/services/calendar.ts` `getCalendar`
+- [x] T063 [US5] `src/app/p/[projectSlug]/calendar/actions.ts` per contracts/ui.md (move to occurrence, next free, swap, listQueued, listEmptySlots, preview/pull forward)
+- [x] T064 [P] [US5] `calendar/{page.tsx,loading.tsx}`: toolbar (heading with period and zone, Previous/Today/Next links, Month/Week links, account filter `<form method="get">`), month `<table>` with `<th scope="col">`, week columns with per-hour groups, empty-range `EmptyState` linking to Accounts
+- [x] T065 [US5] `calendar/CalendarBoard.tsx`: post chip `<button>` (`draggable` when `movable`) opening a `Menu` (Open post, Move to slot…, Move to next free slot, Swap with…, Cancel); empty-slot dashed `<button>` drop target accepting only same-account chips; refusal announced; focus returns to the moved chip by `data-target-id` after refresh; live-region announcement "Moved to Tue 6 Oct 09:00 Europe/London"; stale-action message + `router.refresh()`
+- [x] T066 [US5] `calendar/MoveDialogs.tsx`: Move to slot… (that account's upcoming empty slots), Swap with… (from `listQueuedForAccount`), Pull queue forward… confirmation listing preview moves
+- [x] T067 [US5] Render tests for `CalendarBoard` (keyboard path: open menu → Move to slot… → pick slot invokes `moveToOccurrenceAction`; drop handler rejects other-account chips; announcer text), using mocked actions (SC-007 headless portion)
 
 ---
 
@@ -173,12 +173,12 @@
 **Goal**: filtered paginated post list; detail page with per-target status, attempts, retry/cancel/resolve/delete.
 **Independent test**: `listPosts`/`getPostView` and posts action tests pass.
 
-- [ ] T068 [P] [US6] `tests/integration/posts/list.test.ts`: status filters incl. `needs_decision`, counts, paging, excerpt (first 140 graphemes), project isolation; `getPostView` shape incl. attempts (already redacted), deleted media shown as `{ id, deleted: true }`
-- [ ] T069 [US6] Implement `src/server/services/posts/list.ts` (`listPosts`) and `posts/view.ts` (`getPostView`); export via `posts/index.ts`
-- [ ] T070 [US6] `src/app/p/[projectSlug]/posts/actions.ts`: `retryTargetAction`, `cancelTargetAction`, `resolveTargetAction`, `deletePostAction` (redirect to `/posts`)
-- [ ] T071 [P] [US6] `posts/{page.tsx,loading.tsx}`: table (Post, Status, Accounts, When), `FilterTabs` links with counts, amber "Needs your decision", `Pagination`, empty/error states
-- [ ] T072 [US6] `posts/[postId]/{page.tsx,loading.tsx,TargetActions.tsx}`: one `<section>` per target (`<dl>` of account/status/local time + zone/kind/external link/last error; attempt log table Time/Step/Outcome/Request/Response with `<code>` pairs), ambiguous amber panel with "Mark as published" (optional URL) and "Mark as not published", retry/cancel/delete dialogs, Edit link to the composer, delete refused with explanation when any target is published/publishing
-- [ ] T073 [US6] Tests in `tests/integration/posts/actions.test.ts` for retry (failed only), cancel (scheduled not publishing), resolve outcomes, delete refusal; extend `no-plaintext.test.ts` to scan post detail output for tokens (SC-011)
+- [X] T068 [P] [US6] `tests/integration/posts/list.test.ts`: status filters incl. `needs_decision`, counts, paging, excerpt (first 140 graphemes), project isolation; `getPostView` shape incl. attempts (already redacted), deleted media shown as `{ id, deleted: true }`
+- [X] T069 [US6] Implement `src/server/services/posts/list.ts` (`listPosts`) and `posts/view.ts` (`getPostView`); export via `posts/index.ts`
+- [X] T070 [US6] `src/app/p/[projectSlug]/posts/actions.ts`: `retryTargetAction`, `cancelTargetAction`, `resolveTargetAction`, `deletePostAction` (redirect to `/posts`)
+- [X] T071 [P] [US6] `posts/{page.tsx,loading.tsx}`: table (Post, Status, Accounts, When), `FilterTabs` links with counts, amber "Needs your decision", `Pagination`, empty/error states
+- [X] T072 [US6] `posts/[postId]/{page.tsx,loading.tsx,TargetActions.tsx}`: one `<section>` per target (`<dl>` of account/status/local time + zone/kind/external link/last error; attempt log table Time/Step/Outcome/Request/Response with `<code>` pairs), ambiguous amber panel with "Mark as published" (optional URL) and "Mark as not published", retry/cancel/delete dialogs, Edit link to the composer, delete refused with explanation when any target is published/publishing
+- [X] T073 [US6] Tests in `tests/integration/posts/actions.test.ts` for retry (failed only), cancel (scheduled not publishing), resolve outcomes, delete refusal; extend `no-plaintext.test.ts` to scan post detail output for tokens (SC-011)
 
 ---
 
@@ -187,12 +187,12 @@
 **Goal**: accounts screen with slots, mock connect/reconnect/behaviour, remove with impact count, app-wide needs-reauth banner.
 **Independent test**: `accounts-ui` tests and the banner render test pass.
 
-- [ ] T074 [P] [US7] `tests/integration/accounts-ui.test.ts`: `reconnectMock` (mock only, mock enabled, restores `connected`), `accountRemovalImpact` count, `listAccountsNeedingReauth`, slot add/duplicate refused/pause/delete, editors forbidden, no tokens in any returned view
-- [ ] T075 [US7] Implement `reconnectMock`, `accountRemovalImpact`, `listAccountsNeedingReauth` in `src/server/services/accounts.ts` per contracts/services.md
-- [ ] T076 [US7] `src/app/p/[projectSlug]/accounts/actions.ts`: `connectMockAction`, `reconnectMockAction`, `setMockBehaviourAction`, `removeAccountAction`, `accountRemovalImpactAction`, `addSlotAction`, `setSlotPausedAction`, `deleteSlotAction`
-- [ ] T077 [P] [US7] `accounts/{page.tsx,loading.tsx}` listing each account as `<section id="account-<id>">` (name, platform, status badge, secret-free last error, connected date, slot table sorted by weekday then time with zone), editors see content with no mutation controls
-- [ ] T078 [US7] `accounts/{ConnectMockForm,SlotEditor,RemoveAccountDialog}.tsx` (add-slot weekday `Select` + `type=time`, pause/resume, delete confirm, connect form shown only when mock enabled, reconnect, change behaviour, removal dialog with impact count)
-- [ ] T079 [US7] `src/components/shell/ReauthBanner.tsx` (server component, `role="alert"`, names accounts, link for owners/admins, "ask an owner or admin" for editors, renders nothing when empty) and render it from `src/app/p/[projectSlug]/layout.tsx`; render test covering both roles and the empty case (SC-008)
+- [x] T074 [P] [US7] `tests/integration/accounts-ui.test.ts`: `reconnectMock` (mock only, mock enabled, restores `connected`), `accountRemovalImpact` count, `listAccountsNeedingReauth`, slot add/duplicate refused/pause/delete, editors forbidden, no tokens in any returned view
+- [x] T075 [US7] Implement `reconnectMock`, `accountRemovalImpact`, `listAccountsNeedingReauth` in `src/server/services/accounts.ts` per contracts/services.md
+- [x] T076 [US7] `src/app/p/[projectSlug]/accounts/actions.ts`: `connectMockAction`, `reconnectMockAction`, `setMockBehaviourAction`, `removeAccountAction`, `accountRemovalImpactAction`, `addSlotAction`, `setSlotPausedAction`, `deleteSlotAction`
+- [x] T077 [P] [US7] `accounts/{page.tsx,loading.tsx}` listing each account as `<section id="account-<id>">` (name, platform, status badge, secret-free last error, connected date, slot table sorted by weekday then time with zone), editors see content with no mutation controls
+- [x] T078 [US7] `accounts/{ConnectMockForm,SlotEditor,RemoveAccountDialog}.tsx` (add-slot weekday `Select` + `type=time`, pause/resume, delete confirm, connect form shown only when mock enabled, reconnect, change behaviour, removal dialog with impact count)
+- [x] T079 [US7] `src/components/shell/ReauthBanner.tsx` (server component, `role="alert"`, names accounts, link for owners/admins, "ask an owner or admin" for editors, renders nothing when empty) and render it from `src/app/p/[projectSlug]/layout.tsx`; render test covering both roles and the empty case (SC-008)
 
 ---
 
@@ -201,20 +201,20 @@
 **Goal**: documented R2/S3/offline-MinIO setups and an `offline` Compose profile that prepares a bucket.
 **Independent test**: `pnpm build` produces `storage-init.mjs`; compose file lints; docs contain the public-bucket requirement first.
 
-- [ ] T080 [US8] Implement `scripts/storage-init.mjs` source (SDK-based: create bucket if missing, apply anonymous-read policy; idempotent; no secrets in logs) and wire `build:storage-init`; add a unit test using the in-memory S3 handler for create-if-missing and idempotency
-- [ ] T081 [US8] Add `minio` (pinned image, overridable, ports bound to loopback, volume) and one-shot `storage-init` services under `profiles: ["offline"]` in `docker-compose.yml`, per research D4; the default stack must be unchanged. Validate with `docker compose config` (default) and `docker compose --profile offline config` if docker is available, otherwise add a YAML-parsing test asserting both services carry `profiles: ["offline"]` and no default service changed
-- [ ] T082 [P] [US8] Write `docs/storage.md`: opens with the public-bucket requirement (Instagram/Threads fetch by public URL; no localhost, private buckets or signed URLs; R2 signed URLs don't work on custom domains), then R2 (custom domain), S3, offline MinIO (frozen upstream image, mock provider only). Add a docs test (or grep check in CI script) asserting the requirement appears before the first setup heading (SC-010)
+- [x] T080 [US8] Implement `scripts/storage-init.mjs` source (SDK-based: create bucket if missing, apply anonymous-read policy; idempotent; no secrets in logs) and wire `build:storage-init`; add a unit test using the in-memory S3 handler for create-if-missing and idempotency
+- [x] T081 [US8] Add `minio` (pinned image, overridable, ports bound to loopback, volume) and one-shot `storage-init` services under `profiles: ["offline"]` in `docker-compose.yml`, per research D4; the default stack must be unchanged. Validate with `docker compose config` (default) and `docker compose --profile offline config` if docker is available, otherwise add a YAML-parsing test asserting both services carry `profiles: ["offline"]` and no default service changed
+- [x] T082 [P] [US8] Write `docs/storage.md`: opens with the public-bucket requirement (Instagram/Threads fetch by public URL; no localhost, private buckets or signed URLs; R2 signed URLs don't work on custom domains), then R2 (custom domain), S3, offline MinIO (frozen upstream image, mock provider only). Add a docs test (or grep check in CI script) asserting the requirement appears before the first setup heading (SC-010)
 
 ---
 
 ## Phase 11: Polish & Cross-Cutting
 
-- [ ] T083 `tests/integration/actions-authz.test.ts`: one table of every server action in contracts/ui.md × {owner, admin, editor, non-member} asserting ok/domain failure for allowed roles, `forbidden` for editors on account and slot actions, `not_found` for non-members, and no token or storage secret in any result or thrown message (SC-009, SC-011)
-- [ ] T084 [P] Update `README.md` ("Media storage" section linking `docs/storage.md`, list of new screens) and `docs/adding-a-provider.md` ("Declaring media constraints")
-- [ ] T085 [P] Append "003 — Scheduler screens and media" to `docs/decisions.md` with the condensed D1–D21 items listed in plan note 10, including the media-resolution recovery outcome (note 6) and the MinIO image status
-- [ ] T086 [P] Verify each remaining non-placeholder section: `[section]/page.tsx` placeholders now only `generate`, `jobs`, `review`, `voice`; add/adjust the test that covers it
-- [ ] T087 Run the full gates: `pnpm lint`, `pnpm typecheck`, `pnpm db:check`, `pnpm test`, `pnpm build` (includes `storage-init.mjs`); fix all failures
-- [ ] T088 Walk `specs/003-scheduler-ui-media/quickstart.md` and, in the final report, mark each section verified / verified-with-mocks / not verified (needs a browser), per constitution II; list the MinIO test as skipped if `S3_TEST_ENDPOINT` was unset
+- [x] T083 `tests/integration/actions-authz.test.ts`: one table of every server action in contracts/ui.md × {owner, admin, editor, non-member} asserting ok/domain failure for allowed roles, `forbidden` for editors on account and slot actions, `not_found` for non-members, and no token or storage secret in any result or thrown message (SC-009, SC-011)
+- [x] T084 [P] Update `README.md` ("Media storage" section linking `docs/storage.md`, list of new screens) and `docs/adding-a-provider.md` ("Declaring media constraints")
+- [x] T085 [P] Append "003 — Scheduler screens and media" to `docs/decisions.md` with the condensed D1–D21 items listed in plan note 10, including the media-resolution recovery outcome (note 6) and the MinIO image status
+- [x] T086 [P] Verify each remaining non-placeholder section: `[section]/page.tsx` placeholders now only `generate`, `jobs`, `review`, `voice`; add/adjust the test that covers it
+- [x] T087 Run the full gates: `pnpm lint`, `pnpm typecheck`, `pnpm db:check`, `pnpm test`, `pnpm build` (includes `storage-init.mjs`); fix all failures
+- [x] T088 Walk `specs/003-scheduler-ui-media/quickstart.md` and, in the final report, mark each section verified / verified-with-mocks / not verified (needs a browser), per constitution II; list the MinIO test as skipped if `S3_TEST_ENDPOINT` was unset
 - [ ] T089 🛑 BLOCKED: needs a real browser and a screen reader — one survey pass over the composer, media library, calendar, posts and accounts screens confirming real drag-and-drop between calendar slots, focus return to the moved chip, live-region announcements, and keyboard-only completion of every action (SC-007), reporting all findings together with the count of screens checked
 
 ---
@@ -243,3 +243,14 @@
 2. Add US2 (schedule/publish now), then US3 (media) to complete all P1 stories.
 3. P2 stories (US4–US7) in any order; US4 first if media should reach publishing early.
 4. US8 and Polish last; run all gates after every phase and commit per phase with conventional commits and explicit paths.
+
+---
+
+## Phase 12: Review remediation
+
+From `specs/003-scheduler-ui-media/review.md` (first review). Do T090 first so the existing work lands as `feat` commits, separate from the `fix` commits below.
+
+- [ ] T090 Commit the uncommitted Phase 4–11 work in small Conventional Commits by area (compose schedule/publish, media library screens, scheduler adapted media, calendar, posts, accounts, offline Compose profile and storage-init, docs/decisions; `tasks.md` itself was committed by the review), staging explicit paths only (never `git add -A`/`.`), before committing any fix below — review F4 (MAJOR), specs/003-scheduler-ui-media/tasks.md:103
+- [ ] T091 Make the media page's "Unused" and "Missing alt text" filters work: map `mediaSearchParamsSchema` output (`unused`/`missingAlt` = `"1"`) to `listMedia`'s boolean input in one place, and add a test that feeds the page's parsed search params into `listMedia` for `?unused=1` and `?missingAlt=1` — review F1 (MAJOR), src/app/p/[projectSlug]/media/page.tsx:50
+- [ ] T092 Offer a post-list filter for every post status (`draft`, `needs_review`, `approved`, `scheduled`, `publishing`, `published`, `partially_failed`, `failed`) plus `needs_decision`, building the tabs and the `?status=` parsing from one shared list (`POST_LIST_STATUSES` / `postSearchParamsSchema`) so `?status=partially_failed` is honoured; add a test for it — review F2 (MAJOR), src/app/p/[projectSlug]/posts/page.tsx:23
+- [ ] T093 Bound publish-time media resolution by the tick deadline: after `resolvePublishMedia` returns, re-check `now + providerTimeoutMs > deadline` and release the lease exactly as the pre-resolution check does (no provider call, `released` attempt); time-bound the resolution's storage calls so a hung bucket cannot hold the tick; add the "deadline respected" scheduler test (slow storage double → lease released, no `advance` call) that T055 promised — review F3 (MAJOR), src/server/scheduler/publishing.ts:244
