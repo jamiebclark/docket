@@ -69,8 +69,14 @@ export async function connectAccount(input: {
       if (err.status === 429) {
         return fail("Too many sign-in attempts. Try again later.", undefined, rateLimitNotBefore(err.headers, input.now) ?? undefined);
       }
-      if (err.status === 400 || err.status === 401 || (err.status > 401 && err.status < 500)) {
+      // A PDS rejects bad credentials with 401 (AuthRequiredError). Other 4xx come from hosts
+      // that do not implement createSession — e.g. an HTML 404 (XRPCNotSupported) or an
+      // empty 405 the client reports as 400 — so blame the address, not the password (F1).
+      if (err.status === 401) {
         return fail("Bluesky did not accept that handle or app password.", "appPassword");
+      }
+      if (err.status >= 400 && err.status < 500) {
+        return fail(`${pdsUrl} did not answer as a Bluesky server (PDS). Check the address.`, "pdsUrl");
       }
     }
     return fail(`Could not reach a Bluesky server at ${pdsUrl}. Check the address and try again.`, "pdsUrl");

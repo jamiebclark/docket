@@ -89,6 +89,8 @@ describe("connectWithCredentials", () => {
     ["suspended", { status: 400, json: { error: "AccountTakedown", message: "x" } }, undefined],
     ["unreachable", { status: 502, json: { error: "BadGateway" } }, "pdsUrl"],
     ["not a PDS", { json: { hello: "world" } }, "pdsUrl"],
+    ["not a PDS: HTML 404", { status: 404, json: { error: "XRPCNotSupported" } }, "pdsUrl"],
+    ["not a PDS: method not allowed", { status: 400, json: { error: "InvalidRequest" } }, "pdsUrl"],
   ] as const)("%s leaves the database untouched", async (_name, script, field) => {
     const env = await postsEnv();
     pds.route("POST", CREATE, script);
