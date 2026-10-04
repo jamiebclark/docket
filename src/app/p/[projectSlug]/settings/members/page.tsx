@@ -11,6 +11,14 @@ import { MembersPanel } from "./members-panel";
 export const metadata: Metadata = { title: "Members & invitations" };
 export const dynamic = "force-dynamic";
 
+/** API key and webhook audit rows name their subject in `details` (a key name, or an endpoint host). */
+function detailSubject(a: { action: string; details: unknown }): string | null {
+  if (!/^(api_key|webhook)_/.test(a.action)) return null;
+  const d = (a.details ?? {}) as { name?: unknown; host?: unknown };
+  const label = typeof d.name === "string" ? d.name : typeof d.host === "string" ? d.host : null;
+  return label ? `"${label}"` : null;
+}
+
 export default async function MembersPage({ params }: { params: Promise<{ projectSlug: string }> }) {
   const { projectSlug } = await params;
   const session = await getSession();
@@ -72,7 +80,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
             id: a.id,
             action: a.action,
             actor: nameOf(a.actorUserId),
-            subject: nameOf(a.subjectUserId, a.subjectEmail),
+            subject: detailSubject(a) ?? nameOf(a.subjectUserId, a.subjectEmail),
             createdAt: a.createdAt.toISOString(),
           }))}
         />

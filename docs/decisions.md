@@ -353,3 +353,67 @@ Generic changes to existing code:
 18. Job items record failures on the item, not in `generation_failures`. *Reverse:* also insert a `generation_failures` row per failed item.
 19. Generic changes: `applyApprovalPolicy` gained a guard against re-applying policy to an already-reviewed post, and the `[section]` placeholder route was removed now that every nav section has a screen. *Reverse:* drop the guard; restore the route.
 20. The media library offers "Generate posts for these N images" for an active tag, missing-alt or search filter (review F1). *Reverse:* remove the link; picking images still works.
+
+## 009 — Public API (implementation notes)
+
+1. Key permissions that write also grant the matching view rights (`write_posts`, `generate`, `manage_jobs` → project, account, slot, media, post and voice `view`). The services read back, validate and check accounts and images, so a key holding only `write_posts` would otherwise get a misleading 403. The pipeline still requires the operation's own permission first, and `read` stays the only permission that opens the GET endpoints. *Reverse:* narrow `KEY_GRANTS` and make every write endpoint skip its read-back.
+2. The media-by-URL fetch has no production switch for private addresses. Tests call `setUrlFetchOverridesForTests` (address policy and timeout) in `services/media-from-url.ts`. *Reverse:* none wanted.
+3. A media image rejected by `processUpload` over the API maps to 413 (`too_large`, `too_many_pixels`) or 415 (anything else).
+4. **Own hashed key table, not `@better-auth/api-key`.** Keys live in a project-owned `api_keys` table behind a DAL repository (hash only, shown once). *Why:* keys must act through `ProjectScope` with a project, a permission subset, a per-key rate-limit window and attribution columns on posts, jobs and media; the plugin's table is not project-scoped and has none of these. *Reverse:* migrate rows to the plugin and rewrite `forApiKey`.
+5. **Multipart idempotency hash covers the file bytes plus the canonical JSON of the text fields, not the raw body.** The boundary is random per request, so raw bytes would turn every n8n retry of an upload into a 422. JSON bodies hash a canonical (sorted-key) form. This reads FR-014 by its intent. *Reverse:* hash the raw body.
+6. **`POST /generate` links to its idempotency record through `requestId`** (`uuid(sha256("idem:" + record.id))`) passed to `generateSingle`, so 007's unique index `posts_generation_request_uq` dedupes the post without holding a transaction across the model call. A crash between save and policy leaves the post in review. *Reverse:* run generation inside the idempotency transaction (not allowed by the 008 constraint).
+7. **5xx responses are never stored**; their idempotency claim is released so a retry runs again. 4xx results after the claim are stored and replayed. *Reverse:* store every response.
+8. **Two error codes added to FR-010's list:** `generation_failed` (422, stored) and `generation_unavailable` (503, not stored), so a client can tell a bad model result from a provider outage. *Reverse:* fold both into `internal_error`.
+9. **Failed deliveries count once per delivery**, after the eighth attempt; at 20 consecutive failed deliveries the endpoint is disabled (`disabled_reason = 'failing'`). *Reverse:* count each attempt.
+10. **Closing a job with no items is refused** (409 `conflict`: add an item or cancel). Closing a closed job is a no-op. *Reverse:* allow the empty close, which completes the job at once.
+11. **Generic changes:** `generation_jobs` gains `open` and `closed_at` and its item-count check becomes `0..500` with `open OR item_count >= 1` (UI-created jobs stay closed); list services gain optional `limit` and `offset` beside `page`; `created_by_api_key_id` columns on posts, jobs and media. *Reverse:* a down-migration dropping the columns and restoring the check; callers keep passing `page`.
+12. **The import boundary test (FR-044) is two-tier.** Routes and `src/server/api/operations` may not import the DAL except types and `dal/errors`; the pipeline files directly under `src/server/api` may use the DAL scope but, like everything there, never the database, `pg` or `drizzle-orm`. *Reverse:* tighten the pipeline tier once `forApiKey` is re-exported from a service.
+
+Decisions made while specifying (full text in `specs/009-public-api/spec.md`):
+
+- **Key storage.** The spec preferred `@better-auth/api-key`; planning fell back to a Docket-owned hashed-key table (note 4 above, research D1). *Reverse:* see note 4.
+- **The key decides the project.** *What:* paths carry no project slug (`/api/v1/posts/{id}`); a key works in exactly one project. *Reverse:* add a `/p/{slug}` path prefix and refuse a slug that does not match the key's project.
+- **API keys only.** *What:* browser session cookies are not accepted under `/api/v1`, so the API has no CSRF surface. *Reverse:* accept the session in `src/server/api/auth.ts` and add CSRF checks for writes.
+- **Keys belong to the project.** *What:* a key stays valid when its creator leaves or changes role; owners and admins can revoke it; actions are attributed to the key. *Reverse:* revoke a member's keys when their membership ends.
+- **Permissions are independent.** *What:* `read` is not implied by the write permissions; the creation form preselects it. *Reverse:* make the write permissions imply `read` in the pipeline's permission check.
+- **API-created posts behave like composer posts.** *What:* `POST /posts` makes an origin `api` post that is not put in review and can be queued or scheduled at once. *Reverse:* give origin `api` posts the review state generated posts get.
+- **Idempotency records last 7 days.** *What:* covers an n8n execution re-run days later; afterwards the same key is new. *Reverse:* change `RETENTION_MS` (see the interim limits below).
+- **In-flight duplicates get 409.** *What:* a duplicate arriving while the first request runs is refused with `idempotency_in_progress` and `Retry-After`; it never runs twice and never waits. *Reverse:* wait on the first request's hold instead of answering at once.
+- **Webhook URLs may use `http` and private addresses.** *What:* owners and admins configure them and n8n may run on the same home server; the form warns about non-`https` URLs. *Reverse:* refuse them in the webhook URL validation (`src/lib/validation/api.ts`); belongs to the hardening security pass.
+- **Media by URL is copied into the bucket** through the upload pipeline; fetches refuse loopback, private and link-local addresses. *Reverse:* store the remote URL as is (not recommended: platforms need a stable public URL).
+- **`job.finished` fires on every move into a finished state** (`completed`, `completed_with_failures`, `cancelled`); a retried job that finishes again sends a new event with a new id. *Reverse:* emit only on the first finish.
+- **The media library source is offered over the API** beside the `api` source; the CSV source is not. *Reverse:* drop `media` from the `POST /jobs` source union in `src/server/api/operations/jobs.ts`.
+
+Interim limits (each one constant; *Reverse:* change the constant):
+
+- Rate limit default 60 per minute, range 1–1,000: `rateLimitPerMinute` in `src/lib/validation/api.ts`.
+- 25 keys per project and 10 webhook endpoints: `API_KEY_CAP`, `WEBHOOK_ENDPOINT_CAP` in `src/lib/validation/api.ts`.
+- Idempotency retention 7 days: `RETENTION_MS` in `src/server/dal/idempotency.ts`. Hold: `max(300 s, 2 × LLM timeout + 120 s)`, `holdMs` with `MIN_HOLD_SECONDS` and `DEFAULT_LLM_TIMEOUT_SECONDS` (90 s, when no model is configured) in `src/server/api/idempotency.ts`.
+- JSON body limit 8 MB: `JSON_BODY_LIMIT` in `src/server/api/handle.ts` (multipart gets the upload limit plus `MULTIPART_EXTRA`, 1 MB).
+- 100 items per add call: `API_ITEMS_PER_CALL_MAX` in `src/lib/validation/api.ts`; 500 items per job: `JOB_ITEMS_MAX` in `src/lib/validation/jobs.ts`.
+- Page size 50 by default, at most 100: `PAGE_LIMIT_DEFAULT`, `PAGE_LIMIT_MAX` in `src/lib/validation/api.ts`.
+- Webhook delivery: 8 attempts, backoff 1 min doubling to 6 h, 10 s timeout, disabled after 20 failed deliveries, 30-day log, 10 deliveries per tick at concurrency 4: `WEBHOOK_DEFAULTS` in `src/server/scheduler/config.ts`. Secret rotation overlap 24 h: `ROTATION_OVERLAP_MS` in `src/server/services/webhooks/endpoints.ts`. Signature tolerance 300 s: `SIGNATURE_TOLERANCE_SECONDS` in `src/server/services/webhooks/sign.ts`.
+- URL fetches: 3 redirects, 30 s: `FETCH_MAX_REDIRECTS`, `FETCH_TIMEOUT_MS` in `src/server/net/safe-fetch.ts`.
+- Housekeeping deletes in batches of 500: `HOUSEKEEPING_BATCH` in `src/server/scheduler/housekeeping.ts`.
+
+Error codes added for media by URL: `url_not_allowed`, `url_too_many_redirects`, `url_fetch_failed` and `url_timeout`, all 400 (`src/server/api/errors.ts`), beside `job_item_limit` (400). *Reverse:* fold them into `validation_failed` with the reason in `details`.
+
+The OpenAPI validity test uses the dev dependency `@seriousme/openapi-schema-validator`, so plan.md's `NEEDS DEPENDENCY` is resolved. *Reverse:* remove the dependency and the "is a valid OpenAPI 3.1 document" test; the structural checks remain.
+
+Generic changes to existing code (plan.md):
+
+1. `ProjectScope.actor`, `can()` by actor, the key re-check in `transaction()` and `actorColumns()`. *Reverse:* drop the `api_key` actor kind and `forApiKey`; member scopes are unchanged.
+2. `created_by_api_key_id` attribution columns on posts, media and jobs; views show "API key: <name>". *Reverse:* a down-migration dropping the columns (note 11).
+3. `applyDerivedStatus`, `refreshJobStatus`, `cancelJob` and the account-flag call sites emit webhook events in their transaction; `createSchedulingRepos` gains `webhooks`. *Reverse:* remove the emit calls and the `webhooks` repo from the scheduling repos.
+4. `accounts.recordRefresh` / `markCredentialsInvalid` return `{ changed, previousStatus }`, and their four scheduler call sites run in a transaction. *Reverse:* return `void` again and drop the transactions.
+5. Open jobs: `open`, `closed_at`, the relaxed item-count check, the `deriveJobStatus` open branch, `closeJob`, `appendItems`, and `cancelJob` closing the job. *Reverse:* see note 11; delete `closeJob` and `appendItems`.
+6. `PreparedSource.mediaRules` (optional, 008 behaviour by default) and the `api` item source. *Reverse:* drop the field and unregister the source.
+7. `uploadMedia` split into `prepareUpload` + `commitUpload` (behaviour unchanged); `registerMediaFromUrl` added. *Reverse:* inline the two steps back into `uploadMedia`.
+8. `listUpcomingOccurrences` and `targets.heldOccurrences`; `listEmptySlots` unchanged. *Reverse:* delete both; the slots endpoint goes with them.
+9. `listMedia`, `listJobs`, `listJobItems` take optional `limit`/`offset`; `getJobItem` is new. The API's job reads go through these services (review F4), and `appendItems` shares `createJob`'s rendered-instructions check, `assertRenderedFits` (review F1). *Reverse:* callers keep passing `page`; drop the options.
+10. `createDraft` forces origin `api` for key actors; `prepareForScheduling` is exported. *Reverse:* take the origin from the caller; un-export the helper.
+11. Access statements `api_key` and `webhook` (owner and admin). *Reverse:* remove them from `src/server/auth/access.ts`.
+12. Auth gate: `/api/v1/` is public at the proxy, with authentication in the API pipeline. *Reverse:* remove the prefix from `src/lib/auth-gate.ts` (the API would then need a session).
+13. `runTick()` gains a fourth section, `webhooks`, with its heartbeat; `TickSummary` gains `webhooks`. *Reverse:* remove the section; events stay in the outbox undelivered.
+14. Audit enum values for key and webhook changes, with labels in the activity list. *Reverse:* a migration dropping the enum values once no rows use them.
+15. `MediaRepo.reservedJobFor` so `GET /media/{id}` reports the reserving job (review F2). *Reverse:* delete it; the field is then always `null` on the single-asset read.

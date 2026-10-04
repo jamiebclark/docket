@@ -10,6 +10,7 @@ export type NewPost = Partial<
     | "origin"
     | "generationMetadata"
     | "createdByUserId"
+    | "createdByApiKeyId"
     | "reviewState"
     | "generationRequestId"
     | "schedulingPolicy"

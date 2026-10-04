@@ -2,6 +2,7 @@
 export { createJob, insertItems, previewJob, type CreateJobResult, type JobPreview } from "./create";
 export {
   getJob,
+  getJobItem,
   JOB_ITEMS_PAGE_SIZE,
   JOBS_PAGE_SIZE,
   listJobItems,
@@ -10,6 +11,7 @@ export {
   type JobItemView,
   type JobListItem,
 } from "./read";
-export { cancelJob, retryFailedItems, retryItem, type ManageResult } from "./manage";
+export { appendItems, type AppendResult } from "./append";
+export { cancelJob, closeJob, retryFailedItems, retryItem, type ManageResult } from "./manage";
 export { refreshJobStatus } from "./status";
 export { ITEM_SOURCES, sourceFor } from "./sources";

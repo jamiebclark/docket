@@ -6,7 +6,7 @@ import type { AccountRecord } from "../../dal/accounts";
 import * as clock from "../../dal/clock";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
-import type { ProjectScope } from "../../dal/scope";
+import { actorColumns, type ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
 import { allocateNextFree, nearQueuedWarnings, peekNextFree, plannedTime, type PlannedTime, type Warning } from "../queue";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./cancel";
@@ -162,7 +162,11 @@ export async function gate(tx: Tx, target: TargetRecord): Promise<Gate> {
  * Adapted images are made before any transaction opens: converting and storing can take seconds, which must
  * not be spent holding row locks. Best effort; a pair that fails shows up as `variant_failed` at the gate.
  */
-async function prepare(scope: ProjectScope, postId: string, opts?: Parameters<typeof prepareVariants>[2]): Promise<void> {
+export async function prepareForScheduling(
+  scope: ProjectScope,
+  postId: string,
+  opts?: Parameters<typeof prepareVariants>[2],
+): Promise<void> {
   try {
     await prepareVariants(scope, postId, opts);
   } catch {
@@ -208,8 +212,9 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
     if ((await tx.media.lockShared(parsed.mediaIds)).length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
     const post = await tx.posts.insert({
       baseText: parsed.baseText,
-      createdByUserId: tx.membership.userId,
+      ...actorColumns(tx),
       ...(parsed.origin ? { origin: parsed.origin } : {}),
+      ...(tx.actor.kind === "api_key" ? { origin: "api" as const } : {}),
       ...(parsed.generationMetadata !== undefined ? { generationMetadata: parsed.generationMetadata } : {}),
       ...(parsed.reviewState ? { reviewState: parsed.reviewState } : {}),
       ...(parsed.generationRequestId ? { generationRequestId: parsed.generationRequestId } : {}),
@@ -234,7 +239,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
   const id = uuid.parse(postId);
   const patch = patchSchema.parse(patchInput);
   need(scope, { post: ["edit"] });
-  if (patch.mediaIds) await prepare(scope, id, { mediaIds: patch.mediaIds });
+  if (patch.mediaIds) await prepareForScheduling(scope, id, { mediaIds: patch.mediaIds });
   return scope.transaction(async (tx) => {
     need(tx, { post: ["edit"] });
     await lockPost(tx, id);
@@ -376,7 +381,7 @@ export async function validatePost(
   const id = uuid.parse(postId);
   need(scope, { post: ["view"] });
   if (!(await scope.posts.get(id))) throw new NotFoundError();
-  await prepare(scope, id);
+  await prepareForScheduling(scope, id);
   const out: { targetId: string; issues: ValidationIssue[] }[] = [];
   for (const t of await scope.targets.listForPost(id)) {
     if (t.status === "cancelled") continue;
@@ -397,7 +402,7 @@ export async function previewQueue(
   need(scope, { post: ["view"] });
   const post = await scope.posts.get(id);
   if (!post) throw new NotFoundError();
-  await prepare(scope, id);
+  await prepareForScheduling(scope, id);
   const now = await clock.now();
   const out: TargetResult<PlannedTime & { issues: ValidationIssue[] }>[] = [];
   for (const t of await scope.targets.listForPost(id)) {
@@ -432,7 +437,7 @@ export async function addToQueue(
   const id = uuid.parse(postId);
   const opts = queueSchema.parse(input);
   need(scope, { post: ["schedule"] });
-  await prepare(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
+  await prepareForScheduling(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
   return scope.transaction(async (tx) => {
     need(tx, { post: ["schedule"] });
     const post = await lockPost(tx, id);
@@ -573,7 +578,7 @@ export async function scheduleAt(
   const id = uuid.parse(postId);
   const opts = selectSchema.extend({ at: atSchema }).parse(input);
   need(scope, { post: ["schedule"] });
-  await prepare(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
+  await prepareForScheduling(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
   return scope.transaction((tx) => {
     need(tx, { post: ["schedule"] });
     return scheduleExplicit(tx, id, opts.targetIds, "explicit", () => new Date(opts.at));
@@ -588,7 +593,7 @@ export async function publishNow(
   const id = uuid.parse(postId);
   const opts = selectSchema.parse(input);
   need(scope, { post: ["schedule"] });
-  await prepare(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
+  await prepareForScheduling(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
   return scope.transaction((tx) => {
     need(tx, { post: ["schedule"] });
     return scheduleExplicit(tx, id, opts.targetIds, "now", (now) => now);

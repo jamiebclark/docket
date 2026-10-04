@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   foreignKey,
   index,
@@ -13,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { apiKeys } from "./api";
 import { user } from "./auth";
 import { voiceProfiles, voiceProfileVersions } from "./generation";
 import { mediaAssets } from "./media";
@@ -73,6 +75,10 @@ export const generationJobs = pgTable(
     itemCount: integer("item_count").notNull(),
     createdByUserId: uuid("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
     cancelledByUserId: uuid("cancelled_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdByApiKeyId: uuid("created_by_api_key_id"),
+    cancelledByApiKeyId: uuid("cancelled_by_api_key_id"),
+    open: boolean("open").default(false).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -99,7 +105,21 @@ export const generationJobs = pgTable(
     check("generation_jobs_source_summary_len", sql`char_length(${t.sourceSummary}) BETWEEN 1 AND 200`),
     check("generation_jobs_template_len", sql`char_length(${t.template}) BETWEEN 1 AND 2000`),
     check("generation_jobs_targets_card", sql`cardinality(${t.targetAccountIds}) BETWEEN 1 AND 50`),
-    check("generation_jobs_item_count_range", sql`${t.itemCount} BETWEEN 1 AND 500`),
+    foreignKey({
+      name: "generation_jobs_created_api_key_fk",
+      columns: [t.projectId, t.createdByApiKeyId],
+      foreignColumns: [apiKeys.projectId, apiKeys.id],
+    }),
+    foreignKey({
+      name: "generation_jobs_cancelled_api_key_fk",
+      columns: [t.projectId, t.cancelledByApiKeyId],
+      foreignColumns: [apiKeys.projectId, apiKeys.id],
+    }),
+    check("generation_jobs_item_count_range", sql`${t.itemCount} BETWEEN 0 AND 500`),
+    check(
+      "generation_jobs_open_or_items",
+      sql`${t.open} OR ${t.itemCount} >= 1 OR ${t.status} = 'cancelled'`,
+    ),
     check("generation_jobs_cancelled_pair", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} IS NOT NULL)`),
     check(
       "generation_jobs_finished_set",

@@ -6,7 +6,7 @@ import * as clock from "../../dal/clock";
 import { NotFoundError } from "../../dal/errors";
 import type { GenerationFailureRecord } from "../../dal/generation-failures";
 import type { PostRecord } from "../../dal/posts";
-import type { ProjectScope } from "../../dal/scope";
+import { actorColumns, type ProjectScope } from "../../dal/scope";
 import type { SeriesRecord } from "../../dal/series";
 import { getLlm } from "../../llm";
 import type { LlmFailureKind, LlmProvider, LlmResult } from "../../llm/types";
@@ -263,6 +263,7 @@ export async function writeSeriesPost(
         record,
         schedulingPolicy: request.resolved.scheduling,
         createdByUserId: tx.membership.userId,
+        createdByApiKeyId: actorColumns(tx).createdByApiKeyId,
         link: { seriesId, seriesPosition: position },
       });
     });

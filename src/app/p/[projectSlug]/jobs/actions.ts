@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { fail, type ActionResult } from "@/lib/action-result";
 import { need } from "@/server/services/generation/single";
-import { cancelJob, createJob, retryFailedItems, retryItem, type ManageResult } from "@/server/services/jobs";
+import { cancelJob, closeJob, createJob, retryFailedItems, retryItem, type ManageResult } from "@/server/services/jobs";
 import { CSV_MAX_BYTES, parseJobCsv, type CsvProblem, type CsvRow } from "@/server/services/jobs/sources/csv";
 import { runAction } from "../run-action";
 
@@ -69,4 +69,13 @@ export async function retryFailedAction(slug: string, input: { jobId: string }):
 
 export async function cancelJobAction(slug: string, input: { jobId: string }): Promise<ActionResult<ManageResult>> {
   return managed(slug, (scope) => cancelJob(scope, input?.jobId));
+}
+
+export async function closeJobAction(slug: string, input: { jobId: string }): Promise<ActionResult<{ jobId: string }>> {
+  const result = await runAction(slug, async (scope) => {
+    const job = await closeJob(scope, input?.jobId);
+    return { jobId: job.id };
+  });
+  if (result.ok) refresh();
+  return result;
 }

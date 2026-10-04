@@ -1,8 +1,20 @@
 // The sanctioned surface: application code imports from here, never the database client.
 export { databaseIsHealthy } from "./health";
 export * from "./errors";
-export { crossProject, forProject, requirePermission, requireRole } from "./scope";
-export type { ApprovalPolicy, PermissionRequest, ProjectScope, Role, SchedulingPolicy, SessionLike } from "./scope";
+export { actorColumns, crossProject, forApiKey, forProject, requirePermission, requireRole } from "./scope";
+export type {
+  ApprovalPolicy,
+  PermissionRequest,
+  ProjectScope,
+  Role,
+  SchedulingPolicy,
+  ScopeActor,
+  SessionLike,
+} from "./scope";
+export { API_KEY_PREFIX, apiKeyStatus, generateApiKey, hashApiKey, isWellFormedApiKey } from "./api-keys";
+export type { ApiKeyListRow, ApiKeyPermission, ApiKeyRecord, ApiKeyStatus, ApiKeysRepo, NewApiKey } from "./api-keys";
+export type { ClaimInput, ClaimResult, IdempotencyRepo } from "./idempotency";
+export type { WebhooksRepo } from "./webhooks";
 export type { AuditEntry, AuditRow, MembershipAction } from "./audit";
 export { bootstrapFirstUser, isSetupAvailable } from "./install";
 export type { FirstUserInput } from "./install";

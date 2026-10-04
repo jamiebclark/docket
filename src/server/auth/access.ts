@@ -1,6 +1,5 @@
 import { createAccessControl } from "better-auth/plugins/access";
 
-// Later features extend `statements` (api_keys).
 export const statements = {
   project: ["view", "update"],
   member: ["view", "remove", "remove_owner", "update_role", "transfer_ownership"],
@@ -12,6 +11,8 @@ export const statements = {
   post: ["view", "edit", "schedule", "delete"],
   voice: ["view", "manage"],
   generation: ["run", "auto_approve"],
+  api_key: ["manage"],
+  webhook: ["manage"],
 } as const;
 
 export const ac = createAccessControl(statements);
@@ -27,6 +28,8 @@ export const owner = ac.newRole({
   post: ["view", "edit", "schedule", "delete"],
   voice: ["view", "manage"],
   generation: ["run", "auto_approve"],
+  api_key: ["manage"],
+  webhook: ["manage"],
 });
 
 export const admin = ac.newRole({
@@ -40,6 +43,8 @@ export const admin = ac.newRole({
   post: ["view", "edit", "schedule", "delete"],
   voice: ["view", "manage"],
   generation: ["run", "auto_approve"],
+  api_key: ["manage"],
+  webhook: ["manage"],
 });
 
 export const editor = ac.newRole({

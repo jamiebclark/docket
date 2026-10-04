@@ -14,6 +14,8 @@ import * as mediaActions from "../../src/app/p/[projectSlug]/media/actions";
 import * as voiceActions from "../../src/app/p/[projectSlug]/voice/actions";
 import * as postActions from "../../src/app/p/[projectSlug]/posts/actions";
 import * as jobActions from "../../src/app/p/[projectSlug]/jobs/actions";
+import * as apiKeyActions from "../../src/app/p/[projectSlug]/settings/api-keys/actions";
+import { createApiKey } from "../../src/server/services/api-keys";
 import { setLlmForTests } from "../../src/server/llm";
 import { runTick } from "../../src/server/scheduler";
 import { createJob } from "../../src/server/services/jobs";
@@ -92,8 +94,10 @@ async function fixtures(env: Env) {
   // The actions under test use the configured provider; give each call its own scripted answers.
   setLlmForTests(createFakeLlm([fakeOk(), fakeOk()]));
   const attemptId = await readyAttempt(env.scope, await sessionFor(env.owner.id), pageCandidate("authz", "Authz", false));
+  const apiKey = await createApiKey(env.scope, { name: "fixture", permissions: ["read"], rateLimitPerMinute: 60, expiry: "never" });
   return {
     attemptId,
+    apiKeyId: apiKey.key.id,
     voiceProfileId: voice.id,
     seriesId: (
       await startSeries(env.scope, {
@@ -122,6 +126,19 @@ async function fixtures(env: Env) {
 type Case = { name: string; manage?: true; run: (slug: string, f: Fx) => Promise<unknown> };
 
 const CASES: Case[] = [
+  {
+    name: "createApiKeyAction",
+    manage: true,
+    run: (s) => {
+      const form = new FormData();
+      form.set("name", `key-${randomUUID().slice(0, 8)}`);
+      form.append("permissions", "read");
+      form.set("rateLimitPerMinute", "60");
+      form.set("expiry", "never");
+      return apiKeyActions.createApiKeyAction(s, form);
+    },
+  },
+  { name: "revokeApiKeyAction", manage: true, run: (s, f) => apiKeyActions.revokeApiKeyAction(s, f.apiKeyId) },
   { name: "uploadMediaAction", run: (s, f) => mediaActions.uploadMediaAction(s, f.form) },
   { name: "updateMediaAction", run: (s, f) => mediaActions.updateMediaAction(s, { id: f.mediaId, altText: "x" }) },
   { name: "deleteMediaImpactAction", run: (s, f) => mediaActions.deleteMediaImpactAction(s, { id: f.mediaId }) },
@@ -274,7 +291,7 @@ describe("every server action × role (SC-009, SC-011)", () => {
     setStorageForTests(createMemoryStorage());
     const env = await postsEnv();
     actAs(null);
-    const r = await call(CASES[0]!, env.project.slug, await fixtures(env));
+    const r = await call(CASES.find((c) => c.name === "uploadMediaAction")!, env.project.slug, await fixtures(env));
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/^(not_found|unauthenticated)$/);
   });

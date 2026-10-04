@@ -13,6 +13,11 @@ describe("auth gate", () => {
     expect(isPublicPath("/api/internal/tick")).toBe(true);
     expect(loginRedirectFor("/api/internal/tick", "", false)).toBeNull();
     expect(isPublicPath("/api/internals")).toBe(false);
+    expect(isPublicPath("/api/v1/accounts")).toBe(true);
+    expect(isPublicPath("/api/v1/openapi.json")).toBe(true);
+    expect(loginRedirectFor("/api/v1/posts", "", false)).toBeNull();
+    expect(isPublicPath("/api/v10")).toBe(false);
+    expect(isPublicPath("/api/v1")).toBe(true);
   });
 
   it("does not treat look-alike paths as public", () => {

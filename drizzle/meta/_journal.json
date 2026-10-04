@@ -43,6 +43,13 @@
       "when": 1791111766134,
       "tag": "0005_watery_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791131982890,
+      "tag": "0006_abnormal_chamber",
+      "breakpoints": true
     }
   ]
 }

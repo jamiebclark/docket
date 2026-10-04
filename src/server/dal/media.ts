@@ -20,6 +20,7 @@ export type NewMedia = Pick<typeof mediaAssets.$inferInsert, "storageKey" | "pub
       | "height"
       | "altText"
       | "createdByUserId"
+      | "createdByApiKeyId"
       | "thumbnailStorageKey"
       | "thumbnailUrl"
       | "originalFilename"
@@ -69,6 +70,8 @@ export interface MediaRepo {
   lockForReservation(ids: readonly string[]): Promise<MediaRow[]>;
   /** The subset of `ids` held by a queued, running or failed job item. */
   reservedAmong(ids: readonly string[]): Promise<string[]>;
+  /** The job whose queued, running or failed item holds this asset, or null when none does. */
+  reservedJobFor(id: string): Promise<string | null>;
   /** The subset of `ids` with `first_used_at` set. */
   usedAmong(ids: readonly string[]): Promise<string[]>;
   /** Distinct tags of live assets, sorted. */
@@ -207,6 +210,14 @@ export function createMediaRepo(db: Database, projectId: string): MediaRepo {
         .from(mediaAssets)
         .where(and(inProject, inArray(mediaAssets.id, [...ids]), sql`${reservations} > 0`));
       return rows.map((r) => r.id);
+    },
+    async reservedJobFor(id) {
+      const [row] = await db
+        .select({ jobId: reservedJobExpr })
+        .from(mediaAssets)
+        .where(mine(id))
+        .limit(1);
+      return row?.jobId ?? null;
     },
     async usedAmong(ids) {
       if (ids.length === 0) return [];

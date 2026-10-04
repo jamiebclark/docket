@@ -299,3 +299,9 @@ export async function tryVoice(scope: ProjectScope, input: unknown, llm?: LlmPro
   });
   return { variants, latencyMs: outcome.attempts.reduce((sum, a) => sum + a.latencyMs, 0) };
 }
+
+/** The project's default voice profile id, if one is set. */
+export async function defaultVoiceProfileId(scope: ProjectScope): Promise<string | null> {
+  need(scope, { voice: ["view"] });
+  return (await scope.projects.get())?.defaultVoiceProfileId ?? scope.project.defaultVoiceProfileId ?? null;
+}

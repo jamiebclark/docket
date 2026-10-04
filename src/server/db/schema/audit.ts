@@ -13,6 +13,14 @@ export const membershipAction = pgEnum("membership_action", [
   "member_leave",
   "role_change",
   "ownership_transfer",
+  "api_key_create",
+  "api_key_revoke",
+  "webhook_create",
+  "webhook_update",
+  "webhook_delete",
+  "webhook_rotate_secret",
+  "webhook_enable",
+  "webhook_disable",
 ]);
 
 /** Append-only: the DAL exposes insert and list only (FR-033). */

@@ -4,6 +4,8 @@ import { getEnv } from "../env";
 import { schedulerConfig, type SchedulerConfig } from "./config";
 import { runTokenRefresh } from "./token-refresh";
 import { emptyGenerationCounts, runGenerationJobs, type GenerationCounts } from "./generation";
+import { emptyHousekeepingCounts, runHousekeeping, type HousekeepingCounts } from "./housekeeping";
+import { emptyWebhookCounts, runWebhookDeliveries, type WebhookCounts } from "./webhooks";
 import { emptyPublishingCounts, runPublishing, type PublishingCounts } from "./publishing";
 
 export type { SchedulerConfig } from "./config";
@@ -17,6 +19,8 @@ export interface TickSummary {
   publishing: SectionResult<PublishingCounts>;
   tokenRefresh: SectionResult<{ refreshed: number; failed: number; deferred: number }>;
   generation: SectionResult<GenerationCounts>;
+  housekeeping: SectionResult<HousekeepingCounts>;
+  webhooks: SectionResult<WebhookCounts>;
 }
 
 /**
@@ -38,11 +42,13 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     }
   };
   // The sections run concurrently under the same deadline (D7); each handles its own failure.
-  const [publishing, tokenRefresh, generation] = await Promise.all([
+  const [publishing, tokenRefresh, generation, housekeeping, webhooks] = await Promise.all([
     section("publishing", () => runPublishing({ config, tickId, startedAt }), emptyPublishingCounts()),
     section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0 }),
     section("generation jobs", () => runGenerationJobs({ config, tickId, startedAt }), emptyGenerationCounts()),
+    section("housekeeping", () => runHousekeeping(), emptyHousekeepingCounts()),
+    section("webhooks", () => runWebhookDeliveries({ config, tickId, startedAt }), emptyWebhookCounts()),
   ]);
 
-  return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh, generation };
+  return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh, generation, housekeeping, webhooks };
 }

@@ -20,6 +20,18 @@ describe("deriveJobStatus", () => {
     ["cancelled items alone complete a job that was never cancelled", "running", { done: 1, cancelled: 1 }, true, "completed"],
   ];
   it.each(rows)("%s", (_name, current, counts, started, expected) => {
-    expect(deriveJobStatus(current, c(counts), started)).toBe(expected);
+    expect(deriveJobStatus(current, c(counts), started, false)).toBe(expected);
+  });
+
+  const openRows: [string, JobStatus, Partial<JobCounts>, boolean, JobStatus][] = [
+    ["open and empty, nothing started", "queued", {}, false, "queued"],
+    ["open, every item done, work started", "running", { done: 2 }, true, "running"],
+    ["open, every item done, never flagged started", "queued", { done: 2 }, false, "running"],
+    ["open with failures is not finished", "running", { done: 1, failed: 1 }, true, "running"],
+    ["open with queued items, not started", "queued", { queued: 2 }, false, "queued"],
+    ["open but cancelled stays cancelled", "cancelled", { done: 1 }, true, "cancelled"],
+  ];
+  it.each(openRows)("open job: %s", (_name, current, counts, started, expected) => {
+    expect(deriveJobStatus(current, c(counts), started, true)).toBe(expected);
   });
 });

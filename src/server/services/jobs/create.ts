@@ -6,12 +6,13 @@ import { createJobSchema, jobSourceSchema } from "@/lib/validation/jobs";
 import * as clock from "../../dal/clock";
 import { ConflictError, ValidationIssuesError } from "../../dal/errors";
 import type { JobRecord } from "../../dal/jobs";
-import type { ProjectScope } from "../../dal/scope";
+import { actorColumns, type ProjectScope } from "../../dal/scope";
 import { getLlmStatus, LlmNotConfiguredError } from "../../llm";
 import { resolvePolicies } from "../generation/policy";
 import { assertMediaFits, distinctProviderKeys, isUniqueViolation, loadAccounts, need, takeVoice } from "../generation/single";
 import { refreshJobStatus } from "./status";
 import { sourceFor } from "./sources";
+import { assertApiMediaAvailable } from "./sources/api";
 import type { PreparedSource, SourceItem } from "./sources/types";
 
 export interface CreateJobResult {
@@ -47,15 +48,30 @@ function checkTemplate(kind: string, template: string, prepared: PreparedSource)
       `Unknown ${what}: ${unknown.join(", ")}. Available: ${prepared.fields.join(", ") || "none"}`,
     );
   }
-  for (const item of prepared.items) {
+  assertRenderedFits(template, prepared.items, () => "template");
+}
+
+/**
+ * Refuses the first item whose rendered instructions exceed `JOB_RENDERED_INSTRUCTIONS_MAX`, so every stored item
+ * renders to instructions the generation record accepts. `field(i)` names the offending item in the issue.
+ * Shared by `createJob` and `appendItems`.
+ */
+export function assertRenderedFits(
+  template: string,
+  items: readonly SourceItem[],
+  field: (index: number) => string,
+  code = "template",
+): void {
+  items.forEach((item, i) => {
     const n = renderTemplate(template, item.fields, { mark: true }).length;
     if (n > JOB_RENDERED_INSTRUCTIONS_MAX) {
       throw issue(
-        "template",
+        field(i),
         `${item.label}: the instructions would be ${n} characters; the limit is ${JOB_RENDERED_INSTRUCTIONS_MAX.toLocaleString("en-US")}`,
+        code,
       );
     }
-  }
+  });
 }
 
 /** Appends items to a job, numbering positions from the current count. Call inside a transaction. */
@@ -93,16 +109,21 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
   const accounts = await loadAccounts(scope, parsed.targetAccountIds);
 
   const kind = parsed.source.kind;
+  if (kind === "csv" && scope.actor.kind === "api_key") {
+    throw issue("source", "CSV jobs are created in the app.", "unsupported_source");
+  }
   const source = sourceFor(kind);
   const prepared = await source.prepare(scope, source.inputSchema.parse(parsed.source), ctx);
   const includeUsed = parsed.source.kind === "media" && parsed.source.includeUsed;
   const mode = parsed.source.kind === "media" ? parsed.source.selection.mode : undefined;
+  const open = kind === "api" && (prepared.meta as { open?: boolean }).open === true;
+  const rules = prepared.mediaRules ?? { onReserved: "skip" as const, skipUsed: !includeUsed };
 
   if (prepared.items.some((i) => i.mediaAssetId !== null)) {
     assertMediaFits(distinctProviderKeys(accounts), 1);
   }
   checkTemplate(kind, parsed.template, prepared);
-  if (prepared.items.length === 0) throw issue("selection", emptyMessage(kind, mode), "selection");
+  if (prepared.items.length === 0 && !open) throw issue("selection", emptyMessage(kind, mode), "selection");
 
   const write = () =>
     scope.transaction(async (tx) => {
@@ -112,11 +133,13 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
       let skippedReserved = 0;
 
       const mediaIds = items.map((i) => i.mediaAssetId).filter((id): id is string => id !== null);
-      if (mediaIds.length > 0) {
+      if (mediaIds.length > 0 && rules.onReserved === "refuse") {
+        await assertApiMediaAvailable(tx, items);
+      } else if (mediaIds.length > 0) {
         const live = new Set((await tx.media.lockForReservation(mediaIds)).map((m) => m.id));
         const liveIds = [...live];
         const reserved = new Set(await tx.media.reservedAmong(liveIds));
-        const used = new Set(includeUsed ? [] : await tx.media.usedAmong(liveIds));
+        const used = new Set(!rules.skipUsed ? [] : await tx.media.usedAmong(liveIds));
         items = items.filter((i) => {
           if (i.mediaAssetId === null) return true;
           if (!live.has(i.mediaAssetId)) {
@@ -134,7 +157,7 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
           return true;
         });
       }
-      if (items.length === 0) throw issue("selection", emptyMessage(kind, mode), "selection");
+      if (items.length === 0 && !open) throw issue("selection", emptyMessage(kind, mode), "selection");
 
       const job = await tx.jobs.insert({
         sourceKind: kind,
@@ -151,8 +174,9 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
         approvalPolicy: policies.resolved.approval,
         schedulingPolicy: policies.resolved.scheduling,
         status: "queued",
+        open,
         itemCount: items.length,
-        createdByUserId: tx.membership.userId,
+        ...actorColumns(tx),
       });
       await insertItems(tx, job, items);
       return { jobId: job.id, itemCount: items.length, excluded, skippedReserved } satisfies CreateJobResult;

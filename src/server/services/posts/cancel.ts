@@ -1,5 +1,6 @@
 import type { ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
+import type { EmitRepos } from "../webhooks/emit";
 import { applyDerivedStatus } from "./status";
 
 const CLEARED = {
@@ -23,7 +24,7 @@ export async function cancelTargetRow(tx: Pick<ProjectScope, "targets">, targetI
 }
 
 /** When a cancel leaves a post with no live targets, it returns to `draft` (D11); then the status is re-derived. */
-export async function resetEmptyReview(tx: Pick<ProjectScope, "posts" | "targets">, postId: string): Promise<void> {
+export async function resetEmptyReview(tx: EmitRepos, postId: string): Promise<void> {
   const targets = await tx.targets.listForPost(postId);
   if (targets.every((t) => t.status === "draft" || t.status === "cancelled")) {
     await tx.posts.update(postId, { reviewState: "draft" });

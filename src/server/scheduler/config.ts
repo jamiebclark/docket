@@ -19,6 +19,45 @@ export interface SchedulerConfig {
   jobMaxAttempts?: number;
   jobBackoffBaseMs?: number;
   jobBackoffMaxMs?: number;
+  /** Outgoing webhooks (009). */
+  webhookMaxPerTick?: number;
+  webhookConcurrency?: number;
+  webhookTimeoutMs?: number;
+  webhookMaxAttempts?: number;
+  webhookBackoffBaseMs?: number;
+  webhookBackoffMaxMs?: number;
+  webhookDisableAfterFailures?: number;
+  webhookRetentionDays?: number;
+  webhookMinWindowMs?: number;
+}
+
+export const WEBHOOK_DEFAULTS = {
+  maxPerTick: 10,
+  concurrency: 4,
+  timeoutMs: 10_000,
+  maxAttempts: 8,
+  backoffBaseMs: 60_000,
+  backoffMaxMs: 21_600_000,
+  disableAfterFailures: 20,
+  retentionDays: 30,
+  minWindowMs: 11_000,
+} as const;
+
+/** The webhook-delivery settings with defaults filled in. */
+export function webhookConfig(config: SchedulerConfig) {
+  return {
+    maxPerTick: config.webhookMaxPerTick ?? WEBHOOK_DEFAULTS.maxPerTick,
+    concurrency: config.webhookConcurrency ?? WEBHOOK_DEFAULTS.concurrency,
+    timeoutMs: config.webhookTimeoutMs ?? WEBHOOK_DEFAULTS.timeoutMs,
+    maxAttempts: config.webhookMaxAttempts ?? WEBHOOK_DEFAULTS.maxAttempts,
+    backoffBaseMs: config.webhookBackoffBaseMs ?? WEBHOOK_DEFAULTS.backoffBaseMs,
+    backoffMaxMs: config.webhookBackoffMaxMs ?? WEBHOOK_DEFAULTS.backoffMaxMs,
+    disableAfterFailures: config.webhookDisableAfterFailures ?? WEBHOOK_DEFAULTS.disableAfterFailures,
+    retentionDays: config.webhookRetentionDays ?? WEBHOOK_DEFAULTS.retentionDays,
+    minWindowMs: config.webhookMinWindowMs ?? WEBHOOK_DEFAULTS.minWindowMs,
+    leaseMs: config.leaseMs,
+    timeBudgetMs: config.timeBudgetMs,
+  };
 }
 
 /** The generation-jobs settings with defaults filled in (older hand-built configs omit them). */

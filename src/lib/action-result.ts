@@ -50,6 +50,9 @@ const ERROR_NAME_TO_CODE: Record<string, ErrorCode> = {
   ValidationIssuesError: "validation",
   LlmNotConfiguredError: "conflict",
   PolicyNotAllowedError: "forbidden",
+  JobClosedError: "conflict",
+  MediaReservedError: "conflict",
+  JobItemLimitError: "conflict",
 };
 
 /** Errors whose message is written for the user and safe to show, beyond the codes that always keep theirs. */

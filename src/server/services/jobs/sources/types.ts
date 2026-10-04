@@ -18,6 +18,8 @@ export interface PreparedSource {
   excluded: { reason: "already_used" | "deleted"; count: number }[];
   /** The fixed brief sent to the generator for every item of this source. */
   brief: string;
+  /** How `createJob` treats reserved and used images. Default: skip reserved, skip used unless the caller included them. */
+  mediaRules?: { onReserved: "skip" | "refuse"; skipUsed: boolean };
 }
 
 export interface ItemSource<I> {

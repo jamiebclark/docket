@@ -26,6 +26,12 @@ export const projectOwnedTables = [
   { table: "generation_failures", scopeColumn: "project_id" },
   { table: "generation_jobs", scopeColumn: "project_id" },
   { table: "generation_job_items", scopeColumn: "project_id" },
+  { table: "api_keys", scopeColumn: "project_id" },
+  { table: "api_idempotency_keys", scopeColumn: "project_id" },
+  { table: "webhook_endpoints", scopeColumn: "project_id" },
+  { table: "webhook_events", scopeColumn: "project_id" },
+  { table: "webhook_deliveries", scopeColumn: "project_id" },
+  { table: "webhook_delivery_attempts", scopeColumn: "project_id" },
 ] as const satisfies readonly ProjectOwnedTable[];
 
 export const notProjectOwned = [

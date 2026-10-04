@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { generationJobItems, generationJobs, posts } from "../db/schema";
+import { createWebhooksRepo } from "./webhooks";
 import { refreshJobStatus } from "../services/jobs/status";
 import { createJobItemsRepo, createJobsRepo, type JobItemRecord, type JobRecord } from "./jobs";
 import { crossProject, type ProjectScope } from "./scope";
@@ -118,7 +119,7 @@ export function claimDueJobItems(opts: {
 
       for (const [jobId, projectId] of touched) {
         await createJobsRepo(exec, projectId).update(jobId, { lastClaimedAt: now });
-        const slim = { jobs: createJobsRepo(exec, projectId), jobItems: createJobItemsRepo(exec, projectId) };
+        const slim = { jobs: createJobsRepo(exec, projectId), jobItems: createJobItemsRepo(exec, projectId), webhooks: createWebhooksRepo(exec, projectId) };
         await refreshJobStatus(slim as unknown as ProjectScope, jobId);
       }
       return claimed;
