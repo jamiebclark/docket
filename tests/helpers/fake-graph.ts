@@ -101,8 +101,9 @@ async function readParams(url: URL, init: RequestInit | undefined): Promise<{ pa
   const raw = new Map<string, string>(url.searchParams);
   const body = init?.body;
   if (body instanceof URLSearchParams) for (const [k, v] of body) raw.set(k, v);
-  else if (body instanceof FormData) for (const [k, v] of body) if (typeof v === "string") raw.set(k, v);
-  else if (typeof body === "string") {
+  else if (body instanceof FormData) {
+    for (const [k, v] of body) if (typeof v === "string") raw.set(k, v);
+  } else if (typeof body === "string") {
     try {
       const json = JSON.parse(body) as Record<string, unknown>;
       for (const [k, v] of Object.entries(json)) raw.set(k, typeof v === "string" ? v : JSON.stringify(v));
