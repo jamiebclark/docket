@@ -150,7 +150,7 @@
 - [X] T065 [US5] Add a docs test (`tests/integration/docs/deployment.test.ts`) asserting `docs/deployment.md` mentions every `docker-compose.yml` service, the tick endpoint path, the encryption-key backup warning and "Netlify", and that every `pnpm` script it cites exists in `package.json`
 - [X] T066 [US5] Run `pnpm build:smoke` and `pnpm vitest run tests/integration/docs tests/lint`
 - [X] T067 [US5] If `docker info` succeeds in the implementation environment, run quickstart §7 from a clean clone (`git clone` into `$TMPDIR`), the backup and restore steps, and record exact commands, observed results and the date in the "Verified run" section of `docs/deployment.md`; if Docker is unavailable, write "NOT VERIFIED — Docker unavailable where this was implemented" there instead (FR-037, never claim a run that did not happen)
-- [ ] T068 [US5] 🛑 BLOCKED: needs a machine with Docker and a human (or a Docker-capable CI runner) — ONE survey run of quickstart §7 and §6 on a clean checkout: `docker compose up`, smoke script, backup and restore, and a browser CSP-console check of the shipped screens (U5, U6); report every finding in one pass and record the dated result in `docs/deployment.md`. Complete only if T067 could not run it
+- [x] T068 [US5] (run 2026-10-04 from the front-end session; results in docs/deployment.md "Verified run"; browser CSP-console check not run) ONE survey run of quickstart §7 and §6 on a clean checkout: `docker compose up`, smoke script, backup and restore, and a browser CSP-console check of the shipped screens (U5, U6); report every finding in one pass and record the dated result in `docs/deployment.md`. Complete only if T067 could not run it
 
 **Checkpoint**: US5 complete or honestly reported.
 

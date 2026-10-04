@@ -40,7 +40,19 @@ Optional offline media storage: `docker compose --profile offline up` adds the `
 
 ### Verified run
 
-**NOT VERIFIED — Docker unavailable where this was implemented.** Nothing in this section was run. The steps above, the smoke script and the backup commands in §4 have not been executed against a real stack. The smoke script bundle builds (`pnpm build:smoke`) and imports nothing from `next/*`; that is all that was checked. Run quickstart §7 on a machine with Docker and record the commands, results and date here.
+**Verified on 2026-10-04** on macOS (Docker Desktop, behind a TLS-intercepting proxy), from a clean `git clone` of branch `010-hardening-deployment` at `5e62266`, with `.env` from `.env.example` plus generated `BETTER_AUTH_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `TICK_SECRET`, `MOCK_PROVIDER_ENABLED=true` and `BOOTSTRAP_ADMIN_*`.
+
+| Step | Command | Result |
+|---|---|---|
+| Build | `docker build --secret id=extra_ca,src=<pem> -t docket:local .` (proxy CA, decision 12) | exit 0 |
+| Start | `docker compose up -d --no-build` | exit 0; `postgres` healthy, `web` healthy, `worker` running |
+| Smoke | `docker compose run --rm -T worker node scripts/smoke.mjs` | all 10 steps ✓ (health, user, project, mock account, publish now, worker publishes, scheduler health 0 s, security headers, tick 401 without secret, cross-origin POST 403) |
+| Backup | `docker compose exec -T postgres pg_dump -U docket -d docket -Fc > docket.dump` | exit 0, 131 KB |
+| Restore | `stop web worker`; `pg_restore -U docket -d docket --clean --if-exists < docket.dump`; `start web worker` | all exit 0; web healthy again |
+| Smoke again | same smoke command | all 10 steps ✓ |
+| Tear down | `docker compose down -v` | exit 0 |
+
+Not covered by this run: the smoke script does not list the post created by the first run, so "data survived the restore" is shown only by `pg_restore` exiting 0 and the app coming back healthy; the browser CSP-console check of the shipped screens (quickstart §6, U5) and the manual UI walkthrough were **not run**.
 
 ## 4. Backups and restore
 
@@ -58,7 +70,7 @@ docker compose exec -T postgres pg_restore -U docket -d docket --clean --if-exis
 docker compose start web worker
 ```
 
-(Not run — see "Verified run" above.)
+(Run 2026-10-04 — see "Verified run" above.)
 
 Also keep, somewhere safe and separate from the dump:
 
