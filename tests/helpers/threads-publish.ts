@@ -21,6 +21,8 @@ export interface ThreadsSetupOptions {
   text?: string;
   /** Number of JPEG images attached to the post (0, 1 or N). */
   imageCount?: number;
+  /** Width of each JPEG (default 400+index); above 1440 the Threads variant is a downscale. */
+  imageWidth?: number;
   /** When the token expires; default 30 days after `Date.now()`. */
   expiresAt?: Date;
   /** When the token was issued; default now. */
@@ -55,7 +57,8 @@ export async function threadsSetup(storage: MemoryStorage, opts: ThreadsSetupOpt
   const repos = createSchedulingRepos(testDb(), projectId);
   const ids: string[] = [];
   for (let i = 0; i < imageCount; i++) {
-    const body = await jpeg(400 + i, 300);
+    const w = opts.imageWidth ?? 400 + i;
+    const body = await jpeg(w, 300);
     const key = `projects/${projectId}/media/${i}/original`;
     await storage.put(key, body, "image/jpeg");
     const asset = await repos.media.insert({
@@ -63,7 +66,7 @@ export async function threadsSetup(storage: MemoryStorage, opts: ThreadsSetupOpt
       publicUrl: storage.publicUrl(key),
       mimeType: "image/jpeg",
       byteSize: body.length,
-      width: 400 + i,
+      width: w,
       height: 300,
     });
     ids.push(asset.id);
