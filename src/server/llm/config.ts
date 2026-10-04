@@ -61,3 +61,27 @@ export function parseLlmConfig(
   if (problems.length > 0) return { ok: false, problems };
   return { ok: true, config: { provider, model, apiKey, timeoutMs: timeoutSeconds * 1000, maxOutputTokens } };
 }
+
+export const LLM_VARIABLES: readonly string[] = [
+  "LLM_PROVIDER",
+  "LLM_MODEL",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "LLM_TIMEOUT_SECONDS",
+  "LLM_MAX_OUTPUT_TOKENS",
+];
+
+/**
+ * Strict wrapper for startup (research D25). A wholly absent group is not an issue (generation is
+ * disabled); setting any variable of the group without `LLM_PROVIDER`, or a malformed or
+ * incomplete provider setup, is. Names and reasons only, never values.
+ */
+export function llmEnvIssues(source: Source): EnvIssue[] {
+  const anySet = LLM_VARIABLES.some((n) => Boolean(source[n]?.trim()));
+  if (!anySet) return [];
+  if (!source.LLM_PROVIDER?.trim()) {
+    return [{ name: "LLM_PROVIDER", reason: "required when any LLM_* or *_API_KEY variable is set" }];
+  }
+  const r = parseLlmConfig(source);
+  return r.ok ? [] : r.problems;
+}

@@ -126,14 +126,14 @@
 **Goal**: one validator before migrations in every entry point; `.env.example` complete and checked.
 **Independent test**: `pnpm vitest run tests/lint/env-coverage.test.ts tests/startup src/server/startup src/server/env.test.ts`.
 
-- [ ] T054 [P] [US4] Write `src/server/startup/validate.test.ts`: missing required variable, malformed value, partly-set optional group — all problems listed at once by name and reason with no secret values; wholly absent optional group disables the feature with one log line (FR-031, FR-032)
-- [ ] T055 [P] [US4] Write `tests/startup/prestart.test.ts`: validation runs before migrate and exit happens without migrating; and a test for `DATABASE_URL_DIRECT=""` falling back (empty means unset, FR-033)
-- [ ] T056 [US4] Extend `src/server/env.ts` (NODE_ENV, PORT, HOSTNAME, `ENV_VARIABLES`, `directUrlOf`) and `src/server/llm/config.ts` (`llmEnvIssues`, `LLM_VARIABLES`); create `src/server/config-registry.ts` with `INTERNAL_VARIABLES` and `COMPOSE_ONLY_VARIABLES` (D25, D26)
-- [ ] T057 [US4] Implement `validateConfiguration` in `src/server/startup/validate.ts` and make `runStartup` (`src/server/startup/index.ts`), `src/worker.ts` and `scripts/prestart.mjs` use it before any migration; add `--external:sharp` to `build:prestart` in `package.json`; log the reversal of 007 change 6 in `docs/decisions.md`
-- [ ] T058 [P] [US4] Switch `drizzle.config.ts` and `tests/setup/global-setup.ts` to `||` for empty-means-unset (D28)
-- [ ] T059 [US4] Write `tests/lint/env-coverage.test.ts`: static scan of `src/**`, `scripts/**`, `drizzle.config.ts`, `next.config.ts`, `docker-compose.yml` for every variable read; fail if missing from `.env.example` or the validator/registry; also fail on real-looking secrets in `.env.example` (D27, SC-007)
-- [ ] T060 [US4] Rewrite `.env.example` per contracts/docs-and-config.md §1: grouped by feature, each variable with description, required/optional, default and safe example
-- [ ] T061 [US4] Run `pnpm vitest run tests/lint tests/startup src/server/startup src/server/env.test.ts src/server/llm` and `pnpm tsc --noEmit`
+- [x] T054 [P] [US4] Write `src/server/startup/validate.test.ts`: missing required variable, malformed value, partly-set optional group — all problems listed at once by name and reason with no secret values; wholly absent optional group disables the feature with one log line (FR-031, FR-032)
+- [x] T055 [P] [US4] Write `tests/startup/prestart.test.ts`: validation runs before migrate and exit happens without migrating; and a test for `DATABASE_URL_DIRECT=""` falling back (empty means unset, FR-033)
+- [x] T056 [US4] Extend `src/server/env.ts` (NODE_ENV, PORT, HOSTNAME, `ENV_VARIABLES`, `directUrlOf`) and `src/server/llm/config.ts` (`llmEnvIssues`, `LLM_VARIABLES`); create `src/server/config-registry.ts` with `INTERNAL_VARIABLES` and `COMPOSE_ONLY_VARIABLES` (D25, D26)
+- [x] T057 [US4] Implement `validateConfiguration` in `src/server/startup/validate.ts` and make `runStartup` (`src/server/startup/index.ts`), `src/worker.ts` and `scripts/prestart.mjs` use it before any migration; add `--external:sharp` to `build:prestart` in `package.json`; log the reversal of 007 change 6 in `docs/decisions.md`
+- [x] T058 [P] [US4] Switch `drizzle.config.ts` and `tests/setup/global-setup.ts` to `||` for empty-means-unset (D28)
+- [x] T059 [US4] Write `tests/lint/env-coverage.test.ts`: static scan of `src/**`, `scripts/**`, `drizzle.config.ts`, `next.config.ts`, `docker-compose.yml` for every variable read; fail if missing from `.env.example` or the validator/registry; also fail on real-looking secrets in `.env.example` (D27, SC-007)
+- [x] T060 [US4] Rewrite `.env.example` per contracts/docs-and-config.md §1: grouped by feature, each variable with description, required/optional, default and safe example
+- [x] T061 [US4] Run `pnpm vitest run tests/lint tests/startup src/server/startup src/server/env.test.ts src/server/llm` and `pnpm tsc --noEmit`
 
 **Checkpoint**: US4 complete.
 

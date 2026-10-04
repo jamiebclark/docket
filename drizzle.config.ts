@@ -1,7 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 
 // Only needs a database URL, so CI with just DATABASE_URL works.
-const url = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL;
+const url = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
 
 if (!url) {
   throw new Error(

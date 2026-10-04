@@ -138,31 +138,35 @@ describe("runStartup", () => {
     expect(logs.join("\n")).toContain("skipped (accounts exist)");
   });
 
-  it("logs a disabled-generation line and continues when the LLM settings are unset or incomplete", async () => {
+  it("logs one generation-off line when the group is wholly unset and carries on", async () => {
     const unset = deps();
     await expect(runStartup(unset.d)).resolves.toBeUndefined();
-    expect(unset.logs.join("\n")).toContain("Docket: generation disabled (LLM_PROVIDER: not set; generation is disabled)");
-
-    const partial = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk-SECRETVALUE" } });
-    await expect(runStartup(partial.d)).resolves.toBeUndefined();
-    const out = partial.logs.join("\n");
-    expect(out).toContain("generation disabled (LLM_MODEL: required when LLM_PROVIDER=openai)");
-    expect(out).not.toContain("SECRETVALUE");
+    expect(unset.logs.filter((l) => l.includes("generation is off"))).toHaveLength(1);
   });
 
-  it("names an unknown provider and a missing Anthropic key, and keeps going", async () => {
-    const unknown = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "gemini" } });
-    await expect(runStartup(unknown.d)).resolves.toBeUndefined();
-    expect(unknown.logs.join("\n")).toContain("generation disabled (LLM_PROVIDER: must be openai or anthropic)");
-
-    const noKey = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "anthropic", LLM_MODEL: "m" } });
-    await expect(runStartup(noKey.d)).resolves.toBeUndefined();
-    expect(noKey.logs.join("\n")).toContain("generation disabled (ANTHROPIC_API_KEY: required when LLM_PROVIDER=anthropic)");
+  it("exits 1, naming the variable and no value, for an incomplete or malformed generator setup", async () => {
+    const errors: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((m: unknown) => void errors.push(String(m)));
+    for (const env of [
+      { ...GOOD_ENV, LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk-SECRETVALUE" },
+      { ...GOOD_ENV, LLM_PROVIDER: "gemini" },
+      { ...GOOD_ENV, LLM_PROVIDER: "anthropic", LLM_MODEL: "m" },
+      { ...GOOD_ENV, ANTHROPIC_API_KEY: "sk-SECRETVALUE" },
+    ]) {
+      const { d } = deps({ env });
+      await expect(runStartup(d)).rejects.toMatchObject({ code: 1 });
+      expect(d.migrate).not.toHaveBeenCalled();
+    }
+    const out = errors.join("\n");
+    expect(out).toContain("LLM_MODEL");
+    expect(out).toContain("ANTHROPIC_API_KEY");
+    expect(out).toContain("LLM_PROVIDER");
+    expect(out).not.toContain("SECRETVALUE");
   });
 
   it("logs nothing about generation when it is configured", async () => {
     const ok = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "openai", LLM_MODEL: "m", OPENAI_API_KEY: "sk-x" } });
     await runStartup(ok.d);
-    expect(ok.logs.join("\n")).not.toContain("generation disabled");
+    expect(ok.logs.join("\n")).not.toContain("generation is off");
   });
 });
