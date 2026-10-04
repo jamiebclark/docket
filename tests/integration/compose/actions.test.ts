@@ -4,7 +4,14 @@ vi.mock("@/server/auth/session", async () => (await import("../../helpers/action
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
-import { addToQueueAction, previewQueueAction, saveDraftAction } from "../../../src/app/p/[projectSlug]/compose/actions";
+import {
+  addToQueueAction,
+  previewExplicitTimeAction,
+  previewQueueAction,
+  publishNowAction,
+  saveDraftAction,
+  scheduleAtAction,
+} from "../../../src/app/p/[projectSlug]/compose/actions";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { actAs, refreshCalls } from "../../helpers/actions";
@@ -81,5 +88,45 @@ describe("compose actions", () => {
     const queued = await atTime(new Date("2026-10-01T12:00:00Z"), () => addToQueueAction(t.slug, { postId }));
     expect(queued).toMatchObject({ ok: true });
     expect((queued as { data: { ok: boolean; code?: string }[] }).data[0]).toMatchObject({ ok: false, code: "validation" });
+  });
+
+  it("previews, schedules at and publishes now, and refuses a past time per target", async () => {
+    const t = await setup();
+    actAs(t.env.editor);
+    const saved = await saveDraftAction(t.slug, { baseText: "hi", mediaIds: [], targets: [{ accountId: t.account.id }] });
+    const postId = (saved as { data: { postId: string } }).data.postId;
+    const NOW = new Date("2026-10-01T12:00:00Z");
+    const preview = await atTime(NOW, () => previewExplicitTimeAction(t.slug, { local: "2026-10-05T09:30" }));
+    expect(preview).toMatchObject({ ok: true, data: { kind: "exact", inPast: false } });
+
+    const past = await atTime(NOW, () => scheduleAtAction(t.slug, { postId, at: "2026-09-01T00:00:00.000Z" }));
+    expect(past).toMatchObject({ ok: true });
+    expect((past as { data: { ok: boolean; code?: string }[] }).data[0]).toMatchObject({ ok: false, code: "in_past" });
+
+    refreshCalls.count = 0;
+    const at = (preview as { data: { instant: string } }).data.instant;
+    const scheduled = await atTime(NOW, () => scheduleAtAction(t.slug, { postId, at }));
+    expect((scheduled as { data: { ok: boolean }[] }).data[0]).toMatchObject({ ok: true });
+    expect(refreshCalls.count).toBe(1);
+
+    const now = await atTime(NOW, () => publishNowAction(t.slug, { postId }));
+    expect((now as { data: { ok: boolean }[] }).data[0]).toMatchObject({ ok: true });
+  });
+
+  it("refuses content edits once a target has started publishing", async () => {
+    const t = await setup();
+    actAs(t.env.editor);
+    const saved = await saveDraftAction(t.slug, { baseText: "hi", mediaIds: [], targets: [{ accountId: t.account.id }] });
+    const postId = (saved as { data: { postId: string } }).data.postId;
+    const [target] = await t.env.scope.targets.listForPost(postId);
+    await t.env.scope.targets.update(target!.id, {
+      status: "publishing",
+      scheduleKind: "now",
+      scheduledAt: new Date("2026-10-01T12:00:00Z"),
+      nextAttemptAt: new Date("2026-10-01T12:00:00Z"),
+    });
+    const edit = await saveDraftAction(t.slug, { postId, baseText: "changed", mediaIds: [], targets: [{ accountId: t.account.id }] });
+    expect(edit.ok).toBe(false);
+    expect((await t.env.scope.posts.get(postId))?.baseText).toBe("hi");
   });
 });

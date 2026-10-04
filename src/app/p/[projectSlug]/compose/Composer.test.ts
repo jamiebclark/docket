@@ -87,6 +87,18 @@ describe("Composer", () => {
     expect(html).not.toContain("over the limit");
   });
 
+  it("shows adaptation notes and per-image alt indicators in the preview", async () => {
+    const t = target({
+      issues: [{ severity: "info", code: "media_will_convert", message: "Image 1 will be converted to JPEG.", field: "media" }],
+    });
+    const mv = (id: string, altText: string) =>
+      ({ id, thumbnailUrl: "/t.png", publicUrl: "/o.png", mimeType: "image/png", width: 1, height: 1, byteSize: 1, altText, missingAlt: !altText, tags: [], inUse: false, originalFilename: null }) as never;
+    const html = render({ check: await checked(result([t])), initialMedia: [mv("m1", "a cat"), mv("m2", "")] });
+    expect(html).toContain("Image 1 will be converted to JPEG.");
+    expect(html).toContain("Image 1: has alt text");
+    expect(html).toContain("no alt text");
+  });
+
   it("flips to the error state when count exceeds the limit, and disables scheduling with the reason", async () => {
     const over = target({
       count: 301,

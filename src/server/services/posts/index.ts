@@ -15,7 +15,9 @@ import { loadTargetContent, validateTargetContent } from "./validate";
 import { applyDerivedStatus } from "./status";
 
 export { applyDerivedStatus, derivePostStatus } from "./status";
-export { checkComposition, type CompositionCheck, type TargetCheck } from "./compose";
+export { excerptOf, listPosts, POSTS_PAGE_SIZE, type PostList, type PostListItem } from "./list";
+export { getPostView, type AttemptView, type PostView, type PostViewMedia, type PostViewTarget } from "./view";
+export { checkComposition, previewExplicitTime, type CompositionCheck, type ExplicitTimePreview, type TargetCheck } from "./compose";
 
 export type TargetFailureCode =
   | "no_active_slots"
@@ -197,7 +199,7 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
     need(tx, { post: ["edit"] });
     const now = await clock.now();
     for (const target of parsed.targets) if (!(await tx.accounts.get(target.accountId))) throw new NotFoundError();
-    if ((await tx.media.getMany(parsed.mediaIds)).length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
+    if ((await tx.media.lockShared(parsed.mediaIds)).length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
     const post = await tx.posts.insert({
       baseText: parsed.baseText,
       createdByUserId: tx.membership.userId,
@@ -239,7 +241,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
       });
     }
     if (patch.mediaIds) {
-      if ((await tx.media.getMany(patch.mediaIds)).length !== new Set(patch.mediaIds).size) throw new NotFoundError();
+      if ((await tx.media.lockShared(patch.mediaIds)).length !== new Set(patch.mediaIds).size) throw new NotFoundError();
       await tx.posts.setMedia(id, patch.mediaIds);
       await tx.media.markUsed(patch.mediaIds, now);
     }

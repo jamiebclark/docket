@@ -34,3 +34,35 @@ export async function addToQueueAction(
   if (result.ok) refresh();
   return result;
 }
+
+type Scheduled = Awaited<ReturnType<typeof posts.scheduleAt>>;
+type ExplicitPreview = Awaited<ReturnType<typeof posts.previewExplicitTime>>;
+
+export async function previewExplicitTimeAction(slug: string, input: unknown): Promise<ActionResult<ExplicitPreview>> {
+  return runAction(slug, (scope) => posts.previewExplicitTime(scope, input));
+}
+
+/** `at` is an ISO instant, normally the `instant` from `previewExplicitTimeAction`. */
+export async function scheduleAtAction(
+  slug: string,
+  input: { postId: string; at: string; targetIds?: string[] },
+): Promise<ActionResult<Scheduled>> {
+  const result = await runAction(slug, (scope) => {
+    const { postId, ...rest } = input ?? ({} as typeof input);
+    return posts.scheduleAt(scope, postId, rest);
+  });
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function publishNowAction(
+  slug: string,
+  input: { postId: string; targetIds?: string[] },
+): Promise<ActionResult<Scheduled>> {
+  const result = await runAction(slug, (scope) => {
+    const { postId, ...rest } = input ?? ({} as typeof input);
+    return posts.publishNow(scope, postId, rest);
+  });
+  if (result.ok) refresh();
+  return result;
+}

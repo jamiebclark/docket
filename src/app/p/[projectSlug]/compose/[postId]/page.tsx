@@ -4,6 +4,7 @@ import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { getStorage } from "@/server/storage";
 import * as accounts from "@/server/services/accounts";
+import * as media from "@/server/services/media";
 import * as posts from "@/server/services/posts";
 import { Composer } from "../Composer";
 
@@ -23,6 +24,10 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
     throw error;
   }
   const list = await accounts.listAccounts(scope);
+  // Deleted images drop out of the picker; the next save removes them from the post.
+  const initialMedia = (await Promise.all(detail.mediaIds.map((id) => media.getMedia(scope, id).catch(() => null)))).filter(
+    (m) => m !== null,
+  );
   const live = detail.targets.filter((t) => t.status !== "cancelled");
   return (
     <Composer
@@ -39,6 +44,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
       canEdit={scope.can({ post: ["edit"] })}
       canSchedule={scope.can({ post: ["schedule"] })}
       mediaEnabled={getStorage() !== null}
+      initialMedia={initialMedia}
       initial={{
         postId: detail.post.id,
         baseText: detail.post.baseText,

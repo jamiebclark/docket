@@ -1,11 +1,15 @@
+import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import { countText } from "@/providers/text";
 import type { PostType, TextCountingRule, ValidationIssue } from "@/providers/types";
 import { inferPostType } from "@/providers/validation";
 import { postInputSchema } from "@/lib/validation/scheduling";
+import * as clock from "../../dal/clock";
 import { ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
+import { nearQueuedWarnings, type Warning } from "../queue";
+import { resolveLocalDateTime } from "../queue/occurrences";
 import { validateTargetContent } from "./validate";
 
 const STARTED = ["publishing", "published", "ambiguous"] as const;
@@ -79,4 +83,53 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
     });
   }
   return { targets, editable, reviewBlocked };
+}
+
+const explicitSchema = z.object({
+  /** Wall-clock `YYYY-MM-DDTHH:MM` in the project's zone. */
+  local: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+  accountIds: z.array(z.uuid()).max(50).default([]),
+  postId: z.uuid().optional(),
+});
+
+export interface ExplicitTimePreview {
+  /** `gap`: the typed time does not exist that day; `overlap`: it happens twice and the earlier is used. */
+  kind: "exact" | "gap" | "overlap";
+  instant: string;
+  /** The wall-clock time the post will actually go out, in the project zone. */
+  resolvedLocal: string;
+  inPast: boolean;
+  warnings: Warning[];
+}
+
+/** What a typed local time becomes in the project zone, and whether it is in the past or near a queued post. Writes nothing; warnings never block. */
+export async function previewExplicitTime(scope: ProjectScope, input: unknown): Promise<ExplicitTimePreview> {
+  const parsed = explicitSchema.parse(input);
+  if (!scope.can({ post: ["view"] })) throw new ForbiddenError();
+  const zone = scope.project.timezone;
+  let typed: Temporal.PlainDateTime;
+  try {
+    typed = Temporal.PlainDateTime.from(parsed.local);
+  } catch {
+    throw new z.ZodError([{ code: "custom", path: ["local"], message: "Enter a valid date and time." }]);
+  }
+  const instant = resolveLocalDateTime(zone, parsed.local);
+  const zoned = instant.toZonedDateTimeISO(zone);
+  const plain = zoned.toPlainDateTime();
+  let kind: ExplicitTimePreview["kind"] = "exact";
+  if (!plain.equals(typed)) kind = "gap";
+  else if (typed.toZonedDateTime(zone, { disambiguation: "later" }).epochMilliseconds !== instant.epochMilliseconds) kind = "overlap";
+
+  const when = new Date(instant.epochMilliseconds);
+  const warnings: Warning[] = [];
+  for (const accountId of new Set(parsed.accountIds)) {
+    warnings.push(...(await nearQueuedWarnings(scope, accountId, when)));
+  }
+  return {
+    kind,
+    instant: when.toISOString(),
+    resolvedLocal: plain.toString({ smallestUnit: "minute" }),
+    inPast: when.getTime() <= (await clock.now()).getTime(),
+    warnings,
+  };
 }

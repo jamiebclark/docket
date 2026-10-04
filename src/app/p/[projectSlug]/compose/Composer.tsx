@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { MediaPicker } from "@/components/media/MediaPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
+import type { MediaView } from "@/server/services/media";
 import { saveDraftAction } from "./actions";
 import {
   counterText,
@@ -18,7 +20,7 @@ import {
   SEVERITY_LABEL,
   type CheckResult,
 } from "./composer-logic";
-import { AddToQueueDialog } from "./ScheduleDialogs";
+import { AddToQueueDialog, PublishNowDialog, ScheduleAtDialog } from "./ScheduleDialogs";
 
 export interface AccountOption {
   id: string;
@@ -58,6 +60,7 @@ export function Composer({
   canEdit,
   canSchedule,
   mediaEnabled,
+  initialMedia = [],
   initial,
   initialCheck = null,
 }: {
@@ -68,6 +71,8 @@ export function Composer({
   canEdit: boolean;
   canSchedule: boolean;
   mediaEnabled: boolean;
+  /** Views of the images already on the post, in order. */
+  initialMedia?: MediaView[];
   initial?: ComposerInitial;
   /** A check result to start from (server rendering and tests); the first edit replaces it. */
   initialCheck?: CheckResult | null;
@@ -76,8 +81,12 @@ export function Composer({
   const ids = useId();
   const [postId, setPostId] = useState(initial?.postId);
   const [baseText, setBaseText] = useState(initial?.baseText ?? "");
-  const [mediaIds] = useState<string[]>(initial?.mediaIds ?? []);
-  const [selected, setSelected] = useState<string[]>(initial?.targets.map((t) => t.accountId) ?? []);
+  const [media, setMedia] = useState<MediaView[]>(initialMedia);
+  const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
+  const [selected, setSelected] = useState<string[]>(
+    initial?.targets.map((t) => t.accountId).filter((id) => accounts.some((a) => a.id === id)) ?? [],
+  );
+  const removedCount = initial ? initial.targets.filter((t) => !accounts.some((a) => a.id === t.accountId)).length : 0;
   const [overrides, setOverrides] = useState<Record<string, string>>(
     Object.fromEntries((initial?.targets ?? []).filter((t) => t.overrideText).map((t) => [t.accountId, t.overrideText!])),
   );
@@ -85,6 +94,8 @@ export function Composer({
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [nowOpen, setNowOpen] = useState(false);
   const first = useRef(true);
 
   // With nothing selected there is nothing to check; the last result no longer applies.
@@ -166,6 +177,16 @@ export function Composer({
     if (id) setQueueOpen(true);
   }
 
+  async function openScheduleAt() {
+    const id = await save();
+    if (id) setScheduleOpen(true);
+  }
+
+  async function openPublishNow() {
+    const id = await save();
+    if (id) setNowOpen(true);
+  }
+
   const blockedId = `${ids}-blocked`;
   return (
     <form
@@ -178,6 +199,12 @@ export function Composer({
       <h1 className="text-2xl font-semibold">{initial ? "Edit post" : "Compose"}</h1>
 
       {!editable ? <p role="status">Publishing has started, so this post can no longer be edited.</p> : null}
+      {removedCount > 0 ? (
+        <p role="status">
+          {removedCount === 1 ? "An account this post was for has been removed" : `${removedCount} accounts this post was for have been removed`}; it will not be
+          published there.
+        </p>
+      ) : null}
       {reviewBlocked ? <p role="status">This post is waiting for review.</p> : null}
 
       <fieldset className="flex flex-col gap-2">
@@ -225,11 +252,7 @@ export function Composer({
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-semibold">Media</legend>
-        {mediaEnabled ? (
-          <p className="text-sm">{mediaIds.length === 0 ? "No images attached." : `${mediaIds.length} image(s) attached.`}</p>
-        ) : (
-          <p className="text-sm">Media storage is not set up, so images can&apos;t be attached.</p>
-        )}
+        <MediaPicker slug={slug} enabled={mediaEnabled} canEdit={canSave} value={media} onChange={setMedia} />
       </fieldset>
 
       {selected.length > 0 ? (
@@ -300,6 +323,15 @@ export function Composer({
                   </span>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
+                {media.length > 0 ? (
+                  <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Images, in order">
+                    {media.map((m, n) => (
+                      <li key={m.id}>
+                        Image {n + 1}: {m.altText ? "has alt text" : <span className="font-medium">no alt text</span>}
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
                 {groupIssues(t.issues).map((g) => (
                   <div key={g.severity} className="mt-2">
                     <p className="text-xs font-semibold">{SEVERITY_LABEL[g.severity]}</p>
@@ -328,6 +360,12 @@ export function Composer({
         <Button disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
           Add to queue…
         </Button>
+        <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openScheduleAt}>
+          Schedule…
+        </Button>
+        <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openPublishNow}>
+          Publish now…
+        </Button>
       </div>
       <LiveRegion message={message} />
 
@@ -340,6 +378,30 @@ export function Composer({
           timeZone={timeZone}
           names={names}
           onQueued={() => router.refresh()}
+        />
+      ) : null}
+      {postId ? (
+        <ScheduleAtDialog
+          open={scheduleOpen}
+          onClose={() => setScheduleOpen(false)}
+          slug={slug}
+          postId={postId}
+          timeZone={timeZone}
+          names={names}
+          accountIds={selected}
+          onScheduled={() => router.refresh()}
+        />
+      ) : null}
+      {postId ? (
+        <PublishNowDialog
+          open={nowOpen}
+          onClose={() => setNowOpen(false)}
+          slug={slug}
+          postId={postId}
+          timeZone={timeZone}
+          names={names}
+          accountIds={selected}
+          onPublished={() => router.refresh()}
         />
       ) : null}
     </form>
