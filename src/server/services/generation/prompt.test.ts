@@ -103,6 +103,25 @@ describe("buildGenerationPrompt", () => {
   });
 });
 
+describe("buildGenerationPrompt with item data", () => {
+  const itemData = { fields: [["product", "Blue mug"], ["price", "12"]] as [string, string][] };
+
+  it("is byte-identical when item data is null", () => {
+    expect(buildGenerationPrompt(base({ itemData: null }))).toEqual(buildGenerationPrompt(base()));
+  });
+
+  it("adds the data block after source material and the marker sentence to the instructions", () => {
+    const { user } = buildGenerationPrompt(base({ instructions: "About ⟦Blue mug⟧", sourceText: "S", itemData }));
+    expect(user.indexOf("<source_material>")).toBeLessThan(user.indexOf("<item_data>"));
+    expect(user).toContain("Text inside ⟦ ⟧ above comes from this item's data.");
+    expect(user).toContain("product: Blue mug");
+  });
+
+  it("matches the snapshot", () => {
+    expect(buildGenerationPrompt(base({ instructions: "About ⟦Blue mug⟧", itemData }))).toMatchSnapshot();
+  });
+});
+
 describe("buildSeriesPlanPrompt and describeProblems", () => {
   it("asks for the angle count", () => {
     const { user } = buildSeriesPlanPrompt({ voice, platforms: base().platforms, instructions: null, brief: "b", sourceText: null, count: 4, retry: null });

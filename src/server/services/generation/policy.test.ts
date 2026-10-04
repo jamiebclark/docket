@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { PolicyNotAllowedError } from "../../dal/errors";
 import type { ApprovalPolicy, ProjectScope, SchedulingPolicy } from "../../dal/scope";
 import { roles, type Role } from "../../auth/access";
-import { decidePolicy, resolvePolicies } from "./policy";
+import { applyApprovalPolicy, decidePolicy, resolvePolicies } from "./policy";
 
 const APPROVALS: ApprovalPolicy[] = ["review_required", "auto_approve"];
 const SCHEDULES: SchedulingPolicy[] = ["leave_as_draft", "add_to_queue"];
@@ -92,5 +92,30 @@ describe("resolvePolicies", () => {
         message: "Confirm that posts will be approved and queued without review.",
       });
     }
+  });
+});
+
+describe("applyApprovalPolicy guard", () => {
+  const post = { id: "p1", reviewState: "needs_review" };
+  const fakeScope = () => {
+    const calls: string[] = [];
+    const tx = {
+      media: {},
+      posts: { lockForUpdate: async () => (calls.push("lock"), post) },
+      targets: { lockForPost: async () => [], listForPost: async () => (calls.push("targets"), []) },
+    } as unknown as ProjectScope;
+    return { calls, scope: { ...tx, transaction: async (fn: (t: ProjectScope) => unknown) => fn(tx) } as unknown as ProjectScope };
+  };
+
+  it("runs right after the lock and aborts the policy when it throws", async () => {
+    const { calls, scope } = fakeScope();
+    const guard = async () => {
+      calls.push("guard");
+      throw new Error("job cancelled");
+    };
+    await expect(
+      applyApprovalPolicy(scope, "p1", { approval: "auto_approve", scheduling: "leave_as_draft" }, { guard }),
+    ).rejects.toThrow("job cancelled");
+    expect(calls).toEqual(["lock", "guard"]);
   });
 });
