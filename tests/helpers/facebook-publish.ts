@@ -1,0 +1,52 @@
+import { and, eq } from "drizzle-orm";
+import { postTargets } from "../../src/server/db/schema/posts";
+import { createSchedulingRepos } from "../../src/server/dal/scope";
+import { forSchedulerProject } from "../../src/server/dal/scheduler";
+import { runTick } from "../../src/server/scheduler";
+import { encryptCredentials } from "../../src/server/services/accounts";
+import { testDb } from "./db";
+import { jpeg } from "./images";
+import { createDueTarget } from "./scheduling";
+import { createProjectWithMembers } from "./factories";
+import type { MemoryStorage } from "./storage";
+
+export const PAGE_ID = "1234567890";
+export const PAGE_TOKEN = "EAAB-page-token-0123456789abcdef";
+
+/** A project with a connected Facebook Page account and one due target carrying `imageCount` JPEGs. */
+export async function facebookSetup(storage: MemoryStorage, text: string, imageCount: number) {
+  const ctx = await createProjectWithMembers();
+  const projectId = ctx.project.id;
+  const account = await forSchedulerProject(projectId).accounts.upsertConnected({
+    providerKey: "facebook",
+    displayName: "Docket Page",
+    externalAccountId: PAGE_ID,
+    settings: {},
+    credentialsEncrypted: null,
+    credentialsExpiresAt: null,
+    connectedByUserId: null,
+  });
+  await forSchedulerProject(projectId).accounts.setCredentials(account.id, encryptCredentials(account.id, { pageToken: PAGE_TOKEN }), null);
+  const { post, target } = await createDueTarget(projectId, account.id, { baseText: text });
+  const repos = createSchedulingRepos(testDb(), projectId);
+  const ids: string[] = [];
+  for (let i = 0; i < imageCount; i++) {
+    const body = await jpeg(400 + i, 300);
+    const key = `projects/${projectId}/media/${i}/original`;
+    await storage.put(key, body, "image/jpeg");
+    const asset = await repos.media.insert({
+      storageKey: key,
+      publicUrl: storage.publicUrl(key),
+      mimeType: "image/jpeg",
+      byteSize: body.length,
+      width: 400 + i,
+      height: 300,
+    });
+    ids.push(asset.id);
+  }
+  if (ids.length) await repos.posts.setMedia(post.id, ids);
+  const tick = async () => (await runTick({ config: {} })).publishing.counts;
+  const row = async () =>
+    (await testDb().select().from(postTargets).where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, target.id))))[0]!;
+  return { projectId, accountId: account.id, targetId: target.id, tick, row };
+}

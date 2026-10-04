@@ -1,10 +1,11 @@
 import { UnknownProviderError } from "./errors";
 import { blueskyProvider } from "./bluesky";
+import { facebookProvider } from "./facebook";
 import { mockProvider } from "./mock";
 import type { OAuthConnectGroup, SocialProvider } from "./types";
 
 // Adding a provider = one line here (plus its folder under src/providers/<key>/).
-export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider];
+export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider];
 
 export function findProvider(key: string): SocialProvider | undefined {
   return providers.find((p) => p.key === key);

@@ -114,13 +114,13 @@ description: "Task list for the Facebook Pages and Instagram providers (005)"
 
 **Independent Test**: real `runTick` with fake-graph publishes (a) text + URL, (b) one image, (c) three images; only the final request is `mayPublish`.
 
-- [ ] T037 [P] [US3] Implement `src/providers/facebook/capabilities.ts` and `settings.ts` per contracts/facebook.md (text + image + carousel, text-only allowed, interim R1/R2 limits as named constants, JPEG/PNG ≤ 8 MB, ≤ 10 photos, no alt text sent)
-- [ ] T038 [P] [US3] Implement `src/providers/facebook/links.ts` (first http(s) URL in the text; images take precedence over the link) with `src/providers/facebook/links.test.ts` (several URLs, trailing punctuation, none)
-- [ ] T039 [US3] Implement `src/providers/facebook/steps.ts` (pure, total `stepFor`: text → one `publish_feed`; one image → one `publish_photo`; N images → N `upload_photo` non-publishing steps then `publish_feed` with `attached_media`) with `src/providers/facebook/steps.test.ts` (malformed state, 0/1/N media, step state holds only photo ids)
-- [ ] T040 [US3] Implement `src/providers/facebook/publish.ts` (`advance` using the shared `graphRequest`, `ctx.signal`, outcome mapping per US6 table, `done` with the post id as external id, URL omitted when unknown per R5) and `index.ts` (`facebookProvider`, `oauth` strategy on the `meta` group, `validate`), with `src/providers/facebook/publish.test.ts` for success paths: text, text with link, one photo, multi-photo (mocks only, U1), request params exact
-- [ ] T041 [US3] Register `facebookProvider` in `src/providers/registry.ts` (one line) and make `registry.test.ts` pass
-- [ ] T042 [US3] Write `tests/integration/facebook/publish-e2e.test.ts` through real `runTick`: text + URL → one request with `message` and `link`; one image → photos request with URL and caption; target `published` with post id; Facebook native scheduling never used
-- [ ] T043 [P] [US3] Write `tests/integration/facebook/multi-photo.test.ts`: N photos publish within N + 1 ticks, photo ids in order in `attached_media`, a failed later step leaves nothing public and follows the outcome rules; header comment states U1 is verified with mocks only
+- [x] T037 [P] [US3] Implement `src/providers/facebook/capabilities.ts` and `settings.ts` per contracts/facebook.md (text + image + carousel, text-only allowed, interim R1/R2 limits as named constants, JPEG/PNG ≤ 8 MB, ≤ 10 photos, no alt text sent)
+- [x] T038 [P] [US3] Implement `src/providers/facebook/links.ts` (first http(s) URL in the text; images take precedence over the link) with `src/providers/facebook/links.test.ts` (several URLs, trailing punctuation, none)
+- [x] T039 [US3] Implement `src/providers/facebook/steps.ts` (pure, total `stepFor`: text → one `publish_feed`; one image → one `publish_photo`; N images → N `upload_photo` non-publishing steps then `publish_feed` with `attached_media`) with `src/providers/facebook/steps.test.ts` (malformed state, 0/1/N media, step state holds only photo ids)
+- [x] T040 [US3] Implement `src/providers/facebook/publish.ts` (`advance` using the shared `graphRequest`, `ctx.signal`, outcome mapping per US6 table, `done` with the post id as external id, URL omitted when unknown per R5) and `index.ts` (`facebookProvider`, `oauth` strategy on the `meta` group, `validate`), with `src/providers/facebook/publish.test.ts` for success paths: text, text with link, one photo, multi-photo (mocks only, U1), request params exact
+- [x] T041 [US3] Register `facebookProvider` in `src/providers/registry.ts` (one line) and make `registry.test.ts` pass
+- [x] T042 [US3] Write `tests/integration/facebook/publish-e2e.test.ts` through real `runTick`: text + URL → one request with `message` and `link`; one image → photos request with URL and caption; target `published` with post id; Facebook native scheduling never used
+- [x] T043 [P] [US3] Write `tests/integration/facebook/multi-photo.test.ts`: N photos publish within N + 1 ticks, photo ids in order in `attached_media`, a failed later step leaves nothing public and follows the outcome rules; header comment states U1 is verified with mocks only
 
 ---
 
