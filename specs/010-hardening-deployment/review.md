@@ -90,7 +90,7 @@ Neither is a runtime defect. Both make the artifact the owner is meant to trust 
 
 ## Findings
 
-- [ ] MAJOR F1 — The end-to-end secret scan does not seed or drive everything FR-020 lists, and the findings record says it does
+- [x] MAJOR F1 — The end-to-end secret scan does not seed or drive everything FR-020 lists, and the findings record says it does
       where:  tests/integration/security/secret-scan.test.ts:5-20, tests/integration/security/secret-scan.test.ts:158-279, tests/integration/security/secret-scan.test.ts:219, docs/security.md:9-10
       why:
         - **No session token.** The scan never creates a real session. It mocks `getSession` with a fake id (line 219), and the only sign-in it attempts is for a user who does not exist, so no session token is ever produced or scanned.
@@ -105,7 +105,7 @@ Neither is a runtime defect. Both make the artifact the owner is meant to trust 
         - Bring the "Secrets in …" rows of `docs/security.md` into line with what the test actually covers.
       traces: FR-020, FR-028, SC-005, US3 AS1
 
-- [ ] MAJOR F2 — About 15 limits-inventory rows cite a test that does not break that limit, and the doc test cannot notice
+- [x] MAJOR F2 — About 15 limits-inventory rows cite a test that does not break that limit, and the doc test cannot notice
       where:  docs/limits.md:22, docs/limits.md:25, docs/limits.md:31, docs/limits.md:33-37, docs/limits.md:49-51, docs/limits.md:53-54, docs/limits.md:82, docs/limits.md:85, tests/integration/limits/enforcement.test.ts:53-70, tests/integration/limits/enforcement.test.ts:86-88, tests/integration/limits/enforcement.test.ts:117, tests/integration/docs/limits-inventory.test.ts:96-101
       why:
         - **Instagram planner rows** (bytes, formats, max width, min aspect, max aspect; limits.md:33-37) cite `tests/integration/instagram/carousel.test.ts`. That file's only test publishes 2- and 4-image carousels; nothing in it is oversize, PNG, too wide or out of aspect range.
