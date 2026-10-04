@@ -462,3 +462,7 @@ Baseline before any 010 change: `pnpm tsc --noEmit` clean, `pnpm lint` 0 errors 
 - `pnpm vitest run`: 306 files passed, 1 skipped; 2579 tests passed, 1 skipped.
 - `pnpm build` (includes `build:prestart`, `build:storage-init`, `build:smoke`, `build:worker`): succeeds.
 - Not verified headlessly: Docker compose bring-up and browser checks (no Docker/browser in this run).
+
+## Release fix (2026-10-04)
+
+- `conventional-changelog-conventionalcommits` is pinned to `^9`: `@semantic-release/release-notes-generator` 14 bundles `conventional-changelog-writer` 8, and preset 10 requires writer 9+, so releases failed on every merge to `main` until this fix. *Reverse:* move to preset 10 once release-notes-generator ships writer 9.
