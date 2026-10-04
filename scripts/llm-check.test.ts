@@ -10,9 +10,15 @@ afterEach(() => setLlmForTests(null));
 describe("llm-check main()", () => {
   it("prints the measured line with an injected LLM", async () => {
     const lines: string[] = [];
-    const code = await main({ llm: createFakeLlm([{ ok: { text: "Hello" } }]), log: (l) => void lines.push(l) });
+    const ok = { ok: { text: "Hello" } };
+    const code = await main({ llm: createFakeLlm([ok, ok, ok]), log: (l) => void lines.push(l) });
     expect(code).toBe(0);
-    expect(lines).toEqual(["provider=openai model=fake-model outcome=ok latency_ms=5"]);
+    expect(lines).toEqual([
+      "provider=openai model=fake-model outcome=ok latency_ms=5",
+      "job_call kind=text outcome=ok latency_ms=5 window_ms=17000 fits=yes",
+      "job_call kind=image outcome=ok latency_ms=5 window_ms=17000 fits=yes",
+      "jobs budget_ms=20000 reserve_ms=3000 max_items_per_tick=2",
+    ]);
   });
 
   it("prints the failure kind and exits non-zero when the call fails", async () => {
