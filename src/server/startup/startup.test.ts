@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SetupUnavailableError } from "../dal/errors";
+import * as registry from "../../providers/registry";
 import { runStartup, type StartupDeps } from "./index";
 
 class ExitCalled extends Error {
@@ -45,6 +46,43 @@ describe("runStartup", () => {
     expect(out).toContain("BETTER_AUTH_SECRET");
     expect(out).not.toContain("SECRETVALUE");
     expect(d.migrate).not.toHaveBeenCalled();
+  });
+
+  it("reports a core issue and a connect-group issue together, without values", async () => {
+    const errors: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((m: unknown) => void errors.push(String(m)));
+    const group = {
+      key: "fake",
+      displayName: "Fake",
+      environment: {
+        variables: [{ name: "FAKE_APP_SECRET", secret: true, required: true }],
+        issues: (src: Record<string, string | undefined>) =>
+          src.FAKE_APP_SECRET ? [{ name: "FAKE_APP_SECRET", reason: "is too short" }] : [],
+        configured: () => false,
+      },
+    };
+    vi.spyOn(registry, "listConnectGroups").mockReturnValue([{ group: group as never, providers: [] }]);
+    const { d } = deps({
+      env: { ...GOOD_ENV, BETTER_AUTH_SECRET: "short-SECRETVALUE", FAKE_APP_SECRET: "GROUPSECRETVALUE" },
+    });
+    await expect(runStartup(d)).rejects.toMatchObject({ code: 1 });
+    const out = errors.join("\n");
+    expect(out).toContain("BETTER_AUTH_SECRET");
+    expect(out).toContain("FAKE_APP_SECRET");
+    expect(out).not.toContain("SECRETVALUE");
+    expect(d.migrate).not.toHaveBeenCalled();
+  });
+
+  it("exits 1 for a group issue alone", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const group = {
+      key: "fake",
+      displayName: "Fake",
+      environment: { variables: [], issues: () => [{ name: "FAKE_ID", reason: "is required" }], configured: () => false },
+    };
+    vi.spyOn(registry, "listConnectGroups").mockReturnValue([{ group: group as never, providers: [] }]);
+    const { d } = deps();
+    await expect(runStartup(d)).rejects.toMatchObject({ code: 1 });
   });
 
   it("skips migration when MIGRATE_ON_START=false", async () => {

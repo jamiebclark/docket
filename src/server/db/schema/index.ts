@@ -8,3 +8,4 @@ export * from "./media";
 export * from "./posts";
 export * from "./attempts";
 export * from "./scheduler";
+export * from "./connect";

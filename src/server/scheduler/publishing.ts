@@ -349,6 +349,13 @@ async function execute(
     }
   }
 
+  // G7: the platform said these credentials are dead. Fail the target with a reconnect message; no refresh, no retry.
+  const credentialsInvalidReason =
+    result!.kind === "fatal_error" && result!.credentialsInvalid ? redact(result!.error, secrets) : null;
+  if (credentialsInvalidReason !== null && result!.kind === "fatal_error") {
+    result = { ...result!, error: `Reconnect ${account.displayName} to publish: ${credentialsInvalidReason}` };
+  }
+
   const now = await clock.now();
   const outcome = applyStepResult({
     result: result!,
@@ -377,6 +384,11 @@ async function execute(
   // It only affects the account (a refusal flags `needs_reauth`); the next tick publishes with the new credentials.
   if (result!.kind === "retryable_error" && result!.credentialsExpired && provider.refreshCredentials && (await fitsDeadline())) {
     await refreshForPublish({ projectId: target.projectId, account, provider, seenCiphertext, config }).catch(() => undefined);
+  }
+  if (credentialsInvalidReason !== null) {
+    await repos.accounts
+      .markCredentialsInvalid(account.id, { expectedCiphertext: seenCiphertext, reason: credentialsInvalidReason })
+      .catch(() => console.error(`Docket: could not flag account ${account.providerKey} as needing reconnect`));
   }
   if (!applied) {
     counts.staleResults++;

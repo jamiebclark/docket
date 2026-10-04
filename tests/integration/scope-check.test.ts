@@ -3,8 +3,9 @@ import { eq } from "drizzle-orm";
 import { queryObservers, type ObservedQuery } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import { projectOwnedTables } from "../../src/server/db/project-owned";
-import { member, projects } from "../../src/server/db/schema";
+import { connectAttempts, member, projects } from "../../src/server/db/schema";
 import { claimDueTargets, claimRefreshAccounts, forSchedulerProject } from "../../src/server/dal/scheduler";
+import { createConnectAttemptsRepo } from "../../src/server/dal/connect-attempts";
 import { closeDb, testDb } from "../helpers/db";
 import { createProjectWithMembers } from "../helpers/factories";
 import { checkScope, type QueryRecord } from "../helpers/scope-check";
@@ -13,6 +14,8 @@ import { clearRecordedQueries } from "../setup/scope-recorder";
 afterAll(async () => {
   await closeDb();
 });
+
+const scopeRepo = (projectId: string) => createConnectAttemptsRepo(testDb(), projectId);
 
 async function capture(fn: () => Promise<unknown>): Promise<QueryRecord[]> {
   const seen: QueryRecord[] = [];
@@ -169,5 +172,18 @@ describe("scope check against the real client", () => {
     );
     // Everything but the two claim transactions ran pinned.
     expect(records.filter((r) => !r.crossProjectReason && /^(select|insert|update|delete)/i.test(r.sql)).length).toBeGreaterThan(20);
+  });
+
+  it("covers connect_attempts: a pinned repo passes, an unscoped query fails", async () => {
+    expect(projectOwnedTables.some((t) => t.table === "connect_attempts")).toBe(true);
+    const { project } = await createProjectWithMembers();
+    const repo = scopeRepo(project.id);
+    const records = await capture(async () => {
+      await repo.getReady(crypto.randomUUID(), { userId: crypto.randomUUID(), sessionId: crypto.randomUUID(), now: new Date() });
+    });
+    expect(checkScope(records, projectOwnedTables).violations).toEqual([]);
+    const bad = await capture(() => testDb().select().from(connectAttempts));
+    expect(checkScope(bad, projectOwnedTables).violations).toHaveLength(1);
+    clearRecordedQueries();
   });
 });

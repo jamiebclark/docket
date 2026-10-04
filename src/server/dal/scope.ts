@@ -6,6 +6,7 @@ import { member, projects } from "../db/schema";
 import { createAccountsRepo, type AccountsRepo } from "./accounts";
 import { createAttemptsRepo, type AttemptsRepo } from "./attempts";
 import { createAuditRepo, type AuditRepo } from "./audit";
+import { createConnectAttemptsRepo, type ConnectAttemptsRepo } from "./connect-attempts";
 import { ForbiddenError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
 import { createMediaRepo, type MediaRepo } from "./media";
@@ -48,6 +49,7 @@ export interface ProjectScope {
   readonly posts: PostsRepo;
   readonly targets: TargetsRepo;
   readonly attempts: AttemptsRepo;
+  readonly connectAttempts: ConnectAttemptsRepo;
   readonly projects: {
     get(): Promise<ProjectRecord | null>;
     update(patch: ProjectSettingsPatch): Promise<ProjectRecord>;
@@ -111,6 +113,7 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
     members: createMembersRepo(exec, data.project.id),
     invitations: createInvitationsRepo(exec, data.project.id),
     invitationTokens: createTokensRepo(exec, data.project.id),
+    connectAttempts: createConnectAttemptsRepo(exec, data.project.id),
     ...createSchedulingRepos(exec, data.project.id),
     projects: {
       get: () => getProject(data.project.id, exec),

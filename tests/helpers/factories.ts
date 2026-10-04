@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
-import { member, organization, projects, user } from "../../src/server/db/schema";
+import { member, organization, projects, session, user } from "../../src/server/db/schema";
 import type { Role } from "../../src/server/auth/access";
 
 // Factories write straight through the test client, so they run as deliberate cross-project work.
@@ -13,6 +13,16 @@ export async function createUser(overrides: Partial<typeof user.$inferInsert> = 
     const [row] = await getDb()
       .insert(user)
       .values({ name: `User ${n}`, email: `user-${n}@example.test`, ...overrides })
+      .returning();
+    return row!;
+  });
+}
+
+export async function createSession(userId: string) {
+  return runCrossProject("test factory", async () => {
+    const [row] = await getDb()
+      .insert(session)
+      .values({ userId, token: `tok-${unique()}${unique()}`, expiresAt: new Date(Date.now() + 3600_000) })
       .returning();
     return row!;
   });
