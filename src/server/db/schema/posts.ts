@@ -17,6 +17,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { postingSlots, socialAccounts } from "./accounts";
+import { apiKeys } from "./api";
 import { user } from "./auth";
 import { mediaAssets } from "./media";
 import { generationSeries } from "./generation";
@@ -70,6 +71,7 @@ export const posts = pgTable(
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     rejectionReason: text("rejection_reason"),
     createdByUserId: uuid("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdByApiKeyId: uuid("created_by_api_key_id"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -88,6 +90,11 @@ export const posts = pgTable(
       .on(t.seriesId, t.seriesPosition)
       .where(sql`${t.seriesId} IS NOT NULL AND ${t.deletedAt} IS NULL`),
     check("posts_series_pair", sql`(${t.seriesId} IS NULL) = (${t.seriesPosition} IS NULL)`),
+    foreignKey({
+      name: "posts_api_key_fk",
+      columns: [t.projectId, t.createdByApiKeyId],
+      foreignColumns: [apiKeys.projectId, apiKeys.id],
+    }),
     foreignKey({
       name: "posts_series_fk",
       columns: [t.projectId, t.seriesId],

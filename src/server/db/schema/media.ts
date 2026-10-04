@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { check, foreignKey, index, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { apiKeys } from "./api";
 import { user } from "./auth";
 import { projects } from "./projects";
 
@@ -25,6 +26,7 @@ export const mediaAssets = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     firstUsedAt: timestamp("first_used_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdByApiKeyId: uuid("created_by_api_key_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
@@ -32,6 +34,11 @@ export const mediaAssets = pgTable(
       .notNull(),
   },
   (t) => [
+    foreignKey({
+      name: "media_assets_api_key_fk",
+      columns: [t.projectId, t.createdByApiKeyId],
+      foreignColumns: [apiKeys.projectId, apiKeys.id],
+    }),
     check("media_assets_width_pos", sql`${t.width} > 0`),
     check("media_assets_height_pos", sql`${t.height} > 0`),
     check("media_assets_byte_size_pos", sql`${t.byteSize} > 0`),
