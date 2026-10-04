@@ -58,19 +58,19 @@ All four are small, local fixes. I would run one remediation pass and re-review 
 
 ## Findings
 
-- [ ] MAJOR F1 — The media library's "Unused" and "Missing alt text" filters always fail with "The library could not be loaded."
+- [x] MAJOR F1 — The media library's "Unused" and "Missing alt text" filters always fail with "The library could not be loaded."
       where:  src/app/p/[projectSlug]/media/page.tsx:36, src/app/p/[projectSlug]/media/page.tsx:50, src/lib/validation/media.ts:25, src/server/services/media.ts:164
       why:    The page parses search params with `mediaSearchParamsSchema` (T024), whose `flag` is `z.literal("1")`, so `?unused=1` becomes `{ unused: "1" }`. It passes that object straight to `listMedia` (T046), whose `listSchema` requires `unused`/`missingAlt` to be `boolean`. The resulting `ZodError` is caught at page.tsx:51 and shown as a load failure. This was confirmed by probe. The service tests call `listMedia({ unused: true })` directly and the picker sends booleans, so nothing exercises the page's path. The filter is the generator's future "unused images" entry point.
       owed:   Map the parsed params to the service's input in one place: either `unused: filter.unused === "1"` (and the same for `missingAlt`) in the page, or make `listMedia` accept the search-param shape. Then add a test that feeds `mediaSearchParamsSchema` output into `listMedia`.
       traces: FR-008, US3-AS5, T024/T046/T049
 
-- [ ] MAJOR F2 — The post list offers filters for only 4 of 8 post statuses, and drops any other `?status=` to "All".
+- [x] MAJOR F2 — The post list offers filters for only 4 of 8 post statuses, and drops any other `?status=` to "All".
       where:  src/app/p/[projectSlug]/posts/page.tsx:23, src/app/p/[projectSlug]/posts/page.tsx:52, src/lib/validation/media.ts:49
       why:    `FILTERS` lists All, draft, scheduled, published, failed and needs_decision. `needs_review`, `approved`, `publishing` and `partially_failed` are missing. `known` (line 52) only accepts keys from `FILTERS`, so a shared link such as `?status=partially_failed` silently shows every post. The service (`list.ts:12`) and the unused `postSearchParamsSchema` (T024) both support every status. The page re-implemented the parsing instead of using them. US6's story and independent test name "partially failed" explicitly ("filter the list by each status").
       owed:   Build the tabs and the param parsing from one list of every post status plus `needs_decision`, e.g. `POST_LIST_STATUSES` and `postSearchParamsSchema`, with counts from `list.counts`. Add a test that `?status=partially_failed` is honoured.
       traces: FR-029, US6-AS1, T071
 
-- [ ] MAJOR F3 — Publish-time media resolution is not bounded by the tick deadline, and its storage calls have no timeout.
+- [x] MAJOR F3 — Publish-time media resolution is not bounded by the tick deadline, and its storage calls have no timeout.
       where:  src/server/scheduler/publishing.ts:217, src/server/scheduler/publishing.ts:244, src/server/services/media-variants.ts:222, src/server/services/media-variants.ts:233
       why:    The deadline is checked once, before resolution (line 217). `resolvePublishMedia` then runs unbounded:
       - one `storage.exists` per image;
@@ -82,7 +82,7 @@ All four are small, local fixes. I would run one remediation pass and re-review 
       owed:   After resolution, re-check `now + providerTimeoutMs > deadline` and release the lease exactly as lines 217–231 do. Give the resolution step a time bound, for example an abort or timeout on the storage calls, or race it against the remaining budget, so a hung bucket cannot hold the tick. Add the missing "deadline respected" test: slow storage double, release, no provider call.
       traces: FR-016, Constitution "Engineering Constraints" (runTick bounded), contracts/services.md "Scheduler change", T054, T055
 
-- [ ] MAJOR F4 — 76 of the feature's files are uncommitted, against the constitution's commit-per-task workflow.
+- [x] MAJOR F4 — 76 of the feature's files are uncommitted, against the constitution's commit-per-task workflow.
       where:  specs/003-scheduler-ui-media/tasks.md:103, src/app/p/[projectSlug]/media/page.tsx:1, src/server/services/calendar.ts:1
       why:    `git status` shows 23 modified tracked files and 53 untracked files. They cover:
       - all of Phases 4–11: schedule and publish now, media screens, scheduler media, calendar, posts, accounts, offline profile and docs;
