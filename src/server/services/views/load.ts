@@ -1,13 +1,13 @@
-import type { ApiJob, ApiJobItem, ApiJobSummary, ApiPost } from "@/lib/api/schemas";
+import type { ApiJob, ApiPost } from "@/lib/api/schemas";
 import { NotFoundError } from "../../dal/errors";
-import type { JobItemRecord, JobRecord } from "../../dal/jobs";
+import type { JobRecord } from "../../dal/jobs";
 import type { PostRecord } from "../../dal/posts";
 import type { ProjectScope } from "../../dal/scope";
 import { need } from "../generation/single";
 import { toView } from "../media";
 import { getPost } from "../posts";
 import { toApiPost } from "./post";
-import { toApiJob, toApiJobItem, toApiJobSummary } from "./job";
+import { toApiJob } from "./job";
 
 /** Who made the post: the key's name, the member's display name, or "Former member". */
 async function creatorOf(scope: ProjectScope, post: PostRecord): Promise<ApiPost["createdBy"]> {
@@ -67,36 +67,4 @@ export async function loadApiJob(scope: ProjectScope, jobId: string): Promise<Ap
   if (!job) throw new NotFoundError();
   const [counts, createdBy] = await Promise.all([scope.jobItems.countByStatus(job.id), jobCreator(scope, job)]);
   return toApiJob(job, counts, createdBy);
-}
-
-export async function loadApiJobSummaries(scope: ProjectScope, rows: readonly JobRecord[]): Promise<ApiJobSummary[]> {
-  need(scope, { post: ["view"] });
-  const counts = await scope.jobs.countsFor(rows.map((r) => r.id));
-  return Promise.all(
-    rows.map(async (r) =>
-      toApiJobSummary(r, counts.get(r.id) ?? { queued: 0, running: 0, done: 0, failed: 0, cancelled: 0 }, await jobCreator(scope, r)),
-    ),
-  );
-}
-
-export async function loadApiJobItems(
-  scope: ProjectScope,
-  jobId: string,
-  opts: { status?: "queued" | "running" | "done" | "failed" | "cancelled"; limit: number; offset: number },
-): Promise<ApiJobItem[]> {
-  need(scope, { post: ["view"] });
-  const rows = await scope.jobItems.listForJob(jobId, opts);
-  return Promise.all(rows.map((row) => loadItem(scope, row)));
-}
-
-async function loadItem(scope: ProjectScope, row: JobItemRecord): Promise<ApiJobItem> {
-  const post = await scope.posts.findByJobItemId(row.id);
-  return toApiJobItem(row, post ? { id: post.id, reviewState: post.reviewState } : null);
-}
-
-export async function loadApiJobItem(scope: ProjectScope, jobId: string, itemId: string): Promise<ApiJobItem> {
-  need(scope, { post: ["view"] });
-  const row = await scope.jobItems.get(itemId);
-  if (!row || row.jobId !== jobId) throw new NotFoundError();
-  return loadItem(scope, row);
 }

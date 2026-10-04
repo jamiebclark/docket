@@ -75,6 +75,16 @@ describe("open jobs over HTTP", () => {
     for (const n of [1, 2, 3]) expect(prompts).toContain(`Widget ${n}`);
     const one = await api("GET", `/jobs/${jobId}/items/${items.json.data[0].id}`, { key: e.key });
     expect(one.status).toBe(200);
+    expect(one.json).toEqual(items.json.data[0]);
+    expect(items.json.data[0].mediaId).toBe(image.id);
+    const list = await api("GET", "/jobs?limit=100", { key: e.key });
+    expect(list.status).toBe(200);
+    expect(list.json.data.find((j: { id: string }) => j.id === jobId)).toMatchObject({
+      itemCount: 3,
+      counts: { done: 3 },
+      createdBy: { type: "api_key" },
+      startedAt: expect.any(String),
+    });
   }, 60_000);
 
   it("refuses an image reserved by another job, naming the item, and adds nothing", async () => {

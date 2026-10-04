@@ -9,6 +9,8 @@ const DB = /["'](?:@\/server\/db(?:\/[^"']*)?|(?:\.\.?\/)+(?:server\/)?db(?:\/[^
 const DAL = /["'](?:@\/server\/dal(?:\/[^"']*)?|(?:\.\.?\/)+(?:server\/)?dal(?:\/[^"']*)?)["']/;
 // Type-only imports and the error classes carry no data access.
 const DAL_ALLOWED = /^\s*import\s+type\b|\/dal\/errors["']/;
+// Repo access through the scope object the operation is handed: an import check cannot see it.
+const SCOPE_REPO = /\bscope\.(jobs|jobItems|posts|media|accounts|targets|webhooks|apiKeys)\./;
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -23,6 +25,7 @@ function importLines(file: string): string[] {
 }
 
 const strict = ["src/app/api/v1", "src/server/api/operations"].flatMap(files);
+const operations = files("src/server/api/operations");
 const pipeline = files("src/server/api");
 
 describe("public API import boundary", () => {
@@ -37,5 +40,10 @@ describe("public API import boundary", () => {
 
   it.each(strict)("%s does not import the DAL for data access", (file) => {
     expect(importLines(file).filter((l) => DAL.test(l) && !DAL_ALLOWED.test(l))).toEqual([]);
+  });
+
+  it.each(operations)("%s reaches repos only through services, never `scope.<repo>.`", (file) => {
+    const lines = readFileSync(file, "utf8").split("\n");
+    expect(lines.filter((l) => SCOPE_REPO.test(l))).toEqual([]);
   });
 });

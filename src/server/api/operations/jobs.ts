@@ -3,15 +3,18 @@ import { JobItemSchema, JobSchema, JobSummarySchema } from "@/lib/api/schemas";
 import { appendItemsSchema, apiSourceInputSchema } from "@/lib/validation/api";
 import { JOB_TEMPLATE_MAX } from "@/lib/validation/jobs";
 import { approvalPolicySchema, schedulingPolicySchema } from "@/lib/validation/policies";
-import { NotFoundError } from "../../dal/errors";
 import {
   appendItems,
   cancelJob,
   closeJob,
   createJob,
+  getJobItem,
+  listJobItems,
+  listJobs,
   retryFailedItems,
 } from "../../services/jobs";
-import { loadApiJob, loadApiJobItem, loadApiJobItems, loadApiJobSummaries } from "../../services/views/load";
+import { toApiJobItem, toApiJobSummaryFromList } from "../../services/views/job";
+import { loadApiJob } from "../../services/views/load";
 import { apiError } from "../errors";
 import { decodeCursor, pageOf, pageQuerySchema } from "../pagination";
 import { defineOperation } from "./types";
@@ -60,9 +63,9 @@ export const jobOperations = [
     async run(scope, { query }) {
       const offset = decodeCursor(query.cursor);
       if (offset === null) throw apiError("validation_failed", "The cursor is not valid.");
-      const { rows } = await scope.jobs.list({ limit: query.limit + 1, offset });
-      const page = pageOf(rows, query.limit, offset);
-      return { status: 200, body: { data: await loadApiJobSummaries(scope, page.data), nextCursor: page.nextCursor } };
+      const { items } = await listJobs(scope, { limit: query.limit + 1, offset });
+      const page = pageOf(items, query.limit, offset);
+      return { status: 200, body: { data: page.data.map(toApiJobSummaryFromList), nextCursor: page.nextCursor } };
     },
   }),
   defineOperation({
@@ -127,14 +130,13 @@ export const jobOperations = [
     async run(scope, { params, query }) {
       const offset = decodeCursor(query.cursor);
       if (offset === null) throw apiError("validation_failed", "The cursor is not valid.");
-      if (!(await scope.jobs.get(params.jobId))) throw new NotFoundError();
-      const rows = await loadApiJobItems(scope, params.jobId, {
+      const { items } = await listJobItems(scope, params.jobId, {
         ...(query.status ? { status: query.status } : {}),
         limit: query.limit + 1,
         offset,
       });
-      const page = pageOf(rows, query.limit, offset);
-      return { status: 200, body: { data: page.data, nextCursor: page.nextCursor } };
+      const page = pageOf(items, query.limit, offset);
+      return { status: 200, body: { data: page.data.map(toApiJobItem), nextCursor: page.nextCursor } };
     },
   }),
   defineOperation({
@@ -149,7 +151,7 @@ export const jobOperations = [
     responses: { 200: { description: "The item", schema: JobItemSchema }, 404: { description: "Not found" } },
     idempotent: false,
     async run(scope, { params }) {
-      return { status: 200, body: await loadApiJobItem(scope, params.jobId, params.itemId) };
+      return { status: 200, body: toApiJobItem(await getJobItem(scope, params.jobId, params.itemId)) };
     },
   }),
   defineOperation({
