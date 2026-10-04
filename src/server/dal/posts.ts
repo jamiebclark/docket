@@ -15,6 +15,7 @@ export type NewPost = Partial<
     | "schedulingPolicy"
     | "seriesId"
     | "seriesPosition"
+    | "generationJobItemId"
   >
 >;
 export type PostPatch = Partial<
@@ -63,6 +64,8 @@ export interface PostsRepo {
   findByRequestId(generationRequestId: string): Promise<PostRecord | null>;
   /** The live post written for this series angle, if any. */
   findBySeriesPosition(seriesId: string, position: number): Promise<PostRecord | null>;
+  /** The newest post written for this job item. Soft-deleted rows count only with `includeDeleted` (research D6). */
+  findByJobItemId(itemId: string, opts?: { includeDeleted?: boolean }): Promise<PostRecord | null>;
   insert(input: NewPost): Promise<PostRecord>;
   /** Excludes soft-deleted posts. */
   get(id: string): Promise<PostRecord | null>;
@@ -195,6 +198,17 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
             isNull(posts.deletedAt),
           ),
         )
+        .limit(1);
+      return row ?? null;
+    },
+    async findByJobItemId(itemId, opts) {
+      const conds = [eq(posts.projectId, projectId), eq(posts.generationJobItemId, itemId)];
+      if (!opts?.includeDeleted) conds.push(isNull(posts.deletedAt));
+      const [row] = await db
+        .select()
+        .from(posts)
+        .where(and(...conds))
+        .orderBy(desc(posts.createdAt), desc(posts.id))
         .limit(1);
       return row ?? null;
     },
