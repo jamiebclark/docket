@@ -106,9 +106,9 @@ description: "Task list for the Bluesky provider (004)"
 
 **Independent Test**: `pnpm vitest run tests/integration/bluesky/images.test.ts`
 
-- [ ] T037 [US3] Add `upload_image_<n>` to `src/providers/bluesky/publish.ts`: fetch the variant URL, check size ≤ 2,000,000 and allowed type (fatal before upload otherwise), `uploadBlob(bytes, { encoding })`, `continue` with `blob.ipld()` appended; embed built with `BlobRef.fromJsonRef`, alt text, `aspectRatio` only when both dimensions known
-- [ ] T038 [US3] Extend `publish.test.ts` with the upload rows of the outcome table (timeout/5xx/429/pre-send → retryable, 4xx → fatal, image fetch non-2xx → retryable, size/type mismatch → fatal, expired token → retryable + `credentialsExpired`) and 4-image success
-- [ ] T039 [US3] Write `tests/integration/bluesky/images.test.ts` through `runTick`: 3 images (one source > 2,000,000 bytes) publish in 4 ticks using the Bluesky variant (each upload ≤ 2,000,000 bytes), embed order/alt/aspect ratio correct; upload timeout then success re-uploads only that image and never ambiguous; upload 4xx → `failed` with no `createRecord` request; referenced-image-unknown rejection gives the "use Retry" message
+- [X] T037 [US3] Add `upload_image_<n>` to `src/providers/bluesky/publish.ts`: fetch the variant URL, check size ≤ 2,000,000 and allowed type (fatal before upload otherwise), `uploadBlob(bytes, { encoding })`, `continue` with `blob.ipld()` appended; embed built with `BlobRef.fromJsonRef`, alt text, `aspectRatio` only when both dimensions known
+- [X] T038 [US3] Extend `publish.test.ts` with the upload rows of the outcome table (timeout/5xx/429/pre-send → retryable, 4xx → fatal, image fetch non-2xx → retryable, size/type mismatch → fatal, expired token → retryable + `credentialsExpired`) and 4-image success
+- [X] T039 [US3] Write `tests/integration/bluesky/images.test.ts` through `runTick`: 3 images (one source > 2,000,000 bytes) publish in 4 ticks using the Bluesky variant (each upload ≤ 2,000,000 bytes), embed order/alt/aspect ratio correct; upload timeout then success re-uploads only that image and never ambiguous; upload 4xx → `failed` with no `createRecord` request; referenced-image-unknown rejection gives the "use Retry" message
 
 **Checkpoint**: image posts publish
 

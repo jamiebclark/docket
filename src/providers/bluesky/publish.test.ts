@@ -171,3 +171,93 @@ describe("guards", () => {
     expect(pds.requests).toHaveLength(0);
   });
 });
+
+describe("upload_image_<n>", () => {
+  const UPLOAD = "/xrpc/com.atproto.repo.uploadBlob";
+  const IMG = "https://img.test/a.jpg";
+  const BYTES = new Uint8Array([1, 2, 3, 4, 5]);
+  const blobJson = (n: number) => ({ $type: "blob", ref: { $link: CID }, mimeType: "image/jpeg", size: 5 + n });
+  const item = (over: Record<string, unknown> = {}) => ({ url: IMG, mimeType: "image/jpeg", width: 10, height: 20, bytes: 5, altText: "", ...over });
+  const uploadCtx = (n = 1, media = [item()], state: unknown = null) =>
+    ctx({ content: { text: "pics", media }, step: `upload_image_${n}`, mayPublish: false, state });
+  const routeImage = (res: Parameters<FakePds["route"]>[2] = { bytes: BYTES, headers: { "content-type": "image/jpeg" } }) => pds.route("GET", "/a.jpg", res);
+
+  it("uploads the fetched bytes with the item's content type and appends the blob", async () => {
+    routeImage();
+    pds.route("POST", UPLOAD, { json: { blob: blobJson(0) } });
+    const result = await advance(uploadCtx());
+    expect(result).toMatchObject({ kind: "continue", state: { v: 1, blobs: [blobJson(0)] }, summary: { request: { step: "upload_image_1", image: 1 } } });
+    const req = pds.callsTo("POST", UPLOAD)[0]!;
+    expect(req.headers["content-type"]).toBe("image/jpeg");
+    expect(req.headers.authorization).toBe(`Bearer ${ACCESS}`);
+    expect(Array.from(req.body as Uint8Array)).toEqual(Array.from(BYTES));
+    noSecrets(result);
+  });
+
+  it("appends to blobs already uploaded", async () => {
+    routeImage();
+    pds.route("POST", UPLOAD, { json: { blob: blobJson(1) } });
+    const media = [item(), item()];
+    const result = await advance(uploadCtx(2, media, { v: 1, blobs: [blobJson(0)] }));
+    expect(result).toMatchObject({ kind: "continue", state: { blobs: [blobJson(0), blobJson(1)] } });
+  });
+
+  it("maps upload failures", async () => {
+    const cases: [Parameters<FakePds["route"]>[2], string][] = [
+      [{ mode: "reset-mid-body" }, "retryable_error"],
+      [{ status: 503, json: { error: "Unavailable" } }, "retryable_error"],
+      [{ status: 429, headers: { "retry-after": "30" }, json: { error: "RateLimitExceeded" } }, "retryable_error"],
+      [{ mode: "pre-send-failure" }, "retryable_error"],
+      [{ status: 400, json: { error: "BlobTooLarge", message: "x" } }, "fatal_error"],
+    ];
+    for (const [script, kind] of cases) {
+      pds.reset();
+      routeImage();
+      pds.route("POST", UPLOAD, script);
+      const result = await advance(uploadCtx());
+      expect(result.kind).toBe(kind);
+      noSecrets(result);
+    }
+  });
+
+  it("flags an expired token for refresh", async () => {
+    routeImage();
+    pds.route("POST", UPLOAD, { status: 400, json: { error: "ExpiredToken", message: "x" } });
+    expect(await advance(uploadCtx())).toMatchObject({ kind: "retryable_error", credentialsExpired: true });
+  });
+
+  it("retries when the image cannot be fetched", async () => {
+    routeImage({ status: 404, text: "no" });
+    expect(await advance(uploadCtx())).toMatchObject({ kind: "retryable_error" });
+    pds.reset();
+    routeImage({ mode: "pre-send-failure" });
+    expect(await advance(uploadCtx())).toMatchObject({ kind: "retryable_error" });
+    expect(pds.callsTo("POST", UPLOAD)).toHaveLength(0);
+  });
+
+  it("is fatal, before any upload, for an oversized or wrongly typed image", async () => {
+    expect(await advance(uploadCtx(1, [item({ bytes: 2_000_001 })]))).toMatchObject({ kind: "fatal_error" });
+    expect(await advance(uploadCtx(1, [item({ mimeType: "image/webp" })]))).toMatchObject({ kind: "fatal_error" });
+    routeImage({ bytes: new Uint8Array(2_000_001) });
+    expect(await advance(uploadCtx())).toMatchObject({ kind: "fatal_error" });
+    expect(pds.callsTo("POST", UPLOAD)).toHaveLength(0);
+  });
+
+  it("uploads four images in order and then posts them with alt text", async () => {
+    routeImage();
+    let n = 0;
+    pds.route("POST", UPLOAD, () => ({ json: { blob: blobJson(n++) } }));
+    pds.route("POST", CREATE, { json: { uri: `at://${DID}/app.bsky.feed.post/3k`, cid: CID } });
+    const media = [1, 2, 3, 4].map((i) => item({ altText: `alt ${i}` }));
+    let state: unknown = null;
+    for (let i = 1; i <= 4; i++) {
+      const r = await advance(uploadCtx(i, media, state));
+      expect(r.kind).toBe("continue");
+      state = (r as { state: unknown }).state;
+    }
+    const done = await advance(ctx({ content: { text: "pics", media }, state }));
+    expect(done.kind).toBe("done");
+    const record = (pds.callsTo("POST", CREATE)[0]!.body as { record: { embed: { images: { alt: string }[] } } }).record;
+    expect(record.embed.images.map((i) => i.alt)).toEqual(["alt 1", "alt 2", "alt 3", "alt 4"]);
+  });
+});

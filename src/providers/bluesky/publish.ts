@@ -93,9 +93,41 @@ async function resolveMentions(env: Env): Promise<StepResult> {
   };
 }
 
-// Replaced by the image-upload story.
-export async function uploadImage(_env: Env): Promise<StepResult> {
-  return fatal("Image publishing is not available yet.");
+const MAX_IMAGE_BYTES = 2_000_000;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
+
+async function uploadImage(env: Env): Promise<StepResult> {
+  const { ctx, state, creds } = env;
+  const index = state.blobs.length + 1;
+  const item = ctx.content.media[index - 1];
+  const request = { step: ctx.step.name, image: index, bytes: item?.bytes ?? 0, mimeType: item?.mimeType ?? "" };
+  if (!item) return retryable("The post changed while publishing; will retry.");
+  if (!IMAGE_TYPES.has(item.mimeType)) return { ...fatal(`Image ${index} is not a type Bluesky accepts (${item.mimeType}).`), summary: { request } };
+  if (item.bytes > MAX_IMAGE_BYTES) return { ...fatal(`Image ${index} is larger than Bluesky allows (2 MB).`), summary: { request } };
+
+  let bytes: Uint8Array;
+  try {
+    const res = await globalThis.fetch(item.url, { signal: ctx.signal });
+    if (!res.ok) return { ...retryable(`Could not read image ${index} (HTTP ${res.status}); will retry.`), summary: { request } };
+    bytes = new Uint8Array(await res.arrayBuffer());
+  } catch {
+    return { ...retryable(`Could not read image ${index}; will retry.`), summary: { request } };
+  }
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return { ...fatal(`Image ${index} is larger than Bluesky allows (2 MB).`), summary: { request } };
+
+  try {
+    const res = await agentFor(env.pdsUrl, creds.accessJwt).com.atproto.repo.uploadBlob(bytes, { encoding: item.mimeType, signal: ctx.signal });
+    const blob = res.data.blob.toJSON();
+    const parsed = blueskyStateSchema.shape.blobs.unwrap().element.safeParse(blob);
+    if (!parsed.success) return { ...retryable(`Bluesky gave an unusable answer for image ${index}; will retry.`), summary: { request, response: { status: 200 } } };
+    return {
+      kind: "continue",
+      state: { ...state, blobs: [...state.blobs, parsed.data] } satisfies BlueskyState,
+      summary: { request, response: { status: 200 } },
+    };
+  } catch (err) {
+    return failed(err, "upload", request, env, index);
+  }
 }
 
 async function createPost(env: Env): Promise<StepResult> {
