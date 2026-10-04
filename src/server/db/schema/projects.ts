@@ -1,11 +1,14 @@
-import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { organization } from "./auth";
+import { voiceProfiles } from "./generation";
+import { approvalPolicy, schedulingPolicy } from "./policy-enums";
 
-export const approvalPolicy = pgEnum("approval_policy", ["review_required", "auto_approve"]);
-export const schedulingPolicy = pgEnum("scheduling_policy", ["leave_as_draft", "add_to_queue"]);
+export { approvalPolicy, schedulingPolicy };
 
 /** `id` equals `organization.id` (research D3). */
-export const projects = pgTable("projects", {
+export const projects = pgTable(
+  "projects",
+  {
   id: uuid("id")
     .primaryKey()
     .references(() => organization.id, { onDelete: "cascade" }),
@@ -23,6 +26,16 @@ export const projects = pgTable("projects", {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
-});
+  defaultVoiceProfileId: uuid("default_voice_profile_id"),
+  },
+  (t) => [
+    // Profiles are archived, never deleted, so NO ACTION; the project cascade removes both sides together.
+    foreignKey({
+      name: "projects_default_voice_profile_fk",
+      columns: [t.id, t.defaultVoiceProfileId],
+      foreignColumns: [voiceProfiles.projectId, voiceProfiles.id],
+    }),
+  ],
+);
 
 export type ProjectRow = typeof projects.$inferSelect;

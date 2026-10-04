@@ -30,6 +30,7 @@ const valid = (patch: Record<string, unknown> = {}) => ({
   timezone: "Europe/London",
   defaultApprovalPolicy: "auto_approve",
   defaultSchedulingPolicy: "add_to_queue",
+  confirmUnreviewedQueue: true,
   ...patch,
 });
 
@@ -97,5 +98,40 @@ describe("projects.updateSettings", () => {
     const err = await projectsService.updateSettings(await as(ctx, ctx.owner), valid(patch)).catch((e) => e);
     expect(err).toBeInstanceOf(ZodError);
     expect((err as ZodError).issues.some((i) => i.path[0] === field)).toBe(true);
+  });
+});
+
+describe("projects.updateSettings unreviewed-queue confirmation", () => {
+  it("refuses auto_approve + add_to_queue without confirmation, with the same message as generation", async () => {
+    const ctx = await createProjectWithMembers();
+    const err = await projectsService
+      .updateSettings(await as(ctx, ctx.owner), valid({ slug: ctx.project.slug, confirmUnreviewedQueue: false }))
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ZodError);
+    expect(err.issues[0]).toMatchObject({
+      path: ["confirmUnreviewedQueue"],
+      message: "Confirm that posts will be approved and queued without review.",
+    });
+  });
+
+  it("saves it with confirmation and still refuses an editor", async () => {
+    const ctx = await createProjectWithMembers();
+    const data = valid({ slug: ctx.project.slug, confirmUnreviewedQueue: true });
+    await projectsService.updateSettings(await as(ctx, ctx.owner), data);
+    expect((await rows(ctx.project.id)).project).toMatchObject({
+      defaultApprovalPolicy: "auto_approve",
+      defaultSchedulingPolicy: "add_to_queue",
+    });
+    await expect(projectsService.updateSettings(await as(ctx, ctx.editor), data)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it.each([
+    ["auto_approve", "leave_as_draft"],
+    ["review_required", "add_to_queue"],
+    ["review_required", "leave_as_draft"],
+  ])("needs no confirmation for %s + %s", async (a, s) => {
+    const ctx = await createProjectWithMembers();
+    const data = valid({ slug: ctx.project.slug, defaultApprovalPolicy: a, defaultSchedulingPolicy: s });
+    await expect(projectsService.updateSettings(await as(ctx, ctx.owner), data)).resolves.toBeTruthy();
   });
 });

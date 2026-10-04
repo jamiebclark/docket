@@ -37,6 +37,21 @@ describe("failFromError", () => {
     const r = failFromError(named("LastOwnerError", "Transfer ownership first."));
     expect(r).toMatchObject({ error: "last_owner", message: "Transfer ownership first." });
   });
+  it("maps LlmNotConfiguredError to conflict and keeps its message", () => {
+    const r = failFromError(named("LlmNotConfiguredError", "Generation is not configured. Set: LLM_PROVIDER."));
+    expect(r).toMatchObject({ ok: false, error: "conflict", message: "Generation is not configured. Set: LLM_PROVIDER." });
+  });
+
+  it("maps PolicyNotAllowedError to forbidden, keeps its message and field", () => {
+    const e = Object.assign(named("PolicyNotAllowedError", "Only owners and admins can auto-approve"), { field: "approval" });
+    expect(failFromError(e)).toMatchObject({
+      ok: false,
+      error: "forbidden",
+      message: "Only owners and admins can auto-approve",
+      fieldErrors: { approval: "Only owners and admins can auto-approve" },
+    });
+  });
+
   it.each([
     ["InvitationInvalidError", "invitation_invalid"],
     ["EmailMismatchError", "email_mismatch"],

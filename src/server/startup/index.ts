@@ -3,6 +3,7 @@ import { bootstrapFirstUser } from "../dal/install";
 import { SetupUnavailableError } from "../dal/errors";
 import { formatEnvIssues, parseEnv } from "../env";
 import { providerEnvIssues } from "../provider-env";
+import { parseLlmConfig } from "../llm/config";
 
 export interface StartupDeps {
   env: Record<string, string | undefined>;
@@ -34,6 +35,12 @@ export async function runStartup(overrides: Partial<StartupDeps> = {}): Promise<
     return deps.exit(1);
   }
   const env = parsed.env;
+
+  // Generation is optional: an unset or incomplete group is reported and startup carries on (never exits).
+  const llm = parseLlmConfig(deps.env);
+  if (!llm.ok) {
+    deps.log(`Docket: generation disabled (${llm.problems.map((p) => `${p.name}: ${p.reason}`).join("; ")})`);
+  }
 
   // scripts/prestart.mjs migrates before the server loads; don't repeat it.
   if (env.MIGRATE_ON_START && deps.env.DOCKET_PREMIGRATED !== "1") {

@@ -15,7 +15,10 @@ import { createSlotsRepo, type SlotsRepo } from "./slots";
 import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
 import { createMembersRepo, type MembersRepo } from "./members";
-import { getProject, updateProject, type ProjectRecord, type ProjectSettingsPatch } from "./projects";
+import { createGenerationFailuresRepo, type GenerationFailuresRepo } from "./generation-failures";
+import { createSeriesRepo, type SeriesRepo } from "./series";
+import { createVoiceProfilesRepo, createVoiceVersionsRepo, type VoiceProfilesRepo, type VoiceVersionsRepo } from "./voice";
+import { getProject, setDefaultVoiceProfile, updateProject, type ProjectRecord, type ProjectSettingsPatch } from "./projects";
 
 export type { Role, PermissionRequest };
 
@@ -35,6 +38,7 @@ export interface ProjectScope {
     timezone: string;
     defaultApprovalPolicy: ApprovalPolicy;
     defaultSchedulingPolicy: SchedulingPolicy;
+    defaultVoiceProfileId: string | null;
   };
   readonly membership: { memberId: string; userId: string; role: Role };
   can(request: PermissionRequest): boolean;
@@ -50,8 +54,13 @@ export interface ProjectScope {
   readonly targets: TargetsRepo;
   readonly attempts: AttemptsRepo;
   readonly connectAttempts: ConnectAttemptsRepo;
+  readonly voiceProfiles: VoiceProfilesRepo;
+  readonly voiceVersions: VoiceVersionsRepo;
+  readonly series: SeriesRepo;
+  readonly generationFailures: GenerationFailuresRepo;
   readonly projects: {
     get(): Promise<ProjectRecord | null>;
+    setDefaultVoiceProfile(profileId: string | null): Promise<void>;
     update(patch: ProjectSettingsPatch): Promise<ProjectRecord>;
   };
   transaction<T>(fn: (tx: ProjectScope) => Promise<T>, opts?: { lockProject?: boolean }): Promise<T>;
@@ -71,6 +80,7 @@ const projectColumns = {
   timezone: projects.timezone,
   defaultApprovalPolicy: projects.defaultApprovalPolicy,
   defaultSchedulingPolicy: projects.defaultSchedulingPolicy,
+  defaultVoiceProfileId: projects.defaultVoiceProfileId,
 };
 
 /** Resolves the caller's membership of a project. `exec` is the database or a transaction. */
@@ -114,9 +124,14 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
     invitations: createInvitationsRepo(exec, data.project.id),
     invitationTokens: createTokensRepo(exec, data.project.id),
     connectAttempts: createConnectAttemptsRepo(exec, data.project.id),
+    voiceProfiles: createVoiceProfilesRepo(exec, data.project.id),
+    voiceVersions: createVoiceVersionsRepo(exec, data.project.id),
+    series: createSeriesRepo(exec, data.project.id),
+    generationFailures: createGenerationFailuresRepo(exec, data.project.id),
     ...createSchedulingRepos(exec, data.project.id),
     projects: {
       get: () => getProject(data.project.id, exec),
+      setDefaultVoiceProfile: (profileId) => setDefaultVoiceProfile(data.project.id, profileId, exec),
       update: (patch) => updateProject(data.project.id, patch, exec),
     },
     async transaction(fn, opts) {

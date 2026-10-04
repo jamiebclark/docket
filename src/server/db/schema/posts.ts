@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -18,6 +19,8 @@ import {
 import { postingSlots, socialAccounts } from "./accounts";
 import { user } from "./auth";
 import { mediaAssets } from "./media";
+import { generationSeries } from "./generation";
+import { schedulingPolicy } from "./policy-enums";
 import { projects } from "./projects";
 
 export const postStatus = pgEnum("post_status", [
@@ -29,8 +32,9 @@ export const postStatus = pgEnum("post_status", [
   "published",
   "partially_failed",
   "failed",
+  "rejected",
 ]);
-export const postReviewState = pgEnum("post_review_state", ["draft", "needs_review", "approved"]);
+export const postReviewState = pgEnum("post_review_state", ["draft", "needs_review", "approved", "rejected"]);
 export const postOrigin = pgEnum("post_origin", ["manual", "generated", "api"]);
 export const postTargetStatus = pgEnum("post_target_status", [
   "draft",
@@ -56,6 +60,13 @@ export const posts = pgTable(
     baseText: text("base_text").default("").notNull(),
     origin: postOrigin("origin").default("manual").notNull(),
     generationMetadata: jsonb("generation_metadata"),
+    generationRequestId: uuid("generation_request_id"),
+    schedulingPolicy: schedulingPolicy("scheduling_policy"),
+    seriesId: uuid("series_id"),
+    seriesPosition: smallint("series_position"),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    rejectionReason: text("rejection_reason"),
     createdByUserId: uuid("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -67,6 +78,21 @@ export const posts = pgTable(
   (t) => [
     index("posts_project_status_idx")
       .on(t.projectId, t.status)
+      .where(sql`${t.deletedAt} IS NULL`),
+    uniqueIndex("posts_generation_request_uq")
+      .on(t.projectId, t.generationRequestId)
+      .where(sql`${t.generationRequestId} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+    uniqueIndex("posts_series_position_uq")
+      .on(t.seriesId, t.seriesPosition)
+      .where(sql`${t.seriesId} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+    check("posts_series_pair", sql`(${t.seriesId} IS NULL) = (${t.seriesPosition} IS NULL)`),
+    foreignKey({
+      name: "posts_series_fk",
+      columns: [t.projectId, t.seriesId],
+      foreignColumns: [generationSeries.projectId, generationSeries.id],
+    }),
+    index("posts_review_queue_idx")
+      .on(t.projectId, t.reviewState, t.createdAt.desc())
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );

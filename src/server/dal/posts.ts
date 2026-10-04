@@ -4,11 +4,33 @@ import { postMedia, postStatus, postTargets, posts, type PostRow, type PostTarge
 
 export type PostRecord = PostRow;
 export type NewPost = Partial<
-  Pick<typeof posts.$inferInsert, "baseText" | "origin" | "generationMetadata" | "createdByUserId" | "reviewState">
+  Pick<
+    typeof posts.$inferInsert,
+    | "baseText"
+    | "origin"
+    | "generationMetadata"
+    | "createdByUserId"
+    | "reviewState"
+    | "generationRequestId"
+    | "schedulingPolicy"
+    | "seriesId"
+    | "seriesPosition"
+  >
 >;
 export type PostPatch = Partial<
-  Pick<typeof posts.$inferInsert, "baseText" | "reviewState" | "generationMetadata">
+  Pick<
+    typeof posts.$inferInsert,
+    | "baseText"
+    | "reviewState"
+    | "generationMetadata"
+    | "schedulingPolicy"
+    | "reviewedByUserId"
+    | "reviewedAt"
+    | "rejectionReason"
+  >
 >;
+
+export const REVIEW_QUEUE_PAGE_SIZE = 50;
 
 export interface PostListFilter {
   status?: PostRecord["status"];
@@ -35,6 +57,12 @@ export interface PostsRepo {
   list(filter: PostListFilter): Promise<{ rows: PostListRow[]; total: number }>;
   /** Counts per status plus `needs_decision`, over non-deleted posts. */
   counts(): Promise<Record<PostRecord["status"] | "needs_decision", number>>;
+  /** `needs_review`, not deleted, newest first, {@link REVIEW_QUEUE_PAGE_SIZE} per page (1-based). */
+  listReviewQueue(page: number): Promise<{ rows: PostRecord[]; total: number }>;
+  /** The live post created for this client idempotency key, if any. */
+  findByRequestId(generationRequestId: string): Promise<PostRecord | null>;
+  /** The live post written for this series angle, if any. */
+  findBySeriesPosition(seriesId: string, position: number): Promise<PostRecord | null>;
   insert(input: NewPost): Promise<PostRecord>;
   /** Excludes soft-deleted posts. */
   get(id: string): Promise<PostRecord | null>;
@@ -126,6 +154,49 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
         .where(and(eq(posts.projectId, projectId), isNull(posts.deletedAt), needsDecisionExpr));
       out.needs_decision = nd?.n ?? 0;
       return out;
+    },
+    async listReviewQueue(page) {
+      const where = and(eq(posts.projectId, projectId), eq(posts.reviewState, "needs_review"), isNull(posts.deletedAt));
+      const [rows, [count]] = await Promise.all([
+        db
+          .select()
+          .from(posts)
+          .where(where)
+          .orderBy(desc(posts.createdAt), desc(posts.id))
+          .limit(REVIEW_QUEUE_PAGE_SIZE)
+          .offset((Math.max(1, page) - 1) * REVIEW_QUEUE_PAGE_SIZE),
+        db.select({ n: sql<number>`count(*)::int` }).from(posts).where(where),
+      ]);
+      return { rows, total: count?.n ?? 0 };
+    },
+    async findByRequestId(generationRequestId) {
+      const [row] = await db
+        .select()
+        .from(posts)
+        .where(
+          and(
+            eq(posts.projectId, projectId),
+            eq(posts.generationRequestId, generationRequestId),
+            isNull(posts.deletedAt),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
+    },
+    async findBySeriesPosition(seriesId, position) {
+      const [row] = await db
+        .select()
+        .from(posts)
+        .where(
+          and(
+            eq(posts.projectId, projectId),
+            eq(posts.seriesId, seriesId),
+            eq(posts.seriesPosition, position),
+            isNull(posts.deletedAt),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
     },
     async insert(input) {
       const [row] = await db

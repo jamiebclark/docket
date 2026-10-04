@@ -4,7 +4,7 @@ import type { TargetStatus as PostTargetStatus } from "../../dal/targets";
 
 type PostStatus = PostRecord["status"];
 
-type ReviewState = "draft" | "needs_review" | "approved";
+type ReviewState = "draft" | "needs_review" | "approved" | "rejected";
 
 /** FR-029. Live targets exclude `draft` and `cancelled`; `ambiguous` counts as not published. */
 export function derivePostStatus(reviewState: ReviewState, statuses: readonly PostTargetStatus[]): PostStatus {

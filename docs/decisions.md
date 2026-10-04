@@ -286,3 +286,32 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
 - **Not using `auto_publish_text`.** Every post type keeps the same two-step flow, so only `publish` is `mayPublish` and one ambiguity rule applies.
 - **Tokens in GET queries (D10).** `th_exchange_token`, `th_refresh_token`, status and quota are `GET`s with the token in the query, as 005 does for Facebook. `graphRequest` never exposes the URL and `scrub` removes `access_token=`, `client_secret=` and `code=` from anything shown or logged. Recorded as a limitation.
 - **Verified with mocks only:** live Threads connect, renewal and publishing, and the open questions **U1** (the `.net` host) and **U2** (where the token generator lives, and whether `localhost` or a non-default port is accepted in redirects). The owner performs the live check after merge and records "verified live on <date>" here.
+
+## 007 — Generator core
+
+latency: unmeasured; live path verified with mocks only.
+
+Decisions made while specifying (each reversed by editing the named code):
+
+- **Results saved immediately.** *What:* single-post results are saved as posts at generation time and the policies applied then. *Reverse:* hold results in a draft record and save on confirm.
+- **Failed validation after one retry.** *What:* the post is saved and forced into review with problems listed; an unreadable response saves nothing and records a failure. *Reverse:* change `decidePolicy` and the failure path in `generation/index.ts`.
+- **Scheduling policy remembered on the post.** *What:* `auto_approve` applies it at once; `review_required` applies it on approval. *Reverse:* drop the stored column and apply at generation only.
+- **Override asymmetry.** *What:* editors may override approval only toward `review_required`; `auto_approve` needs owner/admin (`generation: auto_approve` access statement). *Reverse:* relax the check in `resolvePolicies`.
+- **Rejected posts.** *What:* leave the queue, never scheduled, visible under a Rejected filter. *Reverse:* remove the `rejected` review state and the filter tab.
+
+Plan-level decisions:
+
+- **Alt text once per image** (research D9), under the strictest targeted limit, because alt text lives on the media asset. A generated alt text fills only an empty asset alt text; all are kept in the generation record. *Reverse:* ask per variant and store per target.
+- **Model-input image constraints** (R1) are stricter than the spec ceilings (2,000 px, 5 MB raw, 24 MB base64 per request) and are UNVERIFIED for OpenAI. *Reverse:* raise the constants in `src/server/llm/images.ts`.
+- **Failure rows store inputs, not the assembled prompt.** The prompt is rebuildable from inputs plus the recorded profile version. *Reverse:* add a prompt column.
+- **Regenerate replaces content even if edited meanwhile.** It is explicit and the earlier record is kept. *Reverse:* compare an updated-at and return a conflict.
+
+Generic changes to existing code:
+
+1. `queueTargetsInTx` extracted from `addToQueue` (behaviour unchanged). *Reverse:* inline it back.
+2. `validateTargetContent` takes `Pick<AccountRecord, "providerKey">` (type-only). *Reverse:* restore `AccountRecord`.
+3. `ensureVariant` exports get-or-build for any `MediaConstraints`. *Reverse:* delete it; provider variants do not use it.
+4. `rejected` review state, refused by `queueableGate`, plus a Posts filter tab. *Reverse:* drop the enum value (migration) and the tab.
+5. Access statements `voice` and `generation`. *Reverse:* remove from `access.ts`.
+6. Startup logs LLM problems and never fails. *Reverse:* throw from the startup check.
+7. `failFromError` keeps the messages of `LlmNotConfiguredError` and `PolicyNotAllowedError`. *Reverse:* remove the two cases.

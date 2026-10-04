@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { projectOwnedTables } from "../../src/server/db/project-owned";
 import { checkScope, type ProjectOwnedTable } from "./scope-check";
 
 const owned: ProjectOwnedTable[] = [
@@ -95,4 +96,18 @@ describe("checkScope", () => {
     ).toHaveLength(1);
     expect(run('select * from "member" where not $1 = "member"."organization_id"').violations).toHaveLength(1);
   });
+});
+
+describe("generation tables are in the project-owned registry", () => {
+  it.each(["voice_profiles", "voice_profile_versions", "generation_series", "generation_failures"])(
+    "%s: an unpinned query fails and a pinned one passes",
+    (table) => {
+      expect(projectOwnedTables.some((t) => t.table === table && t.scopeColumn === "project_id")).toBe(true);
+      const registry = [...projectOwnedTables];
+      expect(checkScope([{ sql: `select * from "${table}" where "id" = $1` }], registry).violations).toHaveLength(1);
+      expect(
+        checkScope([{ sql: `select * from "${table}" where "${table}"."project_id" = $1` }], registry).violations,
+      ).toEqual([]);
+    },
+  );
 });

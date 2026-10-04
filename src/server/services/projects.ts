@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   approvalPolicySchema,
+  CONFIRM_UNREVIEWED_QUEUE_MESSAGE,
   projectNameSchema,
   schedulingPolicySchema,
   slugSchema,
@@ -36,12 +37,18 @@ export async function get(scope: ProjectScope) {
 export const updateSettingsSchema = createProjectSchema.extend({
   defaultApprovalPolicy: approvalPolicySchema,
   defaultSchedulingPolicy: schedulingPolicySchema,
+  confirmUnreviewedQueue: z.boolean().default(false),
 });
 
 /** Owner/admin only. Throws ZodError, ForbiddenError, or ConflictError (field `slug`). */
 export async function updateSettings(scope: ProjectScope, input: unknown): Promise<{ slug: string }> {
   if (!scope.can({ project: ["update"] })) throw new ForbiddenError();
-  const patch = updateSettingsSchema.parse(input);
+  const { confirmUnreviewedQueue, ...patch } = updateSettingsSchema.parse(input);
+  if (patch.defaultApprovalPolicy === "auto_approve" && patch.defaultSchedulingPolicy === "add_to_queue" && !confirmUnreviewedQueue) {
+    throw new z.ZodError([
+      { code: "custom", path: ["confirmUnreviewedQueue"], message: CONFIRM_UNREVIEWED_QUEUE_MESSAGE, input: undefined },
+    ]);
+  }
   const project = await scope.transaction(
     (tx) => {
       if (!tx.can({ project: ["update"] })) throw new ForbiddenError();

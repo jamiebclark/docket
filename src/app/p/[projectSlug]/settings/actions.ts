@@ -25,6 +25,7 @@ export async function updateProjectSettings(
       timezone: String(formData.get("timezone") ?? ""),
       defaultApprovalPolicy: String(formData.get("defaultApprovalPolicy") ?? ""),
       defaultSchedulingPolicy: String(formData.get("defaultSchedulingPolicy") ?? ""),
+      confirmUnreviewedQueue: formData.get("confirmUnreviewedQueue") === "on",
     }));
   } catch (error) {
     if (error instanceof ZodError) return fail("validation", "Check the highlighted fields.", fieldErrorsFromZod(error));

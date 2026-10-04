@@ -15,6 +15,7 @@ describe("StatusBadge", () => {
     expect(html(createElement(StatusBadge, { status: "ambiguous" }))).toContain("Needs your decision");
     expect(html(createElement(StatusBadge, { status: "ambiguous" }))).toContain("amber");
     expect(html(createElement(StatusBadge, { status: "partially_failed" }))).toContain("Partly failed");
+    expect(html(createElement(StatusBadge, { status: "rejected" }))).toContain("Rejected");
     expect(statusLabel("something_new")).toBe("something new");
   });
 });

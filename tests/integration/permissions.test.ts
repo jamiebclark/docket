@@ -79,4 +79,20 @@ describe("permission matrix (FR-021)", () => {
     expect(() => requirePermission(editorScope, { account: ["manage"] })).toThrow(ForbiddenError);
     expect(() => requirePermission(editorScope, { slot: ["manage"] })).toThrow(ForbiddenError);
   });
+
+  it("generation matrix: editors view voice and run generation; only owners and admins manage voice and auto-approve", async () => {
+    const ctx = await createProjectWithMembers();
+    const scopeOf = async (userId: string) => forProject(fakeSession(userId), ctx.project.slug);
+    for (const who of [ctx.owner, ctx.admin, ctx.editor]) {
+      const scope = await scopeOf(who.id);
+      expect(() => requirePermission(scope, { voice: ["view"], generation: ["run"] })).not.toThrow();
+    }
+    for (const who of [ctx.owner, ctx.admin]) {
+      const scope = await scopeOf(who.id);
+      expect(() => requirePermission(scope, { voice: ["manage"], generation: ["auto_approve"] })).not.toThrow();
+    }
+    const editorScope = await scopeOf(ctx.editor.id);
+    expect(() => requirePermission(editorScope, { voice: ["manage"] })).toThrow(ForbiddenError);
+    expect(() => requirePermission(editorScope, { generation: ["auto_approve"] })).toThrow(ForbiddenError);
+  });
 });

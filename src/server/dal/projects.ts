@@ -20,6 +20,7 @@ export interface ProjectRecord extends ProjectSummary {
   timezone: string;
   defaultApprovalPolicy: (typeof projects.$inferSelect)["defaultApprovalPolicy"];
   defaultSchedulingPolicy: (typeof projects.$inferSelect)["defaultSchedulingPolicy"];
+  defaultVoiceProfileId: string | null;
 }
 
 /**
@@ -120,4 +121,13 @@ export async function updateProject(
     }
     throw error;
   }
+}
+
+/** Sets (or with `null` clears) the project's default voice profile. The service validates the profile first. */
+export async function setDefaultVoiceProfile(
+  projectId: string,
+  profileId: string | null,
+  db: Database = getDb(),
+): Promise<void> {
+  await db.update(projects).set({ defaultVoiceProfileId: profileId }).where(eq(projects.id, projectId));
 }

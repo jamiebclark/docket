@@ -137,4 +137,32 @@ describe("runStartup", () => {
     await runStartup(d);
     expect(logs.join("\n")).toContain("skipped (accounts exist)");
   });
+
+  it("logs a disabled-generation line and continues when the LLM settings are unset or incomplete", async () => {
+    const unset = deps();
+    await expect(runStartup(unset.d)).resolves.toBeUndefined();
+    expect(unset.logs.join("\n")).toContain("Docket: generation disabled (LLM_PROVIDER: not set; generation is disabled)");
+
+    const partial = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk-SECRETVALUE" } });
+    await expect(runStartup(partial.d)).resolves.toBeUndefined();
+    const out = partial.logs.join("\n");
+    expect(out).toContain("generation disabled (LLM_MODEL: required when LLM_PROVIDER=openai)");
+    expect(out).not.toContain("SECRETVALUE");
+  });
+
+  it("names an unknown provider and a missing Anthropic key, and keeps going", async () => {
+    const unknown = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "gemini" } });
+    await expect(runStartup(unknown.d)).resolves.toBeUndefined();
+    expect(unknown.logs.join("\n")).toContain("generation disabled (LLM_PROVIDER: must be openai or anthropic)");
+
+    const noKey = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "anthropic", LLM_MODEL: "m" } });
+    await expect(runStartup(noKey.d)).resolves.toBeUndefined();
+    expect(noKey.logs.join("\n")).toContain("generation disabled (ANTHROPIC_API_KEY: required when LLM_PROVIDER=anthropic)");
+  });
+
+  it("logs nothing about generation when it is configured", async () => {
+    const ok = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "openai", LLM_MODEL: "m", OPENAI_API_KEY: "sk-x" } });
+    await runStartup(ok.d);
+    expect(ok.logs.join("\n")).not.toContain("generation disabled");
+  });
 });

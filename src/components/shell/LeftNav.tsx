@@ -16,8 +16,8 @@ export const NAV_SECTIONS = [
   { slug: "settings", label: "Settings" },
 ] as const;
 
-/** Left navigation for a project; the active entry carries `aria-current="page"`. */
-export function LeftNav({ projectSlug }: { projectSlug: string }) {
+/** Left navigation for a project; the active entry carries `aria-current="page"`. Review shows how many posts wait, as text. */
+export function LeftNav({ projectSlug, reviewCount = 0 }: { projectSlug: string; reviewCount?: number }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Project" className="w-48 shrink-0 border-r border-foreground/20 p-3">
@@ -34,7 +34,7 @@ export function LeftNav({ projectSlug }: { projectSlug: string }) {
                   active ? "bg-foreground/10 font-semibold" : ""
                 }`}
               >
-                {label}
+                {slug === "review" && reviewCount > 0 ? `${label} (${reviewCount})` : label}
               </Link>
             </li>
           );

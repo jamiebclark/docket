@@ -157,6 +157,30 @@ export async function prepareVariants(
   return { failures };
 }
 
+/**
+ * Outside any transaction. The cached variant of `asset` for arbitrary `constraints` (used for model input),
+ * building it when missing. `variant: null` means the original already fits.
+ */
+export async function ensureVariant(
+  scope: Pick<Repos, "media"> & { project: { id: string } },
+  asset: MediaRow,
+  c: MediaConstraints,
+  index = 0,
+): Promise<{ ok: true; variant: VariantRow | null } | { ok: false; message: string }> {
+  const plan = planFor(asset, c, index, "the model");
+  if (plan.kind === "original") return { ok: true, variant: null };
+  if (plan.kind === "refuse") return { ok: false, message: plan.issues[0]?.message ?? "The image cannot be used." };
+  const hash = constraintsHash(c);
+  const existing = await scope.media.getVariant(asset.id, hash);
+  const storage = getStorage();
+  if (existing && (!storage || (await storage.exists(existing.storageKey).catch(() => true)))) {
+    return { ok: true, variant: existing };
+  }
+  if (!storage) return { ok: false, message: NOT_SET_UP };
+  const r = await buildVariant(scope, scope.project.id, storage, asset, c, hash, plan, existing);
+  return r.ok ? { ok: true, variant: r.row } : { ok: false, message: r.message };
+}
+
 /** Inside the gate: adapted media for one target, or issues (a missing variant row → `variant_failed`). */
 export async function adaptedMediaFor(
   tx: Pick<Repos, "media">,

@@ -57,13 +57,18 @@ export interface PostDetail {
 
 type Tx = ProjectScope;
 const uuid = z.uuid();
-const REVIEW = z.enum(["draft", "needs_review", "approved"]);
+const REVIEW = z.enum(["draft", "needs_review", "approved", "rejected"]);
 const STARTED: readonly TargetRecord["status"][] = ["publishing", "published", "ambiguous"];
 
 const createSchema = postInputSchema.extend({
   origin: z.enum(["manual", "generated", "api"]).optional(),
   generationMetadata: z.record(z.string(), z.unknown()).nullish(),
   reviewState: REVIEW.optional(),
+  // Used only by the generation service; the composer never sends them.
+  generationRequestId: uuid.optional(),
+  schedulingPolicy: z.enum(["leave_as_draft", "add_to_queue"]).nullable().optional(),
+  seriesId: uuid.optional(),
+  seriesPosition: z.number().int().min(0).max(32_000).optional(),
 });
 const patchSchema = z.object({
   baseText: baseTextSchema.optional(),
@@ -82,7 +87,7 @@ function need(scope: ProjectScope, request: Parameters<ProjectScope["can"]>[0]):
   if (!scope.can(request)) throw new ForbiddenError();
 }
 
-async function lockPost(tx: Tx, postId: string): Promise<PostRecord> {
+export async function lockPost(tx: Tx, postId: string): Promise<PostRecord> {
   const post = await tx.posts.lockForUpdate(postId);
   if (!post) throw new NotFoundError();
   // Post lock first, then the target rows: waits out a scheduler claim so later reads see its lease.
@@ -136,7 +141,7 @@ type Gate =
   | { ok: false; code: TargetFailureCode; message: string; issues?: ValidationIssue[] };
 
 /** Account usable, provider registered, validation clean (FR-024–FR-028). */
-async function gate(tx: Tx, target: TargetRecord): Promise<Gate> {
+export async function gate(tx: Tx, target: TargetRecord): Promise<Gate> {
   const account = await tx.accounts.get(target.socialAccountId);
   if (!account) return { ok: false, code: "account_unavailable", message: "That account has been removed." };
   if (account.status !== "active") {
@@ -174,6 +179,7 @@ function queueableGate(post: PostRecord, t: TargetRecord): TargetResult<never> |
   if (t.status !== "draft" && t.status !== "cancelled") {
     return fail(t, "not_queueable", "This post is already scheduled or has been published.");
   }
+  if (post.reviewState === "rejected") return fail(t, "not_queueable", "This post was rejected.");
   if (post.reviewState === "needs_review") {
     return fail(t, "not_queueable", "This post is waiting for review before it can be scheduled.");
   }
@@ -206,6 +212,9 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
       ...(parsed.origin ? { origin: parsed.origin } : {}),
       ...(parsed.generationMetadata !== undefined ? { generationMetadata: parsed.generationMetadata } : {}),
       ...(parsed.reviewState ? { reviewState: parsed.reviewState } : {}),
+      ...(parsed.generationRequestId ? { generationRequestId: parsed.generationRequestId } : {}),
+      ...(parsed.schedulingPolicy ? { schedulingPolicy: parsed.schedulingPolicy } : {}),
+      ...(parsed.seriesId ? { seriesId: parsed.seriesId, seriesPosition: parsed.seriesPosition ?? 0 } : {}),
     });
     await tx.posts.setMedia(post.id, parsed.mediaIds);
     await tx.media.markUsed(parsed.mediaIds, now);
@@ -283,9 +292,53 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
   });
 }
 
+const variantEditsSchema = z.object({
+  edits: z
+    .array(z.object({ providerKey: z.string().min(1), text: baseTextSchema }))
+    .min(1)
+    .max(50),
+});
+
+/**
+ * Sets the text of every live (draft) target of each named provider, through `updatePost`. Scheduled targets
+ * keep their text. The returned problems are the blocking issues left on those targets.
+ */
+export async function updatePostVariants(
+  scope: ProjectScope,
+  postId: string,
+  input: unknown,
+): Promise<{ detail: PostDetail; problems: { providerKey: string; targetId: string; issues: ValidationIssue[] }[] }> {
+  const id = uuid.parse(postId);
+  const { edits } = variantEditsSchema.parse(input);
+  need(scope, { post: ["edit"] });
+  const byProvider = new Map(edits.map((e) => [e.providerKey, e.text]));
+  const current = (await scope.targets.listForPost(id)).filter((t) => t.status !== "cancelled");
+  const providerOf = new Map<string, string>();
+  for (const t of current) {
+    const account = await scope.accounts.get(t.socialAccountId);
+    if (account) providerOf.set(t.id, account.providerKey);
+  }
+  const detail = await updatePost(scope, id, {
+    targets: current.map((t) => {
+      const text = t.status === "draft" ? byProvider.get(providerOf.get(t.id) ?? "") : undefined;
+      return { accountId: t.socialAccountId, overrideText: text ?? t.overrideText };
+    }),
+  });
+  const problems: { providerKey: string; targetId: string; issues: ValidationIssue[] }[] = [];
+  for (const r of await validatePost(scope, id)) {
+    const providerKey = providerOf.get(r.targetId);
+    const issues = errorsOf(r.issues);
+    if (providerKey && byProvider.has(providerKey) && issues.length > 0) {
+      problems.push({ providerKey, targetId: r.targetId, issues });
+    }
+  }
+  return { detail, problems };
+}
+
 export async function setReviewState(scope: ProjectScope, postId: string, state: unknown): Promise<void> {
   const id = uuid.parse(postId);
   const reviewState = REVIEW.parse(state);
+  if (reviewState === "rejected") throw new ConflictError("Use reject to reject a post.");
   need(scope, { post: ["edit"] });
   await scope.transaction(async (tx) => {
     need(tx, { post: ["edit"] });
@@ -383,52 +436,68 @@ export async function addToQueue(
   return scope.transaction(async (tx) => {
     need(tx, { post: ["schedule"] });
     const post = await lockPost(tx, id);
-    const now = await clock.now();
     const all = await tx.targets.listForPost(id);
     const chosen = pickTargets(all, opts.targetIds).filter((t) => opts.targetIds || t.status === "draft" || t.status === "cancelled");
-    const out: TargetResult<PlannedTime & { changedFromPreview: boolean }>[] = [];
-    // Hold occurrences in one global order (by account) so two posts sharing accounts
-    // queue concurrently without deadlocking on each other's unique-index entries (F20).
-    const byAccount = [...chosen].sort((a, b) =>
-      a.socialAccountId < b.socialAccountId ? -1 : a.socialAccountId > b.socialAccountId ? 1 : a.id < b.id ? -1 : 1,
-    );
-    for (const t of byAccount) {
-      const blocked = queueableGate(post, t);
-      if (blocked) {
-        out.push(blocked);
-        continue;
-      }
-      const g = await gate(tx, t);
-      if (!g.ok) {
-        out.push(fail(t, g.code, g.message, g.issues));
-        continue;
-      }
-      const slot = await allocateNextFree(tx, { id: t.id, accountId: t.socialAccountId }, { after: now });
-      if (!slot.ok) {
-        out.push(fail(t, slot.code, slot.message));
-        continue;
-      }
-      await tx.targets.update(t.id, {
-        status: "scheduled",
-        attemptCount: 0,
-        lastError: null,
-        stepState: null,
-        firstStepAt: null,
-        publishStartedAt: null,
-      });
-      const expected = opts.expected?.[t.id];
-      out.push({
-        targetId: t.id,
-        accountId: t.socialAccountId,
-        ok: true,
-        ...slot.planned,
-        changedFromPreview: expected !== undefined && new Date(expected).getTime() !== slot.instant.getTime(),
-      });
-    }
-    await applyDerivedStatus(tx, id);
-    const order = new Map(chosen.map((t, i) => [t.id, i]));
-    return out.sort((a, b) => order.get(a.targetId)! - order.get(b.targetId)!);
+    return queueTargetsInTx(tx, post, chosen, opts.expected ? { expected: opts.expected } : undefined);
   });
+}
+
+/**
+ * The body of `addToQueue` after the post is locked, for callers that already hold the lock (the generation
+ * policy, a review approval). `targets` are the chosen targets of `post`; `expected` maps target id to the
+ * previewed instant so a result can say it changed.
+ */
+export async function queueTargetsInTx(
+  tx: Tx,
+  post: PostRecord,
+  targets: TargetRecord[],
+  opts: { expected?: Record<string, string> } = {},
+): Promise<TargetResult<PlannedTime & { changedFromPreview: boolean }>[]> {
+  const id = post.id;
+  const chosen = targets;
+  const now = await clock.now();
+  const out: TargetResult<PlannedTime & { changedFromPreview: boolean }>[] = [];
+  // Hold occurrences in one global order (by account) so two posts sharing accounts
+  // queue concurrently without deadlocking on each other's unique-index entries (F20).
+  const byAccount = [...chosen].sort((a, b) =>
+    a.socialAccountId < b.socialAccountId ? -1 : a.socialAccountId > b.socialAccountId ? 1 : a.id < b.id ? -1 : 1,
+  );
+  for (const t of byAccount) {
+    const blocked = queueableGate(post, t);
+    if (blocked) {
+      out.push(blocked);
+      continue;
+    }
+    const g = await gate(tx, t);
+    if (!g.ok) {
+      out.push(fail(t, g.code, g.message, g.issues));
+      continue;
+    }
+    const slot = await allocateNextFree(tx, { id: t.id, accountId: t.socialAccountId }, { after: now });
+    if (!slot.ok) {
+      out.push(fail(t, slot.code, slot.message));
+      continue;
+    }
+    await tx.targets.update(t.id, {
+      status: "scheduled",
+      attemptCount: 0,
+      lastError: null,
+      stepState: null,
+      firstStepAt: null,
+      publishStartedAt: null,
+    });
+    const expected = opts.expected?.[t.id];
+    out.push({
+      targetId: t.id,
+      accountId: t.socialAccountId,
+      ok: true,
+      ...slot.planned,
+      changedFromPreview: expected !== undefined && new Date(expected).getTime() !== slot.instant.getTime(),
+    });
+  }
+  await applyDerivedStatus(tx, id);
+  const order = new Map(chosen.map((t, i) => [t.id, i]));
+  return out.sort((a, b) => order.get(a.targetId)! - order.get(b.targetId)!);
 }
 
 /** Shared by `scheduleAt` and `publishNow`: an explicit instant with no held occurrence. */
