@@ -11,7 +11,8 @@ import type { PostRecord } from "../../src/server/dal/posts";
 import type { TargetRecord } from "../../src/server/dal/targets";
 import { EMPTY_VOICE_CONTENT, type VoiceContent } from "../../src/lib/validation/voice";
 import type { GenerationMetadata } from "../../src/lib/validation/generation";
-import { createMockAccount } from "./scheduling";
+import { createJobItemsRepo, createJobsRepo, type JobItemRecord, type JobRecord } from "../../src/server/dal/jobs";
+import { createMediaAsset, createMockAccount } from "./scheduling";
 
 // Factories write straight through the test client, so they run as deliberate cross-project work.
 const unique = () => randomUUID().replace(/-/g, "").slice(0, 12);
@@ -165,4 +166,105 @@ export async function createPostInReview(
     })),
   );
   return { post: (await r.posts.get(post.id))!, targets, accountIds };
+}
+
+/**
+ * A generation job with items, written straight to the database (no model call, no reservation checks).
+ * Defaults: a fresh voice profile (pinned version), one mock account, `review_required` + `leave_as_draft`,
+ * and `items` queued items numbered from 0. Pass `itemOverrides` to set per-item fields (status, media, …).
+ */
+export async function createJob(
+  projectId: string,
+  opts: {
+    items?: number;
+    template?: string;
+    templateFields?: string[];
+    status?: JobRecord["status"];
+    sourceKind?: string;
+    voiceProfileId?: string;
+    accountIds?: string[];
+    approval?: "review_required" | "auto_approve";
+    scheduling?: "leave_as_draft" | "add_to_queue";
+    createdByUserId?: string | null;
+    withMedia?: boolean;
+    itemOverrides?: (position: number) => Partial<Parameters<ReturnType<typeof createJobItemsRepo>["insertMany"]>[1][number]>;
+  } = {},
+): Promise<{ job: JobRecord; items: JobItemRecord[]; accountIds: string[]; voiceProfileId: string }> {
+  const db = getDb();
+  const voice = opts.voiceProfileId
+    ? { id: opts.voiceProfileId, versionIds: [] as string[] }
+    : { id: (await createVoiceProfile(projectId)).id, versionIds: [] as string[] };
+  const profile = await createVoiceProfilesRepo(db, projectId).get(voice.id);
+  const version = await createVoiceVersionsRepo(db, projectId).getByNumber(voice.id, profile!.currentVersion);
+  const accountIds = opts.accountIds ?? [(await createMockAccount(projectId)).id];
+  const count = opts.items ?? 1;
+  const jobs = createJobsRepo(db, projectId);
+  const job = await jobs.insert({
+    sourceKind: opts.sourceKind ?? "csv",
+    sourceSummary: `${count} rows`,
+    voiceProfileId: voice.id,
+    voiceProfileVersionId: version!.id,
+    template: opts.template ?? "Write about {{product}}",
+    templateFields: opts.templateFields ?? ["product"],
+    targetAccountIds: accountIds,
+    approvalPolicy: opts.approval ?? "review_required",
+    schedulingPolicy: opts.scheduling ?? "leave_as_draft",
+    itemCount: count,
+    createdByUserId: opts.createdByUserId ?? null,
+  });
+  const newItems = [];
+  for (let position = 0; position < count; position++) {
+    const mediaAssetId = opts.withMedia ? (await createMediaAsset(projectId)).id : null;
+    newItems.push({
+      position,
+      label: `Row ${position + 1}`,
+      payload: { v: 1, fields: { product: `Product ${position + 1}` } },
+      mediaAssetId,
+      ...opts.itemOverrides?.(position),
+    });
+  }
+  const items = await createJobItemsRepo(db, projectId).insertMany(job.id, newItems);
+  const finalJob = opts.status && opts.status !== "queued" ? (await jobs.update(job.id, statusPatch(opts.status)))! : job;
+  return { job: finalJob, items, accountIds, voiceProfileId: voice.id };
+}
+
+function statusPatch(status: JobRecord["status"]) {
+  const at = new Date();
+  return {
+    status,
+    ...(status !== "queued" ? { startedAt: at } : {}),
+    ...(status === "completed" || status === "completed_with_failures" ? { finishedAt: at } : {}),
+    ...(status === "cancelled" ? { cancelledAt: at } : {}),
+  };
+}
+
+/** Adds one item to an existing job at the next position. */
+export async function createJobItem(
+  projectId: string,
+  jobId: string,
+  position: number,
+  over: Partial<Parameters<ReturnType<typeof createJobItemsRepo>["insertMany"]>[1][number]> = {},
+): Promise<JobItemRecord> {
+  const [item] = await createJobItemsRepo(getDb(), projectId).insertMany(jobId, [
+    { position, label: `Row ${position + 1}`, payload: { v: 1, fields: { product: `Product ${position + 1}` } }, ...over },
+  ]);
+  return item!;
+}
+
+/** `count` image assets (an alt text on each, so no gaps), newest last. Returns the rows. */
+export async function createImageAssets(projectId: string, count: number, opts: { altText?: string } = {}) {
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(await createMediaAsset(projectId, { altText: opts.altText ?? `Image ${i + 1}` }));
+  return out;
+}
+
+/** CSV bytes from a header and rows; values are quoted when they need it. `eol` defaults to "\n". */
+export function csvBuilder(
+  columns: readonly string[],
+  rows: readonly (readonly string[])[],
+  opts: { eol?: string; bom?: boolean } = {},
+): Buffer {
+  const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
+  const text = [columns, ...rows].map((r) => r.map(cell).join(",")).join(opts.eol ?? "\n") + (opts.eol ?? "\n");
+  return Buffer.from((opts.bom ? "\uFEFF" : "") + text, "utf8");
 }

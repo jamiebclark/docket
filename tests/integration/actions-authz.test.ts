@@ -13,7 +13,10 @@ import * as composeActions from "../../src/app/p/[projectSlug]/compose/actions";
 import * as mediaActions from "../../src/app/p/[projectSlug]/media/actions";
 import * as voiceActions from "../../src/app/p/[projectSlug]/voice/actions";
 import * as postActions from "../../src/app/p/[projectSlug]/posts/actions";
+import * as jobActions from "../../src/app/p/[projectSlug]/jobs/actions";
 import { setLlmForTests } from "../../src/server/llm";
+import { runTick } from "../../src/server/scheduler";
+import { createJob } from "../../src/server/services/jobs";
 import { startSeries } from "../../src/server/services/generation/series";
 import { generateSingle } from "../../src/server/services/generation/single";
 import * as posts from "../../src/server/services/posts";
@@ -28,6 +31,7 @@ import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterT
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
 import { createMemoryStorage } from "../helpers/storage";
+import { jobsEnv, parkAllJobs } from "../helpers/jobs-env";
 import { createFakePds, mintJwt, type FakePds } from "../helpers/fake-pds";
 
 beforeAll(registerThrowaway);
@@ -349,4 +353,65 @@ describe("connectCredentialsAction", () => {
     }
     expect(pds.requests).toHaveLength(2);
   });
+});
+
+describe("job actions (008)", () => {
+  beforeEach(parkAllJobs);
+
+  /** A job with one failed item (its image was deleted) and one queued item. */
+  async function jobWithFailure() {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(2);
+    const { jobId } = await createJob(e.scope, e.input());
+    const [first] = await e.scope.jobItems.listForJob(jobId);
+    await e.scope.media.softDelete(first!.mediaAssetId!, new Date());
+    await runTick({ config: { jobMaxItems: 1 } });
+    return { e, jobId, itemId: first!.id };
+  }
+
+  const create = (slug: string, e: Awaited<ReturnType<typeof jobsEnv>>, over: Record<string, unknown> = {}) => {
+    const body = new FormData();
+    body.set("payload", JSON.stringify(e.input(over)));
+    return jobActions.createJobAction(slug, body);
+  };
+
+  it("lets an editor create, retry and cancel", async () => {
+    const { e, jobId, itemId } = await jobWithFailure();
+    actAs(e.editor, (await createSession(e.editor.id)).id);
+    await e.assets(1, { tags: ["editor"] });
+    await expect(create(e.project.slug, e)).rejects.toBeInstanceOf(RedirectSignal);
+    expect(await jobActions.retryItemAction(e.project.slug, { jobId, itemId })).toMatchObject({ ok: true, data: { changed: true } });
+    expect(await jobActions.retryFailedAction(e.project.slug, { jobId })).toMatchObject({ ok: true });
+    expect(await jobActions.cancelJobAction(e.project.slug, { jobId })).toMatchObject({ ok: true, data: { changed: true } });
+  }, 60_000);
+
+  it("refuses an editor's auto-approve unless it is the project default", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(1);
+    actAs(e.editor, (await createSession(e.editor.id)).id);
+    const r = await create(e.project.slug, e, { approval: "auto_approve", scheduling: "leave_as_draft" });
+    expect(r).toMatchObject({ ok: false, error: "forbidden", message: "Only owners and admins can auto-approve" });
+
+    actAs(e.owner, (await createSession(e.owner.id)).id);
+    await expect(create(e.project.slug, e, { approval: "auto_approve", scheduling: "leave_as_draft" })).rejects.toBeInstanceOf(RedirectSignal);
+  }, 60_000);
+
+  it("gives a non-member not-found for every action", async () => {
+    const { e, jobId, itemId } = await jobWithFailure();
+    const outsider = await createUser();
+    actAs(outsider, (await createSession(outsider.id)).id);
+    const slug = e.project.slug;
+    const csv = new FormData();
+    csv.set("file", new File(["a\n1\n"], "x.csv", { type: "text/csv" }));
+    const results = [
+      await create(slug, e),
+      await jobActions.validateCsvAction(slug, csv),
+      await jobActions.retryItemAction(slug, { jobId, itemId }),
+      await jobActions.retryFailedAction(slug, { jobId }),
+      await jobActions.cancelJobAction(slug, { jobId }),
+    ];
+    for (const r of results) expect(r).toMatchObject({ ok: false, error: "not_found" });
+  }, 60_000);
 });

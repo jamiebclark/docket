@@ -102,6 +102,10 @@ Signed-in members of a project get these screens under `/p/<project>/`:
 
 Docket can draft posts with OpenAI or Anthropic: pick a voice profile, write a brief, choose accounts, and get a variant per platform that goes through the review queue and the project's approval and scheduling policies. Set `LLM_PROVIDER`, `LLM_MODEL` and the matching API key (see `.env.example`) to enable it; without them everything else still works. Details, the policy matrix and what is out of scope are in [docs/generator.md](docs/generator.md).
 
+## Jobs
+
+Generate many posts at once from a selection of images or a CSV. The worker processes jobs in the background at about 120 items an hour by default (`GENERATION_TICK_MAX_ITEMS`, 2 per tick); a job holds at most 500 items. Progress, failures, retry and cancel are on the project's **Jobs** screen. See [docs/generator.md](docs/generator.md#jobs).
+
 ## Media storage
 
 Images need S3-compatible storage with a **publicly readable** bucket: Instagram and Threads fetch each image by its public URL, so

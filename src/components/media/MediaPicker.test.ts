@@ -23,6 +23,7 @@ const view = (id: string, name: string): MediaView => ({
   missingAlt: true,
   tags: [],
   inUse: false,
+  reservedByJobId: null,
   originalFilename: name,
   createdAt: new Date(0),
 });

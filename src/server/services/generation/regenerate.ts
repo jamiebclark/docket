@@ -82,6 +82,7 @@ export async function regeneratePost(
       providerKeys,
       assets,
       inputs: { brief: inputs.brief, sourceText: inputs.sourceText, instructions, series: inputs.series },
+      itemData: inputs.itemFields ? { fields: Object.entries(inputs.itemFields) } : null,
     },
     llm,
   );

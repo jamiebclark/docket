@@ -74,6 +74,10 @@ export async function applyApprovalPolicy(
   scope: ProjectScope,
   postId: string,
   resolved: ResolvedPolicies,
+  opts: {
+    /** Runs inside the policy transaction right after the post is locked; a throw rolls it back and propagates. */
+    guard?: (tx: ProjectScope) => Promise<void>;
+  } = {},
 ): Promise<{ decision: PolicyDecision; queued: TargetResult<PlannedTime & { changedFromPreview: boolean }>[] }> {
   try {
     await prepareVariants(scope, postId);
@@ -82,6 +86,7 @@ export async function applyApprovalPolicy(
   }
   return scope.transaction(async (tx) => {
     const post = await lockPost(tx, postId);
+    await opts.guard?.(tx);
     if (post.reviewState !== "needs_review") throw new ConflictError("This post was already reviewed.");
     const targets = (await tx.targets.listForPost(postId)).filter((t) => t.status === "draft");
     const blocking: { providerKey: string; message: string }[] = [];

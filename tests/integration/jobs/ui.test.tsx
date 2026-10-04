@@ -1,0 +1,190 @@
+import { isValidElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/server/auth/session", async () => (await import("../../helpers/actions")).sessionModule);
+vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
+vi.mock("next/navigation", async () => ({
+  ...(await import("../../helpers/actions")).navigationModule,
+  useRouter: () => ({ refresh: () => {} }),
+}));
+
+import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
+import { CancelJobDialog } from "../../../src/app/p/[projectSlug]/jobs/[jobId]/CancelJobDialog";
+import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
+import { CsvProblemList } from "../../../src/app/p/[projectSlug]/jobs/new/csv/CsvJobForm";
+import MediaPage from "../../../src/app/p/[projectSlug]/media/page";
+import { AutoRefresh } from "../../../src/components/ui/AutoRefresh";
+import { setLlmForTests } from "../../../src/server/llm";
+import { runTick } from "../../../src/server/scheduler";
+import { createJob } from "../../../src/server/services/jobs";
+import { setStorageForTests } from "../../../src/server/storage";
+import { actAs } from "../../helpers/actions";
+import { closeDb } from "../../helpers/db";
+import { createFakeLlm } from "../../helpers/fake-llm";
+import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+
+beforeEach(parkAllJobs);
+afterAll(async () => {
+  setLlmForTests(null);
+  setStorageForTests(undefined);
+  await closeDb();
+});
+
+type Env = Awaited<ReturnType<typeof jobsEnv>>;
+const noParams = Promise.resolve({});
+
+const jobsHtml = async (e: Env, as: { id: string } = e.owner) => {
+  actAs(as);
+  return renderToStaticMarkup(await JobsPage({ params: Promise.resolve({ projectSlug: e.project.slug }), searchParams: noParams }));
+};
+const jobElement = async (e: Env, jobId: string, search: Record<string, string> = {}) => {
+  actAs(e.owner);
+  return JobPage({ params: Promise.resolve({ projectSlug: e.project.slug, jobId }), searchParams: Promise.resolve(search) });
+};
+
+/** Finds the first element of `type` in an unrendered element tree. */
+function find(node: ReactNode, type: unknown): { props: Record<string, unknown> } | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = find(child, type);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (!isValidElement(node)) return null;
+  if (node.type === type) return node as unknown as { props: Record<string, unknown> };
+  return find((node.props as { children?: ReactNode }).children, type);
+}
+
+describe("Jobs list", () => {
+  it("shows the empty state with both start links", async () => {
+    const e = await jobsEnv();
+    const html = await jobsHtml(e);
+    expect(html).toContain("No generation jobs yet. Start one from your media library or a CSV file.");
+    expect(html).toContain("New job from media");
+    expect(html).toContain("New job from CSV");
+  });
+
+  it("lists a job with its policies, status and counts", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(2);
+    const { jobId } = await createJob(e.scope, e.input({ approval: "auto_approve", scheduling: "add_to_queue", confirmUnreviewedQueue: true }));
+    const html = await jobsHtml(e);
+    expect(html).toContain(`/jobs/${jobId}`);
+    expect(html).toContain("2 unused images");
+    expect(html).toContain("Approve and queue automatically — no review");
+    expect(html).toContain("Queued");
+    expect(html).toContain('scope="col"');
+  });
+
+  it("says generation is not configured above the table", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(1);
+    await createJob(e.scope, e.input());
+    setLlmForTests(null);
+    const html = await jobsHtml(e);
+    expect(html).toMatch(/Generation is not configured\. Set: /);
+  });
+
+  it("shows the start links to an editor", async () => {
+    const e = await jobsEnv();
+    expect(await jobsHtml(e, e.editor)).toContain("New job from CSV");
+  });
+});
+
+describe("Job page", () => {
+  it("shows counts, item rows with post links and review state, and Retry on failed rows", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([modelOk("Second", 1)]));
+    await e.assets(2);
+    const { jobId } = await createJob(e.scope, e.input());
+    const [first] = await e.scope.jobItems.listForJob(jobId);
+    await e.scope.media.softDelete(first!.mediaAssetId!, new Date());
+    await runTick({ config: { jobMaxItems: 2 } });
+
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("View post");
+    expect(html).toContain("Needs review");
+    expect(html).toContain("Image deleted.");
+    expect(html).toContain(">Retry<");
+    expect(html).toContain("Retry all failed (1)");
+        expect(html).toContain("1 done, 1 failed, 0 queued");
+    expect(html).toContain("Completed with failures");
+  }, 60_000);
+
+  it("names the job in the cancel dialog", () => {
+    const html = renderToStaticMarkup(<CancelJobDialog slug="p" jobId="j" summary="3 images" />);
+    expect(html).toContain("Cancel job “3 images”?");
+    expect(html).toContain("Keep running");
+    expect(html).toContain("Posts already made are kept.");
+  });
+
+  it("auto-refreshes only while queued or running", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([modelOk("Done", 1)]));
+    await e.assets(1);
+    const { jobId } = await createJob(e.scope, e.input());
+    expect(find((await jobElement(e, jobId)) as never, AutoRefresh)!.props).toMatchObject({ active: true, intervalMs: 5000 });
+    await runTick({ config: { jobMaxItems: 5 } });
+    expect(find((await jobElement(e, jobId)) as never, AutoRefresh)!.props).toMatchObject({ active: false });
+  }, 60_000);
+
+  it("explains that items wait when generation is not configured", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(1);
+    const { jobId } = await createJob(e.scope, e.input());
+    setLlmForTests(null);
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("Generation is not configured, so these items are waiting.");
+  });
+});
+
+describe("Media page", () => {
+  const mediaHtml = async (e: Env) => {
+    actAs(e.owner);
+    return renderToStaticMarkup(await MediaPage({ params: Promise.resolve({ projectSlug: e.project.slug }), searchParams: noParams }));
+  };
+
+  it("offers Generate for all unused images, disabled at zero, and marks an image in a job", async () => {
+    const e = await jobsEnv();
+    const empty = await mediaHtml(e);
+    expect(empty).not.toContain("Generate for all unused images");
+
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(2);
+    const html = await mediaHtml(e);
+    expect(html).toContain("Generate for all unused images (2)");
+
+    const { jobId } = await createJob(e.scope, e.input());
+    const after = await mediaHtml(e);
+    expect(after).toContain("No unused images to generate for");
+    expect(after).toContain("In a job");
+    expect(after).toContain(`/jobs/${jobId}`);
+  }, 60_000);
+
+  it("offers Generate posts for the current tag filter (F1)", async () => {
+    const e = await jobsEnv();
+    await e.assets(2, { tags: ["dusk"] });
+    actAs(e.owner);
+    const html = renderToStaticMarkup(
+      await MediaPage({ params: Promise.resolve({ projectSlug: e.project.slug }), searchParams: Promise.resolve({ tag: "dusk" }) }),
+    );
+    expect(html).toContain("Generate posts for these 2 images");
+    expect(html).toContain("mode=filter&amp;tag=dusk");
+  }, 60_000);
+});
+
+describe("CSV form", () => {
+  it("lists the problems with line numbers", () => {
+    const html = renderToStaticMarkup(
+      <CsvProblemList problems={[{ line: 4, message: "Row has 3 values; the header has 2" }, { line: null, message: "The file is larger than 1 MB." }]} />,
+    );
+    expect(html).toContain("This file can&#x27;t be used:");
+    expect(html).toContain("Line 4: Row has 3 values; the header has 2");
+    expect(html).toContain("The file is larger than 1 MB.");
+  });
+});

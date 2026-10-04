@@ -3,6 +3,7 @@ import * as clock from "../dal/clock";
 import { getEnv } from "../env";
 import { schedulerConfig, type SchedulerConfig } from "./config";
 import { runTokenRefresh } from "./token-refresh";
+import { emptyGenerationCounts, runGenerationJobs, type GenerationCounts } from "./generation";
 import { emptyPublishingCounts, runPublishing, type PublishingCounts } from "./publishing";
 
 export type { SchedulerConfig } from "./config";
@@ -15,6 +16,7 @@ export interface TickSummary {
   durationMs: number;
   publishing: SectionResult<PublishingCounts>;
   tokenRefresh: SectionResult<{ refreshed: number; failed: number; deferred: number }>;
+  generation: SectionResult<GenerationCounts>;
 }
 
 /**
@@ -36,10 +38,11 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     }
   };
   // The sections run concurrently under the same deadline (D7); each handles its own failure.
-  const [publishing, tokenRefresh] = await Promise.all([
+  const [publishing, tokenRefresh, generation] = await Promise.all([
     section("publishing", () => runPublishing({ config, tickId, startedAt }), emptyPublishingCounts()),
     section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0 }),
+    section("generation jobs", () => runGenerationJobs({ config, tickId, startedAt }), emptyGenerationCounts()),
   ]);
 
-  return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh };
+  return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh, generation };
 }

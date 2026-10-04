@@ -7,7 +7,7 @@ import type { ProjectScope } from "../../dal/scope";
 import { getLlm } from "../../llm";
 import { imagesForModel } from "../../llm/images";
 import type { LlmFailureKind, LlmProvider, LlmProviderName, LlmResult } from "../../llm/types";
-import { buildGenerationPrompt, platformRulesFor, type PromptInput } from "./prompt";
+import { PREVIOUS_OUTPUT_MAX, buildGenerationPrompt, platformRulesFor, type PromptInput } from "./prompt";
 import { checkGenerationOutput, generationOutputSchema, problemLine, type OutputProblem } from "./schema";
 
 export interface CoreRequest {
@@ -16,6 +16,10 @@ export interface CoreRequest {
   providerKeys: string[];
   assets: MediaRow[];
   inputs: Omit<GenerationInputs, "targetAccountIds" | "mediaAssetIds">;
+  /** Passed to `llm.generate` for the first call of a step. Absent: the provider default. */
+  timeoutMs?: number;
+  /** A job item's fields, sent as a separate data block (research D20). */
+  itemData?: { fields: [string, string][] } | null;
 }
 
 type Attempts = GenerationRecord["attempts"];
@@ -43,6 +47,15 @@ export type CoreOutcome =
       model: string;
     };
 
+/** What a deferred correction retry needs to run later (research D1). */
+export interface PendingRetry {
+  reason: NonNullable<Retried>["reason"];
+  problems: string[];
+  previousOutput: string;
+  attempts: Attempts;
+}
+export type CoreStep = CoreOutcome | { ok: "retry"; pending: PendingRetry };
+
 const RETRYABLE = new Set<LlmFailureKind>(["invalid_output", "refused", "incomplete", "timeout"]);
 
 const FAILURE_PROBLEM: Partial<Record<LlmFailureKind, string>> = {
@@ -67,11 +80,23 @@ const groupByKey = (problems: OutputProblem[]): { providerKey: string; messages:
   return [...map].map(([providerKey, messages]) => ({ providerKey, messages }));
 };
 
-export async function runGeneration(
+export interface StepOptions {
+  /** Present: run only the retry call, with this context. */
+  pending?: PendingRetry | null;
+  /**
+   * Called when the first call needs the correction retry. Returns the timeout for the retry call,
+   * or null to defer it. Absent: the step never makes a second call and returns `retry`.
+   */
+  retryWindowMs?: () => Promise<number | null>;
+}
+
+/** Runs one model call (the first, or the retry when `opts.pending` is given), plus the retry when `retryWindowMs` allows it. */
+export async function runGenerationStep(
   scope: ProjectScope,
   req: CoreRequest,
-  llm: LlmProvider = getLlm(),
-): Promise<CoreOutcome> {
+  llm: LlmProvider,
+  opts: StepOptions = {},
+): Promise<CoreStep> {
   const prepared = await imagesForModel(scope, req.assets);
   if (!prepared.ok) throw new ConflictError(prepared.message);
 
@@ -91,19 +116,42 @@ export async function runGeneration(
           total: req.inputs.series.otherAngles.length + 1,
         }
       : null,
+    itemData: req.itemData ?? null,
   };
-  const attempts: Attempts = [];
-  const call = (retry: PromptInput["retry"]) => {
+  const call = (retry: PromptInput["retry"], timeoutMs: number | undefined) => {
     const prompt = buildGenerationPrompt({ ...base, retry });
     return llm
-      .generate({ label: req.label, ...prompt, images: prepared.images, schemaName: "generation_output", schema })
+      .generate({
+        label: req.label,
+        ...prompt,
+        images: prepared.images,
+        schemaName: "generation_output",
+        schema,
+        ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      })
       .then((result) => ({ result, prompt }));
   };
   const check = (value: { variants: Record<string, { text: string }>; imageAltTexts?: string[] }) =>
     checkGenerationOutput(scope, { providerKeys: req.providerKeys, assets: req.assets, output: value });
   const identity = (r: LlmResult<unknown>) => ({ provider: r.provider, model: r.model });
 
-  const first = await call(null);
+  const runRetry = async (pending: PendingRetry, timeoutMs: number | undefined): Promise<CoreOutcome> => {
+    const retried: Retried = { reason: pending.reason, problems: pending.problems };
+    const attempts: Attempts = [...pending.attempts];
+    const second = await call({ previousOutput: pending.previousOutput, problems: pending.problems }, timeoutMs);
+    if (!second.result.ok) {
+      attempts.push(attemptOf(second.result, second.result.kind));
+      return { ok: false, kind: second.result.kind, message: second.result.message, attempts, ...identity(second.result) };
+    }
+    const checked = await check(second.result.value);
+    attempts.push(attemptOf(second.result, checked.problems.length === 0 ? "ok" : "invalid_platform"));
+    return success(second.result.value, checked.problems, checked.warnings, second.prompt, prepared.record, attempts, retried, second.result);
+  };
+
+  if (opts.pending) return runRetry(opts.pending, req.timeoutMs);
+
+  const attempts: Attempts = [];
+  const first = await call(null, req.timeoutMs);
   let problems: OutputProblem[];
   let reason: NonNullable<Retried>["reason"];
   let previousOutput: string;
@@ -127,15 +175,16 @@ export async function runGeneration(
     previousOutput = first.result.rawText ?? "";
   }
 
-  const retried: Retried = { reason, problems: problems.map(problemLine) };
-  const second = await call({ previousOutput, problems: retried.problems });
-  if (!second.result.ok) {
-    attempts.push(attemptOf(second.result, second.result.kind));
-    return { ok: false, kind: second.result.kind, message: second.result.message, attempts, ...identity(second.result) };
-  }
-  const checked = await check(second.result.value);
-  attempts.push(attemptOf(second.result, checked.problems.length === 0 ? "ok" : "invalid_platform"));
-  return success(second.result.value, checked.problems, checked.warnings, second.prompt, prepared.record, attempts, retried, second.result);
+  const pending: PendingRetry = {
+    reason,
+    problems: problems.map(problemLine),
+    previousOutput: previousOutput.slice(0, PREVIOUS_OUTPUT_MAX),
+    attempts,
+  };
+  if (!opts.retryWindowMs) return { ok: "retry", pending };
+  const window = await opts.retryWindowMs();
+  if (window === null) return { ok: "retry", pending };
+  return runRetry(pending, window);
 
   function success(
     value: { variants: Record<string, { text: string }>; imageAltTexts?: string[] },
@@ -161,4 +210,17 @@ export async function runGeneration(
       ...identity(result),
     };
   }
+}
+
+/** Single, series and regenerate: the first call, then the one correction retry straight away. */
+export async function runGeneration(
+  scope: ProjectScope,
+  req: CoreRequest,
+  llm: LlmProvider = getLlm(),
+): Promise<CoreOutcome> {
+  const step = await runGenerationStep(scope, req, llm);
+  if (step.ok !== "retry") return step;
+  const second = await runGenerationStep(scope, req, llm, { pending: step.pending });
+  if (second.ok === "retry") throw new Error("A resumed generation step never defers.");
+  return second;
 }

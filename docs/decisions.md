@@ -315,3 +315,41 @@ Generic changes to existing code:
 5. Access statements `voice` and `generation`. *Reverse:* remove from `access.ts`.
 6. Startup logs LLM problems and never fails. *Reverse:* throw from the startup check.
 7. `failFromError` keeps the messages of `LlmNotConfiguredError` and `PolicyNotAllowedError`. *Reverse:* remove the two cases.
+
+## 008 — Generation jobs, batch mode and item sources
+
+latency: unmeasured; live path verified with mocks only. (`pnpm llm:check` needs a key; run it once with one and record the `job_call` and `jobs budget_ms=…` lines here.)
+
+Decisions (full text in `specs/008-generation-jobs/research.md`):
+
+- **D24 — Series stays in-request.** *What:* series generation is not moved onto jobs; single, series and jobs share one core and one save helper (`saveGeneratedPost`). *Why:* a series item carries angles, not template fields, and the series screen waits for the result. *Reverse:* add a `series` item source whose items carry the angle input.
+- **D1 — One bounded model call per item per tick.** *What:* a job call's timeout is the time left in the tick minus a 3 s save reserve; an item starts only with 8 s + 3 s left; a correction retry that cannot fit is deferred, uncounted. *Reverse:* change `jobMinCallMs` / `jobPersistReserveMs` in `scheduler/config.ts`.
+- **D3 — Throughput.** *What:* one claim round per tick, at most `GENERATION_TICK_MAX_ITEMS` (default 2) items, about 120 items an hour. *Reverse:* raise the setting.
+- **D7 — Attempts.** *What:* 3 automatic attempts for temporary failures, backoff 60 s to 15 min; lasting failures are not retried. *Reverse:* the `JOB_*` constants in `scheduler/config.ts`.
+- **Limits (interim).** 500 items per job; CSV 1 MB / 500 rows / 50,000 characters per row; instructions 2,000 characters. *Reverse:* one constant each.
+- **D15 — Reservation by partial unique index** on active job items per media asset; the Media "Unused" filter excludes reserved images. *Reverse:* drop the index and the filter condition.
+- **D18 — CSV upload is stateless**; the file is re-sent at job creation.
+- **D26 — Live progress by periodic refresh** (every 5 s while active), no push channel. *Reverse:* replace `AutoRefresh` with a push channel.
+
+Generic changes to existing code:
+
+1. `generation/core.ts` gains the step API `runGenerationStep`; `runGeneration` behaves as before. *Reverse:* inline the step back.
+2. `saveGeneratedPost` extracted from single and series generation (behaviour unchanged). *Reverse:* inline it back into both.
+3. Prompt builder takes optional `itemData`; `null` leaves every prompt and snapshot unchanged. *Reverse:* remove the argument.
+4. `GenerationRecord` gains `mode: "job_item"` and `job`; inputs gain optional `itemFields`; regenerate keeps item data. *Reverse:* drop the optional fields.
+5. `forJobRunner` scope in `dal/scope.ts`. *Reverse:* delete it and the runner.
+6. Worker bundle now includes the LLM layer and the generation services; `tests/lint/generation-imports.test.ts` rewritten accordingly. *Reverse:* restore the old assertion and remove the runner.
+7. `MediaRepo.list` carries `reservedByJobId`; Media cards show "In a job". *Reverse:* remove the field.
+8. `GENERATION_TICK_MAX_ITEMS` env setting (1–10, default 2). *Reverse:* remove it and use the constant.
+9. New migration `0005` (job tables, `generation_job_item_id` link on posts). *Reverse:* a down-migration dropping them.
+10. `pnpm llm:check` prints the jobs report; the unmeasured line is now `latency: unmeasured; live path verified with mocks only`.
+11. Cancel discards in-flight work and is final; items that already saved a post are marked `done` with the post kept in review (review F3). *Reverse:* allow resuming a cancelled job by re-queuing its cancelled items.
+12. Job policies are authorised once, at creation, against the creator's role. *Reverse:* re-check per item at save time.
+13. CSV items are text-only (no image attached). *Reverse:* add an image-URL column type.
+14. Filter selections skip used images by default and report how many were left out; the DAL lists used matches so the count is real (review F2). *Reverse:* default `includeUsed` to true.
+15. "Row number" in CSV problems means the file line (header = line 1). *Reverse:* report data-row indexes instead.
+16. Item field values reach the model wrapped in ⟦ ⟧ inside an `<item_data>` block, never as instructions (D20). *Reverse:* plain interpolation (not recommended).
+17. An `incomplete` model result counts as a lasting failure (not retried automatically). *Reverse:* classify it as temporary.
+18. Job items record failures on the item, not in `generation_failures`. *Reverse:* also insert a `generation_failures` row per failed item.
+19. Generic changes: `applyApprovalPolicy` gained a guard against re-applying policy to an already-reviewed post, and the `[section]` placeholder route was removed now that every nav section has a screen. *Reverse:* drop the guard; restore the route.
+20. The media library offers "Generate posts for these N images" for an active tag, missing-alt or search filter (review F1). *Reverse:* remove the link; picking images still works.

@@ -5,6 +5,8 @@ import { POST_MEDIA_MAX } from "./scheduling";
 export const BRIEF_MAX = 2000;
 export const SOURCE_TEXT_MAX = 50_000;
 export const INSTRUCTIONS_MAX = 2000;
+/** Rendered job instructions (a 2,000-character template plus values) can be longer than a form field allows. */
+export const JOB_INSTRUCTIONS_MAX = 10_000;
 export const TARGET_ACCOUNTS_MAX = 50;
 
 const angleSchema = z.object({ title: z.string().min(1).max(120), description: z.string().min(1).max(300) });
@@ -12,7 +14,8 @@ const angleSchema = z.object({ title: z.string().min(1).max(120), description: z
 export const generationInputsSchema = z.object({
   brief: z.string().trim().min(1, { error: "Describe what the post is about" }).max(BRIEF_MAX),
   sourceText: z.string().max(SOURCE_TEXT_MAX).nullable(),
-  instructions: z.string().max(INSTRUCTIONS_MAX).nullable(),
+  instructions: z.string().max(JOB_INSTRUCTIONS_MAX).nullable(),
+  itemFields: z.record(z.string(), z.string()).nullish(),
   mediaAssetIds: z.array(z.uuid()).max(POST_MEDIA_MAX),
   targetAccountIds: z
     .array(z.uuid())
@@ -44,7 +47,10 @@ const usage = z.object({ inputTokens: z.number().nullable(), outputTokens: z.num
 
 export const generationRecordSchema = z.object({
   at: z.string(),
-  mode: z.enum(["single", "series_post", "regenerate"]),
+  mode: z.enum(["single", "series_post", "regenerate", "job_item"]),
+  job: z
+    .object({ id: z.string(), itemId: z.string(), position: z.number().int().min(0), sourceKind: z.string() })
+    .nullish(),
   provider: z.enum(["openai", "anthropic"]),
   model: z.string(),
   voiceProfile: z.object({ id: z.string(), versionId: z.string(), version: z.number().int(), name: z.string() }),

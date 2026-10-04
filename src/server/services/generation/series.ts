@@ -10,8 +10,8 @@ import type { ProjectScope } from "../../dal/scope";
 import type { SeriesRecord } from "../../dal/series";
 import { getLlm } from "../../llm";
 import type { LlmFailureKind, LlmProvider, LlmResult } from "../../llm/types";
-import { applyDerivedStatus } from "../posts";
 import { recordFailure } from "./failures";
+import { saveGeneratedPost } from "./save";
 import { runGeneration } from "./core";
 import { applyApprovalPolicy, resolvePolicies } from "./policy";
 import { buildSeriesPlanPrompt, platformRulesFor } from "./prompt";
@@ -21,7 +21,6 @@ import {
   buildRecord,
   distinctProviderKeys,
   existingResult,
-  fillEmptyAltTexts,
   generateSingleSchema,
   isUniqueViolation,
   loadAccounts,
@@ -252,34 +251,20 @@ export async function writeSeriesPost(
     resolved: request.resolved,
     at: await clock.now(),
   });
-  const variantOf = (providerKey: string) => outcome.output.variants[providerKey] ?? "";
-
   let postId: string;
   try {
     postId = await scope.transaction(async (tx) => {
       need(tx, { generation: ["run"], post: ["edit"] });
-      const now = await clock.now();
-      if ((await tx.media.lockShared(inputs.mediaAssetIds)).length !== new Set(inputs.mediaAssetIds).size) {
-        throw new NotFoundError();
-      }
-      const post = await tx.posts.insert({
-        baseText: variantOf(accounts[0]!.providerKey),
-        createdByUserId: tx.membership.userId,
-        origin: "generated",
-        reviewState: "needs_review",
+      return saveGeneratedPost(tx, {
+        accounts,
+        variants: outcome.output.variants,
+        assets,
+        imageAltTexts: outcome.output.imageAltTexts,
+        record,
         schedulingPolicy: request.resolved.scheduling,
-        seriesId,
-        seriesPosition: position,
-        generationMetadata: { v: 1, records: [record] },
+        createdByUserId: tx.membership.userId,
+        link: { seriesId, seriesPosition: position },
       });
-      await tx.posts.setMedia(post.id, inputs.mediaAssetIds);
-      await tx.media.markUsed(inputs.mediaAssetIds, now);
-      await tx.targets.insertMany(
-        accounts.map((a) => ({ postId: post.id, socialAccountId: a.id, overrideText: variantOf(a.providerKey) })),
-      );
-      await fillEmptyAltTexts(tx, assets, outcome.output.imageAltTexts);
-      await applyDerivedStatus(tx, post.id);
-      return post.id;
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;

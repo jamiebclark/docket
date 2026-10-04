@@ -9,6 +9,7 @@ import { createAuditRepo, type AuditRepo } from "./audit";
 import { createConnectAttemptsRepo, type ConnectAttemptsRepo } from "./connect-attempts";
 import { ForbiddenError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
+import { createJobItemsRepo, createJobsRepo, type JobItemsRepo, type JobsRepo } from "./jobs";
 import { createMediaRepo, type MediaRepo } from "./media";
 import { createPostsRepo, type PostsRepo } from "./posts";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
@@ -58,6 +59,8 @@ export interface ProjectScope {
   readonly voiceVersions: VoiceVersionsRepo;
   readonly series: SeriesRepo;
   readonly generationFailures: GenerationFailuresRepo;
+  readonly jobs: JobsRepo;
+  readonly jobItems: JobItemsRepo;
   readonly projects: {
     get(): Promise<ProjectRecord | null>;
     setDefaultVoiceProfile(profileId: string | null): Promise<void>;
@@ -128,6 +131,8 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
     voiceVersions: createVoiceVersionsRepo(exec, data.project.id),
     series: createSeriesRepo(exec, data.project.id),
     generationFailures: createGenerationFailuresRepo(exec, data.project.id),
+    jobs: createJobsRepo(exec, data.project.id),
+    jobItems: createJobItemsRepo(exec, data.project.id),
     ...createSchedulingRepos(exec, data.project.id),
     projects: {
       get: () => getProject(data.project.id, exec),
@@ -143,7 +148,8 @@ function buildScope(exec: Database, data: ScopeData): ProjectScope {
           // snapshot taken before the lock was granted and miss a concurrent removal or demotion.
           await txExec.select({ id: projects.id }).from(projects).where(projectId).for("update");
         }
-        const fresh = await resolve(txExec, data.membership.userId, projectId);
+        // The job runner has no session: its membership is fixed, never re-resolved (research D11).
+        const fresh = data.membership.memberId === JOB_RUNNER_MEMBER ? data : await resolve(txExec, data.membership.userId, projectId);
         return fn(buildScope(txExec, fresh));
       });
     },
@@ -167,6 +173,23 @@ export async function forProject(session: SessionLike | null, projectSlug: strin
     resolve(db, session.user.id, eq(projects.slug, projectSlug)),
   );
   return buildScope(db, data);
+}
+
+const JOB_RUNNER_MEMBER = "job-runner";
+
+/**
+ * A scope pinned to one project with no session, for the generation-job runner (research D11). It can do
+ * what an editor can (`generation: run`, `post: edit`) but not `generation: auto_approve`. Callers pass
+ * `createdByUserId` explicitly; the runner never writes `membership.userId`.
+ */
+export async function forJobRunner(projectId: string, actorUserId: string | null): Promise<ProjectScope> {
+  const db = getDb();
+  const rows = await crossProject("scheduler: job runner project", () =>
+    db.select(projectColumns).from(projects).where(eq(projects.id, projectId)).limit(1),
+  );
+  const project = rows[0];
+  if (!project) throw new NotFoundError();
+  return buildScope(db, { project, membership: { memberId: JOB_RUNNER_MEMBER, userId: actorUserId ?? "", role: "editor" } });
 }
 
 export function requireRole(scope: ProjectScope, ...allowed: Role[]): void {

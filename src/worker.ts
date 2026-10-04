@@ -1,6 +1,7 @@
 // Worker entry, bundled to `.next/standalone/worker.mjs` by `build:worker`. It must not import `next/*`.
 import { closeDb, schemaIsReady } from "./server/dal";
 import { formatEnvIssues, getEnv, parseEnv } from "./server/env";
+import { parseLlmConfig } from "./server/llm/config";
 import { runTick } from "./server/scheduler";
 import { runLoop } from "./server/scheduler/loop";
 import { waitForSchema } from "./server/scheduler/schema-wait";
@@ -10,6 +11,10 @@ async function main(): Promise<void> {
   if (!parsed.ok) {
     console.error(formatEnvIssues(parsed.issues));
     process.exit(1);
+  }
+
+  if (!parseLlmConfig(process.env).ok) {
+    console.log("Docket scheduler: generation is not configured; queued generation jobs wait until it is.");
   }
 
   const controller = new AbortController();

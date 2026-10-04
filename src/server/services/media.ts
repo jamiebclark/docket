@@ -58,6 +58,8 @@ export interface MediaView {
   missingAlt: boolean;
   tags: string[];
   inUse: boolean;
+  /** The job holding this image in a queued, running or failed item, if any. */
+  reservedByJobId: string | null;
   originalFilename: string | null;
   createdAt: Date;
 }
@@ -83,7 +85,11 @@ export async function mediaStatus(scope: ProjectScope): Promise<MediaStatus> {
   return { enabled: getStorage() !== null, maxUploadBytes, maxMegapixels: maxPixels / 1_000_000, acceptedTypes: ACCEPTED_TYPES };
 }
 
-async function toView(row: MediaRow, inUse = row.firstUsedAt !== null): Promise<MediaView> {
+export async function toView(
+  row: MediaRow,
+  inUse = row.firstUsedAt !== null,
+  reservedByJobId: string | null = null,
+): Promise<MediaView> {
   const storage = getStorage();
   const signed = storage && getEnv().storage?.previewUrls === "signed";
   const sign = async (key: string, fallback: string) => (signed ? storage.signedUrl(key, PREVIEW_SECONDS) : fallback);
@@ -102,6 +108,7 @@ async function toView(row: MediaRow, inUse = row.firstUsedAt !== null): Promise<
     missingAlt: row.altText.trim() === "",
     tags: row.tags,
     inUse,
+    reservedByJobId,
     originalFilename: row.originalFilename,
     createdAt: row.createdAt,
   };
@@ -183,7 +190,7 @@ export async function listMedia(scope: ProjectScope, filter: unknown = {}) {
     scope.media.listTags(),
   ]);
   return {
-    items: await Promise.all(rows.map((r) => toView(r, r.inUse))),
+    items: await Promise.all(rows.map((r) => toView(r, r.inUse, r.reservedByJobId))),
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / MEDIA_PAGE_SIZE)),

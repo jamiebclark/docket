@@ -24,6 +24,8 @@ export const projectOwnedTables = [
   { table: "voice_profile_versions", scopeColumn: "project_id" },
   { table: "generation_series", scopeColumn: "project_id" },
   { table: "generation_failures", scopeColumn: "project_id" },
+  { table: "generation_jobs", scopeColumn: "project_id" },
+  { table: "generation_job_items", scopeColumn: "project_id" },
 ] as const satisfies readonly ProjectOwnedTable[];
 
 export const notProjectOwned = [

@@ -114,6 +114,7 @@ describe("parseEnv", () => {
         SCHEDULER_STALE_AFTER_MINUTES: 5,
         EXPLICIT_TIME_WARNING_MINUTES: 30,
         QUEUE_HORIZON_DAYS: 366,
+        GENERATION_TICK_MAX_ITEMS: 2,
         MOCK_PROVIDER_ENABLED: true,
       });
     });
@@ -139,6 +140,8 @@ describe("parseEnv", () => {
       ["EXPLICIT_TIME_WARNING_MINUTES", "-1"],
       ["QUEUE_HORIZON_DAYS", "6"],
       ["QUEUE_HORIZON_DAYS", "731"],
+      ["GENERATION_TICK_MAX_ITEMS", "0"],
+      ["GENERATION_TICK_MAX_ITEMS", "11"],
       ["RUN_WORKER_IN_PROCESS", "yes"],
       ["MOCK_PROVIDER_ENABLED", "1"],
     ])("rejects %s=%s", (name, value) => {
@@ -149,6 +152,13 @@ describe("parseEnv", () => {
       const r = parseEnv({ ...base, WORKER_INTERVAL_SECONDS: "30", QUEUE_HORIZON_DAYS: "730", EXPLICIT_TIME_WARNING_MINUTES: "0", RUN_WORKER_IN_PROCESS: "true", MOCK_PROVIDER_ENABLED: "false" });
       if (!r.ok) throw new Error(JSON.stringify(r.issues));
       expect(r.env).toMatchObject({ WORKER_INTERVAL_SECONDS: 30, QUEUE_HORIZON_DAYS: 730, EXPLICIT_TIME_WARNING_MINUTES: 0, RUN_WORKER_IN_PROCESS: true, MOCK_PROVIDER_ENABLED: false });
+    });
+
+    it("accepts GENERATION_TICK_MAX_ITEMS at 1 and 10", () => {
+      for (const v of ["1", "10"]) {
+        const r = parseEnv({ ...base, GENERATION_TICK_MAX_ITEMS: v });
+        expect(r.ok && r.env.GENERATION_TICK_MAX_ITEMS).toBe(Number(v));
+      }
     });
 
     it("accepts the smallest lease against the largest budget and timeout", () => {

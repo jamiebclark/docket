@@ -20,6 +20,20 @@ describe("createFakeLlm", () => {
     ]);
   });
 
+  test("delayMs past timeoutMs fails as timeout; within it succeeds", async () => {
+    const llm = createFakeLlm([{ ok: { text: "a" }, delayMs: 50 }, { ok: { text: "b" }, delayMs: 5 }]);
+    expect(await llm.generate({ ...req(), timeoutMs: 10 })).toMatchObject({ ok: false, kind: "timeout" });
+    expect(await llm.generate({ ...req(), timeoutMs: 100 })).toMatchObject({ ok: true });
+  });
+
+  test("an aborted signal during delayMs fails as timeout", async () => {
+    const ac = new AbortController();
+    const llm = createFakeLlm([{ ok: { text: "a" }, delayMs: 200 }]);
+    const p = llm.generate({ ...req(), signal: ac.signal });
+    ac.abort();
+    expect(await p).toMatchObject({ ok: false, kind: "timeout" });
+  });
+
   test("invalid raw JSON is invalid_output with rawText", async () => {
     const r = await createFakeLlm([{ raw: "{nope" }]).generate(req());
     expect(r).toMatchObject({ ok: false, kind: "invalid_output", rawText: "{nope" });

@@ -20,9 +20,11 @@ import type { PostRecord } from "../../dal/posts";
 import type { ProjectScope } from "../../dal/scope";
 import type { LlmFailureKind, LlmProvider } from "../../llm/types";
 import type { PlannedTime } from "../queue";
-import { applyDerivedStatus, type TargetResult } from "../posts";
+import type { TargetResult } from "../posts";
 import { runGeneration, type CoreOutcome } from "./core";
 import { recordFailure } from "./failures";
+import { saveGeneratedPost } from "./save";
+export { fillEmptyAltTexts } from "./save";
 import { applyApprovalPolicy, resolvePolicies, type PolicyDecision, type ResolvedPolicies } from "./policy";
 
 export const generateSingleSchema = z.object({
@@ -173,19 +175,6 @@ export function buildRecord(args: {
   };
 }
 
-/** Fills a media asset's alt text only where it is empty (research D9). */
-export async function fillEmptyAltTexts(
-  tx: ProjectScope,
-  assets: readonly MediaRow[],
-  alts: readonly string[] | null,
-): Promise<void> {
-  if (!alts) return;
-  for (const [i, asset] of assets.entries()) {
-    const alt = alts[i]?.trim();
-    if (alt && asset.altText.trim() === "") await tx.media.updateAlt(asset.id, alt);
-  }
-}
-
 export async function generateSingle(scope: ProjectScope, input: unknown, llm?: LlmProvider): Promise<GenerateResult> {
   const parsed = generateSingleSchema.parse(input);
   need(scope, { generation: ["run"], post: ["edit"] });
@@ -241,33 +230,20 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
     resolved: policies.resolved,
     at: await clock.now(),
   });
-  const variantOf = (a: AccountRecord) => outcome.output.variants[a.providerKey] ?? "";
-
   let postId: string;
   try {
     postId = await scope.transaction(async (tx) => {
       need(tx, { generation: ["run"], post: ["edit"] });
-      const now = await clock.now();
-      if ((await tx.media.lockShared(inputs.mediaAssetIds)).length !== new Set(inputs.mediaAssetIds).size) {
-        throw new NotFoundError();
-      }
-      const post = await tx.posts.insert({
-        baseText: variantOf(accounts[0]!),
-        createdByUserId: tx.membership.userId,
-        origin: "generated",
-        reviewState: "needs_review",
+      return saveGeneratedPost(tx, {
+        accounts,
+        variants: outcome.output.variants,
+        assets,
+        imageAltTexts: outcome.output.imageAltTexts,
+        record,
         schedulingPolicy: policies.resolved.scheduling,
-        generationRequestId: parsed.requestId,
-        generationMetadata: { v: 1, records: [record] },
+        createdByUserId: tx.membership.userId,
+        link: { generationRequestId: parsed.requestId },
       });
-      await tx.posts.setMedia(post.id, inputs.mediaAssetIds);
-      await tx.media.markUsed(inputs.mediaAssetIds, now);
-      await tx.targets.insertMany(
-        accounts.map((a) => ({ postId: post.id, socialAccountId: a.id, overrideText: variantOf(a) })),
-      );
-      await fillEmptyAltTexts(tx, assets, outcome.output.imageAltTexts);
-      await applyDerivedStatus(tx, post.id);
-      return post.id;
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
