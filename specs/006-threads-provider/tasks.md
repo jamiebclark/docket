@@ -141,8 +141,8 @@ description: "Task list for the Threads provider (006)"
 
 **Independent Test**: fill the counter; stub reached/unreadable quota.
 
-- [ ] T041 [US6] Write `tests/integration/threads/limits.test.ts`: 250 starts in the window → the 251st target waits with **no** provider request (SC-006, run a 300-target simulation); an account-level override still works; quota reading at/over limit → `retryable_error` with `next_attempt_at ≥ now + 1 h`, no publish request, usage recorded in the attempt summary; unreadable/failed quota → publish proceeds on the engine counter with `quota:"unknown"` in the summary; wait longer than 23 h → container recreated before publishing (no publish had been sent)
-- [ ] T042 [US6] Write `tests/integration/threads/quota.test.ts` only if T041 leaves branches uncovered: `threads_publishing_limit` shapes (missing `config`, string numbers, empty `data`, error body, 190) map to known/unknown/credentials-invalid as in research R7/D8
+- [x] T041 [US6] Write `tests/integration/threads/limits.test.ts`: 250 starts in the window → the 251st target waits with **no** provider request (SC-006, run a 300-target simulation); an account-level override still works; quota reading at/over limit → `retryable_error` with `next_attempt_at ≥ now + 1 h`, no publish request, usage recorded in the attempt summary; unreadable/failed quota → publish proceeds on the engine counter with `quota:"unknown"` in the summary; wait longer than 23 h → container recreated before publishing (no publish had been sent)
+- [x] T042 [US6] (not needed: `src/providers/threads/quota.test.ts` covers the shapes, `outcomes.test.ts` covers error body/190 at check_quota) Write `tests/integration/threads/quota.test.ts` only if T041 leaves branches uncovered: `threads_publishing_limit` shapes (missing `config`, string numbers, empty `data`, error body, 190) map to known/unknown/credentials-invalid as in research R7/D8
 
 ---
 
