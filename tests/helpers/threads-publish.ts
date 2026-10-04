@@ -46,8 +46,8 @@ export async function threadsSetup(storage: MemoryStorage, opts: ThreadsSetupOpt
   const credentials = {
     v: 1,
     accessToken: THREADS_TOKEN,
-    issuedAt: Math.floor(issued.getTime() / 1000),
-    expiresAt: Math.floor(expires.getTime() / 1000),
+    issuedAt: issued.getTime(),
+    expiresAt: expires.getTime(),
     expiryEstimated: false,
   };
   await forSchedulerProject(projectId).accounts.setCredentials(account.id, encryptCredentials(account.id, credentials), expires);
