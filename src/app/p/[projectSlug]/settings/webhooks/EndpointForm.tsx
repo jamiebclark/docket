@@ -6,6 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { ShowOnceDialog } from "@/components/ui/ShowOnceDialog";
 import { createEndpointAction, updateEndpointAction } from "./actions";
 import { EVENT_LABELS, type EndpointDto } from "./dto";
+import { checkStyles } from "@/components/ui/controls";
 
 const SELECTABLE = ["post.published", "post.failed", "job.finished", "account.needs_reauth"] as const;
 
@@ -87,8 +88,7 @@ export function EndpointForm({
                 type="checkbox"
                 name="events"
                 value={type}
-                defaultChecked={endpoint ? endpoint.events.includes(type) : type !== "account.needs_reauth"}
-              />
+                defaultChecked={endpoint ? endpoint.events.includes(type) : type !== "account.needs_reauth"} className={checkStyles} />
               {EVENT_LABELS[type]}
             </label>
           ))}

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { chooseConnectCandidatesAction } from "../../actions";
 import { buttonStyles } from "@/components/ui/Button";
+import { checkStyles } from "@/components/ui/controls";
 
 export interface ChooserCandidate {
   key: string;
@@ -36,7 +37,7 @@ function Option({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2">
-        <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4" />
+        <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className={checkStyles} />
         <label htmlFor={id} className="text-sm">
           {c.displayName} <span className="text-muted-foreground">({c.providerName})</span>
         </label>
