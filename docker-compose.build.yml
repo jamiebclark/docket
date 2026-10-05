@@ -1,0 +1,16 @@
+# Build the image from this checkout instead of pulling the published one. Use it on top of
+# docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# or set COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml in .env so a plain
+# `docker compose up -d --build` does the same.
+services:
+  web:
+    image: docket:local
+    build: .
+
+  worker:
+    image: docket:local
+
+  storage-init:
+    image: docket:local
+    build: .
