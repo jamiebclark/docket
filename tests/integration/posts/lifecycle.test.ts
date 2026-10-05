@@ -107,6 +107,20 @@ describe("post lifecycle", () => {
     await expect(posts.getPost(env.scope, p.post.id)).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it("cancelling one draft target of a needs_review post keeps it in review (F22)", async () => {
+    const env = await postsEnv();
+    const a = await env.account();
+    const b = await env.account();
+    const p = await posts.createDraft(env.scope, { baseText: "r", reviewState: "needs_review", targets: [{ accountId: a.id }, { accountId: b.id }] });
+    await posts.cancelTarget(env.scope, p.targets[0]!.id);
+    expect((await posts.getPost(env.scope, p.post.id)).post.reviewState).toBe("needs_review");
+    const blocked = await atTime(NOW, () => posts.addToQueue(env.scope, p.post.id));
+    expect(blocked.every((r) => !r.ok)).toBe(true);
+    // Cancelling the last live target is "all cancelled", which does return to draft.
+    await posts.cancelTarget(env.scope, p.targets[1]!.id);
+    expect((await posts.getPost(env.scope, p.post.id)).post.reviewState).toBe("draft");
+  });
+
   it("needs_review posts cannot be queued, and ambiguous/failed targets resolve and retry", async () => {
     const env = await postsEnv();
     const a = await env.account({ behaviour: "ambiguous" }, false);

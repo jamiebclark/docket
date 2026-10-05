@@ -23,10 +23,14 @@ export async function cancelTargetRow(tx: Pick<ProjectScope, "targets">, targetI
   await tx.targets.update(targetId, { status: "cancelled", ...CLEARED }, { statuses: ["draft", "scheduled", "publishing"] });
 }
 
-/** When a cancel leaves a post with no live targets, it returns to `draft` (D11); then the status is re-derived. */
+/**
+ * Only an all-cancelled post returns to `draft` (FR-029). A post that still has draft targets
+ * keeps its editorial state, so cancelling one target of a `needs_review` post never lets it
+ * skip review (re-review F22). Then the status is re-derived.
+ */
 export async function resetEmptyReview(tx: EmitRepos, postId: string): Promise<void> {
   const targets = await tx.targets.listForPost(postId);
-  if (targets.every((t) => t.status === "draft" || t.status === "cancelled")) {
+  if (targets.length > 0 && targets.every((t) => t.status === "cancelled")) {
     await tx.posts.update(postId, { reviewState: "draft" });
   }
   await applyDerivedStatus(tx, postId);
