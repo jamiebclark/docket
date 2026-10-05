@@ -19,6 +19,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:check": "node scripts/check-migrations-current.mjs",
+    "db:test:clean": "esbuild scripts/test-db-clean.ts --bundle --platform=node --target=node24 --format=esm --outfile=${TMPDIR:-/tmp}/test-db-clean.mjs --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node ${TMPDIR:-/tmp}/test-db-clean.mjs",
     "prepare": "husky"
   },
   "engines": {
