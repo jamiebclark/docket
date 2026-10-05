@@ -18,6 +18,9 @@ export const metaConnectGroup: OAuthConnectGroup = {
   key: "meta",
   displayName: "Facebook Pages and Instagram",
   setupDoc: "docs/meta-setup.md",
+  // Appended to the no-accounts / sign-in banners: name what the login must grant (re-review F1).
+  callbackHint:
+    "Facebook must grant pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic and instagram_content_publish, and at least one Page must be selected in the login dialog.",
   environment: {
     variables: [
       { name: "META_APP_ID", secret: false, required: false },
