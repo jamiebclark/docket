@@ -51,6 +51,12 @@ over fancy.** Every screen must be fully usable from the keyboard.
   form, right-aligned; destructive actions are secondary styling and confirm
   in a dialog that names the thing being destroyed.
 - Disable submit only while pending; show pending state on the button itself.
+- One-of-many choices never use a native `<select>`: 2–6 short options are a
+  `SegmentedControl` (option `cards` when each needs explaining), lists that
+  grow with data use `ChoiceField`, long lists (time zones) use `Combobox` /
+  `TimeZoneField`. See `docs/design-system.md` §7.
+- Long forms end in an `ActionBar` (sticky from `md`); anything sticky inside
+  the shell offsets from `var(--sticky-top)`, never `top-0`.
 
 ## Lists, tables, calendar
 - Tables use real `<table>` markup with `<th scope>`. Filters are links/

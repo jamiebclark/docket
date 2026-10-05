@@ -34,7 +34,9 @@ in light and dark themes.
   `<Link>`), `<Field>`/`<Select>` or `controlStyles`, `Card`/`cardStyles`,
   `PageHeader`, `Table`/`Row`/`Cell`, `StatusBadge`/`Badge`, `Alert`/
   `alertStyles`, `EmptyState`, `FilterTabs`, `Dialog`, `Menu`, `Pagination`,
-  `Skeleton`, `Icon`. If something is missing, add a variant or a new
+  `Skeleton`, `Icon`, `ActionBar`, and for one-of-many choices
+  `SegmentedControl` / `ChoiceField` / `Combobox` / `TimeZoneField` (never a
+  native `<select>`; the size rules are in design-system §7). If something is missing, add a variant or a new
   component in `src/components/ui/` with a short JSDoc on its props, and add
   it to the component table in `docs/design-system.md` in the same change.
 - **Hierarchy.** One `h1` per route (via `PageHeader`). One `primary` button
