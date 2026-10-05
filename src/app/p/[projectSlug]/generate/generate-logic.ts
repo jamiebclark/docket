@@ -1,4 +1,5 @@
 // Pure helpers for the Generate screens, kept out of the client component so tests can import them.
+import { GROUP_LIMIT, groupLimitMessage, groupTargets } from "@/lib/generation/groups";
 import { BRIEF_MAX, INSTRUCTIONS_MAX, SOURCE_TEXT_MAX } from "@/lib/validation/generation";
 
 export interface AccountOption {
@@ -10,6 +11,7 @@ export interface AccountOption {
   providerAvailable: boolean;
   maxImages: number;
   mediaRequired: boolean;
+  postingInstructions: string | null;
 }
 
 export const LIMITS = { brief: BRIEF_MAX, sourceText: SOURCE_TEXT_MAX, instructions: INSTRUCTIONS_MAX } as const;
@@ -29,6 +31,15 @@ export function platformsNeedingImage(selected: readonly AccountOption[], imageC
   if (imageCount > 0) return [];
   return [...new Set(selected.filter((a) => a.mediaRequired).map((a) => a.providerName))];
 }
+
+/** The live message when the chosen accounts need more versions than one generation can write; null otherwise. */
+export function groupLimitNotice(selected: readonly AccountOption[]): string | null {
+  const n = groupTargets(selected).length;
+  return n > GROUP_LIMIT ? groupLimitMessage(n) : null;
+}
+
+export const ACCOUNTS_HINT =
+  "One version is written for each platform you choose. Accounts on the same platform with different posting instructions each get their own version.";
 
 export const imageWarning = (providerName: string): string =>
   `${providerName} needs an image. Without one, the ${providerName} version will go to review.`;

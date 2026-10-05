@@ -167,4 +167,13 @@ describe("openapi.json", () => {
     expect(result.errors).toBeUndefined();
     expect(result.valid).toBe(true);
   });
+
+  it("documents Account.postingInstructions as a required nullable string", () => {
+    const schema = doc().components.schemas.Account;
+    expect(schema.required).toContain("postingInstructions");
+    const types = [schema.properties.postingInstructions.type].flat().concat(
+      (schema.properties.postingInstructions.anyOf ?? []).map((a: any) => a.type),
+    );
+    expect(types).toEqual(expect.arrayContaining(["string", "null"]));
+  });
 });

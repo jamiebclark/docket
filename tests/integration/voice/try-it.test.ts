@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ConflictError } from "../../../src/server/dal/errors";
+import * as accounts from "../../../src/server/services/accounts";
 import * as voice from "../../../src/server/services/voice";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
@@ -35,43 +36,44 @@ async function setup() {
     content: { voiceAndTone: "SAVED-TONE" },
   });
   const current = await voice.getVoiceProfile(env.scope, profileId);
-  return { env, versionId: current.current.id };
+  const account = await accounts.connectMock(env.scope, { displayName: "Acme", settings: {} });
+  return { env, versionId: current.current.id, accountId: account.id };
 }
 
 describe("tryVoice", () => {
-  it("returns a variant per platform with counts and writes nothing", async () => {
-    const { env, versionId } = await setup();
-    const llm = createFakeLlm([ok({ bluesky: "Hello Bluesky", threads: "Hello Threads" })]);
+  it("returns a variant per group with counts and writes nothing", async () => {
+    const { env, versionId, accountId } = await setup();
+    const llm = createFakeLlm([ok({ mock: "Hello Mock" })]);
     const before = await rowCounts();
-    const res = await voice.tryVoice(env.scope, { brief: "Say hi", providerKeys: ["bluesky", "threads"], versionId }, llm);
+    const res = await voice.tryVoice(env.scope, { brief: "Say hi", accountIds: [accountId], versionId }, llm);
     expect(await rowCounts()).toEqual(before);
-    expect(res.variants.map((v) => v.providerKey)).toEqual(["bluesky", "threads"]);
-    expect(res.variants[0]).toMatchObject({ text: "Hello Bluesky", count: 13, issues: [] });
+    expect(res.variants.map((v) => v.providerKey)).toEqual(["mock"]);
+    expect(res.variants[0]).toMatchObject({ text: "Hello Mock", count: 10, accountNames: ["Acme"], issues: [] });
     expect(res.variants[0]!.limit).toBeGreaterThan(0);
     expect(res.latencyMs).toBeGreaterThan(0);
     expect(llm.requests.length).toBeLessThanOrEqual(2);
   });
 
   it("uses an owner's unsaved draft, but an editor's draft is ignored for the saved version", async () => {
-    const { env, versionId } = await setup();
+    const { env, versionId, accountId } = await setup();
     const draft = { voiceAndTone: "DRAFT-TONE" };
-    const ownerLlm = createFakeLlm([ok({ bluesky: "x" })]);
-    await voice.tryVoice(env.scope, { brief: "b", providerKeys: ["bluesky"], draft, versionId }, ownerLlm);
+    const ownerLlm = createFakeLlm([ok({ mock: "x" })]);
+    await voice.tryVoice(env.scope, { brief: "b", accountIds: [accountId], draft, versionId }, ownerLlm);
     expect(ownerLlm.requests[0]!.system + ownerLlm.requests[0]!.user).toContain("DRAFT-TONE");
 
-    const editorLlm = createFakeLlm([ok({ bluesky: "x" })]);
+    const editorLlm = createFakeLlm([ok({ mock: "x" })]);
     const editor = await env.as(env.editor);
-    await voice.tryVoice(editor, { brief: "b", providerKeys: ["bluesky"], draft, versionId }, editorLlm);
+    await voice.tryVoice(editor, { brief: "b", accountIds: [accountId], draft, versionId }, editorLlm);
     const prompt = editorLlm.requests[0]!.system + editorLlm.requests[0]!.user;
     expect(prompt).toContain("SAVED-TONE");
     expect(prompt).not.toContain("DRAFT-TONE");
   });
 
   it("surfaces a failed call as a plain message and writes nothing", async () => {
-    const { env, versionId } = await setup();
+    const { env, versionId, accountId } = await setup();
     const before = await rowCounts();
     const llm = createFakeLlm([{ fail: "timeout" }, { fail: "timeout" }]);
-    await expect(voice.tryVoice(env.scope, { brief: "b", providerKeys: ["bluesky"], versionId }, llm)).rejects.toBeInstanceOf(
+    await expect(voice.tryVoice(env.scope, { brief: "b", accountIds: [accountId], versionId }, llm)).rejects.toBeInstanceOf(
       ConflictError,
     );
     expect(llm.requests.length).toBeLessThanOrEqual(2);

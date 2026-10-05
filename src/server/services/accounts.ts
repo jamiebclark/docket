@@ -15,6 +15,8 @@ import { decryptSecret, encryptSecret } from "../crypto/secrets";
 import { getEnv } from "../env";
 import type { ApiAccount } from "@/lib/api/schemas";
 import { redact } from "../scheduler/redact";
+import { normaliseInstructions, POSTING_INSTRUCTIONS_MAX } from "@/lib/generation/groups";
+import { recordAudit } from "./audit";
 import { toApiAccount } from "./views/account";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./posts/cancel";
 
@@ -33,6 +35,8 @@ export interface AccountView {
   connectedAt: Date;
   /** From the provider's `accountNotes` hook (G13); plain text, at most 5 notes of 300 characters. */
   notes: string[];
+  /** Per-account writing rules, normalised; `null` when none are set. */
+  postingInstructions: string | null;
 }
 
 export interface ConnectableProvider {
@@ -100,6 +104,7 @@ function view(a: AccountRecord): AccountView {
     providerAvailable: provider !== undefined,
     connectedAt: a.createdAt,
     notes: notesFor(a),
+    postingInstructions: a.postingInstructions,
   };
 }
 
@@ -292,6 +297,41 @@ export async function updateAccountSettings(scope: ProjectScope, accountId: stri
     const provider = findProvider(account.providerKey);
     if (!provider) throw new ConflictError("That provider is no longer available.");
     await tx.accounts.updateSettings(id, provider.settingsSchema.parse(settings ?? {}));
+  });
+}
+
+export const postingInstructionsSchema = z.object({
+  instructions: z
+    .string()
+    .transform((text) => normaliseInstructions(text))
+    .refine((text) => text === null || text.length <= POSTING_INSTRUCTIONS_MAX, {
+      error: "Keep posting instructions to 2,000 characters or fewer",
+    }),
+});
+
+/** Stores the normalised text (`null` clears it). An unchanged value writes and audits nothing. */
+export async function setPostingInstructions(
+  scope: ProjectScope,
+  accountId: string,
+  input: unknown,
+): Promise<{ changed: boolean; instructions: string | null }> {
+  const parsedId = idSchema.safeParse(accountId);
+  if (!parsedId.success) throw new NotFoundError();
+  const id = parsedId.data;
+  const { instructions } = postingInstructionsSchema.parse(input);
+  require(scope, "manage");
+  return scope.transaction(async (tx) => {
+    require(tx, "manage");
+    const account = await tx.accounts.getForUpdate(id);
+    if (!account || account.removedAt) throw new NotFoundError();
+    if (account.postingInstructions === instructions) return { changed: false, instructions };
+    await tx.accounts.setPostingInstructions(id, instructions);
+    await recordAudit(tx, {
+      action: "account_posting_instructions_update",
+      actorUserId: tx.membership.userId || null,
+      details: { accountId: id, displayName: account.displayName, previous: account.postingInstructions, next: instructions },
+    });
+    return { changed: true, instructions };
   });
 }
 

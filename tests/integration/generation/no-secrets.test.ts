@@ -85,7 +85,7 @@ describe("no secrets", () => {
 
     const version = (await listVersions(env.scope, profile.id))[0]!;
     results.push(
-      await tryVoice(env.scope, { brief: "Try", versionId: version.id, providerKeys: ["bluesky"] }, createFakeLlm([ok("Tried")])),
+      await tryVoice(env.scope, { brief: "Try", versionId: version.id, accountIds: [bsky.id] }, createFakeLlm([ok("Tried")])),
     );
 
     const failed = await generateSingle(

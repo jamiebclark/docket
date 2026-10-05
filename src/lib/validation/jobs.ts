@@ -61,3 +61,10 @@ export const itemPayloadSchema = z.object({
   fields: z.record(z.string(), z.string()),
 });
 export type ItemPayload = z.infer<typeof itemPayloadSchema>;
+
+/** `generation_jobs.posting_instructions_snapshot`: each target account's instructions when the job was created. */
+export const jobInstructionsSnapshotSchema = z.object({
+  v: z.literal(1),
+  byAccount: z.record(z.uuid(), z.string().nullable()),
+});
+export type JobInstructionsSnapshot = z.infer<typeof jobInstructionsSnapshotSchema>;

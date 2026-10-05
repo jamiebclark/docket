@@ -299,43 +299,39 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
 
 const variantEditsSchema = z.object({
   edits: z
-    .array(z.object({ providerKey: z.string().min(1), text: baseTextSchema }))
+    .array(z.object({ accountIds: z.array(z.uuid()).min(1).max(50), text: baseTextSchema }))
     .min(1)
     .max(50),
 });
 
 /**
- * Sets the text of every live (draft) target of each named provider, through `updatePost`. Scheduled targets
+ * Sets the text of every live (draft) target of the listed accounts, through `updatePost`. Scheduled targets
  * keep their text. The returned problems are the blocking issues left on those targets.
  */
 export async function updatePostVariants(
   scope: ProjectScope,
   postId: string,
   input: unknown,
-): Promise<{ detail: PostDetail; problems: { providerKey: string; targetId: string; issues: ValidationIssue[] }[] }> {
+): Promise<{ detail: PostDetail; problems: { accountIds: string[]; targetId: string; issues: ValidationIssue[] }[] }> {
   const id = uuid.parse(postId);
   const { edits } = variantEditsSchema.parse(input);
   need(scope, { post: ["edit"] });
-  const byProvider = new Map(edits.map((e) => [e.providerKey, e.text]));
+  const edit = new Map<string, { text: string; accountIds: string[] }>();
+  for (const e of edits) for (const accountId of e.accountIds) edit.set(accountId, e);
   const current = (await scope.targets.listForPost(id)).filter((t) => t.status !== "cancelled");
-  const providerOf = new Map<string, string>();
-  for (const t of current) {
-    const account = await scope.accounts.get(t.socialAccountId);
-    if (account) providerOf.set(t.id, account.providerKey);
-  }
   const detail = await updatePost(scope, id, {
     targets: current.map((t) => {
-      const text = t.status === "draft" ? byProvider.get(providerOf.get(t.id) ?? "") : undefined;
+      const text = t.status === "draft" ? edit.get(t.socialAccountId)?.text : undefined;
       return { accountId: t.socialAccountId, overrideText: text ?? t.overrideText };
     }),
   });
-  const problems: { providerKey: string; targetId: string; issues: ValidationIssue[] }[] = [];
+  const accountOf = new Map(current.map((t) => [t.id, t.socialAccountId]));
+  const problems: { accountIds: string[]; targetId: string; issues: ValidationIssue[] }[] = [];
   for (const r of await validatePost(scope, id)) {
-    const providerKey = providerOf.get(r.targetId);
+    const accountId = accountOf.get(r.targetId);
     const issues = errorsOf(r.issues);
-    if (providerKey && byProvider.has(providerKey) && issues.length > 0) {
-      problems.push({ providerKey, targetId: r.targetId, issues });
-    }
+    const edited = accountId ? edit.get(accountId) : undefined;
+    if (edited && issues.length > 0) problems.push({ accountIds: edited.accountIds, targetId: r.targetId, issues });
   }
   return { detail, problems };
 }

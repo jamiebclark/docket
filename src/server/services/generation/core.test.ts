@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_VOICE_CONTENT } from "@/lib/validation/voice";
 import type { ProjectScope } from "../../dal/scope";
 import { createFakeLlm } from "../../../../tests/helpers/fake-llm";
+import { groupsOfPlatforms } from "./__fixtures__/cases";
 import { runGeneration, type CoreRequest } from "./core";
 
 const prepare = vi.hoisted(() => vi.fn());
@@ -11,7 +12,7 @@ const scope = { media: {} } as unknown as ProjectScope;
 const req: CoreRequest = {
   label: "generate.single",
   voice: { content: EMPTY_VOICE_CONTENT },
-  providerKeys: ["bluesky"],
+  groups: groupsOfPlatforms(["bluesky"]),
   assets: [],
   inputs: { brief: "Sale day", sourceText: null, instructions: null, series: null },
 };
@@ -42,7 +43,7 @@ describe("runGeneration", () => {
   it("returns ok with remaining problems after two invalid answers, never a third call", async () => {
     const llm = createFakeLlm([{ ok: long }, { ok: long }, { ok: good }]);
     const r = await runGeneration(scope, req, llm);
-    expect(r.ok && r.remainingProblems).toEqual([{ providerKey: "bluesky", messages: ["Text is 312 graphemes; the limit is 300."] }]);
+    expect(r.ok && r.remainingProblems).toEqual([{ providerKey: "bluesky", groupKey: "bluesky", messages: ["Text is 312 graphemes; the limit is 300."] }]);
     expect(llm.requests).toHaveLength(2);
     expect(llm.remaining()).toBe(1);
   });

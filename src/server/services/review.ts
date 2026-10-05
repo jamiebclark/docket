@@ -11,6 +11,7 @@ import type { ProjectScope, SchedulingPolicy } from "../dal/scope";
 import type { TargetRecord } from "../dal/targets";
 import { prepareVariants } from "./media-variants";
 import { applyDerivedStatus, gate, lockPost, queueTargetsInTx, type TargetResult } from "./posts";
+import { variantGroupsForPost } from "./posts/variant-groups";
 import { loadTargetContent, validateTargetContent } from "./posts/validate";
 import type { PlannedTime } from "./queue";
 
@@ -19,7 +20,7 @@ export const REJECT_REASON_MAX = 500;
 
 const pageSchema = z.object({ page: z.coerce.number().int().min(1).default(1) });
 const approveSchema = z.object({
-  edits: z.array(z.object({ providerKey: z.string().min(1), text: z.string() })).max(50).optional(),
+  edits: z.array(z.object({ accountIds: z.array(z.uuid()).min(1).max(50), text: z.string() })).max(50).optional(),
 });
 const rejectSchema = z.object({
   reason: z.string().trim().max(REJECT_REASON_MAX, { error: "The reason can be at most 500 characters" }).nullish(),
@@ -32,6 +33,8 @@ const bulkSchema = z.object({
 });
 
 export interface ReviewVariant {
+  /** The variant key: the platform, or `<platform>_<n>` when the post has several variants for it. */
+  key: string;
   providerKey: string;
   displayName: string;
   text: string;
@@ -62,32 +65,29 @@ const liveTargets = (all: TargetRecord[]) => all.filter((t) => t.status !== "can
 
 async function buildItem(scope: ProjectScope, post: PostRecord): Promise<ReviewItem> {
   const targets = liveTargets(await scope.targets.listForPost(post.id));
+  const byId = new Map(targets.map((t) => [t.id, t]));
   const variants: ReviewVariant[] = [];
-  for (const t of targets) {
-    const account = await scope.accounts.get(t.socialAccountId);
+  for (const group of await variantGroupsForPost(scope, post, targets)) {
+    const first = byId.get(group.targetIds[0]!)!;
+    const account = await scope.accounts.get(first.socialAccountId);
     if (!account) continue;
-    const provider = findProvider(account.providerKey);
-    let variant = variants.find((v) => v.providerKey === account.providerKey);
-    if (!variant) {
-      const content = await loadTargetContent(scope, t);
-      const issues = content ? ((await validateTargetContent(scope, account, content, { preview: true })) ?? []) : [];
-      const rule = provider?.capabilities.text.countingRule ?? null;
-      const text = content?.text ?? t.overrideText ?? post.baseText;
-      variant = {
-        providerKey: account.providerKey,
-        displayName: provider?.displayName ?? account.providerKey,
-        text,
-        accountIds: [],
-        accountNames: [],
-        count: rule ? countText(text, rule) : text.length,
-        limit: provider?.capabilities.text.maxLength ?? 0,
-        countingRule: rule ? countingRuleName(rule) : "characters",
-        issues,
-      };
-      variants.push(variant);
-    }
-    variant.accountIds.push(account.id);
-    variant.accountNames.push(account.displayName);
+    const provider = findProvider(group.providerKey);
+    const content = await loadTargetContent(scope, first);
+    const issues = content ? ((await validateTargetContent(scope, account, content, { preview: true })) ?? []) : [];
+    const rule = provider?.capabilities.text.countingRule ?? null;
+    const text = content?.text ?? first.overrideText ?? post.baseText;
+    variants.push({
+      key: group.key,
+      providerKey: group.providerKey,
+      displayName: group.providerName,
+      text,
+      accountIds: group.accountIds,
+      accountNames: group.accountNames,
+      count: rule ? countText(text, rule) : text.length,
+      limit: provider?.capabilities.text.maxLength ?? 0,
+      countingRule: rule ? countingRuleName(rule) : "characters",
+      issues,
+    });
   }
   const meta = post.generationMetadata as { records?: unknown[] } | null;
   const parsed = generationRecordSchema.safeParse(meta?.records?.at(-1));
@@ -178,10 +178,10 @@ async function approveSerialized(
     const targets = await tx.targets.listForPost(id);
     const draft = targets.filter((t) => t.status === "draft");
     if (edits && edits.length > 0) {
-      const byProvider = new Map(edits.map((e) => [e.providerKey, e.text]));
+      const byAccount = new Map<string, string>();
+      for (const e of edits) for (const accountId of e.accountIds) byAccount.set(accountId, e.text);
       for (const t of draft) {
-        const account = await tx.accounts.get(t.socialAccountId);
-        const text = account ? byProvider.get(account.providerKey) : undefined;
+        const text = byAccount.get(t.socialAccountId);
         if (text !== undefined) await tx.targets.update(t.id, { overrideText: text });
       }
     }
@@ -189,11 +189,15 @@ async function approveSerialized(
     const fresh = await tx.targets.listForPost(id);
     const issues: Record<string, ValidationIssue[]> = {};
     let first: string | null = null;
+    const keyOf = new Map<string, string>();
+    for (const group of await variantGroupsForPost(tx, post, liveTargets(fresh))) {
+      for (const accountId of group.accountIds) keyOf.set(accountId, group.key);
+    }
     for (const t of fresh.filter((x) => x.status === "draft")) {
       const g = await gate(tx, t);
       if (g.ok || g.code !== "validation") continue;
       const account = await tx.accounts.get(t.socialAccountId);
-      const key = account?.providerKey ?? "";
+      const key = keyOf.get(t.socialAccountId) ?? account?.providerKey ?? "";
       issues[key] = g.issues ?? [];
       first ??= g.message;
     }

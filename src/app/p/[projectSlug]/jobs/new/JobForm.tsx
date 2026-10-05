@@ -6,7 +6,7 @@ import { LiveRegion } from "@/components/ui/LiveRegion";
 import { MARK_CLOSE, MARK_OPEN, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
 import { INSTRUCTIONS_MAX } from "@/lib/validation/generation";
 import { createJobAction } from "../actions";
-import { imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
+import { ACCOUNTS_HINT, groupLimitNotice, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
 import { controlStyles } from "@/components/ui/controls";
@@ -61,6 +61,7 @@ export function JobForm(props: JobFormProps) {
   const preview = firstFields ? renderTemplate(template, firstFields, { mark: true }) : null;
   const empties = Object.entries(emptyByField).filter(([name, n]) => n > 0 && new RegExp(`\\{\\{\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\}\\}`).test(template));
   const selected = accounts.filter((a) => chosen.includes(a.id));
+  const limitNotice = groupLimitNotice(selected);
   const needImage = source.kind === "csv" ? [...new Set(selected.filter((a) => a.mediaRequired).map((a) => a.providerName))] : [];
 
   function insertField(name: string) {
@@ -204,12 +205,12 @@ export function JobForm(props: JobFormProps) {
       <div className="flex flex-col gap-3">
         <AccountPicker
           legend="Target accounts"
-          hint="One version is written for each platform you choose."
+          hint={ACCOUNTS_HINT}
           idPrefix={uid}
           showStatus="always"
           value={chosen}
           onChange={setChosen}
-          error={fieldErrors.targetAccountIds}
+          error={fieldErrors.targetAccountIds ?? limitNotice ?? undefined}
           accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
         />
         {needImage.map((name) => (

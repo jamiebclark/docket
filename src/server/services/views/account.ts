@@ -12,6 +12,7 @@ export function toApiAccount(a: AccountRecord): ApiAccount {
     displayName: a.displayName,
     status: a.status,
     lastError: a.lastError,
+    postingInstructions: a.postingInstructions,
     capabilities: {
       textLimit: caps?.text.maxLength ?? 0,
       countingRule: rule === undefined ? "graphemes" : typeof rule === "string" ? rule : rule.name,

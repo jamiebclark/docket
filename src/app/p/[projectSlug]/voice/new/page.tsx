@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { EMPTY_VOICE_CONTENT } from "@/lib/validation/voice";
-import { scopeOrNotFound, platformOptions } from "../scope";
+import { scopeOrNotFound } from "../scope";
 import { VoiceEditor } from "../VoiceEditor";
 
 export const metadata: Metadata = { title: "New voice profile" };
@@ -19,8 +19,7 @@ export default async function NewVoicePage({ params }: { params: Promise<{ proje
         canManage
         initialName=""
         initialContent={EMPTY_VOICE_CONTENT}
-        platforms={platformOptions()}
-        tryDefaults={[]}
+        accounts={[]}
       />
     </section>
   );

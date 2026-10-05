@@ -14,7 +14,6 @@ export interface VoiceFormState {
   preferredLinks: { url: string; label: string }[];
   /** Typed as one line; normalised on blur. */
   hashtags: string;
-  platformGuidance: Record<string, string>;
 }
 
 export function toFormState(name: string, c: VoiceContent): VoiceFormState {
@@ -27,7 +26,6 @@ export function toFormState(name: string, c: VoiceContent): VoiceFormState {
     examplePosts: [...c.examplePosts],
     preferredLinks: c.preferredLinks.map((l) => ({ ...l })),
     hashtags: c.preferredHashtags.map((t) => `#${t}`).join(" "),
-    platformGuidance: { ...c.platformGuidance },
   };
 }
 
@@ -56,6 +54,5 @@ export function toContent(s: VoiceFormState) {
     preferredHashtags: normaliseHashtags(s.hashtags)
       .split(" ")
       .filter(Boolean),
-    platformGuidance: s.platformGuidance,
   };
 }

@@ -2,13 +2,14 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import { JOB_RENDERED_INSTRUCTIONS_MAX, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
-import { createJobSchema, jobSourceSchema } from "@/lib/validation/jobs";
+import { createJobSchema, jobSourceSchema, type JobInstructionsSnapshot } from "@/lib/validation/jobs";
 import * as clock from "../../dal/clock";
 import { ConflictError, ValidationIssuesError } from "../../dal/errors";
 import type { JobRecord } from "../../dal/jobs";
 import { actorColumns, type ProjectScope } from "../../dal/scope";
 import { getLlmStatus, LlmNotConfiguredError } from "../../llm";
 import { resolvePolicies } from "../generation/policy";
+import { assertGroupLimit, groupsForAccounts } from "../generation/groups";
 import { assertMediaFits, distinctProviderKeys, isUniqueViolation, loadAccounts, need, takeVoice } from "../generation/single";
 import { refreshJobStatus } from "./status";
 import { sourceFor } from "./sources";
@@ -107,6 +108,11 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
   });
   const voice = await takeVoice(scope, parsed.voiceProfileId);
   const accounts = await loadAccounts(scope, parsed.targetAccountIds);
+  const snapshot: JobInstructionsSnapshot = {
+    v: 1,
+    byAccount: Object.fromEntries(accounts.map((a) => [a.id, a.postingInstructions])),
+  };
+  assertGroupLimit(groupsForAccounts(accounts, (a) => snapshot.byAccount[a.id] ?? null));
 
   const kind = parsed.source.kind;
   if (kind === "csv" && scope.actor.kind === "api_key") {
@@ -164,6 +170,7 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
         // The count in a media summary leads it; keep it true after reservations drop items.
         sourceSummary: (items.length === prepared.items.length ? prepared.summary : prepared.summary.replace(/^\d+/, String(items.length))).slice(0, 200),
         sourceMeta: prepared.meta,
+        postingInstructionsSnapshot: snapshot,
         voiceProfileId: voice.id,
         voiceProfileVersionId: voice.versionId,
         template: parsed.template,

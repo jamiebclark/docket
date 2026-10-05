@@ -97,20 +97,20 @@ describe("voice editor", () => {
         profile,
         initialName: "Brand",
         initialContent: { ...EMPTY_VOICE_CONTENT, voiceAndTone: "Typed tone" },
-        platforms: [
-          { key: "bluesky", displayName: "Bluesky" },
-          { key: "threads", displayName: "Threads" },
+        accounts: [
+          { id: "a1", displayName: "Acme", providerKey: "bluesky", providerName: "Bluesky", postingInstructions: null },
         ],
-        tryDefaults: ["bluesky"],
         ...props,
       }),
     );
 
-  it("gives owners Save, Make default, Archive and History, and a guidance box per platform", () => {
+  it("gives owners Save, Make default, Archive and History, and no per-platform guidance field", () => {
     const out = render({});
-    for (const label of ["Save", "Make default", "Archive", "History", "Basics", "Voice", "Examples", "Platform guidance", "Bluesky", "Threads"]) {
+    for (const label of ["Save", "Make default", "Archive", "History", "Basics", "Voice", "Examples"]) {
       expect(out).toContain(label);
     }
+    expect(out).not.toContain("Platform guidance");
+    expect(out).toContain(`/p/s/accounts`);
     expect(out).toContain("Samples are not saved.");
   });
 
@@ -138,26 +138,63 @@ describe("voice editor", () => {
 });
 
 describe("try it", () => {
-  it("renders result cards with counts and issues", () => {
-    const out = renderToStaticMarkup(
-      createElement(TryItPanel, {
-        slug: "s",
-        canManage: true,
-        versionId: "v",
-        draft: () => ({}),
-        platforms: [{ key: "bluesky", displayName: "Bluesky" }],
-        defaults: ["bluesky"],
-        initial: {
-          result: {
-            latencyMs: 1200,
-            variants: [{ providerKey: "bluesky", text: "Hello", count: 5, limit: 300, countingRule: "graphemes", issues: ["Too long"] }],
-          },
-        },
-      }),
+  const acct = (id: string, displayName: string, providerKey: string, providerName: string, postingInstructions: string | null = null) => ({
+    id,
+    displayName,
+    providerKey,
+    providerName,
+    postingInstructions,
+  });
+  const panel = (accounts: ReturnType<typeof acct>[], initial?: React.ComponentProps<typeof TryItPanel>["initial"]) =>
+    renderToStaticMarkup(
+      createElement(TryItPanel, { slug: "s", canManage: true, versionId: "v", draft: () => ({}), accounts, initial }),
     );
+
+  it("renders result cards headed by platform and accounts, with counts and issues", () => {
+    const out = panel([acct("a1", "Acme", "bluesky", "Bluesky")], {
+      result: {
+        latencyMs: 1200,
+        variants: [
+          {
+            key: "bluesky",
+            providerKey: "bluesky",
+            providerName: "Bluesky",
+            accountNames: ["Acme", "Beta"],
+            text: "Hello",
+            count: 5,
+            limit: 300,
+            countingRule: "graphemes",
+            issues: ["Too long"],
+          },
+        ],
+      },
+    });
+    expect(out).toContain("Bluesky: Acme, Beta");
     expect(out).toContain("5 / 300");
     expect(out).toContain("Too long");
     expect(out).toContain("Took 1.2 s.");
+    expect(out).toContain("Samples are not saved.");
+  });
+
+  it("shows an empty state linking to Accounts when there are none", () => {
+    const out = panel([]);
+    expect(out).toContain("Connect an account to try this voice.");
+    expect(out).toContain('href="/p/s/accounts"');
+    expect(out).toContain("Go to Accounts");
+  });
+
+  it("ticks every account that fits in one generation and warns past the group limit", () => {
+    const few = panel([acct("a1", "Acme", "bluesky", "Bluesky"), acct("a2", "Beta", "threads", "Threads")]);
+    expect(few).toContain("Acme (Bluesky)");
+    expect(few).toContain("Beta (Threads)");
+    expect(few.match(/checked=""/g)).toHaveLength(2);
+    expect(few).not.toContain("different versions");
+
+    // 17 accounts on one platform, each with its own instructions, need 17 groups: the default stops at 16.
+    const many = Array.from({ length: 17 }, (_, i) => acct(`m${i}`, `Acct ${i}`, "bluesky", "Bluesky", `Rule ${i}`));
+    const out = panel(many);
+    expect(out.match(/checked=""/g)).toHaveLength(16);
+    expect(out).not.toContain("different versions");
   });
 });
 

@@ -8,6 +8,7 @@ import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
 import * as posts from "@/server/services/posts";
+import { variantGroupsForPost } from "@/server/services/posts/variant-groups";
 import { RegenerateDialog } from "./RegenerateDialog";
 import { VariantEditor } from "./VariantEditor";
 import type { VariantCard } from "./variant-logic";
@@ -33,18 +34,17 @@ export default async function ResultPage({ params }: { params: Promise<{ project
   const timeZone = scope.project.timezone;
   const byAccount = new Map((await accounts.listAccounts(scope)).map((a) => [a.id, a]));
   const live = detail.targets.filter((t) => t.status !== "cancelled");
-  const cards: VariantCard[] = [];
-  for (const t of live) {
-    const a = byAccount.get(t.accountId);
-    if (!a) continue;
-    let card = cards.find((c) => c.providerKey === a.providerKey);
-    if (!card) {
-      card = { providerKey: a.providerKey, providerName: a.providerName, accountIds: [], accountNames: [], text: t.overrideText ?? detail.post.baseText };
-      cards.push(card);
-    }
-    card.accountIds.push(a.id);
-    card.accountNames.push(a.displayName);
-  }
+  const liveRecords = (await scope.targets.listForPost(postId)).filter((t) => t.status !== "cancelled");
+  const targetById = new Map(live.map((t) => [t.id, t]));
+  const groups = await variantGroupsForPost(scope, detail.post, liveRecords);
+  const cards: VariantCard[] = groups.map((g) => ({
+    key: g.key,
+    providerKey: g.providerKey,
+    providerName: g.providerName,
+    accountIds: g.accountIds,
+    accountNames: g.accountNames,
+    text: targetById.get(g.targetIds[0]!)?.overrideText ?? detail.post.baseText,
+  }));
 
   const locked = live.some((t) => t.status !== "draft");
   const queuedTargets = live.filter((t) => t.status === "scheduled" && t.scheduledAt);
@@ -53,7 +53,7 @@ export default async function ResultPage({ params }: { params: Promise<{ project
     detail.post.reviewState === "approved" && queuedTargets.length > 0
       ? null
       : `${detail.post.reviewState === "approved" ? "Approved" : "In review"}: ${decision?.reason ?? ""}`.trim();
-  const remaining = record.remainingProblems.flatMap((p) => p.messages.map((m) => `${p.providerKey}: ${m}`));
+  const remaining = record.remainingProblems.flatMap((p) => p.messages.map((m) => `${p.groupKey ?? p.providerKey}: ${m}`));
 
   return (
     <section className="flex flex-col gap-4">
@@ -89,6 +89,29 @@ export default async function ResultPage({ params }: { params: Promise<{ project
         mediaIds={detail.mediaIds}
         canEdit={scope.can({ post: ["edit"] }) && !locked}
       />
+
+      <section aria-labelledby="posting-instructions-used" className="max-w-2xl text-sm">
+        <h2 id="posting-instructions-used" className="font-medium">
+          Posting instructions used
+        </h2>
+        <ul className="mt-1 flex flex-col gap-1">
+          {groups.map((g) => (
+            <li key={g.key}>
+              <span className="font-medium">
+                {g.providerName}: {g.accountNames.join(", ")}
+              </span>
+              {" "}
+              {g.instructions === "not_recorded" ? (
+                <span className="text-muted-foreground">Not recorded</span>
+              ) : g.instructions === null ? (
+                <span className="text-muted-foreground">None</span>
+              ) : (
+                <span className="whitespace-pre-wrap">{g.instructions}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <div className="flex flex-wrap items-center gap-3">
         {locked ? (

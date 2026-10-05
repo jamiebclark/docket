@@ -9,6 +9,7 @@ import type { LlmProvider } from "../../llm/types";
 import { prepareVariants } from "../media-variants";
 import { applyDerivedStatus, gate, lockPost } from "../posts";
 import { runGeneration } from "./core";
+import { assertGroupLimit, groupsForAccounts } from "./groups";
 import { decidePolicy } from "./policy";
 import { recordFailure } from "./failures";
 import {
@@ -62,8 +63,9 @@ export async function regeneratePost(
   const accounts = await loadAccounts(scope, live.map((t) => t.socialAccountId));
   const mediaIds = await scope.posts.listMediaIds(id);
   const assets = await loadAssets(scope, mediaIds);
-  const providerKeys = distinctProviderKeys(accounts);
-  assertMediaFits(providerKeys, assets.length);
+  const groups = groupsForAccounts(accounts);
+  assertGroupLimit(groups);
+  assertMediaFits(distinctProviderKeys(accounts), assets.length);
 
   const extra = instruction?.trim();
   const instructions = [previous.inputs.instructions, extra].filter(Boolean).join("\n") || null;
@@ -79,7 +81,7 @@ export async function regeneratePost(
     {
       label: "generate.regenerate",
       voice,
-      providerKeys,
+      groups,
       assets,
       inputs: { brief: inputs.brief, sourceText: inputs.sourceText, instructions, series: inputs.series },
       itemData: inputs.itemFields ? { fields: Object.entries(inputs.itemFields) } : null,
@@ -104,13 +106,14 @@ export async function regeneratePost(
     outcome,
     voice,
     inputs,
+    groups,
     requested: previous.policies.requested,
     resolved: previous.policies.resolved,
     at: await clock.now(),
   });
   const variantFor = (accountId: string) => {
-    const account = accounts.find((a) => a.id === accountId);
-    return (account && outcome.output.variants[account.providerKey]) ?? "";
+    const group = groups.find((g) => g.accounts.some((a) => a.id === accountId));
+    return (group && outcome.output.variants[group.key]) ?? "";
   };
 
   try {

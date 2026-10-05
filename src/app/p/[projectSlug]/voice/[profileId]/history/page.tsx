@@ -72,9 +72,17 @@ export default async function VoiceHistoryPage({ params, searchParams }: Props) 
             <Show label="Links" value={c.preferredLinks.map((l) => (l.label ? `${l.label}: ${l.url}` : l.url)).join("\n")} />
             <Show label="Hashtags" value={c.preferredHashtags.map((t) => `#${t}`).join(" ")} />
             <Show
-              label="Platform guidance"
+              label="Platform guidance (no longer used)"
               value={Object.entries(c.platformGuidance).map(([k, v]) => `${k}: ${v}`).join("\n")}
             />
+            {Object.keys(c.platformGuidance).length > 0 ? (
+              <p className="text-sm">
+                Guidance is now set per account.{" "}
+                <Link href={`/p/${projectSlug}/accounts`} className="underline">
+                  Go to Accounts
+                </Link>
+              </p>
+            ) : null}
           </dl>
         </section>
       ) : null}

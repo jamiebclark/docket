@@ -15,6 +15,8 @@ import {
   SCHEDULING_LABEL,
   counterLabel,
   freshRequestId,
+  ACCOUNTS_HINT,
+  groupLimitNotice,
   imageWarning,
   LIMITS,
   maxImagesFor,
@@ -102,6 +104,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
   const busy = pending || initial?.pending === true;
 
   const selected = accounts.filter((a) => chosen.includes(a.id));
+  const limitNotice = groupLimitNotice(selected);
   const maxImages = maxImagesFor(selected);
   const needImage = platformsNeedingImage(selected, media.length);
 
@@ -247,12 +250,12 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
 
       <AccountPicker
         legend="Accounts"
-        hint="One version is written for each platform you choose."
+        hint={ACCOUNTS_HINT}
         idPrefix={uid}
         showStatus="always"
         value={chosen}
         onChange={setChosen}
-        error={fieldErrors.targetAccountIds}
+        error={fieldErrors.targetAccountIds ?? limitNotice ?? undefined}
         accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
       />
 

@@ -101,6 +101,7 @@ export default async function GeneratePage({ params, searchParams }: Props) {
       providerAvailable: a.providerAvailable,
       maxImages: caps?.media.maxImages ?? 0,
       mediaRequired: caps?.media.required ?? false,
+      postingInstructions: a.postingInstructions,
     };
   });
   const failures = scope.can({ post: ["view"] }) ? await listRecentFailures(scope, { limit: 5 }) : [];

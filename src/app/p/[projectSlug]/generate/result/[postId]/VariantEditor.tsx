@@ -7,7 +7,7 @@ import { LiveRegion } from "@/components/ui/LiveRegion";
 import { counterText, fetchCheck, groupIssues, isOverLimit, SEVERITY_LABEL, type CheckResult } from "../../../compose/composer-logic";
 import { approveAction } from "../../../review/actions";
 import { updatePostVariantsAction } from "../../actions";
-import { CHECK_DEBOUNCE_MS, cardCheck, checkInputFor, createDebounce, type VariantCard } from "./variant-logic";
+import { CHECK_DEBOUNCE_MS, cardCheck, checkInputFor, createDebounce, editsFor, liveCards, type VariantCard } from "./variant-logic";
 import { controlStyles } from "@/components/ui/controls";
 
 export interface VariantEditorProps {
@@ -25,12 +25,12 @@ export interface VariantEditorProps {
 export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewing = false, initialCheck = null }: VariantEditorProps) {
   const router = useRouter();
   const uid = useId();
-  const [texts, setTexts] = useState(() => Object.fromEntries(cards.map((c) => [c.providerKey, c.text])));
+  const [texts, setTexts] = useState(() => Object.fromEntries(cards.map((c) => [c.key, c.text])));
   const [check, setCheck] = useState<CheckResult | null>(initialCheck);
   const [message, setMessage] = useState("");
   const [pending, start] = useTransition();
   const debounce = useRef(createDebounce(CHECK_DEBOUNCE_MS));
-  const live = useMemo(() => cards.map((c) => ({ ...c, text: texts[c.providerKey] ?? c.text })), [cards, texts]);
+  const live = useMemo(() => liveCards(cards, texts), [cards, texts]);
 
   useEffect(() => {
     const d = debounce.current;
@@ -49,11 +49,11 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
     };
   }, [slug, postId, cards, mediaIds, initialCheck]);
 
-  function edit(providerKey: string, text: string) {
-    const next = { ...texts, [providerKey]: text };
+  function edit(key: string, text: string) {
+    const next = { ...texts, [key]: text };
     setTexts(next);
     debounce.current.schedule(() => {
-      void fetchCheck(slug, checkInputFor(postId, cards.map((c) => ({ ...c, text: next[c.providerKey] ?? c.text })), mediaIds)).then(
+      void fetchCheck(slug, checkInputFor(postId, liveCards(cards, next), mediaIds)).then(
         (r) => r && setCheck(r),
       );
     });
@@ -63,7 +63,7 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
     start(async () => {
       const r = await updatePostVariantsAction(slug, {
         postId,
-        edits: live.map((c) => ({ providerKey: c.providerKey, text: c.text })),
+        edits: editsFor(live),
       });
       if (!r.ok) return setMessage(`Error: ${r.message}`);
       setMessage(r.data.problems.length > 0 ? "Saved. Some versions still have problems." : "Saved.");
@@ -75,7 +75,7 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
     start(async () => {
       const r = await approveAction(slug, {
         postId,
-        edits: live.map((c) => ({ providerKey: c.providerKey, text: c.text })),
+        edits: editsFor(live),
       });
       if (!r.ok) return setMessage(`Error: ${r.message}`);
       if (!r.data.ok) {
@@ -98,15 +98,14 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
       {live.map((c) => {
         const t = cardCheck(check, c);
         const over = t ? isOverLimit(t) : false;
-        const id = `${uid}-${c.providerKey}`;
+        const id = `${uid}-${c.key}`;
         return (
-          <article key={c.providerKey} aria-labelledby={`${id}-title`} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
+          <article key={c.key} aria-labelledby={`${id}-title`} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
             <h3 id={`${id}-title`} className="text-base font-semibold">
-              {c.providerName}
+              {c.providerName}: {c.accountNames.join(", ")}
             </h3>
-            <p className="text-xs text-muted-foreground">For {c.accountNames.join(", ")}</p>
             <label htmlFor={id} className="sr-only">
-              {c.providerName} text
+              {c.providerName}: {c.accountNames.join(", ")} text
             </label>
             <textarea
               id={id}
@@ -114,7 +113,7 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
               value={c.text}
               readOnly={!canEdit}
               aria-describedby={`${id}-count`}
-              onChange={(e) => edit(c.providerKey, e.target.value)}
+              onChange={(e) => edit(c.key, e.target.value)}
               className={controlStyles}
             />
             <p id={`${id}-count`} className={`text-right text-xs ${over ? "font-semibold text-danger" : "text-muted-foreground"}`}>

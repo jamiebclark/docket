@@ -48,6 +48,32 @@ describe("voice profiles", () => {
     expect((await voice.listVersions(env.scope, profileId)).length).toBe(2);
   });
 
+  it("strips platformGuidance from input, and an unchanged save of a pre-upgrade version is a no-op", async () => {
+    const env = await postsEnv();
+    const { profileId } = await make(env.scope, "Legacy");
+    await voice.saveVoiceProfile(env.scope, profileId, {
+      name: "Legacy",
+      content: content({ audience: "x", platformGuidance: { bluesky: "short" } }),
+      baseVersion: 1,
+    });
+    expect((await voice.getVersion(env.scope, profileId, 2)).content.platformGuidance).toEqual({});
+
+    // A version written before the upgrade still carries its guidance, untouched.
+    await env.scope.transaction(async (tx) => {
+      await tx.voiceVersions.insert({
+        profileId,
+        version: 3,
+        content: { v: 1, voiceAndTone: "Warm", audience: "x", platformGuidance: { bluesky: "old" } },
+        authorUserId: tx.membership.userId,
+      });
+      await tx.voiceProfiles.setCurrentVersion(profileId, 3);
+    });
+    const same = await voice.saveVoiceProfile(env.scope, profileId, { name: "Legacy", content: content({ audience: "x" }), baseVersion: 3 });
+    expect(same.version).toBe(3);
+    expect((await voice.listVersions(env.scope, profileId)).length).toBe(3);
+    expect((await voice.getVersion(env.scope, profileId, 3)).content.platformGuidance).toEqual({ bluesky: "old" });
+  });
+
   it("a rename alone creates a new version", async () => {
     const env = await postsEnv();
     const { profileId } = await make(env.scope);

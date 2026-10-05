@@ -1,4 +1,5 @@
 // generation/save: the one place a generated post is written (single, series and job items share it).
+import type { VariantGroup } from "@/lib/generation/groups";
 import type { GenerationRecord } from "@/lib/validation/generation";
 import type { AccountRecord } from "../../dal/accounts";
 import * as clock from "../../dal/clock";
@@ -29,8 +30,10 @@ export type GeneratedPostLink =
 export async function saveGeneratedPost(
   tx: ProjectScope,
   args: {
-    /** The first account decides `base_text` (007 D10). */
+    /** In request order; the first account decides `base_text` (007 D10). */
     accounts: AccountRecord[];
+    /** Which variant each account gets. */
+    groups: readonly VariantGroup[];
     variants: Record<string, string>;
     assets: MediaRow[];
     imageAltTexts: string[] | null;
@@ -44,7 +47,8 @@ export async function saveGeneratedPost(
   const now = await clock.now();
   const mediaIds = args.assets.map((a) => a.id);
   if ((await tx.media.lockShared(mediaIds)).length !== new Set(mediaIds).size) throw new NotFoundError();
-  const variantOf = (a: AccountRecord) => args.variants[a.providerKey] ?? "";
+  const groupKeyOf = new Map(args.groups.flatMap((g) => g.accounts.map((a) => [a.id, g.key] as const)));
+  const variantOf = (a: AccountRecord) => args.variants[groupKeyOf.get(a.id) ?? a.providerKey] ?? "";
   const post = await tx.posts.insert({
     baseText: variantOf(args.accounts[0]!),
     createdByUserId: args.createdByUserId,

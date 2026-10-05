@@ -7,6 +7,10 @@ import { approvePost, listReviewQueue, rejectPost } from "../../../src/server/se
 import { closeDb } from "../../helpers/db";
 import { createPostInReview, createProject } from "../../helpers/factories";
 import { postsEnv } from "../../helpers/posts-env";
+import * as accounts from "../../../src/server/services/accounts";
+import { generateSingle } from "../../../src/server/services/generation/single";
+import { createFakeLlm } from "../../helpers/fake-llm";
+import { createVoiceProfile } from "../../helpers/factories";
 
 afterAll(async () => {
   await closeDb();
@@ -106,7 +110,7 @@ describe("approvePost", () => {
     const env = await postsEnv();
     const a = await env.account();
     const { post } = await createPostInReview(env.project.id, { accountIds: [a.id], baseText: TOO_LONG, schedulingPolicy: "add_to_queue" });
-    const r = await approvePost(env.scope, post.id, { edits: [{ providerKey: "mock", text: "Fixed up" }] });
+    const r = await approvePost(env.scope, post.id, { edits: [{ accountIds: [a.id], text: "Fixed up" }] });
     expect(r.ok).toBe(true);
     const [target] = await env.scope.targets.listForPost(post.id);
     expect(target).toMatchObject({ overrideText: "Fixed up", status: "scheduled" });
@@ -116,7 +120,7 @@ describe("approvePost", () => {
     const env = await postsEnv();
     const a = await env.account();
     const { post } = await createPostInReview(env.project.id, { accountIds: [a.id] });
-    const r = await approvePost(env.scope, post.id, { edits: [{ providerKey: "mock", text: TOO_LONG }] });
+    const r = await approvePost(env.scope, post.id, { edits: [{ accountIds: [a.id], text: TOO_LONG }] });
     expect(r).toMatchObject({ ok: false, code: "validation" });
     expect((await env.scope.posts.get(post.id))!.reviewState).toBe("needs_review");
     expect((await env.scope.targets.listForPost(post.id))[0]!.overrideText).toBe(TOO_LONG);
@@ -188,3 +192,47 @@ describe("rejectPost", () => {
   });
 });
 
+
+describe("grouped variants", () => {
+  async function generated() {
+    const env = await postsEnv();
+    const voice = await createVoiceProfile(env.project.id);
+    const a = await accounts.connectMock(env.scope, { displayName: "Acme A", settings: {} });
+    const b = await accounts.connectMock(env.scope, { displayName: "Acme B", settings: {} });
+    await accounts.setPostingInstructions(env.scope, a.id, { instructions: "Formal." });
+    await accounts.setPostingInstructions(env.scope, b.id, { instructions: "Casual." });
+    const res = await generateSingle(
+      env.scope,
+      { requestId: randomUUID(), voiceProfileId: voice.id, brief: "Brief", targetAccountIds: [a.id, b.id] },
+      createFakeLlm([{ ok: { variants: { mock_1: { text: "Formal text" }, mock_2: { text: "Casual text" } } } }]),
+    );
+    if (!res.ok) throw new Error("setup failed");
+    return { env, a, b, postId: res.postId };
+  }
+
+  it("lists one entry per group with its own count and limit", async () => {
+    const { env, a, b, postId } = await generated();
+    const item = (await listReviewQueue(env.scope, {})).items.find((i) => i.postId === postId)!;
+    expect(item.variants).toHaveLength(2);
+    expect(item.variants[0]).toMatchObject({ key: "mock_1", text: "Formal text", count: 11, limit: 500, accountIds: [a.id], accountNames: ["Acme A"] });
+    expect(item.variants[1]).toMatchObject({ key: "mock_2", text: "Casual text", count: 11, limit: 500, accountIds: [b.id] });
+  });
+
+  it("editing one group changes only that group's targets", async () => {
+    const { env, a, b, postId } = await generated();
+    await posts.updatePostVariants(env.scope, postId, { edits: [{ accountIds: [b.id], text: "Edited casual" }] });
+    const text = Object.fromEntries((await env.scope.targets.listForPost(postId)).map((t) => [t.socialAccountId, t.overrideText]));
+    expect(text).toEqual({ [a.id]: "Formal text", [b.id]: "Edited casual" });
+  });
+
+  it("groups an old record without accounts by platform", async () => {
+    const env = await postsEnv();
+    const a = await env.account();
+    const b = await env.account();
+    const { post } = await createPostInReview(env.project.id, { accountIds: [a.id, b.id] });
+    const item = (await listReviewQueue(env.scope, {})).items.find((i) => i.postId === post.id)!;
+    expect(item.variants).toHaveLength(1);
+    expect(item.variants[0]!.key).toBe("mock");
+    expect([...item.variants[0]!.accountIds].sort()).toEqual([a.id, b.id].sort());
+  });
+});

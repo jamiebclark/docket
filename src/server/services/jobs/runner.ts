@@ -1,7 +1,7 @@
 // jobs/runner: process one claimed job item (contracts/runner.md). Every write after the claim is lease-checked
 // and holds the job lock first; no model, storage or sharp work happens inside a held transaction.
 import { renderTemplate } from "@/lib/jobs/template";
-import { itemPayloadSchema } from "@/lib/validation/jobs";
+import { itemPayloadSchema, jobInstructionsSnapshotSchema } from "@/lib/validation/jobs";
 import type { GenerationRecord } from "@/lib/validation/generation";
 import { voiceContentSchema } from "@/lib/validation/voice";
 import * as clock from "../../dal/clock";
@@ -21,9 +21,10 @@ import type { GenerationCounts } from "../../scheduler/generation";
 import { runGenerationStep, type PendingRetry } from "../generation/core";
 import { applyApprovalPolicy } from "../generation/policy";
 import { saveGeneratedPost } from "../generation/save";
+import { GROUP_LIMIT, groupLimitMessage } from "../../../lib/generation/groups";
+import { groupsForAccounts } from "../generation/groups";
 import {
   buildRecord,
-  distinctProviderKeys,
   isUniqueViolation,
   lastRecord,
   type VoiceSnapshot,
@@ -255,12 +256,19 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     const llm = ctx.llm ?? getLlm();
     const pending = (item.pendingRetry as PendingRetry | null) ?? null;
 
+    const parsedSnapshot = jobInstructionsSnapshotSchema.nullable().safeParse(job.postingInstructionsSnapshot ?? null);
+    const snapshot = parsedSnapshot.success ? parsedSnapshot.data : null;
+    const groups = groupsForAccounts(
+      accounts,
+      snapshot ? (a) => snapshot.byAccount[a.id] ?? null : undefined,
+    );
+    if (groups.length > GROUP_LIMIT) return await fail("bad_request", groupLimitMessage(groups.length));
     const step = await runGenerationStep(
       s,
       {
         label: "generate.job_item",
         voice,
-        providerKeys: distinctProviderKeys(accounts),
+        groups,
         assets,
         inputs: { brief, sourceText: null, instructions, series: null },
         timeoutMs: window,
@@ -307,6 +315,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
         outcome: step,
         voice,
         inputs,
+        groups,
         requested: { approval: job.requestedApproval, scheduling: job.requestedScheduling },
         resolved: { approval: job.approvalPolicy, scheduling: job.schedulingPolicy },
         at: await clock.now(),
@@ -322,6 +331,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
         if (!(await tx.jobItems.updateWithLease(item.id, token, { pendingRetry: null }))) return "stale";
         const id = await saveGeneratedPost(tx, {
           accounts,
+          groups,
           variants: step.output.variants,
           assets,
           imageAltTexts: step.output.imageAltTexts,

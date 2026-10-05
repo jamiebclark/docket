@@ -37,7 +37,24 @@ describe("generationMetadataSchema", () => {
       remainingProblems: [],
     };
     expect(generationMetadataSchema.safeParse({ v: 1, records: [record] }).success).toBe(true);
+    // Records written before posting instructions have neither `accounts` nor `groupKey`.
+    const withGroups = {
+      ...record,
+      accounts: [{ accountId: id, displayName: "A", providerKey: "bluesky", instructions: null, groupKey: "bluesky" }],
+      remainingProblems: [{ providerKey: "bluesky", groupKey: "bluesky", messages: ["m"] }],
+    };
+    expect(generationMetadataSchema.safeParse({ v: 1, records: [withGroups] }).success).toBe(true);
+    expect(generationMetadataSchema.safeParse({ v: 1, records: [{ ...record, accounts: null }] }).success).toBe(true);
     expect(generationMetadataSchema.safeParse({ v: 2, records: [] }).success).toBe(false);
     expect(generationMetadataSchema.safeParse({ v: 1, records: [{ ...record, mode: "series_plan" }] }).success).toBe(false);
+  });
+});
+
+describe("jobInstructionsSnapshotSchema", () => {
+  it("accepts per-account text or null and rejects other versions", async () => {
+    const { jobInstructionsSnapshotSchema } = await import("./jobs");
+    expect(jobInstructionsSnapshotSchema.safeParse({ v: 1, byAccount: { [id]: null } }).success).toBe(true);
+    expect(jobInstructionsSnapshotSchema.safeParse({ v: 1, byAccount: { [id]: "x" } }).success).toBe(true);
+    expect(jobInstructionsSnapshotSchema.safeParse({ v: 2, byAccount: {} }).success).toBe(false);
   });
 });

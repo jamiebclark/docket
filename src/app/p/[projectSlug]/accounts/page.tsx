@@ -15,6 +15,7 @@ import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
 import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
+import { PostingInstructionsForm } from "./PostingInstructionsForm";
 import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
 import { alertStyles } from "@/components/ui/Alert";
 import { buttonStyles } from "@/components/ui/Button";
@@ -176,6 +177,19 @@ export default async function AccountsPage({
                         </details>
                       ))
                   : null}
+                <h4 className="text-sm font-semibold">Posting instructions</h4>
+                {canManage ? (
+                  <PostingInstructionsForm
+                    slug={projectSlug}
+                    accountId={account.id}
+                    accountName={account.displayName}
+                    initial={account.postingInstructions}
+                  />
+                ) : account.postingInstructions ? (
+                  <p className="whitespace-pre-wrap text-sm">{account.postingInstructions}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No posting instructions.</p>
+                )}
                 <h4 className="text-sm font-semibold">Posting slots ({timeZone})</h4>
                 {rows.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No posting slots yet.</p>

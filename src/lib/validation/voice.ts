@@ -81,6 +81,9 @@ export const voiceContentSchema = z.object({
   platformGuidance: platformGuidance.default({}),
 });
 
+/** What an editor submits: per-platform guidance now lives on accounts, so a stray key is stripped. */
+export const voiceContentInputSchema = voiceContentSchema.omit({ platformGuidance: true });
+
 export type VoiceContent = z.infer<typeof voiceContentSchema>;
 
 export const EMPTY_VOICE_CONTENT: VoiceContent = voiceContentSchema.parse({});

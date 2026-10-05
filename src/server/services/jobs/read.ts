@@ -1,5 +1,6 @@
 // jobs/read: list jobs, one job, and a job's items (contracts/services.md § Read).
 import { z } from "zod";
+import { jobInstructionsSnapshotSchema } from "@/lib/validation/jobs";
 import { getEnv } from "../../env";
 import { NotFoundError } from "../../dal/errors";
 import type { JobCounts, JobItemRecord, JobRecord, JobStatus, JobItemStatus } from "../../dal/jobs";
@@ -117,6 +118,8 @@ export async function getJob(scope: ProjectScope, jobId: string) {
     scope.voiceProfiles.get(job.voiceProfileId),
     scope.voiceVersions.get(job.voiceProfileVersionId),
   ]);
+  const snapshot = jobInstructionsSnapshotSchema.nullable().safeParse(job.postingInstructionsSnapshot ?? null);
+  const recorded = snapshot.success ? snapshot.data : null;
   const targets = await Promise.all(
     job.targetAccountIds.map(async (accountId) => {
       const account = await scope.accounts.get(accountId);
@@ -125,6 +128,7 @@ export async function getJob(scope: ProjectScope, jobId: string) {
         displayName: account?.displayName ?? "Removed account",
         providerKey: account?.providerKey ?? "",
         removed: !account,
+        instructions: recorded ? (recorded.byAccount[accountId] ?? null) : ("not_recorded" as const),
       };
     }),
   );

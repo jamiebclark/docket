@@ -8,6 +8,7 @@ import {
   NotFoundError,
   SetupUnavailableError,
 } from "@/server/dal/errors";
+import { assertGroupLimit } from "@/server/services/generation/groups";
 import { fail, failFromError, ok } from "./action-result";
 
 function named(name: string, message = "x") {
@@ -17,6 +18,22 @@ function named(name: string, message = "x") {
 }
 
 describe("failFromError", () => {
+  it("keeps the group-limit refusal message and puts it on the account picker", () => {
+    const groups = Array.from({ length: 17 }, (_, i) => ({ key: `g${i}`, accounts: [], instructions: null }));
+    let thrown: unknown;
+    try {
+      assertGroupLimit(groups as never);
+    } catch (e) {
+      thrown = e;
+    }
+    const r = failFromError(thrown);
+    expect(r).toMatchObject({ ok: false, error: "validation" });
+    if (r.ok) throw new Error("unreachable");
+    expect(r.message).toContain("17");
+    expect(r.message).toContain("16");
+    expect(r.fieldErrors?.targetAccountIds).toBe(r.message);
+  });
+
   it("maps ValidationIssuesError to validation with the issues attached", () => {
     const issues = { t1: [{ code: "text_too_long", message: "Too long", field: "text" }] };
     const e = Object.assign(named("ValidationIssuesError", "internal"), { issues });

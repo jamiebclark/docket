@@ -28,6 +28,7 @@ export async function loadJobFormData(scope: ProjectScope): Promise<JobFormData>
         providerAvailable: a.providerAvailable,
         maxImages: caps?.media.maxImages ?? 0,
         mediaRequired: caps?.media.required ?? false,
+        postingInstructions: a.postingInstructions,
       };
     }),
     defaults: { approval: scope.project.defaultApprovalPolicy, scheduling: scope.project.defaultSchedulingPolicy },

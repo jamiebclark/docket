@@ -22,7 +22,7 @@ import { postsEnv } from "../../../../../../tests/helpers/posts-env";
 import { sessionModule } from "../../../../../../tests/helpers/actions";
 import { fetchCheck, type CheckResult } from "../../compose/composer-logic";
 import ResultPage from "./[postId]/page";
-import { CHECK_DEBOUNCE_MS, cardCheck, checkInputFor, createDebounce, type VariantCard } from "./[postId]/variant-logic";
+import { CHECK_DEBOUNCE_MS, cardCheck, checkInputFor, createDebounce, editsFor, liveCards, type VariantCard } from "./[postId]/variant-logic";
 
 afterEach(() => vi.useRealTimers());
 
@@ -91,8 +91,57 @@ describe("result page", () => {
   });
 });
 
+describe("result page with posting instructions", () => {
+  async function twoGroups() {
+    const env = await postsEnv();
+    const voice = await createVoiceProfile(env.project.id);
+    const connect = async (name: string, instructions: string) => {
+      const a = await accounts.saveConnectedAccount(env.scope, {
+        providerKey: "bluesky",
+        externalAccountId: `bsky-${randomUUID().slice(0, 8)}`,
+        displayName: name,
+        settings: {},
+      });
+      await accounts.setPostingInstructions(env.scope, a.id, { instructions });
+      return a;
+    };
+    const a = await connect("Acme Science", "Hashtags last.");
+    const b = await connect("Acme News", "No hashtags.");
+    const res = await generateSingle(
+      env.scope,
+      { requestId: randomUUID(), voiceProfileId: voice.id, brief: "Brief", targetAccountIds: [a.id, b.id] },
+      createFakeLlm([{ ok: { variants: { bluesky_1: { text: "First version" }, bluesky_2: { text: "Second version" } } } }]),
+    );
+    if (!res.ok) throw new Error("setup failed");
+    return { env, a, b, postId: res.postId };
+  }
+
+  it("shows one labelled card per group and lists the instructions used", async () => {
+    const { env, postId } = await twoGroups();
+    const html = await render(env, postId);
+    expect(html).toContain("Bluesky: Acme Science");
+    expect(html).toContain("Bluesky: Acme News");
+    expect(html).toContain("First version");
+    expect(html).toContain("Second version");
+    expect(html).toContain("Posting instructions used");
+    expect(html).toContain("Hashtags last.");
+    expect(html).toContain("No hashtags.");
+  });
+
+  it("shows Not recorded for a record written before posting instructions", async () => {
+    const { env, postId } = await setup();
+    const post = (await env.scope.posts.get(postId))!;
+    const meta = post.generationMetadata as { v: number; records: Record<string, unknown>[] };
+    const records = meta.records.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "accounts")));
+    await env.scope.posts.update(postId, { generationMetadata: { ...meta, records } });
+    const html = await render(env, postId);
+    expect(html).toContain("Not recorded");
+    expect(html).toContain("Bluesky: Main Bluesky");
+  });
+});
+
 describe("variant editor checks", () => {
-  const card: VariantCard = { providerKey: "bluesky", providerName: "Bluesky", accountIds: ["a1", "a2"], accountNames: ["A", "B"], text: "hi" };
+  const card: VariantCard = { key: "bluesky", providerKey: "bluesky", providerName: "Bluesky", accountIds: ["a1", "a2"], accountNames: ["A", "B"], text: "hi" };
 
   it("sends every account of a platform with the platform's text", () => {
     expect(checkInputFor("p1", [card], ["m1"])).toEqual({
@@ -125,5 +174,26 @@ describe("variant editor checks", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(CHECK_DEBOUNCE_MS).toBe(300);
+  });
+});
+
+describe("variant editor live cards", () => {
+  const card = (key: string, id: string, text: string): VariantCard => ({
+    key,
+    providerKey: "bluesky",
+    providerName: "Bluesky",
+    accountIds: [id],
+    accountNames: [id],
+    text,
+  });
+  const cards = [card("bluesky", "a1", "one"), card("bluesky_2", "a2", "two")];
+
+  it("editing bluesky_2 changes only that card and its edit", () => {
+    const live = liveCards(cards, { bluesky: "one", bluesky_2: "changed" });
+    expect(live.map((c) => c.text)).toEqual(["one", "changed"]);
+    expect(editsFor(live)).toEqual([
+      { accountIds: ["a1"], text: "one" },
+      { accountIds: ["a2"], text: "changed" },
+    ]);
   });
 });

@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { api, createKey } from "../../../helpers/api";
 import { atTime } from "../../../helpers/clock";
 import { closeDb } from "../../../helpers/db";
+import { setPostingInstructions } from "../../../../src/server/services/accounts";
 import { postsEnv } from "../../../helpers/posts-env";
 
 afterAll(closeDb);
@@ -75,11 +76,19 @@ describe("GET /accounts", () => {
       capabilities: { textLimit: 500, countingRule: "graphemes" },
     });
     expect(r.json.data[0].capabilities.postTypes).toContain("text");
-    expect(Object.keys(r.json.data[0]).sort()).toEqual(["capabilities", "displayName", "id", "lastError", "provider", "status"]);
+    expect(Object.keys(r.json.data[0]).sort()).toEqual(["capabilities", "displayName", "id", "lastError", "postingInstructions", "provider", "status"]);
+    expect(r.json.data[0].postingInstructions).toBeNull();
     expect(r.text).not.toMatch(/token|secret|credential|password/i);
     const other = await setup();
     const ids = (await api("GET", "/accounts", { key: (await createKey(other.env.scope, ["read"])).secret })).json.data.map((a: { id: string }) => a.id);
     expect(ids).not.toContain(account.id);
     void env;
+  });
+
+  it("returns the account's posting instructions text", async () => {
+    const { account, key, env } = await setup();
+    await setPostingInstructions(env.scope, account.id, { instructions: "Keep it short." });
+    const r = await api("GET", "/accounts", { key });
+    expect(r.json.data[0].postingInstructions).toBe("Keep it short.");
   });
 });

@@ -13,6 +13,10 @@ export const AccountSchema = z
     displayName: z.string(),
     status: z.enum(["active", "needs_reauth"]),
     lastError: z.string().nullable(),
+    postingInstructions: z
+      .string()
+      .nullable()
+      .meta({ description: "Free-text guidance on how to write for this account; null when none is set." }),
     capabilities: z.object({
       textLimit: z.number().int(),
       countingRule: z.string(),

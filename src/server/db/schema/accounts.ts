@@ -36,6 +36,7 @@ export const socialAccounts = pgTable(
     status: socialAccountStatus("status").default("active").notNull(),
     lastError: text("last_error"),
     settings: jsonb("settings").default({}).notNull(),
+    postingInstructions: text("posting_instructions"),
     publishLimitCount: integer("publish_limit_count"),
     publishLimitWindowSeconds: integer("publish_limit_window_seconds"),
     refreshLeaseUntil: timestamp("refresh_lease_until", { withTimezone: true }),
@@ -52,6 +53,10 @@ export const socialAccounts = pgTable(
       .notNull(),
   },
   (t) => [
+    check(
+      "social_accounts_posting_instructions_len",
+      sql`${t.postingInstructions} IS NULL OR char_length(${t.postingInstructions}) BETWEEN 1 AND 2000`,
+    ),
     check("social_accounts_limit_count_pos", sql`${t.publishLimitCount} > 0`),
     check("social_accounts_limit_window_pos", sql`${t.publishLimitWindowSeconds} > 0`),
     check(
