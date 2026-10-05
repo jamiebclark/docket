@@ -7,6 +7,7 @@ Docket needs one thing a lot of hosts do not give you: **something that runs the
 | Setup | What runs the scheduler | Persistent data | HTTPS | Cost notes |
 |---|---|---|---|---|
 | Local Docker Compose | the `worker` service | named volume `docket-pgdata` | none (localhost) | free |
+| Unraid template (one container) | the in-process worker (`RUN_WORKER_IN_PROCESS=true`) | your Postgres container | your reverse proxy | your hardware |
 | Unraid / home server (Compose) | the `worker` service | named volume, or a bind mount | your reverse proxy | your hardware |
 | Container host + Neon | a second service from the same image, an external cron, or the in-process worker | Neon Postgres | the host's | host plan + Neon plan |
 | Render free tier (not recommended) | external cron only | free Postgres expires after 30 days | Render's | free, but fragile (see §8) |
@@ -20,26 +21,47 @@ Docket needs one thing a lot of hosts do not give you: **something that runs the
 - **Restart after editing `.env`.** Configuration is read at startup: run `docker compose up -d` to recreate the containers with the new values.
 - **The mock provider is off in production images.** Set `MOCK_PROVIDER_ENABLED=true` in `.env` for the local walkthrough, and remove it for real use.
 
+### The published image
+
+Every release is published to GitHub Container Registry as `ghcr.io/jamiebclark/docket`, for `linux/amd64` and
+`linux/arm64`. Tags: `latest`, the exact version (`1.2.3`), and the moving `1.2` and `1` tags. One image runs everything:
+by default it migrates the database and starts the web server; with the command `node worker.mjs` it runs the scheduler
+instead. `docker-compose.yml` pulls `latest`. To update only when you choose, set `DOCKET_IMAGE=ghcr.io/jamiebclark/docket:1.2.3`
+in `.env`.
+
+To build from a source checkout instead, add the build override:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`, or set
+`COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` in `.env` so plain `docker compose` commands build.
+
 ## 3. Local Docker Compose
 
-1. `git clone` the repository and `cd docket`.
-2. `cp .env.example .env`, then set:
+1. `git clone` the repository and `cd docket`. Or, without a checkout, download just the two files you need:
+
+   ```bash
+   mkdir docket && cd docket
+   curl -fsSLO https://raw.githubusercontent.com/jamiebclark/docket/main/docker-compose.yml
+   curl -fsSL -o .env https://raw.githubusercontent.com/jamiebclark/docket/main/.env.example
+   ```
+
+2. `cp .env.example .env` (skip this if you downloaded `.env` above), then set:
    - `BETTER_AUTH_SECRET` and `CREDENTIALS_ENCRYPTION_KEY` (with `openssl rand -base64 32`);
    - `MOCK_PROVIDER_ENABLED=true`;
    - `TICK_SECRET` (optional);
    - `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (or use `/setup` in the browser). They are used only while no account exists, so remove the password from `.env` once you have signed in.
-3. `docker compose up -d --build`, then `docker compose ps`. `web` should be healthy and `worker` running. The `postgres` service is the database.
+3. `docker compose up -d`, then `docker compose ps`. This pulls the published image. `web` should be healthy, and `worker` and `db-backup` running. The `postgres` service is the database.
 4. Open `http://localhost:3000`, sign in (or complete `/setup`), and create a project.
 5. Accounts → Connect **Mock (offline)**.
 6. Compose → write text → choose the mock account → **Publish now**.
 7. Within about a minute the post shows **Published**, and the header shows "last successful tick" under a minute old.
-8. `docker compose run --rm worker node scripts/smoke.mjs`. Every line should be ✓. (From a source checkout, `pnpm build:smoke` builds that file.)
+8. `docker compose run --rm worker node scripts/smoke.mjs`. Every line should be ✓. (The image includes it; from a source checkout, `pnpm build:smoke` builds that file.)
 9. Back up, then restore (§4). The post is still there.
 10. `docker compose down` keeps your data. `docker compose down -v` deletes it.
 
 Optional offline media storage: `docker compose --profile offline up` adds the `minio` and `storage-init` services (mock provider only; see [storage.md](./storage.md)).
 
 ### Verified run
+
+This run predates the published image, so it built the image from source; the steps after the build are the same.
 
 **Verified on 2026-10-04** on macOS (Docker Desktop, behind a TLS-intercepting proxy), from a clean `git clone` of branch `010-hardening-deployment` at `5e62266`, with `.env` from `.env.example` plus generated `BETTER_AUTH_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `TICK_SECRET`, `MOCK_PROVIDER_ENABLED=true` and `BOOTSTRAP_ADMIN_*`.
 
@@ -69,7 +91,10 @@ The walkthrough above uses the mock provider. To post to real accounts, do these
 
 ## 4. Backups and restore
 
-Backup:
+The `db-backup` service in `docker-compose.yml` writes `docket-YYYYMMDD-HHMMSS.dump` (the `pg_dump -Fc` format below)
+when it starts and every 24 hours after, into `./backups` next to `docker-compose.yml` (`BACKUP_PATH` in `.env`). It deletes
+dumps older than 7 days (`BACKUP_KEEP_DAYS`). Copy that directory off the machine too: a backup on the same disk does not
+survive the disk. To take one by hand:
 
 ```bash
 docker compose exec -T postgres pg_dump -U docket -d docket -Fc > docket-$(date +%F).dump
@@ -91,19 +116,50 @@ Also keep, somewhere safe and separate from the dump:
 - **`BETTER_AUTH_SECRET`** (sessions; losing it signs everyone out).
 - **The media bucket**, which is backed up separately by your storage provider.
 
-## 5. Unraid (or any home server) with Docker Compose
+## 5. Unraid (or any home server)
 
-These are generic steps. They assume you can run `docker compose` on the box.
+Two ways in. The template is one container and needs a Postgres you already run. Compose brings its own Postgres, a
+separate worker and nightly backups.
 
-1. Clone the repository onto the server.
-2. Create `.env` as in §3 (and read §2).
-3. `docker compose up -d --build`.
+### 5a. Unraid template
+
+[`unraid/docket.xml`](https://github.com/jamiebclark/docket/blob/main/unraid/docket.xml) runs the published image as one
+container with `RUN_WORKER_IN_PROCESS=true`, so the web process also runs the scheduler (keep it `true`, or nothing
+publishes).
+
+1. Run a PostgreSQL container (Docket is tested on PostgreSQL 17) and create a `docket` database and user for it.
+2. Add the template: Unraid reads user templates from `/boot/config/plugins/dockerMan/templates-user/`, so save
+   `docket.xml` there (or paste its raw URL,
+   `https://raw.githubusercontent.com/jamiebclark/docket/main/unraid/docket.xml`, wherever your Unraid version accepts a
+   template URL), then add a container from it.
+3. Fill in the required fields: Database URL, App URL (`BETTER_AUTH_URL`, the exact address you will browse to, such as
+   `http://192.168.1.100:3000`), Auth Secret and Credentials Encryption Key (`openssl rand -base64 32` for each). Read §2.
+4. Start it and open the Web UI. The first visit goes to `/setup` to create the first account.
+5. Media storage, the generator, Meta and Threads are under "Show more settings". Leave a group empty to turn it off;
+   empty fields count as unset.
+6. Back up the database from your Postgres container (§4 shows the `pg_dump` format), and keep the two secrets somewhere
+   safe.
+7. Update by pulling the new image (Unraid's "check for updates", or pin a version tag in Repository).
+
+Unverified, so check against your Unraid version: the template path and menu names above. The template file itself parses
+and lists only variables Docket reads.
+
+### 5b. Docker Compose
+
+These steps assume you can run `docker compose` on the box.
+
+1. Download `docker-compose.yml` and `.env` as in §3 step 1 (no checkout needed), into a directory on the array, e.g. under
+   your appdata share.
+2. Fill in `.env` as in §3 (and read §2). To reach Docket from your LAN without a reverse proxy, set `DOCKET_BIND=0.0.0.0`
+   and `BETTER_AUTH_URL` to `http://<server-ip>:3000`.
+3. `docker compose up -d`.
 4. Data lives in the named volume `docket-pgdata`. To bind-mount a directory instead, replace the `docket-pgdata:/var/lib/postgresql/data` line under `postgres.volumes` with a host path.
 5. `restart: unless-stopped` on every service keeps the web and worker up after a reboot.
-6. Back up as in §4.
-7. Update with `git pull && docker compose up -d --build`.
+6. `db-backup` writes a dump every 24 hours into `./backups` (§4), which sits in that directory and is covered by
+   whatever backs it up.
+7. Update with `docker compose pull && docker compose up -d`.
 
-Unverified, so check against your Unraid version: how Unraid exposes Compose, where it stores appdata, and how it starts containers at boot. This guide gives no plugin names, menu paths or default paths, because none were checked.
+Unverified, so check against your Unraid version: how Unraid exposes Compose, where it stores appdata, and how it starts containers at boot. This guide gives no plugin names, menu paths or default paths for Compose, because none were checked.
 
 ## 6. Reverse proxy and HTTPS
 
@@ -117,9 +173,9 @@ Proxy-product configuration is not given here: it is specific to each product an
 
 ## 7. Container host + Neon
 
-- **Build the image yourself.** No prebuilt image is published. Build it from the repository (`docker build -t docket .`), push it to a registry your host can pull from, and run it with the variables from `.env.example`. The web service listens on port 3000 (`PORT`) and serves `/api/health`; the worker runs the same image with the command `node worker.mjs`.
+- **Use the published image** `ghcr.io/jamiebclark/docket` (see "The published image" in §2) and run it with the variables from `.env.example`. The web service listens on port 3000 (`PORT`) and serves `/api/health`; the worker runs the same image with the command `node worker.mjs`.
 - **Migrations run on start.** The web container applies migrations before serving (`MIGRATE_ON_START`, default `true`), using `DATABASE_URL_DIRECT` (or `DATABASE_URL` when that is unset). The worker never migrates, so start it after the web service is healthy.
-- **Neon with Compose.** `docker-compose.yml` sets `DATABASE_URL` to its own `postgres` service, which overrides `.env`. To use Neon with Compose, change that line to your pooled Neon URL, add `DATABASE_URL_DIRECT`, and remove the `postgres` service and the `web` service's `depends_on: postgres`.
+- **Neon with Compose.** `docker-compose.yml` sets `DATABASE_URL` to its own `postgres` service, which overrides `.env`. To use Neon with Compose, change that line to your pooled Neon URL, add `DATABASE_URL_DIRECT`, and remove the `postgres` and `db-backup` services and the `web` service's `depends_on: postgres`.
 - **Pooled vs direct.** `DATABASE_URL` is the pooled Neon URL (the `-pooler` host, transaction mode; `SKIP LOCKED` works). `DATABASE_URL_DIRECT` is the non-pooled URL, which migrations use.
 - **The scheduler** — pick one:
   - a second service from the same image running `node worker.mjs`;

@@ -113,6 +113,8 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+    outputs:
+      version: ${{ steps.released.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -127,3 +129,21 @@ jobs:
       - run: pnpm exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # semantic-release tags HEAD when it cuts a release. A re-run on an already released commit
+      # finds the tag from the earlier run, which only rebuilds the same version.
+      - id: released
+        run: |
+          tag=$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1)
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  # Publishes ghcr.io/<owner>/docket for the release cut above. A separate `release: published`
+  # workflow would never run: releases created with GITHUB_TOKEN do not trigger workflows.
+  image:
+    needs: release
+    if: needs.release.outputs.version != ''
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.release.outputs.version }}

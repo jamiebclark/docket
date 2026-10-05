@@ -20,15 +20,22 @@ belongs to exactly one project.
 
 ## Quick start
 
-Needs Docker. This runs the whole stack offline with the mock provider.
+Needs Docker. This runs the whole stack offline with the mock provider, from the published image
+`ghcr.io/jamiebclark/docket` (no checkout or build).
 
 ```sh
-git clone <this repository> && cd docket
-cp .env.example .env     # set BETTER_AUTH_SECRET, CREDENTIALS_ENCRYPTION_KEY and MOCK_PROVIDER_ENABLED=true
-docker compose up -d --build
-docker compose ps        # web healthy, worker running
+mkdir docket && cd docket
+curl -fsSLO https://raw.githubusercontent.com/jamiebclark/docket/main/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/jamiebclark/docket/main/.env.example
+# edit .env: set BETTER_AUTH_SECRET, CREDENTIALS_ENCRYPTION_KEY and MOCK_PROVIDER_ENABLED=true
+docker compose up -d
+docker compose ps        # web healthy, worker and db-backup running
 # open http://localhost:3000, create the first account (or set BOOTSTRAP_ADMIN_EMAIL / _PASSWORD)
 ```
+
+**On Unraid**, use the template in [`unraid/docket.xml`](unraid/docket.xml): one container next to your Postgres. See
+[docs/deployment.md](docs/deployment.md#5-unraid-or-any-home-server). From a source checkout, build the image yourself with
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 Generate the two secrets with `openssl rand -base64 32`. **Back up `CREDENTIALS_ENCRYPTION_KEY`**: without it, stored
 credentials cannot be decrypted. A clean-checkout run of these steps is recorded in

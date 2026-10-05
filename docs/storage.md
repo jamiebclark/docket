@@ -80,7 +80,7 @@ S3_PUBLIC_BASE_URL=http://localhost:9000/docket-media
 2. Start (or restart) the stack with the profile, so `web` and `worker` pick up the new variables:
 
 ```
-docker compose --profile offline up -d --build
+docker compose --profile offline up -d
 ```
 
 Use `--profile offline` on every later `docker compose` command too, or Compose ignores the

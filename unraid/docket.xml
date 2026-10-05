@@ -1,0 +1,282 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Docket</Name>
+  <Repository>ghcr.io/jamiebclark/docket:latest</Repository>
+  <Registry>https://github.com/jamiebclark/docket/pkgs/container/docket</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/jamiebclark/docket/issues</Support>
+  <Project>https://github.com/jamiebclark/docket</Project>
+  <Overview>
+    Docket is a self-hosted, multi-project social scheduler and LLM post generator for Facebook Pages, Instagram, Threads and Bluesky.&#xA;&#xA;
+    Queue, schedule and publish posts from a calendar, draft them with OpenAI or Anthropic, and automate it all through a REST API with webhooks.&#xA;&#xA;
+    Requires an external PostgreSQL database. This template runs the web app and the scheduler in one container (RUN_WORKER_IN_PROCESS=true). Database migrations run on start. On first visit, /setup creates the first account.
+  </Overview>
+  <Category>Productivity: Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/jamiebclark/docket/main/unraid/docket.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/jamiebclark/docket/main/public/icon-512.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <Requires>PostgreSQL container (Docket is tested on PostgreSQL 17). Install the official "postgres" template from Community Applications, create a database named "docket" with a dedicated user, and paste the connection string into Database URL below. Back up the Credentials Encryption Key somewhere safe: without it, connected accounts must all be reconnected.</Requires>
+
+  <!-- ── Ports ──────────────────────────────────────────────── -->
+  <Config
+    Name="Web UI Port"
+    Target="3000"
+    Default="3000"
+    Mode="tcp"
+    Description="Host port for the Docket web UI. Keep it on your LAN or behind a reverse proxy; never forward it directly to the internet."
+    Type="Port"
+    Display="always"
+    Required="true"
+    Mask="false">3000</Config>
+
+  <!-- ── Required variables ─────────────────────────────────── -->
+  <Config
+    Name="Database URL"
+    Target="DATABASE_URL"
+    Default=""
+    Mode=""
+    Description="PostgreSQL connection string. Example: postgres://docket:password@192.168.1.100:5432/docket"
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="false"></Config>
+
+  <Config
+    Name="App URL"
+    Target="BETTER_AUTH_URL"
+    Default=""
+    Mode=""
+    Description="The exact address people type into the browser: scheme, host and port, no path. A mismatch breaks sign-in. Examples: http://192.168.1.100:3000 or https://docket.example.com. Threads needs https:// on a real domain."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="false"></Config>
+
+  <Config
+    Name="Auth Secret"
+    Target="BETTER_AUTH_SECRET"
+    Default=""
+    Mode=""
+    Description="Signs session cookies; at least 32 characters. Generate with: openssl rand -base64 32. Changing it signs everyone out."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="true"></Config>
+
+  <Config
+    Name="Credentials Encryption Key"
+    Target="CREDENTIALS_ENCRYPTION_KEY"
+    Default=""
+    Mode=""
+    Description="Encrypts stored account credentials: 32 bytes as base64 (44 characters) or hex (64). Generate with: openssl rand -base64 32. BACK THIS UP: losing it means reconnecting every account."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="true"></Config>
+
+  <Config
+    Name="Run Scheduler In Web Container"
+    Target="RUN_WORKER_IN_PROCESS"
+    Default="true"
+    Mode=""
+    Description="Keep true. The scheduler publishes due posts every minute; with false, nothing publishes unless you run a separate worker container (command: node worker.mjs) or an external cron."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="false">true</Config>
+
+  <!-- ── Media storage ──────────────────────────────────────── -->
+  <!-- All four or none. Facebook, Instagram and Threads fetch images by URL, so the bucket must be publicly reachable over https. -->
+  <Config
+    Name="S3 Bucket"
+    Target="S3_BUCKET"
+    Default=""
+    Mode=""
+    Description="Media storage (photos). Leave all S3 fields empty to disable uploads; set all four to enable. Works with Cloudflare R2, AWS S3 or another S3-compatible store. The bucket must be publicly reachable: see docs/storage.md."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="S3 Access Key ID"
+    Target="S3_ACCESS_KEY_ID"
+    Default=""
+    Mode=""
+    Description="Media storage access key id."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="S3 Secret Access Key"
+    Target="S3_SECRET_ACCESS_KEY"
+    Default=""
+    Mode=""
+    Description="Media storage secret access key."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
+  <Config
+    Name="S3 Public Base URL"
+    Target="S3_PUBLIC_BASE_URL"
+    Default=""
+    Mode=""
+    Description="Public https:// address media is served from, e.g. an R2 custom domain: https://media.example.com"
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="S3 Endpoint"
+    Target="S3_ENDPOINT"
+    Default=""
+    Mode=""
+    Description="Optional. Leave empty for AWS. R2: https://ACCOUNT_ID.r2.cloudflarestorage.com"
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="S3 Region"
+    Target="S3_REGION"
+    Default=""
+    Mode=""
+    Description="Optional. Empty means auto (right for R2). For AWS, the bucket's region."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <!-- ── Generator (LLM) ────────────────────────────────────── -->
+  <Config
+    Name="LLM Provider"
+    Target="LLM_PROVIDER"
+    Default=""
+    Mode=""
+    Description="Optional. openai or anthropic. Leave empty (with the other LLM fields) to turn the post generator off. See docs/generator.md."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="LLM Model"
+    Target="LLM_MODEL"
+    Default=""
+    Mode=""
+    Description="Model id your provider account can use; required when LLM Provider is set."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="OpenAI API Key"
+    Target="OPENAI_API_KEY"
+    Default=""
+    Mode=""
+    Description="Required when LLM Provider is openai."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
+  <Config
+    Name="Anthropic API Key"
+    Target="ANTHROPIC_API_KEY"
+    Default=""
+    Mode=""
+    Description="Required when LLM Provider is anthropic."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
+  <!-- ── Meta (Facebook Pages, Instagram) and Threads ───────── -->
+  <Config
+    Name="Meta App ID"
+    Target="META_APP_ID"
+    Default=""
+    Mode=""
+    Description="Optional. Facebook Pages and Instagram. Set with Meta App Secret; register APP_URL/connect/callback in the Meta app. See docs/meta-setup.md."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Meta App Secret"
+    Target="META_APP_SECRET"
+    Default=""
+    Mode=""
+    Description="Optional. Set with Meta App ID."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
+  <Config
+    Name="Threads App ID"
+    Target="THREADS_APP_ID"
+    Default=""
+    Mode=""
+    Description="Optional. Threads. Set with Threads App Secret. Needs an https:// App URL that is not localhost."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Threads App Secret"
+    Target="THREADS_APP_SECRET"
+    Default=""
+    Mode=""
+    Description="Optional. Set with Threads App ID."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
+  <!-- ── Reverse proxy ──────────────────────────────────────── -->
+  <Config
+    Name="Trusted IP Headers"
+    Target="TRUSTED_IP_HEADERS"
+    Default=""
+    Mode=""
+    Description="Optional. Behind a reverse proxy: comma-separated header names holding the real client IP, e.g. x-real-ip. Set with Trusted Proxies so rate limits see visitors, not the proxy."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Trusted Proxies"
+    Target="TRUSTED_PROXIES"
+    Default=""
+    Mode=""
+    Description="Optional. Comma-separated IPs or CIDR ranges of your reverse proxy, e.g. 172.17.0.0/16."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Allow Mock Provider"
+    Target="MOCK_PROVIDER_ENABLED"
+    Default=""
+    Mode=""
+    Description="Optional. true lets you connect an offline Mock account to try Docket without real social accounts. Leave empty for real use."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+</Container>
