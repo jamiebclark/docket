@@ -30,9 +30,15 @@ export async function variantGroupsForPost(
   const parsed = generationRecordSchema.safeParse(meta?.records?.at(-1));
   const recorded = parsed.success ? (parsed.data.accounts ?? null) : null;
   const byAccount = new Map((recorded ?? []).map((a) => [a.accountId, a]));
+  // A post's targets share one created_at, so their stored order falls back to random ids.
+  // Recorded accounts are in request order, which also numbers the group keys.
+  const position = new Map((recorded ?? []).map((a, i) => [a.accountId, i]));
+  const ordered = [...targets].sort(
+    (x, y) => (position.get(x.socialAccountId) ?? Number.MAX_SAFE_INTEGER) - (position.get(y.socialAccountId) ?? Number.MAX_SAFE_INTEGER),
+  );
 
   const groups: PostVariantGroup[] = [];
-  for (const target of targets) {
+  for (const target of ordered) {
     const account = await scope.accounts.get(target.socialAccountId);
     if (!account) continue;
     const entry = byAccount.get(account.id);
