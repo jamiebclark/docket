@@ -8,6 +8,8 @@ import {
   targetForHighlight,
   type SwitcherProject,
 } from "./switcher-logic";
+import { Icon } from "@/components/ui/Icon";
+import { controlStyles } from "@/components/ui/controls";
 
 /**
  * Project switcher: a button plus Ctrl/⌘+K open a modal combobox over the
@@ -78,9 +80,11 @@ export function ProjectSwitcher({
         type="button"
         onClick={show}
         aria-haspopup="dialog"
-        className="rounded border border-foreground/30 px-3 py-1.5 text-sm font-medium hover:bg-foreground/10 focus-visible:ring-2"
+        className="inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-border bg-surface pr-2 pl-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:border-primary/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
-        {currentName} <kbd className="ml-2 text-xs opacity-70">Ctrl/⌘ K</kbd>
+        <span className="truncate">{currentName}</span>
+        <Icon name="chevronDown" size={16} className="text-muted-foreground" />
+        <kbd className="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground sm:inline">Ctrl/⌘ K</kbd>
       </button>
       <dialog
         ref={dialogRef}
@@ -89,30 +93,34 @@ export function ProjectSwitcher({
           setOpen(false);
           returnTo.current?.focus();
         }}
-        className="m-auto mt-24 w-full max-w-md rounded-lg border border-foreground/30 bg-background p-4 text-foreground backdrop:bg-black/50"
+        className="m-auto mt-24 w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border bg-surface p-3 text-foreground shadow-overlay"
       >
-        <label htmlFor={`${listId}-filter`} className="mb-1 block text-sm font-medium">
+        <label htmlFor={`${listId}-filter`} className="mb-2 block px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Switch project
         </label>
-        <input
-          ref={inputRef}
-          id={`${listId}-filter`}
-          type="text"
-          role="combobox"
-          aria-expanded={open}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={items[highlight] ? `${listId}-${highlight}` : undefined}
-          autoComplete="off"
-          value={filter}
-          onChange={(e) => {
-            setFilter(e.target.value);
-            setHighlight(0);
-          }}
-          onKeyDown={onInputKeyDown}
-          className="w-full rounded border border-foreground/30 bg-background px-3 py-2 focus-visible:ring-2"
-        />
-        <ul id={listId} role="listbox" aria-label="Projects" className="mt-2 max-h-72 overflow-auto">
+        <div className="relative">
+          <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            id={`${listId}-filter`}
+            type="text"
+            role="combobox"
+            aria-expanded={open}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={items[highlight] ? `${listId}-${highlight}` : undefined}
+            autoComplete="off"
+            value={filter}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setHighlight(0);
+            }}
+            onKeyDown={onInputKeyDown}
+            placeholder="Search projects"
+            className={`${controlStyles} h-11 pl-10 text-base`}
+          />
+        </div>
+        <ul id={listId} role="listbox" aria-label="Projects" className="mt-2 max-h-80 overflow-auto">
           {items.map((item, i) => (
             <li
               key={item.href}
@@ -121,12 +129,12 @@ export function ProjectSwitcher({
               aria-selected={i === highlight}
               onMouseEnter={() => setHighlight(i)}
               onClick={() => go(i)}
-              className={`cursor-pointer rounded px-3 py-2 ${
-                i === highlight ? "bg-foreground text-background" : ""
-              } ${item.kind === "create" ? "border-t border-foreground/20" : ""}`}
+              className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm ${
+                i === highlight ? "bg-accent/70 text-accent-foreground" : ""
+              } ${item.kind === "create" ? "mt-1 border-t border-border font-medium text-primary" : "font-medium"}`}
             >
               {item.label}
-              {item.kind === "project" && <span className="ml-2 text-xs opacity-70">{item.slug}</span>}
+              {item.kind === "project" && <span className="font-mono text-xs font-normal text-muted-foreground">{item.slug}</span>}
             </li>
           ))}
         </ul>

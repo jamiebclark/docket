@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { safeRedirect } from "@/lib/safe-redirect";
+import { buttonStyles } from "@/components/ui/Button";
+import { alertStyles } from "@/components/ui/Alert";
+import { controlStyles, labelStyles } from "@/components/ui/controls";
 
 const GENERIC_FAILURE = "Email or password is incorrect.";
 
@@ -33,34 +36,34 @@ export function LoginForm({ next }: { next: string }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       {error ? (
-        <p role="alert" className="rounded border border-red-600 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className={alertStyles("danger")}>
           {error}
         </p>
       ) : null}
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={`flex flex-col gap-1.5 ${labelStyles}`}>
         Email
         <input
           name="email"
           type="email"
           autoComplete="username"
           required
-          className="rounded border border-foreground/30 bg-transparent px-3 py-2 focus-visible:ring-2"
+          className={`${controlStyles} h-10 font-normal`}
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={`flex flex-col gap-1.5 ${labelStyles}`}>
         Password
         <input
           name="password"
           type="password"
           autoComplete="current-password"
           required
-          className="rounded border border-foreground/30 bg-transparent px-3 py-2 focus-visible:ring-2"
+          className={`${controlStyles} h-10 font-normal`}
         />
       </label>
       <button
         type="submit"
         disabled={pending}
-        className="rounded bg-foreground px-3 py-2 text-background disabled:opacity-60 focus-visible:ring-2"
+        className={buttonStyles({ variant: "primary", size: "lg", className: "mt-2 w-full" })}
       >
         {pending ? "Logging in…" : "Log in"}
       </button>

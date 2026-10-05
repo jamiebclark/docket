@@ -1,7 +1,12 @@
-# One command to run Docket: `docker compose up -d --build`.
+# One command to run Docket: `docker compose up -d`. It pulls the published image
+# (ghcr.io/jamiebclark/docket), so this file and a .env are all you need; no checkout or build.
 # Copy .env.example to .env first and set BETTER_AUTH_SECRET and CREDENTIALS_ENCRYPTION_KEY
 # (openssl rand -base64 32). For the offline walkthrough also set MOCK_PROVIDER_ENABLED=true.
+# Update with `docker compose pull && docker compose up -d`.
+# To build from a source checkout instead, add docker-compose.build.yml (see that file).
 # Full setup, going live with real accounts, backups and hosting options: docs/deployment.md
+x-docket-image: &docket-image ${DOCKET_IMAGE:-ghcr.io/jamiebclark/docket:latest}
+
 x-docket-env: &docket-env
   # Points at the postgres service below and overrides DATABASE_URL in .env. To use Neon or another
   # external database, change it here (see docs/deployment.md, "Container host + Neon").
@@ -31,8 +36,7 @@ services:
       retries: 20
 
   web:
-    image: docket:local
-    build: .
+    image: *docket-image
     restart: unless-stopped
     depends_on:
       postgres:
@@ -45,14 +49,14 @@ services:
       timeout: 5s
       retries: 30
       start_period: 10s
-    # Bound to this machine only. To reach it from your LAN, change this to "3000:3000" (and set
+    # Bound to this machine only. To reach it from your LAN, set DOCKET_BIND=0.0.0.0 in .env (and
     # BETTER_AUTH_URL to the address people use), or put a reverse proxy in front and keep the
-    # loopback binding. Never publish port 3000 directly to the internet.
+    # loopback binding. Never publish the port directly to the internet.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "${DOCKET_BIND:-127.0.0.1}:${DOCKET_PORT:-3000}:3000"
 
   worker:
-    image: docket:local
+    image: *docket-image
     restart: unless-stopped
     command: ["node", "worker.mjs"]
     env_file: .env
@@ -60,6 +64,40 @@ services:
     depends_on:
       web:
         condition: service_healthy
+
+  # A pg_dump of the database on start and then every 24 hours, into BACKUP_PATH. Dumps older than
+  # BACKUP_KEEP_DAYS are deleted. Restore one as in docs/deployment.md §4. This does not back up
+  # .env (CREDENTIALS_ENCRYPTION_KEY) or the media bucket; keep those safe separately.
+  db-backup:
+    image: postgres:17
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: docket
+      PGPASSWORD: docket
+      PGDATABASE: docket
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+    volumes:
+      - ${BACKUP_PATH:-./backups}:/backups
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          file=/backups/docket-$$(date -u +%Y%m%d-%H%M%S).dump
+          if pg_dump -Fc -f "$$file.partial"; then
+            mv "$$file.partial" "$$file"
+            echo "[db-backup] wrote $$file"
+          else
+            rm -f "$$file.partial"
+            echo "[db-backup] pg_dump failed; next attempt in 24h" >&2
+          fi
+          find /backups -name 'docket-*.dump' -mtime +"$$KEEP_DAYS" -delete
+          sleep 86400
+        done
 
   # Offline media storage (opt-in): `docker compose --profile offline up`.
   # MinIO's upstream image is frozen; use it with the mock provider only. See docs/storage.md.
@@ -84,8 +122,7 @@ services:
 
   storage-init:
     profiles: ["offline"]
-    image: docket:local
-    build: .
+    image: *docket-image
     restart: "no"
     command: ["node", "scripts/storage-init.mjs"]
     depends_on:

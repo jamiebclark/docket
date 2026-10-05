@@ -5,6 +5,7 @@ import { getSession } from "@/server/auth/session";
 import * as setup from "@/server/services/setup";
 import { decideAnonymousRedirect } from "../root-redirect";
 import { LoginForm } from "./login-form";
+import { AuthShell } from "@/components/brand/AuthShell";
 
 export const metadata: Metadata = { title: "Log in" };
 
@@ -19,9 +20,12 @@ export default async function LoginPage({
   if (await setup.isAvailable()) redirect(decideAnonymousRedirect(true));
 
   return (
-    <main id="main" className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-16">
-      <h1 className="text-2xl font-semibold">Log in to Docket</h1>
+    <AuthShell>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold">Welcome back</h1>
+        <p className="text-sm text-muted-foreground">Log in to Docket to plan and schedule your posts.</p>
+      </div>
       <LoginForm next={target} />
-    </main>
+    </AuthShell>
   );
 }

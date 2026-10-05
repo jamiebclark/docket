@@ -8,6 +8,7 @@ import { counterText, fetchCheck, groupIssues, isOverLimit, SEVERITY_LABEL, type
 import { approveAction } from "../../../review/actions";
 import { updatePostVariantsAction } from "../../actions";
 import { CHECK_DEBOUNCE_MS, cardCheck, checkInputFor, createDebounce, editsFor, liveCards, type VariantCard } from "./variant-logic";
+import { controlStyles } from "@/components/ui/controls";
 
 export interface VariantEditorProps {
   slug: string;
@@ -99,7 +100,7 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
         const over = t ? isOverLimit(t) : false;
         const id = `${uid}-${c.key}`;
         return (
-          <article key={c.key} aria-labelledby={`${id}-title`} className="flex flex-col gap-2 rounded-lg border border-foreground/20 p-4">
+          <article key={c.key} aria-labelledby={`${id}-title`} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
             <h3 id={`${id}-title`} className="text-base font-semibold">
               {c.providerName}: {c.accountNames.join(", ")}
             </h3>
@@ -113,9 +114,9 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
               readOnly={!canEdit}
               aria-describedby={`${id}-count`}
               onChange={(e) => edit(c.key, e.target.value)}
-              className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+              className={controlStyles}
             />
-            <p id={`${id}-count`} className={`text-right text-xs ${over ? "font-semibold text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
+            <p id={`${id}-count`} className={`text-right text-xs ${over ? "font-semibold text-danger" : "text-muted-foreground"}`}>
               {t ? counterText(t) : ""}
               {over ? " (too long)" : ""}
             </p>
@@ -125,7 +126,7 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
                     <p className="text-xs font-medium">{SEVERITY_LABEL[g.severity]}</p>
                     <ul className="list-disc pl-5 text-sm">
                       {g.items.map((i, n) => (
-                        <li key={n} className={g.severity === "error" ? "text-red-700 dark:text-red-400" : g.severity === "warning" ? "text-amber-800 dark:text-amber-300" : ""}>
+                        <li key={n} className={g.severity === "error" ? "text-danger" : g.severity === "warning" ? "text-warning" : ""}>
                           {g.severity === "error" ? "Error: " : g.severity === "warning" ? "Warning: " : ""}
                           {i.message}
                         </li>

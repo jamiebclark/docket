@@ -9,6 +9,7 @@ import type { TryItResult } from "@/server/services/voice";
 import { GROUP_LIMIT, groupLimitMessage, groupTargets } from "@/lib/generation/groups";
 import { tryVoiceAction } from "./actions";
 import type { AccountOption } from "./VoiceEditor";
+import { checkStyles, controlStyles } from "@/components/ui/controls";
 
 /** Accounts in list order, as many as fit in one generation. */
 function defaultSelection(accounts: AccountOption[]): string[] {
@@ -59,11 +60,11 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
   }
 
   return (
-    <section aria-labelledby={`${uid}-h`} className="flex flex-col gap-3 rounded-md border border-foreground/20 p-4">
+    <section aria-labelledby={`${uid}-h`} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
       <h2 id={`${uid}-h`} className="text-lg font-semibold">
         Try it
       </h2>
-      <p className="text-xs text-foreground/70">Samples are not saved.</p>
+      <p className="text-xs text-muted-foreground">Samples are not saved.</p>
       {accounts.length === 0 ? (
         <EmptyState
           message="Connect an account to try this voice."
@@ -82,6 +83,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
                 type="checkbox"
                 checked={chosen.includes(a.id)}
                 onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((id) => id !== a.id)))}
+                className={checkStyles}
               />
               {a.displayName} ({a.providerName})
             </label>
@@ -89,7 +91,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
         </fieldset>
       )}
       {overLimit ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {groupLimitMessage(groupCount)}
         </p>
       ) : null}
@@ -103,7 +105,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
           required
           value={brief}
           onChange={(e) => setBrief(e.target.value)}
-          className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+          className={controlStyles}
         />
       </div>
       <div>
@@ -112,7 +114,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
         </Button>
       </div>
       {error ? (
-        <p role="alert" className="rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
+        <p role="alert" className="rounded-md border border-danger-border p-3 text-sm">
           Error: {error}
         </p>
       ) : null}
@@ -120,16 +122,16 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
       {result ? (
         <div className="flex flex-col gap-3">
           {result.variants.map((v) => (
-            <article key={v.key} aria-label={`${v.providerName}: ${v.accountNames.join(", ")} sample`} className="rounded-md border border-foreground/20 p-3 text-sm">
+            <article key={v.key} aria-label={`${v.providerName}: ${v.accountNames.join(", ")} sample`} className="rounded-lg border border-border bg-surface p-3 text-sm">
               <h3 className="font-medium">
                 {v.providerName}: {v.accountNames.join(", ")}
               </h3>
               <p className="mt-1 whitespace-pre-wrap">{v.text}</p>
-              <p className="mt-1 text-xs text-foreground/70">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {v.count} / {v.limit} ({v.countingRule})
               </p>
               {v.issues.length > 0 ? (
-                <ul className="mt-1 list-disc pl-5 text-xs text-amber-900 dark:text-amber-300">
+                <ul className="mt-1 list-disc pl-5 text-xs text-warning">
                   {v.issues.map((m) => (
                     <li key={m}>{m}</li>
                   ))}
@@ -137,7 +139,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
               ) : null}
             </article>
           ))}
-          <p className="text-xs text-foreground/70">Took {(result.latencyMs / 1000).toFixed(1)} s.</p>
+          <p className="text-xs text-muted-foreground">Took {(result.latencyMs / 1000).toFixed(1)} s.</p>
         </div>
       ) : null}
     </section>

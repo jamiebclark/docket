@@ -177,14 +177,14 @@ describe("posting instructions on the accounts page", () => {
       renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
     );
     expect(html).toContain("<h3");
-    expect(html).toContain("Posting instructions</h3>");
+    expect(html).toContain("Posting instructions</h4>");
     expect(html).toContain(`Posting instructions for ${a.displayName}`);
     expect(html).toContain("<textarea");
     expect(html).toContain("One hashtag.");
     expect(html).toContain("12 / 2,000");
     expect(html).toContain("How posts for this account are written");
     expect(html).toContain("Save");
-    expect(html.indexOf("Posting instructions</h3>")).toBeLessThan(html.indexOf("Posting slots"));
+    expect(html.indexOf("Posting instructions</h4>")).toBeLessThan(html.indexOf("Posting slots"));
   });
 
   it("shows editors read-only text and no form control", async () => {

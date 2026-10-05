@@ -4,10 +4,16 @@ import { useActionState, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Select } from "@/components/ui/Select";
 import { Cell, Row, Table } from "@/components/ui/Table";
 import type { ActionResult } from "@/lib/action-result";
 import { changeMemberRole, leaveProject, removeMember, transferOwnership } from "./actions";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+
+const ROLE_OPTIONS = [
+  { value: "editor", label: "Editor" },
+  { value: "admin", label: "Admin" },
+  { value: "owner", label: "Owner" },
+];
 
 export interface MemberItem {
   userId: string;
@@ -25,7 +31,7 @@ export interface MemberItem {
 type Confirm = "remove" | "leave" | "transfer";
 type Action = (prev: ActionResult<null> | null, formData: FormData) => Promise<ActionResult<null>>;
 
-const errorClass = "mt-1 text-xs text-red-700 dark:text-red-400";
+const errorClass = "mt-1 text-xs text-danger";
 const joined = (iso: string) => new Date(iso).toISOString().slice(0, 10);
 
 export function MembersPanel({ slug, members }: { slug: string; members: MemberItem[] }) {
@@ -57,15 +63,18 @@ function MemberRow({ slug, m }: { slug: string; m: MemberItem }) {
       <Cell>{m.email}</Cell>
       <Cell>
         {m.canChangeRole ? (
-          <form action={roleAction} className="flex items-center gap-2">
+          <form action={roleAction} className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="slug" value={slug} />
             <input type="hidden" name="userId" value={m.userId} />
-            <Select id={`role-${m.userId}`} name="role" label={`Role for ${m.name}`} defaultValue={m.role}>
-              <option value="editor">Editor</option>
-              <option value="admin">Admin</option>
-              <option value="owner">Owner</option>
-            </Select>
-            <Button type="submit" variant="secondary" pending={changing} pendingLabel="Saving…" className="mt-6">
+            <SegmentedControl
+              name="role"
+              label={`Role for ${m.name}`}
+              hideLabel
+              size="sm"
+              defaultValue={m.role}
+              options={ROLE_OPTIONS}
+            />
+            <Button type="submit" variant="secondary" size="sm" pending={changing} pendingLabel="Saving…">
               Save
             </Button>
           </form>
@@ -170,7 +179,7 @@ function ConfirmDialog({
     <Dialog open={open} onClose={onClose} title={title}>
       <p className="mb-4 text-sm">{body}</p>
       {error ? (
-        <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="mb-3 text-sm text-danger">
           {error}
         </p>
       ) : null}

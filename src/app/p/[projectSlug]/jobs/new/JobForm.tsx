@@ -3,14 +3,16 @@
 import { useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
-import { Select } from "@/components/ui/Select";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MARK_CLOSE, MARK_OPEN, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
 import { INSTRUCTIONS_MAX } from "@/lib/validation/generation";
 import { createJobAction } from "../actions";
-import { ACCOUNTS_HINT, groupLimitNotice, groupByPlatform, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
+import { ACCOUNTS_HINT, groupLimitNotice, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
+import { controlStyles } from "@/components/ui/controls";
+import { ChoiceField } from "@/components/ui/ChoiceField";
+import { ActionBar } from "@/components/ui/ActionBar";
+import { AccountPicker } from "@/components/accounts/AccountPicker";
 
 export type JobFormSource =
   | { kind: "media"; selection: unknown; includeUsed: boolean }
@@ -40,7 +42,7 @@ function flatten(issues: unknown): string[] {
   return (list as { message?: string }[]).map((i) => i.message ?? "").filter(Boolean);
 }
 
-const red = "text-xs text-red-700 dark:text-red-400";
+const red = "text-xs text-danger";
 
 export function JobForm(props: JobFormProps) {
   const { slug, source, summary, itemCount, fields, firstFields, emptyByField, profiles, accounts, defaults, canAutoApprove } = props;
@@ -113,12 +115,12 @@ export function JobForm(props: JobFormProps) {
       }}
     >
       {isUnreviewedQueue(defaults) ? (
-        <p role="note" className="rounded-md border-2 border-amber-700 p-2 text-sm font-semibold dark:border-amber-400">
+        <p role="note" className="rounded-md border-2 border-warning-border p-2 text-sm font-semibold">
           This project is set to: {UNREVIEWED_QUEUE_LABEL}.
         </p>
       ) : null}
       {issues.length > 0 ? (
-        <div ref={summaryRef} tabIndex={-1} role="alert" className="rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
+        <div ref={summaryRef} tabIndex={-1} role="alert" className="rounded-md border border-danger-border p-3 text-sm">
           <p className="font-medium">This job can&apos;t be started:</p>
           <ul className="mt-1 list-disc pl-5">
             {issues.map((m, i) => (
@@ -133,27 +135,22 @@ export function JobForm(props: JobFormProps) {
         {summary}
       </fieldset>
 
-      <Select
+      <ChoiceField
         id={`${uid}-voice`}
+        name={`${uid}-voice`}
         label="Voice profile"
         hint="How every post should sound."
         value={voiceProfileId}
-        onChange={(e) => setVoiceProfileId(e.target.value)}
-        {...(fieldErrors.voiceProfileId ? { error: fieldErrors.voiceProfileId } : {})}
-      >
-        {profiles.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-            {p.isDefault ? " (default)" : ""}
-          </option>
-        ))}
-      </Select>
+        onChange={setVoiceProfileId}
+        error={fieldErrors.voiceProfileId}
+        options={profiles.map((p) => ({ value: p.id, label: p.isDefault ? `${p.name} (default)` : p.name }))}
+      />
 
       <div className="flex flex-col gap-1">
         <label htmlFor={`${uid}-template`} className="text-sm font-medium">
           Instructions template
         </label>
-        <p id={`${uid}-template-hint`} className="text-xs text-foreground/70">
+        <p id={`${uid}-template-hint`} className="text-xs text-muted-foreground">
           Written once, used for every item. Available fields:
         </p>
         <ul className="flex flex-wrap gap-1" aria-label="Available fields">
@@ -162,7 +159,7 @@ export function JobForm(props: JobFormProps) {
               <button
                 type="button"
                 onClick={() => insertField(f)}
-                className="rounded-full border border-foreground/40 px-2 py-0.5 font-mono text-xs hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+                className="rounded-full border border-input px-2 py-0.5 font-mono text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
                 {`{{${f}}}`}
               </button>
@@ -178,9 +175,9 @@ export function JobForm(props: JobFormProps) {
           aria-describedby={`${uid}-template-hint ${uid}-template-count`}
           aria-invalid={fieldErrors.template ? true : undefined}
           onChange={(e) => setTemplate(e.target.value)}
-          className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+          className={controlStyles}
         />
-        <p id={`${uid}-template-count`} className={`text-right text-xs ${template.length > INSTRUCTIONS_MAX ? "text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
+        <p id={`${uid}-template-count`} className={`text-right text-xs ${template.length > INSTRUCTIONS_MAX ? "text-danger" : "text-muted-foreground"}`}>
           {counterLabel(template.length, INSTRUCTIONS_MAX)}
         </p>
         {fieldErrors.template ? <p className={red}>{fieldErrors.template}</p> : null}
@@ -190,55 +187,38 @@ export function JobForm(props: JobFormProps) {
           </p>
         ))}
         {empties.map(([name, n]) => (
-          <p key={name} role="note" className="text-xs text-amber-900 dark:text-amber-300">
+          <p key={name} role="note" className="text-xs text-warning">
             {n} {n === 1 ? "item has" : "items have"} an empty value for {name}.
           </p>
         ))}
         {preview !== null ? (
-          <div className="mt-1 rounded-md border border-foreground/20 p-2">
+          <div className="mt-1 rounded-lg border border-border bg-surface p-2">
             <p className="text-xs font-medium">Preview of the first item</p>
             <pre className="mt-1 whitespace-pre-wrap text-sm">{preview}</pre>
-            <p className="mt-1 text-xs text-foreground/70">
+            <p className="mt-1 text-xs text-muted-foreground">
               Values from each item are marked {MARK_OPEN} {MARK_CLOSE} so the model treats them as data.
             </p>
           </div>
         ) : null}
       </div>
 
-      <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
-        <legend className="text-sm font-semibold">Target accounts</legend>
-        <p id={`${uid}-accounts-hint`} className="text-xs text-foreground/70">
-          {ACCOUNTS_HINT}
-        </p>
-        {groupByPlatform(accounts).map((group) => (
-          <div key={group.providerName} className="flex flex-col gap-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">{group.providerName}</p>
-            {group.accounts.map((a) => (
-              <label key={a.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(a.id)}
-                  disabled={!a.providerAvailable}
-                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))}
-                />
-                <span>{a.displayName}</span>
-                <StatusBadge status={a.status} />
-              </label>
-            ))}
-          </div>
-        ))}
+      <div className="flex flex-col gap-3">
+        <AccountPicker
+          legend="Target accounts"
+          hint={ACCOUNTS_HINT}
+          idPrefix={uid}
+          showStatus="always"
+          value={chosen}
+          onChange={setChosen}
+          error={fieldErrors.targetAccountIds ?? limitNotice ?? undefined}
+          accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
+        />
         {needImage.map((name) => (
-          <p key={name} role="note" className="rounded-md border border-amber-700 p-2 text-sm text-amber-900 dark:border-amber-400 dark:text-amber-300">
+          <p key={name} role="note" className="rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning">
             Warning: {imageWarning(name)}
           </p>
         ))}
-        {limitNotice ? (
-          <p role="status" aria-live="polite" className="text-xs text-red-700 dark:text-red-400">
-            {limitNotice}
-          </p>
-        ) : null}
-        {fieldErrors.targetAccountIds ? <p className={red}>{fieldErrors.targetAccountIds}</p> : null}
-      </fieldset>
+      </div>
 
       <PolicyPicker
         idPrefix={`${uid}-policy`}
@@ -250,11 +230,11 @@ export function JobForm(props: JobFormProps) {
       />
 
       <LiveRegion message={pending ? "Starting the job…" : ""} />
-      <div className="flex justify-end">
+      <ActionBar stickyFrom="md" message={chosen.length === 0 ? "Choose at least one account." : undefined}>
         <Button type="submit" pending={pending} pendingLabel="Starting…" disabled={pending || chosen.length === 0 || unknown.length > 0}>
           {`Start job (${itemCount} items)`}
         </Button>
-      </div>
+      </ActionBar>
     </form>
   );
 }

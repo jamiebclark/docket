@@ -53,10 +53,10 @@ export default async function ProjectLayout({
       />
       <SchedulerHealth variant="banner" health={health} now={at} timezone={timezone} />
       <ReauthBanner accounts={reauth} projectSlug={scope.project.slug} canManage={scope.can({ account: ["manage"] })} />
-      <div className="flex flex-1">
+      <div className="flex flex-1 flex-col [--sticky-top:6.875rem] md:flex-row md:[--sticky-top:3.5rem]">
         <LeftNav projectSlug={scope.project.slug} reviewCount={reviewCount} failuresCount={failuresCount} />
-        <main id="main" className="flex-1 p-6">
-          {children}
+        <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+          <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
       </div>
     </div>

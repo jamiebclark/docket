@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { docsUrl } from "@/lib/docs";
 import { createFakeGraph } from "../../../tests/helpers/fake-graph";
 import type { MetaConfig } from "./config";
 import { dialogUrl, exchangeCode, exchangeLongLived, metaApp } from "./oauth";
@@ -55,7 +56,7 @@ describe("exchanges", () => {
     const r = await exchangeCode(app, cfg, { code: "CODE123", redirectUri: "https://x.test/cb", signal: signal() });
     expect(r.ok).toBe(false);
     const msg = r.ok ? "" : r.message;
-    expect(msg).toContain("docs/meta-setup.md");
+    expect(msg).toContain(docsUrl("meta-setup"));
     expect(msg).not.toContain("CODE123");
     expect(msg).not.toContain(cfg.appSecret);
   });

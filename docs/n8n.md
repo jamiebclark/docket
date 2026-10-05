@@ -2,7 +2,7 @@
 
 Docket's public API lets an n8n workflow do what the old scheduler flow did: take a row (an image URL and a brief), import the image, generate a post for each account, and queue it into the next free slot. Re-running the same rows creates nothing new, because every write carries a row-derived idempotency key.
 
-The full reference is generated from the code: [`/api/v1/openapi.json`](/api/v1/openapi.json) on your Docket host.
+The full reference is generated from the code: `/api/v1/openapi.json` on your Docket host.
 
 ## 1. Create a key
 

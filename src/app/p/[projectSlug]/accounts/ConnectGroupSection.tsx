@@ -54,16 +54,25 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-lg border border-foreground/20 p-4">
-      <h2 id={headingId} className="text-lg font-semibold">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
+      <h3 id={headingId} className="text-lg font-semibold">
         Connect {displayName}
-      </h2>
-      <p className="text-sm text-foreground/80">Connects {providerNames.join(" and ")} accounts with one sign-in.</p>
+      </h3>
+      <p className="text-sm text-muted-foreground">Connects {providerNames.join(" and ")} accounts with one sign-in.</p>
       {!configured ? (
         <div className="flex max-w-xl flex-col gap-2 text-sm">
           <p>
             {displayName} is not configured on this server.
-            {setupDoc ? <> Follow the setup guide in <code>{setupDoc}</code>.</> : null}
+            {setupDoc ? (
+              <>
+                {" "}
+                Follow the{" "}
+                <a href={setupDoc} target="_blank" rel="noreferrer" className="underline">
+                  setup guide
+                </a>
+                .
+              </>
+            ) : null}
           </p>
           <CopyField id={`connect-group-${groupKey}-redirect`} label="Redirect address to register" value={redirectUri} />
         </div>
@@ -74,7 +83,15 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
           {unavailable ? (
             <p className="max-w-xl text-sm">
               {unavailable.reason}
-              {unavailable.doc ? <> See <code>{unavailable.doc}</code>.</> : null}
+              {unavailable.doc ? (
+                <>
+                  {" "}
+                  <a href={unavailable.doc} target="_blank" rel="noreferrer" className="underline">
+                    How to fix this
+                  </a>
+                  .
+                </>
+              ) : null}
             </p>
           ) : (
             <>
@@ -83,7 +100,7 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
                   Connect {displayName}
                 </Button>
               </div>
-              <p role="alert" className="min-h-4 text-sm text-red-700 dark:text-red-400">
+              <p role="alert" className="min-h-4 text-sm text-danger">
                 {message}
               </p>
             </>
@@ -102,7 +119,7 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
                 required
                 aria-required
               />
-              <p role="alert" className="min-h-4 text-sm text-red-700 dark:text-red-400">
+              <p role="alert" className="min-h-4 text-sm text-danger">
                 {pasteMessage}
               </p>
               <div>

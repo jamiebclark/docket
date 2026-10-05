@@ -28,16 +28,16 @@ export function MediaCard({
 }) {
   const dims = item.width && item.height ? `${item.width}×${item.height}` : null;
   return (
-    <article className="flex flex-col gap-2 rounded-lg border border-foreground/30 p-3">
+    <article className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3 shadow-card">
       {select}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={item.thumbnailUrl}
         alt={item.altText || ""}
         loading="lazy"
-        className="aspect-square w-full rounded bg-foreground/5 object-cover"
+        className="aspect-square w-full rounded bg-muted object-cover"
       />
-      <p className="text-xs text-foreground/70">
+      <p className="text-xs text-muted-foreground">
         {[dims, formatBytes(item.byteSize), TYPE_LABEL[item.mimeType] ?? item.mimeType].filter(Boolean).join(" · ")}
       </p>
       {item.originalFilename ? <p className="truncate text-sm font-medium">{item.originalFilename}</p> : null}
@@ -53,7 +53,7 @@ export function MediaCard({
       {item.tags.length > 0 ? (
         <ul aria-label="Tags" className="flex flex-wrap gap-1 text-xs">
           {item.tags.map((t) => (
-            <li key={t} className="rounded bg-foreground/10 px-1.5 py-0.5">
+            <li key={t} className="rounded bg-muted px-1.5 py-0.5">
               {t}
             </li>
           ))}

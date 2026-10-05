@@ -15,6 +15,11 @@ export const INTERNAL_VARIABLES: Readonly<Record<string, string>> = {
 
 /** Read by docker-compose.yml or the smoke script, never by Docket itself. */
 export const COMPOSE_ONLY_VARIABLES: Readonly<Record<string, string>> = {
+  DOCKET_IMAGE: "image the web, worker and storage-init services run",
+  DOCKET_BIND: "host interface the web port is published on",
+  DOCKET_PORT: "host port the web service is published on",
+  BACKUP_PATH: "host directory the db-backup service writes dumps to",
+  BACKUP_KEEP_DAYS: "days the db-backup service keeps dumps",
   MINIO_IMAGE: "image tag for the offline-profile MinIO service",
   MINIO_ROOT_USER: "MinIO root user for the offline profile",
   MINIO_ROOT_PASSWORD: "MinIO root password for the offline profile",

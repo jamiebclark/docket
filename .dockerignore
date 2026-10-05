@@ -10,3 +10,4 @@ specs
 Dockerfile
 docker-compose*.yml
 *.log
+backups

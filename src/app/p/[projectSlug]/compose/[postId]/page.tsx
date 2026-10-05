@@ -33,9 +33,10 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
     <Composer
       slug={projectSlug}
       timeZone={scope.project.timezone}
-      accounts={list.map(({ id, displayName, providerName, status, providerAvailable }) => ({
+      accounts={list.map(({ id, displayName, providerKey, providerName, status, providerAvailable }) => ({
         id,
         displayName,
+        providerKey,
         providerName,
         status,
         providerAvailable,

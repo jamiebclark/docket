@@ -5,8 +5,6 @@ import { useId, useState, useTransition } from "react";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
-import { Select } from "@/components/ui/Select";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { MediaView } from "@/server/services/media";
 import { generateSingleAction, planSeriesAction } from "./actions";
 import { SeriesPlanEditor } from "./SeriesPlanEditor";
@@ -18,7 +16,6 @@ import {
   counterLabel,
   freshRequestId,
   ACCOUNTS_HINT,
-  groupByPlatform,
   groupLimitNotice,
   imageWarning,
   LIMITS,
@@ -26,6 +23,10 @@ import {
   platformsNeedingImage,
   type AccountOption,
 } from "./generate-logic";
+import { controlStyles } from "@/components/ui/controls";
+import { ChoiceField } from "@/components/ui/ChoiceField";
+import { ActionBar } from "@/components/ui/ActionBar";
+import { AccountPicker } from "@/components/accounts/AccountPicker";
 
 export interface VoiceOption {
   id: string;
@@ -64,7 +65,7 @@ function TextArea(props: {
       <label htmlFor={props.id} className="text-sm font-medium">
         {props.label}
       </label>
-      <p id={hintId} className="text-xs text-foreground/70">
+      <p id={hintId} className="text-xs text-muted-foreground">
         {props.hint}
       </p>
       <textarea
@@ -75,9 +76,9 @@ function TextArea(props: {
         value={props.value}
         aria-describedby={`${hintId} ${countId}`}
         onChange={(e) => props.onChange(e.target.value)}
-        className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+        className={controlStyles}
       />
-      <p id={countId} className={`text-right text-xs ${props.value.length > props.max ? "text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
+      <p id={countId} className={`text-right text-xs ${props.value.length > props.max ? "text-danger" : "text-muted-foreground"}`}>
         {counterLabel(props.value.length, props.max)}
       </p>
     </div>
@@ -173,26 +174,21 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
     >
       <input type="hidden" name="requestId" value={requestId} />
       {isUnreviewedQueue(defaults) ? (
-        <p role="note" className="rounded-md border-2 border-amber-700 p-2 text-sm font-semibold dark:border-amber-400">
+        <p role="note" className="rounded-md border-2 border-warning-border p-2 text-sm font-semibold">
           This project is set to: {UNREVIEWED_QUEUE_LABEL}.
         </p>
       ) : null}
 
-      <Select
+      <ChoiceField
         id={`${uid}-voice`}
+        name={`${uid}-voice`}
         label="Voice profile"
         hint="How the post should sound."
         value={voiceProfileId}
-        onChange={(e) => setVoiceProfileId(e.target.value)}
-        {...(fieldErrors.voiceProfileId ? { error: fieldErrors.voiceProfileId } : {})}
-      >
-        {profiles.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-            {p.isDefault ? " (default)" : ""}
-          </option>
-        ))}
-      </Select>
+        onChange={setVoiceProfileId}
+        error={fieldErrors.voiceProfileId}
+        options={profiles.map((p) => ({ value: p.id, label: p.isDefault ? `${p.name} (default)` : p.name }))}
+      />
 
       <TextArea
         id={`${uid}-brief`}
@@ -204,14 +200,14 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
         required
         onChange={setBrief}
       />
-      {fieldErrors.brief ? <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.brief}</p> : null}
+      {fieldErrors.brief ? <p className="text-xs text-danger">{fieldErrors.brief}</p> : null}
 
       {series ? (
         <div className="flex flex-col gap-1">
           <label htmlFor={`${uid}-count`} className="text-sm font-medium">
             Number of posts
           </label>
-          <p className="text-xs text-foreground/70">
+          <p className="text-xs text-muted-foreground">
             {SERIES_COUNT_MIN} to {SERIES_COUNT_MAX}. You can edit the plan before anything is written.
           </p>
           <input
@@ -221,9 +217,9 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
             max={SERIES_COUNT_MAX}
             value={count}
             onChange={(e) => setCount(Number(e.target.value))}
-            className="w-24 rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+            className={`${controlStyles} w-24`}
           />
-          {fieldErrors.count ? <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.count}</p> : null}
+          {fieldErrors.count ? <p className="text-xs text-danger">{fieldErrors.count}</p> : null}
         </div>
       ) : null}
 
@@ -252,42 +248,21 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
         onChange={setInstructions}
       />
 
-      <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
-        <legend className="text-sm font-semibold">Accounts</legend>
-        <p id={`${uid}-accounts-hint`} className="text-xs text-foreground/70">
-          {ACCOUNTS_HINT}
-        </p>
-        {groupByPlatform(accounts).map((group) => (
-          <div key={group.providerName} className="flex flex-col gap-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">{group.providerName}</p>
-            {group.accounts.map((a) => (
-              <label key={a.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(a.id)}
-                  disabled={!a.providerAvailable}
-                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))}
-                />
-                <span>{a.displayName}</span>
-                <StatusBadge status={a.status} />
-              </label>
-            ))}
-          </div>
-        ))}
-        {limitNotice ? (
-          <p role="status" aria-live="polite" className="text-xs text-red-700 dark:text-red-400">
-            {limitNotice}
-          </p>
-        ) : null}
-        {fieldErrors.targetAccountIds ? (
-          <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.targetAccountIds}</p>
-        ) : null}
-      </fieldset>
+      <AccountPicker
+        legend="Accounts"
+        hint={ACCOUNTS_HINT}
+        idPrefix={uid}
+        showStatus="always"
+        value={chosen}
+        onChange={setChosen}
+        error={fieldErrors.targetAccountIds ?? limitNotice ?? undefined}
+        accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
+      />
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-semibold">Images</legend>
         {selected.length > 0 ? (
-          <p className="text-xs text-foreground/70">
+          <p className="text-xs text-muted-foreground">
             {maxImages === 0 ? "The chosen accounts do not take images." : `Up to ${maxImages} image${maxImages === 1 ? "" : "s"} for the chosen accounts.`}
           </p>
         ) : null}
@@ -299,7 +274,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
           onChange={(next) => setMedia(maxImages > 0 ? next.slice(0, maxImages) : next)}
         />
         {needImage.map((name) => (
-          <p key={name} role="note" className="rounded-md border border-amber-700 p-2 text-sm text-amber-900 dark:border-amber-400 dark:text-amber-300">
+          <p key={name} role="note" className="rounded-md border border-warning-border p-2 text-sm text-warning">
             Warning: {imageWarning(name)}
           </p>
         ))}
@@ -315,7 +290,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       />
 
       {error ? (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
+        <div role="alert" className="flex flex-col items-start gap-2 rounded-lg border border-danger-border bg-danger-bg p-3 text-sm text-danger">
           <p>Error: {error}</p>
           <Button variant="secondary" onClick={() => submit(freshRequestId())} disabled={busy}>
             Try again
@@ -324,7 +299,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       ) : null}
       <LiveRegion message={busy ? (series ? "Planning…" : "Generating…") : error ? `Error: ${error}` : ""} />
 
-      <div className="flex justify-end">
+      <ActionBar stickyFrom="md" message={chosen.length === 0 ? "Choose at least one account." : undefined}>
         <Button
           type="submit"
           pending={busy}
@@ -333,7 +308,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
         >
           {series ? "Plan series" : "Generate"}
         </Button>
-      </div>
+      </ActionBar>
     </form>
     {plan ? <SeriesPlanEditor slug={slug} request={{ ...request, count }} initialAngles={plan} /> : null}
     </>

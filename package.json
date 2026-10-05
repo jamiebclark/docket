@@ -19,6 +19,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:check": "node scripts/check-migrations-current.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "db:test:clean": "esbuild scripts/test-db-clean.ts --bundle --platform=node --target=node24 --format=esm --outfile=${TMPDIR:-/tmp}/test-db-clean.mjs --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node ${TMPDIR:-/tmp}/test-db-clean.mjs",
     "prepare": "husky"
   },
   "engines": {
@@ -59,7 +61,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "husky": "^9.1.7",
+    "lucide-static": "1.52.0",
     "semantic-release": "^25.0.9",
+    "simple-icons": "16.34.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.3"

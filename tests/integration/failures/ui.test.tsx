@@ -40,7 +40,8 @@ describe("failures page markup (FR-013)", () => {
     expect(html).toContain("Mark published");
     expect(html).toContain("Mark not published…");
     expect(html).toContain("Retry");
-    expect(html).toMatch(/<label[^>]*for="failures-account"/);
+    // The account filter is labelled: a legend while it is a short button row, a label once it is an autocomplete.
+    expect(html).toMatch(/<legend[^>]*>Account<\/legend>|<label[^>]*for="failures-account"/);
     expect(html).not.toMatch(/<button[^>]*>\s*<\/button>/);
     expect(html).not.toMatch(/token|secret|password/i);
   });

@@ -39,7 +39,7 @@ export function ActivityList({ items }: { items: ActivityItem[] }) {
         <ol className="flex flex-col gap-1 text-sm">
           {items.map((i) => (
             <li key={i.id}>
-              <time dateTime={i.createdAt} className="mr-2 text-foreground/70">
+              <time dateTime={i.createdAt} className="mr-2 text-muted-foreground">
                 {new Date(i.createdAt).toUTCString()}
               </time>
               {i.actor} {LABEL[i.action] ?? i.action} {i.subject}

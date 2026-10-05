@@ -101,7 +101,7 @@ export interface OAuthConnectGroup {
   key: string;
   /** "Facebook Pages and Instagram". Used in "Connect <displayName>". */
   displayName: string;
-  /** Repo-relative doc shown when the group is not configured, e.g. "docs/meta-setup.md". */
+  /** Published setup guide linked when the group is not configured, e.g. `docsUrl("meta-setup")`. */
   setupDoc?: string;
   /** Pure; reads only `source`. */
   environment: {
@@ -117,7 +117,7 @@ export interface OAuthConnectGroup {
     publicHost: boolean;
     /** Shown as is, e.g. "Threads needs an HTTPS address that is not localhost." */
     reason: string;
-    /** Repo-relative doc path with optional #anchor. */
+    /** Published doc URL (usually `docsUrl(page, anchor)`) linked beside the reason. */
     doc?: string;
   };
   /** Static, non-secret. Appended to the accounts banner after a failed or refused callback for this group (G12). */

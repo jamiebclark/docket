@@ -7,10 +7,10 @@ import { CopyField } from "@/components/ui/CopyField";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
-import { Select } from "@/components/ui/Select";
 import { Cell, Row, Table } from "@/components/ui/Table";
 import type { ActionResult } from "@/lib/action-result";
 import { inviteMember, regenerateInvitation, revokeInvitation, type DeliveryDto } from "./actions";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 export interface InvitationView {
   id: string;
@@ -49,7 +49,7 @@ export function InvitationsPanel({
       </h2>
       {canInvite ? <InviteForm slug={slug} canInviteOwner={canInviteOwner} onLink={setLink} /> : null}
       {link ? (
-        <div role="region" aria-label="Invitation link" className="flex flex-col gap-2 rounded-lg border border-foreground/30 p-4">
+        <div role="region" aria-label="Invitation link" className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
           <p className="text-sm">
             Send this link to {link.email}. It is shown only once and expires on {when(link.expiresAt)}.
           </p>
@@ -94,19 +94,27 @@ function InviteForm({
   return (
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="slug" value={slug} />
-      <div className="flex flex-wrap items-start gap-3">
-        <Field id="invite-email" name="email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
-        <Select id="invite-role" name="role" label="Role" defaultValue="editor" error={errors.role}>
-          <option value="editor">Editor</option>
-          <option value="admin">Admin</option>
-          {canInviteOwner ? <option value="owner">Owner</option> : null}
-        </Select>
-        <Button type="submit" pending={pending} pendingLabel="Inviting…" className="mt-6">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+        <div className="min-w-64 flex-1">
+          <Field id="invite-email" name="email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+        </div>
+        <SegmentedControl
+          name="role"
+          label="Role"
+          defaultValue="editor"
+          error={errors.role}
+          options={[
+            { value: "editor", label: "Editor" },
+            { value: "admin", label: "Admin" },
+            ...(canInviteOwner ? [{ value: "owner", label: "Owner" }] : []),
+          ]}
+        />
+        <Button type="submit" pending={pending} pendingLabel="Inviting…" className="mb-5">
           Invite
         </Button>
       </div>
       {formError ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {formError}
         </p>
       ) : null}
@@ -171,7 +179,7 @@ function InvitationRow({ slug, inv, onLink }: { slug: string; inv: InvitationVie
           </div>
         ) : null}
         {error && !error.ok ? (
-          <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-400">
+          <p role="alert" className="mt-1 text-xs text-danger">
             {error.message}
           </p>
         ) : null}

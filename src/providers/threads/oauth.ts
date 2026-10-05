@@ -1,4 +1,4 @@
-import { scrub } from "../meta/errors";
+import { GRAPH_ERROR_TABLE, scrub } from "../meta/errors";
 import { graphRequest, type GraphOutcome } from "../meta/graph";
 import { THREADS_LONG_LIVED_SECONDS, threadsApp, type ThreadsConfig } from "./config";
 
@@ -28,7 +28,10 @@ function failure(outcome: Exclude<GraphOutcome, { kind: "ok" }>, secrets: readon
     case "graph_error": {
       const e = outcome.error;
       const transient =
-        e.transient || outcome.status >= 500 || e.code === 1 || e.code === 2 || [4, 17, 32, 613].includes(e.code ?? -1);
+        e.transient ||
+        outcome.status >= 500 ||
+        (GRAPH_ERROR_TABLE.temporary as readonly number[]).includes(e.code ?? -1) ||
+        (GRAPH_ERROR_TABLE.rateLimited as readonly number[]).includes(e.code ?? -1);
       return { ok: false, transient, reason: scrub(e.message, secrets) };
     }
   }

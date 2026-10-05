@@ -1,7 +1,7 @@
 # Meta platforms — verified facts
 
 Checked 2026-10-04 against developers.facebook.com (see "Self-hoster setup
-verification, 2026-10-04" at the end; earlier sections last fully checked
+verification, 2026-10-04" and "Rate limits, 2026-10-04" at the end; earlier sections last fully checked
 2026-10-02). Re-verify before changing
 provider code (use the `platform-researcher` agent). Items marked
 **UNVERIFIED** could not be confirmed on an official page; cover them with
@@ -264,3 +264,127 @@ confirmed / contradicted / not determinable from official docs.
 ### Code impact notes for the caller
 - No limit/endpoint/host change found. Doc claims to revisit: the Development vs
   Live assumptions in docs/meta-setup.md, and the 50 vs 100 IG limit.
+
+## Rate limits, 2026-10-04
+Checked 2026-10-04. Main source: https://developers.facebook.com/docs/graph-api/overview/rate-limiting/
+(page fetched through a summarising tool; formulas and codes below are as
+reported from that page, so re-read the page before relying on an exact
+wording). Verdicts: confirmed / contradicted / not determinable.
+
+### Q1. Facebook Pages with a Page token — CONFIRMED: BUC regime, per Page
+- Pages API calls made with a Page (or system user) token fall under Business
+  Use Case limits, not Platform limits: "Calls within 24 hours = 4800 * Number
+  of Engaged Users", where engaged users are those who engaged with the Page
+  in the last 24 h. Reported as scoped per Page, not pooled across the app.
+  Source: https://developers.facebook.com/docs/graph-api/overview/rate-limiting/
+- The Pages API overview says all Pages requests are subject to rate limiting
+  and app consumption is shown in the App Dashboard.
+  Source: https://developers.facebook.com/docs/pages-api/overview
+- A Page with very few engaged users gets a small budget. The page did not
+  state a minimum floor for Pages (the Threads page states a floor of 10
+  impressions, see Q5). **UNVERIFIED**: floor for Pages.
+
+### Q2. Instagram Graph API — CONFIRMED: BUC, per app and app-user pair
+- "Calls within 24 hours = 4800 * Number of Impressions" (times content from
+  the account's professional account entered a screen in the last 24 h),
+  rolling 24 h window. Tracked per app and app user pair, i.e. per connected
+  IG account's token for this app, not pooled across the app.
+  Sources: https://developers.facebook.com/docs/instagram-platform/overview
+  and https://developers.facebook.com/docs/graph-api/overview/rate-limiting/
+- Business Discovery and Hashtag Search follow Platform limits instead
+  (Docket uses neither).
+- Publish cap is separate and fixed: "100 API-published posts within a
+  24-hour moving period"; carousels count as one post.
+  Source: https://developers.facebook.com/docs/instagram-platform/content-publishing
+  (the 50 vs 100 discrepancy with the media_publish reference above stands).
+
+### Q3. Platform (app-level) limits — CONFIRMED
+- "Calls within one hour = 200 * Number of Users", users being daily active
+  users of the app (weekly/monthly used at low activity). This is an app-wide
+  pool across all users, not per user. Applies to app-token calls and to
+  calls not covered by a BUC.
+- User-token calls also count against that user's own rolling one-hour limit,
+  pooled across apps; values are undisclosed. Error 17 reports it.
+- Practical reading for Docket: the user-token calls (`/me/accounts`, token
+  exchange) are connect-time only, so Platform limits are rarely reached.
+  How a small app with few DAUs is floored: **UNVERIFIED** (no minimum stated
+  on the page as reported).
+  Source: https://developers.facebook.com/docs/graph-api/overview/rate-limiting/
+
+### Q4. Per-Page publishing cap for Facebook Pages — NOT DETERMINABLE (none documented)
+- No posts-per-day cap appears on the rate-limiting page, the Pages API
+  overview, or https://developers.facebook.com/docs/pages-api/posts.
+  Only the BUC call budget (Q1) applies. Absence of a documented cap is not
+  proof that none exists (Facebook may apply spam/integrity limits that are
+  not published). **UNVERIFIED** beyond that. Keep `publish limit: none`
+  and rely on error handling (Q6).
+
+### Q5. Threads API — CONFIRMED: impressions-based call limit plus fixed quotas
+- Call limit: "Calls within 24 hours = 4800 * Number of Impressions"; CPU
+  time "720000 * number_of_impressions" for total_cputime; "2880000 * Number
+  of Impressions" for total_time; impression floor of 10. Per Threads
+  account (app-user pair; the page text on scope was not captured, so
+  **UNVERIFIED** whether it says "per app and user pair").
+  Source: https://developers.facebook.com/docs/threads/overview
+- Fixed 24 h moving-window quotas: 250 API-published posts (carousel = 1),
+  1,000 replies, 100 deletions, 500 location searches. The first two match
+  the existing lines; deletions and location searches are new here.
+  Sources: https://developers.facebook.com/docs/threads/overview and
+  https://developers.facebook.com/docs/threads/troubleshooting
+- No per-app call-volume limit was found on the Threads pages. The Threads
+  pages fetched give no header or error-code detail; assume the Graph codes
+  in Q6. **UNVERIFIED** for Threads-specific codes and headers.
+
+### Q6. Headers and error codes — CONFIRMED, one gap in Docket's table
+- Headers (https://developers.facebook.com/docs/graph-api/overview/rate-limiting/):
+  - `X-App-Usage`: `call_count`, `total_cputime`, `total_time` (percentages).
+  - `X-Business-Use-Case-Usage`: keyed by id, with `call_count`,
+    `total_cputime`, `total_time`, `type`, `estimated_time_to_regain_access`
+    (minutes), `ads_api_access_tier`. This is the one Pages and Instagram
+    calls return.
+  - `X-Ad-Account-Usage`: ads only; irrelevant.
+  - `X-Page-Usage`: not mentioned on the page. Not a documented header.
+- Codes:
+  | Code | Meaning |
+  |---|---|
+  | 4 | App reached its rate limit (Platform) |
+  | 17 | User reached their rate limit (subcode 2446079 = old Ads API) |
+  | 32 | User or app reached its limit on a Pages API request |
+  | 613 | Custom rate limit (subcode 1996 = inconsistent request volume) |
+  | 80001 | Page calls with a Page or system user token (BUC) |
+  | 80002 | Instagram (BUC) |
+  | 80000, 80003-80006, 80008, 80009, 80014 | Ads, Custom Audience, LeadGen, Messenger, WhatsApp, Catalog; not used by Docket |
+- Compare: `src/providers/meta/errors.ts` and `src/providers/threads/oauth.ts`
+  treat only `[4, 17, 32, 613]` as rate-limited. **80001 and 80002 are
+  missing**, and these are the codes Docket's Page-token and IG calls would
+  actually receive when the BUC budget is exhausted. Whether they come back
+  with HTTP 400 or 403 is **UNVERIFIED**; match on `error.code`, not status.
+- Backoff: `estimated_time_to_regain_access` (minutes) in the BUC header is
+  the documented wait hint. Use it when present.
+
+### Q7. App role limits — CONFIRMED
+- "Apps can have up to 500 administrators." Linked to a verified Business
+  Manager: up to a combined 500 analytics users and testers. Other apps:
+  "up to 50 testers". The developer role count was not reported in the
+  fetched text. **UNVERIFIED** for developers.
+  Source: https://developers.facebook.com/docs/development/build-and-test/app-roles
+- Threads testers use the same roles list; a separate cap was not found.
+  **UNVERIFIED**.
+
+### Is one app per install a concern for a small install?
+- No. Page BUC is per Page and IG BUC per app-user pair, so one app does not
+  pool Pages or IG accounts together. Platform pool (200 x DAU) is touched
+  only by connect-time user-token calls. Dozens of posts/day cost a few calls
+  each (container create, polls, publish), far below 4800 x engaged users,
+  unless a Page has almost no engagement: then the daily budget is small but
+  unpublished. Role caps (50 testers, 500 admins) are well above a few users.
+- Poll cost: IG status polling every 10 s doubling to 5 min is about 6-10
+  calls per post; fine.
+
+### Code impact notes for the caller (rate limits)
+- Add 80001 and 80002 to the rate-limited set in `src/providers/meta/errors.ts`
+  (and its test); consider the same in `src/providers/threads/oauth.ts`.
+- Optionally read `X-Business-Use-Case-Usage.estimated_time_to_regain_access`
+  for backoff in the Meta provider HTTP client.
+- docs/limits.md Facebook publish limit row: the research result is "no
+  documented cap"; update the "NEEDS RESEARCH (U2)" note (not edited here).

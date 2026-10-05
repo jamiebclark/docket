@@ -1,3 +1,4 @@
+import { docsUrl } from "@/lib/docs";
 import { graphRequest, DEFAULT_GRAPH_BASE, type MetaApp } from "../meta/graph";
 import { graphVersion } from "../meta/config";
 import { readPageToken } from "../meta/credentials";
@@ -7,7 +8,7 @@ import { firstUrl } from "./links";
 import { facebookStateSchema, type FacebookState } from "./settings";
 import { facebookStepFor } from "./steps";
 
-const PHOTO_SUFFIX = " Images must be at a public URL (see docs/storage.md).";
+const PHOTO_SUFFIX = ` Images must be at a public URL (see ${docsUrl("storage")}).`;
 
 const fatal = (error: string, extra: Partial<Extract<StepResult, { kind: "fatal_error" }>> = {}): StepResult => ({
   kind: "fatal_error",

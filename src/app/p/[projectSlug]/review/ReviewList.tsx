@@ -10,6 +10,8 @@ import { VariantEditor } from "../generate/result/[postId]/VariantEditor";
 import { approveAction, bulkApproveAction } from "./actions";
 import { RejectDialog } from "./RejectDialog";
 import { BRIEF_PREVIEW_MAX, EXCERPT_MAX, bulkDetails, bulkSummary, policyText, toggle, toggleAll, truncate } from "./review-logic";
+import { ActionBar } from "@/components/ui/ActionBar";
+import { checkStyles } from "@/components/ui/controls";
 
 export interface ReviewListProps {
   slug: string;
@@ -64,8 +66,7 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
           <input
             type="checkbox"
             checked={ids.length > 0 && ids.every((id) => live.includes(id))}
-            onChange={() => setSelected(toggleAll(live, ids))}
-          />
+            onChange={() => setSelected(toggleAll(live, ids))} className={checkStyles} />
           Select all on this page
         </label>
       ) : null}
@@ -77,7 +78,7 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
           const blockReason = "Fix the problems below before approving.";
           return (
             <li key={item.postId}>
-              <article aria-labelledby={`${id}-title`} className="flex flex-col gap-3 rounded-lg border border-foreground/20 p-4">
+              <article aria-labelledby={`${id}-title`} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
                 <div className="flex items-start gap-3">
                   {canApprove ? (
                     <input
@@ -85,19 +86,19 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
                       aria-label={`Select post: ${excerpt}`}
                       checked={live.includes(item.postId)}
                       onChange={() => setSelected(toggle(live, item.postId))}
-                      className="mt-1.5"
+                      className={`${checkStyles} mt-1.5`}
                     />
                   ) : null}
                   <h2 id={`${id}-title`} className="text-base font-semibold">
                     {excerpt || "(no text)"}
                   </h2>
                 </div>
-                <p className="text-xs text-foreground/70">
+                <p className="text-xs text-muted-foreground">
                   {item.voice ? `Voice: ${item.voice.name}, version ${item.voice.version}` : "Voice: unknown"}
                   {policy ? ` · ${policy}` : ""}
                 </p>
                 {item.brief ? (
-                  <p className="text-sm text-foreground/80" title={item.brief}>
+                  <p className="text-sm text-muted-foreground" title={item.brief}>
                     Brief: {truncate(item.brief, BRIEF_PREVIEW_MAX)}
                   </p>
                 ) : null}
@@ -105,12 +106,12 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
                   {item.variants.map((v) => {
                     const over = v.limit > 0 && v.count > v.limit;
                     return (
-                      <li key={v.key} className="rounded-md bg-foreground/5 p-3">
+                      <li key={v.key} className="rounded-md bg-muted p-3">
                         <p className="text-sm font-medium">
-                          {v.displayName}: <span className="font-normal text-foreground/70">{v.accountNames.join(", ")}</span>
+                          {v.displayName}: <span className="font-normal text-muted-foreground">{v.accountNames.join(", ")}</span>
                         </p>
                         <p className="whitespace-pre-wrap text-sm">{v.text}</p>
-                        <p className={`text-xs ${over ? "font-semibold text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
+                        <p className={`text-xs ${over ? "font-semibold text-danger" : "text-muted-foreground"}`}>
                           {v.count.toLocaleString("en-US")}
                           {v.limit > 0 ? ` / ${v.limit.toLocaleString("en-US")}` : ""} {v.countingRule}
                           {over ? " (too long)" : ""}
@@ -118,7 +119,7 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
                         {v.issues.length > 0 ? (
                           <ul className="list-disc pl-5 text-sm">
                             {v.issues.map((i, n) => (
-                              <li key={n} className={i.severity === "error" ? "text-red-700 dark:text-red-400" : i.severity === "warning" ? "text-amber-800 dark:text-amber-300" : ""}>
+                              <li key={n} className={i.severity === "error" ? "text-danger" : i.severity === "warning" ? "text-warning" : ""}>
                                 {i.severity === "error" ? "Error: " : i.severity === "warning" ? "Warning: " : ""}
                                 {i.message}
                               </li>
@@ -145,7 +146,7 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
                     {canRegenerate ? <RegenerateDialog slug={slug} postId={item.postId} /> : null}
                     <RejectDialog slug={slug} postId={item.postId} text={item.variants[0]?.text ?? ""} />
                     {item.blocking ? (
-                      <span id={`${id}-reason`} className="text-sm text-red-700 dark:text-red-400">
+                      <span id={`${id}-reason`} className="text-sm text-danger">
                         {blockReason}
                       </span>
                     ) : null}
@@ -174,15 +175,14 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
         })}
       </ul>
       {live.length > 0 ? (
-        <div className="sticky bottom-0 flex items-center gap-3 border-t border-foreground/20 bg-background py-3" role="region" aria-label="Bulk actions">
-          <p className="text-sm font-medium">{live.length} selected</p>
-          <Button onClick={approveSelected} pending={pending} pendingLabel="Approving…">
-            Approve selected
-          </Button>
+        <ActionBar label="Bulk actions" message={<span className="font-medium text-foreground">{live.length} selected</span>}>
           <Button variant="secondary" onClick={() => setSelected([])}>
             Clear selection
           </Button>
-        </div>
+          <Button onClick={approveSelected} pending={pending} pendingLabel="Approving…">
+            Approve selected
+          </Button>
+        </ActionBar>
       ) : null}
       <LiveRegion message={message} />
       {message ? <p className="text-sm">{message}</p> : null}

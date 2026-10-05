@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { SegmentedControl, type ChoiceOption } from "@/components/ui/SegmentedControl";
+import { checkStyles } from "@/components/ui/controls";
 import { APPROVAL_LABEL, SCHEDULING_LABEL } from "./generate-logic";
 
 type Approval = keyof typeof APPROVAL_LABEL;
@@ -38,7 +40,8 @@ interface Props {
   error?: string | undefined;
 }
 
-function Radios<T extends string>(props: {
+/** One policy as option cards: "use the project default" first, then each explicit choice. */
+function PolicyChoices<T extends string>(props: {
   name: string;
   legend: string;
   value: T | null;
@@ -46,34 +49,24 @@ function Radios<T extends string>(props: {
   options: { value: T; label: string; disabled?: boolean; help?: string; helpId?: string }[];
   onChange: (v: T | null) => void;
 }) {
-  const choices: { value: T | null; label: string; disabled?: boolean; help?: string; helpId?: string }[] = [
-    { value: null, label: `Use project default (${props.defaultLabel})` },
-    ...props.options,
+  const options: ChoiceOption[] = [
+    { value: "", label: `Use project default (${props.defaultLabel})` },
+    ...props.options.map((o) => ({
+      value: o.value,
+      label: o.label,
+      ...(o.disabled ? { disabled: true } : {}),
+      ...(o.help ? { description: o.help, ...(o.helpId ? { descriptionId: o.helpId } : {}) } : {}),
+    })),
   ];
   return (
-    <fieldset className="flex flex-col gap-1">
-      <legend className="text-sm font-medium">{props.legend}</legend>
-      {choices.map((c) => (
-        <div key={c.value ?? "default"} className="flex flex-col">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name={props.name}
-              checked={props.value === c.value}
-              disabled={c.disabled === true}
-              {...(c.helpId ? { "aria-describedby": c.helpId } : {})}
-              onChange={() => props.onChange(c.value)}
-            />
-            {c.label}
-          </label>
-          {c.help ? (
-            <p id={c.helpId} className="ml-6 text-xs text-foreground/70">
-              {c.help}
-            </p>
-          ) : null}
-        </div>
-      ))}
-    </fieldset>
+    <SegmentedControl
+      name={props.name}
+      label={props.legend}
+      layout="cards"
+      value={props.value ?? ""}
+      onChange={(v) => props.onChange(v === "" ? null : (v as T))}
+      options={options}
+    />
   );
 }
 
@@ -86,17 +79,18 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
   if (unreviewed && !expanded) {
     return (
       <fieldset
-        className="flex flex-col gap-2 rounded-md border-2 border-amber-700 p-3 dark:border-amber-400"
+        className="flex flex-col gap-2 rounded-xl border-2 border-warning-border bg-warning-bg/40 p-4"
         aria-describedby={explainId}
       >
         <legend className="px-1 text-sm font-semibold">Review and scheduling</legend>
         <p className="text-sm font-semibold">{UNREVIEWED_QUEUE_LABEL}</p>
-        <p id={explainId} className="text-xs text-foreground/80">
+        <p id={explainId} className="text-xs text-muted-foreground">
           {UNREVIEWED_QUEUE_EXPLANATION}
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
+            className={checkStyles}
             required
             checked={value.confirmUnreviewedQueue}
             aria-invalid={error ? true : undefined}
@@ -104,8 +98,8 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
           />
           {UNREVIEWED_QUEUE_CONFIRM}
         </label>
-        {error ? <p className="text-xs text-red-700 dark:text-red-400">{error}</p> : null}
-        <button type="button" className="self-start text-sm underline" onClick={() => setExpanded(true)}>
+        {error ? <p className="text-xs text-danger">{error}</p> : null}
+        <button type="button" className="self-start text-sm font-medium text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" onClick={() => setExpanded(true)}>
           Change review and scheduling
         </button>
       </fieldset>
@@ -113,9 +107,9 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
   }
 
   return (
-    <fieldset className="flex flex-col gap-3" aria-describedby={explainId}>
+    <fieldset className="flex flex-col gap-4" aria-describedby={explainId}>
       <legend className="text-sm font-semibold">Review and scheduling</legend>
-      <Radios<Approval>
+      <PolicyChoices<Approval>
         name={`${idPrefix}-approval`}
         legend="Approval"
         value={value.approval}
@@ -131,7 +125,7 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
         ]}
         onChange={(approval) => onChange({ ...value, approval })}
       />
-      <Radios<Scheduling>
+      <PolicyChoices<Scheduling>
         name={`${idPrefix}-scheduling`}
         legend="Scheduling"
         value={value.scheduling}
@@ -144,12 +138,13 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
       />
       {unreviewed ? (
         <>
-          <p id={explainId} className="text-xs text-foreground/80">
+          <p id={explainId} className="text-xs text-muted-foreground">
             {UNREVIEWED_QUEUE_EXPLANATION}
           </p>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
+              className={checkStyles}
               required
               checked={value.confirmUnreviewedQueue}
               onChange={(e) => onChange({ ...value, confirmUnreviewedQueue: e.target.checked })}
@@ -158,7 +153,7 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
           </label>
         </>
       ) : null}
-      {error ? <p className="text-xs text-red-700 dark:text-red-400">{error}</p> : null}
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
     </fieldset>
   );
 }

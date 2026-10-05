@@ -22,7 +22,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | formats | image/jpeg, image/png |  | interim, UNVERIFIED (decisions.md R2); an uploaded WebP (or an oversize PNG) is converted to JPEG | media planner | `tests/integration/limits/enforcement.test.ts` "facebook: formats" |
 | media required | no |  | interim, UNVERIFIED (decisions.md R1–R10) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: media required" |
 | text only | yes |  | interim, UNVERIFIED (decisions.md R1–R10) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: text only" |
-| publish limit | none |  | no documented per-Page limit found; NEEDS RESEARCH (research U2). The account-level limit still applies | account limit (engine deferral) | `tests/integration/limits/enforcement.test.ts` "facebook: publish limit none" |
+| publish limit | none |  | docs/research/meta.md ("Rate limits, 2026-10-04"): no documented posts-per-day cap for Pages; Graph calls are limited per Page (4800 × engaged users / 24 h). The account-level limit still applies | account limit (engine deferral) | `tests/integration/limits/enforcement.test.ts` "facebook: publish limit none" |
 
 ## Instagram
 
@@ -89,7 +89,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 Gaps found when each provider's declared limits were read against `docs/research/`:
 
 - **Bluesky declared no publish limit** although research lists write points. Fixed: two approximate limits, decisions.md G16 (U3).
-- **Facebook declares no publish limit** and `docs/research/meta.md` has none for Pages. NEEDS RESEARCH (U2); the account-level limit is the only guard.
+- **Facebook declares no publish limit.** Researched 2026-10-04 (`docs/research/meta.md`, "Rate limits"): Meta documents no posts-per-day cap for Pages, only a per-Page call budget, so the account-level limit is the only guard. Meta may still apply undocumented spam limits.
 - **Bluesky formats** are declared as JPEG/PNG while the lexicon accepts `image/*`. This is deliberate: anything else is refused at upload as an unsupported type.
 - **Instagram minimum width 320** is not declared; research says the platform scales up from below 320, so Docket accepts it (D15).
 - **Facebook, Instagram and Threads text lengths and Facebook photo values** are interim and UNVERIFIED against the live API (decisions.md R1–R10); they are enforced as declared.

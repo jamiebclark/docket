@@ -21,13 +21,6 @@ export const counterLabel = (used: number, max: number): string =>
 
 export const freshRequestId = (): string => crypto.randomUUID();
 
-/** Accounts grouped by platform, in the order the platforms first appear. */
-export function groupByPlatform(accounts: readonly AccountOption[]): { providerName: string; accounts: AccountOption[] }[] {
-  const groups = new Map<string, AccountOption[]>();
-  for (const a of accounts) groups.set(a.providerName, [...(groups.get(a.providerName) ?? []), a]);
-  return [...groups].map(([providerName, list]) => ({ providerName, accounts: list }));
-}
-
 /** The most images any selected platform takes; 0 when nothing is selected. */
 export function maxImagesFor(selected: readonly AccountOption[]): number {
   return Math.max(0, ...selected.map((a) => a.maxImages));

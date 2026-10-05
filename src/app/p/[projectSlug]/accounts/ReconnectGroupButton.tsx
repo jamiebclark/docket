@@ -25,7 +25,7 @@ export function ReconnectGroupButton({ slug, groupKey, displayName }: { slug: st
           Reconnect with {displayName}
         </Button>
       </div>
-      <p role="alert" className="min-h-4 text-sm text-red-700 dark:text-red-400">
+      <p role="alert" className="min-h-4 text-sm text-danger">
         {message}
       </p>
     </div>

@@ -29,7 +29,7 @@ export function CancelJobDialog({ slug, jobId, summary }: { slug: string; jobId:
           Items not yet generated will not be generated, and their images become unused again. Posts already made are kept.
         </p>
         {error ? (
-          <p role="alert" className="mb-2 text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="mb-2 text-sm text-danger">
             Error: {error}
           </p>
         ) : null}

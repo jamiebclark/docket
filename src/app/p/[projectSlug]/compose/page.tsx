@@ -23,9 +23,10 @@ export default async function ComposePage({ params }: { params: Promise<{ projec
     <Composer
       slug={projectSlug}
       timeZone={scope.project.timezone}
-      accounts={list.map(({ id, displayName, providerName, status, providerAvailable }) => ({
+      accounts={list.map(({ id, displayName, providerKey, providerName, status, providerAvailable }) => ({
         id,
         displayName,
+        providerKey,
         providerName,
         status,
         providerAvailable,

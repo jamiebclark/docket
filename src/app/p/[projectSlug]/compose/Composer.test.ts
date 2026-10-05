@@ -13,8 +13,8 @@ import { Composer, type AccountOption } from "./Composer";
 import { fetchCheck, type CheckResult } from "./composer-logic";
 
 const accounts: AccountOption[] = [
-  { id: "a1", displayName: "Main", providerName: "Bluesky", status: "active", providerAvailable: true },
-  { id: "a2", displayName: "Old", providerName: "Bluesky", status: "needs_reauth", providerAvailable: true },
+  { id: "a1", displayName: "Main", providerKey: "bluesky", providerName: "Bluesky", status: "active", providerAvailable: true },
+  { id: "a2", displayName: "Old", providerKey: "bluesky", providerName: "Bluesky", status: "needs_reauth", providerAvailable: true },
 ];
 
 const target = (over: Partial<CheckResult["targets"][number]> = {}): CheckResult["targets"][number] => ({

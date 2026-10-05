@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { SubNav } from "@/components/ui/SubNav";
 import { getSession } from "@/server/auth/session";
 import { forProject } from "@/server/dal";
 
@@ -16,26 +16,19 @@ export default async function SettingsLayout({
   const canManageApi = await forProject(await getSession(), projectSlug)
     .then((scope) => scope.can({ api_key: ["manage"] }))
     .catch(() => false);
+  const items = [
+    { label: "Project settings", href: base },
+    { label: "Members & invitations", href: `${base}/members` },
+    ...(canManageApi
+      ? [
+          { label: "API keys", href: `${base}/api-keys` },
+          { label: "Webhooks", href: `${base}/webhooks` },
+        ]
+      : []),
+  ];
   return (
-    <div className="flex flex-col gap-4">
-      <nav aria-label="Settings" className="flex gap-4 border-b border-foreground/20 text-sm">
-        <Link href={base} className="px-1 py-2 hover:underline focus-visible:ring-2">
-          Project settings
-        </Link>
-        <Link href={`${base}/members`} className="px-1 py-2 hover:underline focus-visible:ring-2">
-          Members &amp; invitations
-        </Link>
-        {canManageApi ? (
-          <Link href={`${base}/api-keys`} className="px-1 py-2 hover:underline focus-visible:ring-2">
-            API keys
-          </Link>
-        ) : null}
-        {canManageApi ? (
-          <Link href={`${base}/webhooks`} className="px-1 py-2 hover:underline focus-visible:ring-2">
-            Webhooks
-          </Link>
-        ) : null}
-      </nav>
+    <div className="flex flex-col gap-6">
+      <SubNav label="Settings" items={items} />
       {children}
     </div>
   );

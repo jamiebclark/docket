@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import type { ActionResult } from "@/lib/action-result";
 import { signUpWithInvitation } from "./actions";
+import { alertStyles } from "@/components/ui/Alert";
 
 export function SignupForm({ token, email }: { token: string; email: string }) {
   const [state, action, pending] = useActionState<ActionResult<never> | null, FormData>(signUpWithInvitation, null);
@@ -15,7 +16,7 @@ export function SignupForm({ token, email }: { token: string; email: string }) {
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="token" value={token} />
       {formError ? (
-        <p role="alert" className="rounded border border-red-600 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className={alertStyles("danger")}>
           {formError}
         </p>
       ) : null}

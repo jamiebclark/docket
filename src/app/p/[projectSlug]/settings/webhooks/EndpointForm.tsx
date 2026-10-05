@@ -6,6 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { ShowOnceDialog } from "@/components/ui/ShowOnceDialog";
 import { createEndpointAction, updateEndpointAction } from "./actions";
 import { EVENT_LABELS, type EndpointDto } from "./dto";
+import { checkStyles } from "@/components/ui/controls";
 
 const SELECTABLE = ["post.published", "post.failed", "job.finished", "account.needs_reauth"] as const;
 
@@ -66,7 +67,7 @@ export function EndpointForm({
           onChange={(e) => setInsecure(e.currentTarget.value.trim().toLowerCase().startsWith("http:"))}
         />
         {insecure ? (
-          <p className="text-xs text-amber-800 dark:text-amber-300">
+          <p className="text-xs text-warning">
             This address is not encrypted (http). Use https unless the receiver is on your own network.
           </p>
         ) : null}
@@ -87,17 +88,16 @@ export function EndpointForm({
                 type="checkbox"
                 name="events"
                 value={type}
-                defaultChecked={endpoint ? endpoint.events.includes(type) : type !== "account.needs_reauth"}
-              />
+                defaultChecked={endpoint ? endpoint.events.includes(type) : type !== "account.needs_reauth"} className={checkStyles} />
               {EVENT_LABELS[type]}
             </label>
           ))}
-          <p id="webhook-events-error" aria-live="polite" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+          <p id="webhook-events-error" aria-live="polite" className="min-h-4 text-xs text-danger">
             {errors.events ?? ""}
           </p>
         </fieldset>
         {formError ? (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             {formError}
           </p>
         ) : null}

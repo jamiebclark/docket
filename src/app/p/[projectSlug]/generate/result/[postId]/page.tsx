@@ -75,7 +75,7 @@ export default async function ResultPage({ params }: { params: Promise<{ project
         )}
       </p>
       {remaining.length > 0 ? (
-        <ul className="list-disc pl-5 text-sm text-red-700 dark:text-red-400">
+        <ul className="list-disc pl-5 text-sm text-danger">
           {remaining.map((m) => (
             <li key={m}>Error: {m}</li>
           ))}

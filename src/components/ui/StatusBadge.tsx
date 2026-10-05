@@ -1,13 +1,13 @@
-import { Badge } from "./Badge";
+import { Badge, type BadgeTone } from "./Badge";
 
-type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+type Tone = BadgeTone;
 
 const STATUSES: Record<string, { label: string; tone: Tone }> = {
   draft: { label: "Draft", tone: "neutral" },
   needs_review: { label: "Needs review", tone: "warning" },
-  approved: { label: "Approved", tone: "neutral" },
-  scheduled: { label: "Scheduled", tone: "neutral" },
-  publishing: { label: "Publishing", tone: "warning" },
+  approved: { label: "Approved", tone: "info" },
+  scheduled: { label: "Scheduled", tone: "brand" },
+  publishing: { label: "Publishing", tone: "info" },
   published: { label: "Published", tone: "success" },
   partially_failed: { label: "Partly failed", tone: "danger" },
   failed: { label: "Failed", tone: "danger" },

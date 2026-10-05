@@ -20,15 +20,22 @@ belongs to exactly one project.
 
 ## Quick start
 
-Needs Docker. This runs the whole stack offline with the mock provider.
+Needs Docker. This runs the whole stack offline with the mock provider, from the published image
+`ghcr.io/jamiebclark/docket` (no checkout or build).
 
 ```sh
-git clone <this repository> && cd docket
-cp .env.example .env     # set BETTER_AUTH_SECRET, CREDENTIALS_ENCRYPTION_KEY and MOCK_PROVIDER_ENABLED=true
-docker compose up -d --build
-docker compose ps        # web healthy, worker running
+mkdir docket && cd docket
+curl -fsSLO https://raw.githubusercontent.com/jamiebclark/docket/main/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/jamiebclark/docket/main/.env.example
+# edit .env: set BETTER_AUTH_SECRET, CREDENTIALS_ENCRYPTION_KEY and MOCK_PROVIDER_ENABLED=true
+docker compose up -d
+docker compose ps        # web healthy, worker and db-backup running
 # open http://localhost:3000, create the first account (or set BOOTSTRAP_ADMIN_EMAIL / _PASSWORD)
 ```
+
+**On Unraid**, use the template in [`unraid/docket.xml`](unraid/docket.xml): one container next to your Postgres. See
+[docs/deployment.md](docs/deployment.md#5-unraid-or-any-home-server). From a source checkout, build the image yourself with
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 Generate the two secrets with `openssl rand -base64 32`. **Back up `CREDENTIALS_ENCRYPTION_KEY`**: without it, stored
 credentials cannot be decrypted. A clean-checkout run of these steps is recorded in
@@ -89,6 +96,10 @@ has been recorded recently. Details: [docs/deployment.md](docs/deployment.md#9-i
 
 ## Documentation
 
+The guides below are published at **https://jamiebclark.github.io/docket/**, built from `docs/` on every push to `main`
+(`mkdocs.yml`, `.github/workflows/docs.yml`). The app links to the published pages through `src/lib/docs.ts`, so keep page
+file names and headings stable or update those links.
+
 | Topic | Where |
 |---|---|
 | Deploying (Compose, Unraid, Neon, proxies, backups, Netlify) | [docs/deployment.md](docs/deployment.md) |
@@ -124,7 +135,10 @@ pnpm typecheck
 pnpm test
 ```
 
-`DATABASE_URL` must name a database whose name ends in `_test`; the test helpers refuse anything else. Tests use mocks only and
+`DATABASE_URL` must name a database whose name ends in `_test`; the test helpers refuse anything else. Each run makes its own
+databases from that name (`docket_<checkout>_<id>_test` plus one clone per worker), so parallel runs never collide, and drops
+them when it finishes. A run also clears databases left by runs that crashed; `pnpm db:test:clean` lists leftovers and
+`pnpm db:test:clean --yes` drops them. Set `KEEP_TEST_DB=1` to keep a run's databases for debugging. Tests use mocks only and
 never call a platform. Schema changes go through `pnpm db:generate`, `pnpm db:migrate` and `pnpm db:check`.
 
 Conventional Commits are enforced (commitlint and husky), and releases are cut by semantic-release from `main`. Features are

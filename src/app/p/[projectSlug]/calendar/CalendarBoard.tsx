@@ -81,18 +81,21 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
     router.refresh();
   }
 
+  const chipClass =
+    "block w-full rounded-lg border border-accent bg-accent/30 px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+
   function chip(item: TargetItem) {
     const body = (
       <>
         <span className="font-medium">{hm(item.localTime)}</span> <span>{accountName(item.accountId)}</span>{" "}
         <StatusBadge status={item.status} />
-        <span className="block truncate text-xs text-foreground/70">{item.excerpt}</span>
+        <span className="block truncate text-xs text-muted-foreground">{item.excerpt}</span>
       </>
     );
     const open = `/p/${slug}/posts/${item.postId}`;
     if (!canSchedule || !item.movable) {
       return (
-        <Link key={item.targetId} data-target-id={item.targetId} href={open} className="block rounded border border-foreground/30 px-2 py-1 text-sm hover:bg-foreground/10">
+        <Link key={item.targetId} data-target-id={item.targetId} href={open} className={chipClass}>
           {body}
         </Link>
       );
@@ -112,6 +115,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
         }}
       >
         <Menu
+          triggerClassName={chipClass}
           label={`Actions for the ${hm(item.localTime)} post on ${accountName(item.accountId)}`}
           items={[
             { label: "Open post", onSelect: () => router.push(open) },
@@ -147,7 +151,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
           void dropOn(item);
         }}
         onClick={() => say("To place a post here, open its menu and choose Move to slot…")}
-        className="block w-full rounded border border-dashed border-foreground/40 px-2 py-1 text-left text-xs text-foreground/80 hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+        className="block w-full rounded-lg border border-dashed border-input/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         Empty slot · {accountName(item.accountId)} · {hm(item.localTime)}
       </button>
@@ -163,7 +167,11 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
   );
 
   const dayHeading = (d: CalendarDay) => (
-    <span className={`text-xs ${d.isToday ? "font-bold underline" : ""}`}>
+    <span
+      className={`inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums ${
+        d.isToday ? "bg-primary font-semibold text-primary-foreground" : ""
+      }`}
+    >
       {Number(d.date.slice(8))}
       {d.isToday ? <span className="sr-only"> (today)</span> : null}
     </span>
@@ -179,7 +187,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
     <div className="flex flex-col gap-3">
       <LiveRegion message={announcement} />
       {error ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}
@@ -194,34 +202,36 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
       ) : null}
 
       {calendar.view === "month" ? (
-        <table className="w-full table-fixed border-collapse text-sm">
-          <thead>
-            <tr>
-              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((w) => (
-                <th key={w} scope="col" className="border border-foreground/20 p-1 text-left text-xs">
-                  {w}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: calendar.days.length / 7 }, (_, row) => (
-              <tr key={row}>
-                {calendar.days.slice(row * 7, row * 7 + 7).map((d) => (
-                  <td key={d.date} className={`h-24 border border-foreground/20 p-1 align-top ${d.inMonth ? "" : "bg-foreground/5 text-foreground/60"}`}>
-                    {dayHeading(d)}
-                    {cell(d.items)}
-                  </td>
+        <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
+          <table className="w-full min-w-[42rem] table-fixed border-collapse border-hidden text-sm">
+            <thead>
+              <tr>
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((w) => (
+                  <th key={w} scope="col" className="border border-border bg-muted/60 px-2 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {w}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {Array.from({ length: calendar.days.length / 7 }, (_, row) => (
+                <tr key={row}>
+                  {calendar.days.slice(row * 7, row * 7 + 7).map((d) => (
+                    <td key={d.date} className={`h-28 border border-border p-1.5 align-top ${d.inMonth ? "" : "bg-muted/50 text-muted-foreground"}`}>
+                      {dayHeading(d)}
+                      {cell(d.items)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-2 md:grid-cols-7">
           {calendar.days.map((d) => (
-            <section key={d.date} aria-label={`${weekday(d)} ${d.date}`} className="rounded border border-foreground/20 p-1">
-              <h3 className="text-xs">
+            <section key={d.date} aria-label={`${weekday(d)} ${d.date}`} className="rounded-xl border border-border bg-surface p-2 shadow-card">
+              <h3 className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
                 {weekday(d)} {dayHeading(d)}
               </h3>
               {(d.hours ?? []).map((h, idx) => {
@@ -229,7 +239,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
                 const items = d.hours!.indexOf(h) === idx ? d.items.filter((i) => hourOf(i) === h) : [];
                 return items.length ? (
                   <div key={`${h}-${idx}`} role="group" aria-label={`${h}:00`} className="mt-1">
-                    <p className="text-xs text-foreground/70">{h}:00</p>
+                    <p className="text-xs text-muted-foreground">{h}:00</p>
                     {cell(items)}
                   </div>
                 ) : null;

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import type { MediaView } from "@/server/services/media";
 import { updateMediaAction } from "./actions";
+import { controlStyles } from "@/components/ui/controls";
 
 export function MediaEditDialog({ slug, item, open, onClose }: { slug: string; item: MediaView; open: boolean; onClose: () => void }) {
   const [alt, setAlt] = useState(item.altText);
@@ -41,7 +42,7 @@ export function MediaEditDialog({ slug, item, open, onClose }: { slug: string; i
             maxLength={2000}
             rows={3}
             onChange={(e) => setAlt(e.target.value)}
-            className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm"
+            className={controlStyles}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -53,13 +54,13 @@ export function MediaEditDialog({ slug, item, open, onClose }: { slug: string; i
             value={tags}
             onChange={(e) => setTags(e.target.value)}
             aria-describedby={`tags-hint-${item.id}`}
-            className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm"
+            className={controlStyles}
           />
-          <p id={`tags-hint-${item.id}`} className="text-xs text-foreground/70">
+          <p id={`tags-hint-${item.id}`} className="text-xs text-muted-foreground">
             Separate with commas. Up to 20 tags.
           </p>
         </div>
-        <p role="alert" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+        <p role="alert" className="min-h-4 text-xs text-danger">
           {error}
         </p>
         <div className="flex justify-end gap-2">
