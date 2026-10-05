@@ -172,3 +172,32 @@
     font-family: var(--font-mono);
   }
 }
+
+/*
+ * Stacked tables on phones (src/components/ui/Table.tsx): each data cell is prefixed with its
+ * column name, read from the --col-N variables the Table sets. Row-header cells carry no label.
+ */
+@layer components {
+  @media (width < 40rem) {
+    .stack-table td::before {
+      flex: none;
+      width: 6rem;
+      padding-top: 0.125rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted-foreground);
+    }
+    .stack-table td:nth-child(1)::before { content: var(--col-1, ""); }
+    .stack-table td:nth-child(2)::before { content: var(--col-2, ""); }
+    .stack-table td:nth-child(3)::before { content: var(--col-3, ""); }
+    .stack-table td:nth-child(4)::before { content: var(--col-4, ""); }
+    .stack-table td:nth-child(5)::before { content: var(--col-5, ""); }
+    .stack-table td:nth-child(6)::before { content: var(--col-6, ""); }
+    .stack-table td:nth-child(7)::before { content: var(--col-7, ""); }
+    .stack-table td:nth-child(8)::before { content: var(--col-8, ""); }
+    .stack-table td:nth-child(9)::before { content: var(--col-9, ""); }
+    .stack-table td:nth-child(10)::before { content: var(--col-10, ""); }
+  }
+}

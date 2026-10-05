@@ -25,6 +25,7 @@ import { alertStyles } from "@/components/ui/Alert";
 import { cardStyles } from "@/components/ui/Card";
 import { checkStyles, controlStyles, labelStyles } from "@/components/ui/controls";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ActionBar } from "@/components/ui/ActionBar";
 
 // Each fieldset is a card. A floated legend is not drawn on the border, so it sits inside as the card title.
 const section = `${cardStyles} flex min-w-0 flex-col gap-3 p-5`;
@@ -308,7 +309,7 @@ export function Composer({
           ) : null}
         </div>
 
-        <fieldset className={`${section} lg:sticky lg:top-20`}>
+        <fieldset className={`${section} lg:sticky lg:top-[calc(var(--sticky-top)+1.5rem)]`}>
           <legend className={legend}>Preview</legend>
           {selected.length === 0 ? <p className="text-sm text-muted-foreground">Choose an account to see what it will receive.</p> : null}
           <div aria-live="polite" className="flex flex-col gap-3">
@@ -364,12 +365,7 @@ export function Composer({
         </fieldset>
       </div>
 
-      <div className={`${cardStyles} z-10 flex flex-wrap items-center justify-end gap-2 px-4 py-3 md:sticky md:bottom-4`}>
-        {blocked ? (
-          <p id={blockedId} className="mr-auto text-sm text-muted-foreground">
-            {blocked}
-          </p>
-        ) : null}
+      <ActionBar stickyFrom="md" message={blocked ? <span id={blockedId}>{blocked}</span> : undefined}>
         <Button type="submit" variant="secondary" pending={saving} pendingLabel="Saving…" disabled={!canSave}>
           Save draft
         </Button>
@@ -382,7 +378,7 @@ export function Composer({
         <Button variant="cta" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
           Add to queue…
         </Button>
-      </div>
+      </ActionBar>
       <LiveRegion message={message} />
 
       {postId ? (
