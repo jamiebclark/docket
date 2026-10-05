@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { normaliseInstructions, POSTING_INSTRUCTIONS_MAX } from "@/lib/generation/groups";
 import { setPostingInstructionsAction } from "./actions";
+import { controlStyles, errorStyles, hintStyles } from "@/components/ui/controls";
 
 const HELP =
   "How posts for this account are written: for example where hashtags go and how many, whether to include the link and where, how a post opens. The brand voice still applies.";
@@ -58,17 +59,17 @@ export function PostingInstructionsForm({
         onChange={(e) => setText(e.target.value)}
         aria-invalid={error || tooLong ? true : undefined}
         aria-describedby={`${id}-help ${id}-count ${id}-error`}
-        className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+        className={controlStyles}
       />
-      <p id={`${id}-help`} className="text-xs text-foreground/70">
+      <p id={`${id}-help`} className={hintStyles}>
         {HELP}
       </p>
-      <p id={`${id}-count`} className={`text-xs ${tooLong ? "text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
+      <p id={`${id}-count`} className={`text-xs ${tooLong ? "text-danger" : "text-muted-foreground"}`}>
         {tooLong
           ? `${length} / ${POSTING_INSTRUCTIONS_MAX.toLocaleString("en-US")}, too long`
           : `${length} / ${POSTING_INSTRUCTIONS_MAX.toLocaleString("en-US")}`}
       </p>
-      <p id={`${id}-error`} aria-live="polite" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+      <p id={`${id}-error`} aria-live="polite" className={errorStyles}>
         {error}
       </p>
       <div className="flex justify-end">

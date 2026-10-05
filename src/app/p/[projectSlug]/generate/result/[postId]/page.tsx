@@ -102,9 +102,9 @@ export default async function ResultPage({ params }: { params: Promise<{ project
               </span>
               {" "}
               {g.instructions === "not_recorded" ? (
-                <span className="text-foreground/70">Not recorded</span>
+                <span className="text-muted-foreground">Not recorded</span>
               ) : g.instructions === null ? (
-                <span className="text-foreground/70">None</span>
+                <span className="text-muted-foreground">None</span>
               ) : (
                 <span className="whitespace-pre-wrap">{g.instructions}</span>
               )}
