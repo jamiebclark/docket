@@ -57,7 +57,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
         {actions}
       </div>
       {!llm.configured && (
-        <p role="note" className="rounded-md border border-amber-700 p-3 text-sm">
+        <p role="note" className="rounded-md border border-warning-border p-3 text-sm">
           Generation is not configured. Set: {llm.problems.map((p) => p.name).join(", ")}.
         </p>
       )}

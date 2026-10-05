@@ -64,7 +64,7 @@ export default async function JobPage({ params, searchParams }: Props) {
         <h1 className="text-2xl font-semibold">{job.sourceSummary}</h1>
         <StatusBadge status={job.status} />
         {job.open && job.status !== "cancelled" ? (
-          <span className="rounded border border-blue-700 px-2 py-0.5 text-xs font-medium text-blue-800 dark:border-blue-400 dark:text-blue-300">
+          <span className="rounded border border-info-border px-2 py-0.5 text-xs font-medium text-info">
             Open: accepting items
           </span>
         ) : null}
@@ -85,12 +85,12 @@ export default async function JobPage({ params, searchParams }: Props) {
       </div>
 
       {active && !llm.configured ? (
-        <p role="note" className="rounded-md border border-amber-700 p-3 text-sm">
+        <p role="note" className="rounded-md border border-warning-border p-3 text-sm">
           Generation is not configured, so these items are waiting. Set: {llm.problems.map((p) => p.name).join(", ")}.
         </p>
       ) : null}
       {active && !job.jobsRunnable.ok ? (
-        <p role="note" className="rounded-md border border-amber-700 p-3 text-sm">
+        <p role="note" className="rounded-md border border-warning-border p-3 text-sm">
           Jobs cannot run: {job.jobsRunnable.message}
         </p>
       ) : null}
@@ -122,7 +122,7 @@ export default async function JobPage({ params, searchParams }: Props) {
           ] as const
         ).map(([label, n]) => (
           <div key={label}>
-            <dt className="text-xs uppercase tracking-wide text-foreground/70">{label}</dt>
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
             <dd className="text-xl font-semibold">{n}</dd>
           </div>
         ))}

@@ -42,7 +42,7 @@ export default async function ConnectChooserPage({ params }: { params: Promise<{
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">Connect {choice.groupDisplayName}</h1>
-      <p className="text-sm text-foreground/80">
+      <p className="text-sm text-muted-foreground">
         Choose what to connect. This choice is available until <LocalTime value={choice.expiresAt} timeZone={scope.project.timezone} />.
       </p>
       {choice.notices.map((n) => (

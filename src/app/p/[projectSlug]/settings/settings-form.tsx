@@ -4,9 +4,11 @@ import { useActionState, useState } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { UNREVIEWED_QUEUE_CONFIRM, UNREVIEWED_QUEUE_EXPLANATION, UNREVIEWED_QUEUE_LABEL } from "../generate/PolicyPicker";
 import { updateProjectSettings } from "./actions";
+import { buttonStyles } from "@/components/ui/Button";
+import { alertStyles } from "@/components/ui/Alert";
+import { controlStyles } from "@/components/ui/controls";
 
-const input =
-  "rounded border border-foreground/30 bg-transparent px-3 py-2 focus-visible:ring-2 disabled:opacity-60";
+const input = controlStyles;
 
 export interface SettingsValues {
   name: string;
@@ -28,7 +30,7 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
   const formError = state && !state.ok && Object.keys(errors).length === 0 ? state.message : null;
   const err = (n: string) =>
     errors[n] ? (
-      <span id={`${n}-error`} className="text-xs text-red-700 dark:text-red-400">
+      <span id={`${n}-error`} className="text-xs text-danger">
         {errors[n]}
       </span>
     ) : null;
@@ -41,17 +43,17 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
     <form action={action} className="flex max-w-xl flex-col gap-4">
       <input type="hidden" name="currentSlug" value={values.slug} />
       {!canEdit ? (
-        <p className="rounded border border-foreground/30 px-3 py-2 text-sm">
+        <p className="rounded border border-border px-3 py-2 text-sm">
           Only owners and admins can change project settings.
         </p>
       ) : null}
       {formError ? (
-        <p role="alert" className="rounded border border-red-600 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className={alertStyles("danger")}>
           {formError}
         </p>
       ) : null}
       {state?.ok ? (
-        <p role="status" className="rounded border border-foreground/30 px-3 py-2 text-sm">
+        <p role="status" className="rounded border border-border px-3 py-2 text-sm">
           Settings saved.
         </p>
       ) : null}
@@ -63,7 +65,7 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
       <label className="flex flex-col gap-1 text-sm">
         URL name
         <input name="slug" required defaultValue={values.slug} disabled={!canEdit} className={input} {...a11y("slug")} />
-        {errors.slug ? err("slug") : <span className="text-xs opacity-70">Changing this moves the project to a new URL</span>}
+        {errors.slug ? err("slug") : <span className="text-xs text-muted-foreground">Changing this moves the project to a new URL</span>}
       </label>
       <label className="flex flex-col gap-1 text-sm">
         Time zone
@@ -75,7 +77,7 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
           className={input}
           {...a11y("timezone")}
         />
-        {errors.timezone ? err("timezone") : <span className="text-xs opacity-70">IANA name, e.g. America/New_York</span>}
+        {errors.timezone ? err("timezone") : <span className="text-xs text-muted-foreground">IANA name, e.g. America/New_York</span>}
       </label>
       <label className="flex flex-col gap-1 text-sm">
         Default approval
@@ -108,9 +110,9 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
         {err("defaultSchedulingPolicy")}
       </label>
       {unreviewed ? (
-        <div className="flex flex-col gap-2 rounded-md border-2 border-amber-700 p-3 dark:border-amber-400">
+        <div className="flex flex-col gap-2 rounded-md border-2 border-warning-border p-3">
           <p className="text-sm font-semibold">{UNREVIEWED_QUEUE_LABEL}</p>
-          <p id="unreviewed-explain" className="text-xs text-foreground/80">
+          <p id="unreviewed-explain" className="text-xs text-muted-foreground">
             {UNREVIEWED_QUEUE_EXPLANATION}
           </p>
           <label className="flex items-center gap-2 text-sm">
@@ -131,7 +133,7 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
         <button
           type="submit"
           disabled={pending}
-          className="self-start rounded bg-foreground px-3 py-2 text-background disabled:opacity-60 focus-visible:ring-2"
+          className={buttonStyles({ variant: "primary", className: "self-start" })}
         >
           {pending ? "Saving…" : "Save settings"}
         </button>

@@ -77,7 +77,7 @@ export function SlotRowActions({ slug, id, paused, label }: { slug: string; id: 
           Delete<span className="sr-only"> {label}</span>
         </Button>
       )}
-      <span role="alert" className="text-xs text-red-700 dark:text-red-400">
+      <span role="alert" className="text-xs text-danger">
         {error}
       </span>
     </div>
@@ -101,7 +101,7 @@ export function ReconnectMockButton({ slug, id }: { slug: string; id: string }) 
       >
         Reconnect
       </Button>
-      <p role="alert" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+      <p role="alert" className="min-h-4 text-xs text-danger">
         {error}
       </p>
     </div>

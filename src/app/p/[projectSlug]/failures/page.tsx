@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { listFailures, failuresQuerySchema, type AttemptRun, type FailureList, type FailureRow } from "@/server/services/failures";
+import { buttonStyles } from "@/components/ui/Button";
 
 export const metadata: Metadata = { title: "Failures" };
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ function RunSummary({ run, tz }: { run: AttemptRun; tz: string }) {
       <td className="px-2 py-1">
         {run.outcome.replaceAll("_", " ")}
         {run.count > 1 ? ` × ${run.count}` : ""}
-        {run.error ? <div className="text-red-700 dark:text-red-400">{run.error}</div> : null}
+        {run.error ? <div className="text-danger">{run.error}</div> : null}
       </td>
     </>
   );
@@ -69,13 +70,13 @@ function AttemptLog({ row, tz }: { row: FailureRow; tz: string }) {
   const entries = row.attempts.reduce((n, r) => n + r.count, 0);
   return (
     <details>
-      <summary className="cursor-pointer text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground">
+      <summary className="cursor-pointer text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
         Attempt log ({entries} {entries === 1 ? "entry" : "entries"})
       </summary>
       <table className="mt-2 w-full border-collapse text-left text-xs">
         <caption className="sr-only">Attempt log for {row.account.name}</caption>
         <thead>
-          <tr className="border-b border-foreground/30">
+          <tr className="border-b border-border">
             {["Time", "Step", "Outcome", "Who", "Request", "Response"].map((c) => (
               <th key={c} scope="col" className="px-2 py-1 font-medium">
                 {c}
@@ -86,7 +87,7 @@ function AttemptLog({ row, tz }: { row: FailureRow; tz: string }) {
         <tbody>
           {row.attempts.map((run) =>
             run.count === 1 ? (
-              <tr key={run.entries[0]!.id} className="border-b border-foreground/10 align-top">
+              <tr key={run.entries[0]!.id} className="border-b border-border align-top">
                 <RunSummary run={run} tz={tz} />
                 <td className="px-2 py-1">{run.entries[0]!.actor.kind === "member" ? run.entries[0]!.actor.name : "System"}</td>
                 <td className="px-2 py-1">
@@ -97,7 +98,7 @@ function AttemptLog({ row, tz }: { row: FailureRow; tz: string }) {
                 </td>
               </tr>
             ) : (
-              <tr key={run.entries[0]!.id} className="border-b border-foreground/10 align-top">
+              <tr key={run.entries[0]!.id} className="border-b border-border align-top">
                 <td colSpan={6} className="px-2 py-1">
                   <details>
                     <summary className="cursor-pointer">
@@ -187,7 +188,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
                 </option>
               ))}
             </Select>
-            <button type="submit" className="rounded-md border border-foreground/30 px-3 py-1.5 text-sm hover:bg-foreground/10 focus-visible:ring-2">
+            <button type="submit" className={buttonStyles({ variant: "secondary" })}>
               Apply
             </button>
           </form>
@@ -196,7 +197,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
 
       <div className="mt-4">
         {list === null ? (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             Failures couldn&apos;t be loaded. Reload the page to try again.
           </p>
         ) : empty ? (
@@ -220,7 +221,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
               <table className="w-full border-collapse text-left text-sm">
                 <caption className="sr-only">Posts that did not go out</caption>
                 <thead>
-                  <tr className="border-b border-foreground/30">
+                  <tr className="border-b border-border">
                     {["Account", "Post", `Meant to go out (${tz})`, "How", "Last error", "Attempts", "Actions"].map((c) => (
                       <th key={c} scope="col" className="px-2 py-2 font-medium">
                         {c}
@@ -239,7 +240,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
                   return (
                     <tbody key={row.targetId}>
                       {heading ? (
-                        <tr className="bg-foreground/5">
+                        <tr className="bg-muted">
                           <th scope="rowgroup" colSpan={7} className="px-2 py-1 text-left font-semibold">
                             {row.status === "ambiguous" ? <Badge tone="warning">{heading}</Badge> : <Badge tone="danger">{heading}</Badge>}
                           </th>
@@ -270,7 +271,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
                           />
                         </td>
                       </tr>
-                      <tr className="border-b border-foreground/20">
+                      <tr className="border-b border-border">
                         <td colSpan={7} className="px-2 pb-2">
                           <AttemptLog row={row} tz={tz} />
                         </td>

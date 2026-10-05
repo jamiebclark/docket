@@ -10,7 +10,7 @@ export function ArchivedBanner({ slug, profileId, canManage }: { slug: string; p
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   return (
-    <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-amber-700 p-3 text-sm dark:border-amber-400">
+    <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-warning-border p-3 text-sm">
       <p>This profile is archived. It is not offered when generating, and posts that used it keep their record.</p>
       {canManage ? (
         <Button

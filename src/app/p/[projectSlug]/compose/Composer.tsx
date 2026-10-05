@@ -21,6 +21,14 @@ import {
   type CheckResult,
 } from "./composer-logic";
 import { AddToQueueDialog, PublishNowDialog, ScheduleAtDialog } from "./ScheduleDialogs";
+import { alertStyles } from "@/components/ui/Alert";
+import { cardStyles } from "@/components/ui/Card";
+import { checkStyles, controlStyles, labelStyles } from "@/components/ui/controls";
+import { PageHeader } from "@/components/ui/PageHeader";
+
+// Each fieldset is a card. A floated legend is not drawn on the border, so it sits inside as the card title.
+const section = `${cardStyles} flex min-w-0 flex-col gap-3 p-5`;
+const legend = "float-left mb-1 w-full font-heading text-base font-semibold text-heading";
 
 export interface AccountOption {
   id: string;
@@ -190,181 +198,189 @@ export function Composer({
   const blockedId = `${ids}-blocked`;
   return (
     <form
-      className="flex max-w-3xl flex-col gap-6"
+      className="flex flex-col gap-6"
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
     >
-      <h1 className="text-2xl font-semibold">{initial ? "Edit post" : "Compose"}</h1>
+      <PageHeader
+        title={initial ? "Edit post" : "Compose"}
+        description="Write once, tailor per account, then queue, schedule or publish."
+      />
 
-      {!editable ? <p role="status">Publishing has started, so this post can no longer be edited.</p> : null}
+      {!editable ? <p role="status" className={alertStyles("info")}>Publishing has started, so this post can no longer be edited.</p> : null}
       {removedCount > 0 ? (
-        <p role="status">
+        <p role="status" className={alertStyles("warning")}>
           {removedCount === 1 ? "An account this post was for has been removed" : `${removedCount} accounts this post was for have been removed`}; it will not be
           published there.
         </p>
       ) : null}
-      {reviewBlocked ? <p role="status">This post is waiting for review.</p> : null}
+      {reviewBlocked ? <p role="status" className={alertStyles("warning")}>This post is waiting for review.</p> : null}
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-semibold">Accounts</legend>
-        {accounts.map((a) => {
-          const reason = unavailableReason(a);
-          return (
-            <div key={a.id} className="flex items-center gap-2 text-sm">
-              <input
-                id={`${ids}-acct-${a.id}`}
-                type="checkbox"
-                checked={selected.includes(a.id)}
-                disabled={!!reason || !canSave}
-                aria-describedby={reason ? `${ids}-acct-${a.id}-why` : undefined}
-                onChange={() => toggle(a.id)}
-              />
-              <label htmlFor={`${ids}-acct-${a.id}`}>
-                {a.displayName} <span className="text-foreground/70">· {a.providerName}</span>
-              </label>
-              {a.status !== "active" ? <Badge tone="danger">{a.status === "needs_reauth" ? "Needs reconnecting" : a.status}</Badge> : null}
-              {reason ? (
-                <span id={`${ids}-acct-${a.id}-why`} className="text-xs text-foreground/70">
-                  {reason}
-                </span>
-              ) : null}
-            </div>
-          );
-        })}
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-semibold">Text</legend>
-        <label htmlFor={`${ids}-text`} className="text-sm font-medium">
-          Post text
-        </label>
-        <textarea
-          id={`${ids}-text`}
-          rows={6}
-          value={baseText}
-          readOnly={!canSave}
-          onChange={(e) => setBaseText(e.target.value)}
-          className="rounded-md border border-foreground/40 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
-        />
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-semibold">Media</legend>
-        <MediaPicker slug={slug} enabled={mediaEnabled} canEdit={canSave} value={media} onChange={setMedia} />
-      </fieldset>
-
-      {selected.length > 0 ? (
-        <fieldset className="flex flex-col gap-3">
-          <legend className="text-sm font-semibold">Per-account text</legend>
-          {selected.map((accountId) => {
-            const t = byAccount.get(accountId);
-            const over = t ? isOverLimit(t) : false;
-            return (
-              <details key={accountId} className="rounded-md border border-foreground/20 p-3" open={!!overrides[accountId]}>
-                <summary className="cursor-pointer text-sm font-medium">{names[accountId]}</summary>
-                <div className="mt-2 flex flex-col gap-2">
-                  <label htmlFor={`${ids}-ov-${accountId}`} className="text-sm">
-                    Text for {names[accountId]}
-                  </label>
-                  <textarea
-                    id={`${ids}-ov-${accountId}`}
-                    rows={4}
-                    value={overrides[accountId] ?? ""}
-                    readOnly={!canSave}
-                    aria-invalid={over || undefined}
-                    onChange={(e) => setOverrides((cur) => ({ ...cur, [accountId]: e.target.value }))}
-                    className="rounded-md border border-foreground/40 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
-                  />
-                  <div>
-                    <Button
-                      variant="secondary"
-                      disabled={!canSave || !overrides[accountId]}
-                      onClick={() => setOverrides((cur) => ({ ...cur, [accountId]: "" }))}
-                    >
-                      Use base text
-                    </Button>
-                  </div>
-                </div>
-              </details>
-            );
-          })}
-        </fieldset>
-      ) : null}
-
-      <fieldset className="flex flex-col gap-3">
-        <legend className="text-sm font-semibold">Preview</legend>
-        {selected.length === 0 ? <p className="text-sm">Choose an account to see what it will receive.</p> : null}
-        <div aria-live="polite" className="flex flex-col gap-3">
-          {selected.map((accountId) => {
-            const t = byAccount.get(accountId);
-            if (!t) {
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-6">
+          <fieldset className={section}>
+            <legend className={legend}>Accounts</legend>
+            {accounts.map((a) => {
+              const reason = unavailableReason(a);
               return (
-                <article key={accountId} className="rounded-md border border-foreground/20 p-3 text-sm">
-                  <h3 className="font-medium">{names[accountId]}</h3>
-                  <p>Checking…</p>
+                <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg px-1 py-1 text-sm hover:bg-muted/60">
+                  <input
+                    id={`${ids}-acct-${a.id}`}
+                    type="checkbox"
+                    checked={selected.includes(a.id)}
+                    disabled={!!reason || !canSave}
+                    aria-describedby={reason ? `${ids}-acct-${a.id}-why` : undefined}
+                    onChange={() => toggle(a.id)}
+                    className={checkStyles}
+                  />
+                  <label htmlFor={`${ids}-acct-${a.id}`}>
+                    {a.displayName} <span className="text-muted-foreground">· {a.providerName}</span>
+                  </label>
+                  {a.status !== "active" ? <Badge tone="danger">{a.status === "needs_reauth" ? "Needs reconnecting" : a.status}</Badge> : null}
+                  {reason ? (
+                    <span id={`${ids}-acct-${a.id}-why`} className="text-xs text-muted-foreground">
+                      {reason}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </fieldset>
+
+          <fieldset className={section}>
+            <legend className={legend}>Text</legend>
+            <label htmlFor={`${ids}-text`} className={labelStyles}>
+              Post text
+            </label>
+            <textarea
+              id={`${ids}-text`}
+              rows={6}
+              value={baseText}
+              readOnly={!canSave}
+              onChange={(e) => setBaseText(e.target.value)}
+              className={`${controlStyles} min-h-40 text-base leading-relaxed`}
+            />
+          </fieldset>
+
+          <fieldset className={section}>
+            <legend className={legend}>Media</legend>
+            <MediaPicker slug={slug} enabled={mediaEnabled} canEdit={canSave} value={media} onChange={setMedia} />
+          </fieldset>
+
+          {selected.length > 0 ? (
+            <fieldset className={section}>
+              <legend className={legend}>Per-account text</legend>
+              {selected.map((accountId) => {
+                const t = byAccount.get(accountId);
+                const over = t ? isOverLimit(t) : false;
+                return (
+                  <details key={accountId} className="rounded-lg border border-border bg-surface p-3" open={!!overrides[accountId]}>
+                    <summary className="cursor-pointer text-sm font-medium">{names[accountId]}</summary>
+                    <div className="mt-2 flex flex-col gap-2">
+                      <label htmlFor={`${ids}-ov-${accountId}`} className="text-sm">
+                        Text for {names[accountId]}
+                      </label>
+                      <textarea
+                        id={`${ids}-ov-${accountId}`}
+                        rows={4}
+                        value={overrides[accountId] ?? ""}
+                        readOnly={!canSave}
+                        aria-invalid={over || undefined}
+                        onChange={(e) => setOverrides((cur) => ({ ...cur, [accountId]: e.target.value }))}
+                        className={controlStyles}
+                      />
+                      <div>
+                        <Button
+                          variant="secondary"
+                          disabled={!canSave || !overrides[accountId]}
+                          onClick={() => setOverrides((cur) => ({ ...cur, [accountId]: "" }))}
+                        >
+                          Use base text
+                        </Button>
+                      </div>
+                    </div>
+                  </details>
+                );
+              })}
+            </fieldset>
+          ) : null}
+        </div>
+
+        <fieldset className={`${section} lg:sticky lg:top-20`}>
+          <legend className={legend}>Preview</legend>
+          {selected.length === 0 ? <p className="text-sm text-muted-foreground">Choose an account to see what it will receive.</p> : null}
+          <div aria-live="polite" className="flex flex-col gap-3">
+            {selected.map((accountId) => {
+              const t = byAccount.get(accountId);
+              if (!t) {
+                return (
+                  <article key={accountId} className="rounded-lg border border-border bg-surface p-3 text-sm">
+                    <h3 className="font-medium">{names[accountId]}</h3>
+                    <p>Checking…</p>
+                  </article>
+                );
+              }
+              const over = isOverLimit(t);
+              return (
+                <article key={accountId} className="rounded-lg border border-border bg-surface p-3 text-sm">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="font-medium">
+                      {t.displayName} <span className="font-normal text-muted-foreground">· {t.providerName}</span>
+                    </h3>
+                    <span
+                      data-testid={`counter-${accountId}`}
+                      className={over ? "font-semibold text-danger" : "text-muted-foreground"}
+                    >
+                      {counterText(t)}
+                      {over ? " · over the limit" : ""}
+                    </span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
+                  {media.length > 0 ? (
+                    <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Images, in order">
+                      {media.map((m, n) => (
+                        <li key={m.id}>
+                          Image {n + 1}: {m.altText ? "has alt text" : <span className="font-medium">no alt text</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                  {groupIssues(t.issues).map((g) => (
+                    <div key={g.severity} className="mt-2">
+                      <p className="text-xs font-semibold">{SEVERITY_LABEL[g.severity]}</p>
+                      <ul className="list-disc pl-5">
+                        {g.items.map((i, n) => (
+                          <li key={`${i.code}-${n}`}>{i.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </article>
               );
-            }
-            const over = isOverLimit(t);
-            return (
-              <article key={accountId} className="rounded-md border border-foreground/20 p-3 text-sm">
-                <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="font-medium">
-                    {t.displayName} <span className="font-normal text-foreground/70">· {t.providerName}</span>
-                  </h3>
-                  <span
-                    data-testid={`counter-${accountId}`}
-                    className={over ? "font-semibold text-red-700 dark:text-red-400" : "text-foreground/70"}
-                  >
-                    {counterText(t)}
-                    {over ? " · over the limit" : ""}
-                  </span>
-                </div>
-                <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
-                {media.length > 0 ? (
-                  <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Images, in order">
-                    {media.map((m, n) => (
-                      <li key={m.id}>
-                        Image {n + 1}: {m.altText ? "has alt text" : <span className="font-medium">no alt text</span>}
-                      </li>
-                    ))}
-                  </ol>
-                ) : null}
-                {groupIssues(t.issues).map((g) => (
-                  <div key={g.severity} className="mt-2">
-                    <p className="text-xs font-semibold">{SEVERITY_LABEL[g.severity]}</p>
-                    <ul className="list-disc pl-5">
-                      {g.items.map((i, n) => (
-                        <li key={`${i.code}-${n}`}>{i.message}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </article>
-            );
-          })}
-        </div>
-      </fieldset>
+            })}
+          </div>
+        </fieldset>
+      </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className={`${cardStyles} z-10 flex flex-wrap items-center justify-end gap-2 px-4 py-3 md:sticky md:bottom-4`}>
         {blocked ? (
-          <p id={blockedId} className="mr-auto text-sm text-foreground/70">
+          <p id={blockedId} className="mr-auto text-sm text-muted-foreground">
             {blocked}
           </p>
         ) : null}
         <Button type="submit" variant="secondary" pending={saving} pendingLabel="Saving…" disabled={!canSave}>
           Save draft
         </Button>
-        <Button disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
-          Add to queue…
+        <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openPublishNow}>
+          Publish now…
         </Button>
         <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openScheduleAt}>
           Schedule…
         </Button>
-        <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openPublishNow}>
-          Publish now…
+        <Button variant="cta" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
+          Add to queue…
         </Button>
       </div>
       <LiveRegion message={message} />

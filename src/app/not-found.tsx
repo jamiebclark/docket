@@ -9,7 +9,7 @@ export default function NotFound() {
       <p className="text-sm">
         This page doesn&apos;t exist, or you don&apos;t have access to it.
       </p>
-      <Link href="/" className="text-sm underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground">
+      <Link href="/" className="text-sm underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
         Go to Docket
       </Link>
     </main>

@@ -1,3 +1,4 @@
+import { alertStyles } from "@/components/ui/Alert";
 import type { SchedulerHealth as Health } from "@/server/services/scheduler-health";
 
 function ago(from: Date, to: Date): string {
@@ -53,14 +54,15 @@ export function SchedulerHealth({
   if (variant === "quiet") {
     if (health.state !== "ok" || !at) return null;
     return (
-      <span className="text-xs text-foreground/70">
+      <span className="hidden items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs text-muted-foreground lg:inline-flex">
+        <span aria-hidden="true" className="size-2 rounded-full bg-success" />
         Scheduler ran <When at={at} now={now} timezone={timezone} />
       </span>
     );
   }
   if (health.state === "ok") return null;
   return (
-    <div role="alert" className="border-b border-red-700 bg-red-50 px-4 py-3 text-sm text-red-900">
+    <div role="alert" className={alertStyles("danger", true)}>
       <p className="font-semibold">
         {at ? (
           <>

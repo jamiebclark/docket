@@ -11,6 +11,7 @@ import { createJobAction } from "../actions";
 import { groupByPlatform, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
+import { controlStyles } from "@/components/ui/controls";
 
 export type JobFormSource =
   | { kind: "media"; selection: unknown; includeUsed: boolean }
@@ -40,7 +41,7 @@ function flatten(issues: unknown): string[] {
   return (list as { message?: string }[]).map((i) => i.message ?? "").filter(Boolean);
 }
 
-const red = "text-xs text-red-700 dark:text-red-400";
+const red = "text-xs text-danger";
 
 export function JobForm(props: JobFormProps) {
   const { slug, source, summary, itemCount, fields, firstFields, emptyByField, profiles, accounts, defaults, canAutoApprove } = props;
@@ -112,12 +113,12 @@ export function JobForm(props: JobFormProps) {
       }}
     >
       {isUnreviewedQueue(defaults) ? (
-        <p role="note" className="rounded-md border-2 border-amber-700 p-2 text-sm font-semibold dark:border-amber-400">
+        <p role="note" className="rounded-md border-2 border-warning-border p-2 text-sm font-semibold">
           This project is set to: {UNREVIEWED_QUEUE_LABEL}.
         </p>
       ) : null}
       {issues.length > 0 ? (
-        <div ref={summaryRef} tabIndex={-1} role="alert" className="rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
+        <div ref={summaryRef} tabIndex={-1} role="alert" className="rounded-md border border-danger-border p-3 text-sm">
           <p className="font-medium">This job can&apos;t be started:</p>
           <ul className="mt-1 list-disc pl-5">
             {issues.map((m, i) => (
@@ -152,7 +153,7 @@ export function JobForm(props: JobFormProps) {
         <label htmlFor={`${uid}-template`} className="text-sm font-medium">
           Instructions template
         </label>
-        <p id={`${uid}-template-hint`} className="text-xs text-foreground/70">
+        <p id={`${uid}-template-hint`} className="text-xs text-muted-foreground">
           Written once, used for every item. Available fields:
         </p>
         <ul className="flex flex-wrap gap-1" aria-label="Available fields">
@@ -161,7 +162,7 @@ export function JobForm(props: JobFormProps) {
               <button
                 type="button"
                 onClick={() => insertField(f)}
-                className="rounded-full border border-foreground/40 px-2 py-0.5 font-mono text-xs hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+                className="rounded-full border border-input px-2 py-0.5 font-mono text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
                 {`{{${f}}}`}
               </button>
@@ -177,9 +178,9 @@ export function JobForm(props: JobFormProps) {
           aria-describedby={`${uid}-template-hint ${uid}-template-count`}
           aria-invalid={fieldErrors.template ? true : undefined}
           onChange={(e) => setTemplate(e.target.value)}
-          className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+          className={controlStyles}
         />
-        <p id={`${uid}-template-count`} className={`text-right text-xs ${template.length > INSTRUCTIONS_MAX ? "text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
+        <p id={`${uid}-template-count`} className={`text-right text-xs ${template.length > INSTRUCTIONS_MAX ? "text-danger" : "text-muted-foreground"}`}>
           {counterLabel(template.length, INSTRUCTIONS_MAX)}
         </p>
         {fieldErrors.template ? <p className={red}>{fieldErrors.template}</p> : null}
@@ -189,15 +190,15 @@ export function JobForm(props: JobFormProps) {
           </p>
         ))}
         {empties.map(([name, n]) => (
-          <p key={name} role="note" className="text-xs text-amber-900 dark:text-amber-300">
+          <p key={name} role="note" className="text-xs text-warning">
             {n} {n === 1 ? "item has" : "items have"} an empty value for {name}.
           </p>
         ))}
         {preview !== null ? (
-          <div className="mt-1 rounded-md border border-foreground/20 p-2">
+          <div className="mt-1 rounded-lg border border-border bg-surface p-2">
             <p className="text-xs font-medium">Preview of the first item</p>
             <pre className="mt-1 whitespace-pre-wrap text-sm">{preview}</pre>
-            <p className="mt-1 text-xs text-foreground/70">
+            <p className="mt-1 text-xs text-muted-foreground">
               Values from each item are marked {MARK_OPEN} {MARK_CLOSE} so the model treats them as data.
             </p>
           </div>
@@ -206,12 +207,12 @@ export function JobForm(props: JobFormProps) {
 
       <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
         <legend className="text-sm font-semibold">Target accounts</legend>
-        <p id={`${uid}-accounts-hint`} className="text-xs text-foreground/70">
+        <p id={`${uid}-accounts-hint`} className="text-xs text-muted-foreground">
           One version is written for each platform you choose.
         </p>
         {groupByPlatform(accounts).map((group) => (
           <div key={group.providerName} className="flex flex-col gap-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">{group.providerName}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.providerName}</p>
             {group.accounts.map((a) => (
               <label key={a.id} className="flex items-center gap-2 text-sm">
                 <input
@@ -227,7 +228,7 @@ export function JobForm(props: JobFormProps) {
           </div>
         ))}
         {needImage.map((name) => (
-          <p key={name} role="note" className="rounded-md border border-amber-700 p-2 text-sm text-amber-900 dark:border-amber-400 dark:text-amber-300">
+          <p key={name} role="note" className="rounded-md border border-warning-border p-2 text-sm text-warning">
             Warning: {imageWarning(name)}
           </p>
         ))}

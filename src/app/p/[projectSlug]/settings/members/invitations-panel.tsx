@@ -49,7 +49,7 @@ export function InvitationsPanel({
       </h2>
       {canInvite ? <InviteForm slug={slug} canInviteOwner={canInviteOwner} onLink={setLink} /> : null}
       {link ? (
-        <div role="region" aria-label="Invitation link" className="flex flex-col gap-2 rounded-lg border border-foreground/30 p-4">
+        <div role="region" aria-label="Invitation link" className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
           <p className="text-sm">
             Send this link to {link.email}. It is shown only once and expires on {when(link.expiresAt)}.
           </p>
@@ -106,7 +106,7 @@ function InviteForm({
         </Button>
       </div>
       {formError ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {formError}
         </p>
       ) : null}
@@ -171,7 +171,7 @@ function InvitationRow({ slug, inv, onLink }: { slug: string; inv: InvitationVie
           </div>
         ) : null}
         {error && !error.ok ? (
-          <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-400">
+          <p role="alert" className="mt-1 text-xs text-danger">
             {error.message}
           </p>
         ) : null}

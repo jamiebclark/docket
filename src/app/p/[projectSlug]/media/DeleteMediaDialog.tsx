@@ -72,7 +72,7 @@ export function DeleteMediaDialog({ slug, item, open, onClose }: { slug: string;
           <PostList slug={slug} refs={impact.affected} />
         </>
       ) : null}
-      <p role="alert" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+      <p role="alert" className="min-h-4 text-xs text-danger">
         {error}
       </p>
       <div className="mt-3 flex justify-end gap-2">

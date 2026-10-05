@@ -4,8 +4,11 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { SLUG_MAX } from "@/lib/validation/slug";
 import { createProject } from "./actions";
+import { buttonStyles } from "@/components/ui/Button";
+import { alertStyles } from "@/components/ui/Alert";
+import { controlStyles } from "@/components/ui/controls";
 
-const input = "rounded border border-foreground/30 bg-transparent px-3 py-2 focus-visible:ring-2";
+const input = controlStyles;
 
 function slugify(value: string): string {
   return value
@@ -32,7 +35,7 @@ export function NewProjectForm() {
 
   const err = (name: string) =>
     errors[name] ? (
-      <span id={`${name}-error`} className="text-xs text-red-700 dark:text-red-400">
+      <span id={`${name}-error`} className="text-xs text-danger">
         {errors[name]}
       </span>
     ) : null;
@@ -44,7 +47,7 @@ export function NewProjectForm() {
   return (
     <form action={action} className="flex flex-col gap-4">
       {formError ? (
-        <p role="alert" className="rounded border border-red-600 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className={alertStyles("danger")}>
           {formError}
         </p>
       ) : null}
@@ -76,7 +79,7 @@ export function NewProjectForm() {
           className={input}
           {...a11y("slug")}
         />
-        {errors.slug ? err("slug") : <span className="text-xs opacity-70">Lowercase letters, numbers and hyphens</span>}
+        {errors.slug ? err("slug") : <span className="text-xs text-muted-foreground">Lowercase letters, numbers and hyphens</span>}
       </label>
       <label className="flex flex-col gap-1 text-sm">
         Time zone
@@ -88,12 +91,12 @@ export function NewProjectForm() {
           className={input}
           {...a11y("timezone")}
         />
-        {errors.timezone ? err("timezone") : <span className="text-xs opacity-70">IANA name, e.g. America/New_York</span>}
+        {errors.timezone ? err("timezone") : <span className="text-xs text-muted-foreground">IANA name, e.g. America/New_York</span>}
       </label>
       <button
         type="submit"
         disabled={pending}
-        className="rounded bg-foreground px-3 py-2 text-background disabled:opacity-60 focus-visible:ring-2"
+        className={buttonStyles({ variant: "primary" })}
       >
         {pending ? "Creating…" : "Create project"}
       </button>

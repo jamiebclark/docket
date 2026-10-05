@@ -94,11 +94,11 @@ export function AddToQueueDialog({
             </p>
             <ul className="flex flex-col gap-2">
               {rows.map((r) => (
-                <li key={r.targetId} className="rounded-md border border-foreground/20 p-2">
+                <li key={r.targetId} className="rounded-lg border border-border bg-surface p-2">
                   <strong>{names[r.accountId] ?? "Account"}</strong>:{" "}
                   {r.ok && r.scheduledAt ? formatLocal(r.scheduledAt, timeZone) : (r.message ?? "Can't be queued.")}
                   {r.changedFromPreview ? (
-                    <p className="mt-1 text-amber-800 dark:text-amber-300">Changed: another post took the previewed slot</p>
+                    <p className="mt-1 text-warning">Changed: another post took the previewed slot</p>
                   ) : null}
                 </li>
               ))}
@@ -141,11 +141,11 @@ function Outcomes({ rows, names, timeZone, verb }: { rows: Outcome[]; names: Rec
   return (
     <ul className="flex flex-col gap-2">
       {rows.map((r) => (
-        <li key={r.targetId} className="rounded-md border border-foreground/20 p-2">
+        <li key={r.targetId} className="rounded-lg border border-border bg-surface p-2">
           <strong>{names[r.accountId] ?? "Account"}</strong>:{" "}
           {r.ok ? `${verb} ${r.scheduledAt ? formatLocal(r.scheduledAt, timeZone) : ""}`.trim() : (r.message ?? "Couldn't be scheduled.")}
           {(r.warnings ?? []).map((w, n) => (
-            <p key={n} className="mt-1 text-amber-800 dark:text-amber-300">
+            <p key={n} className="mt-1 text-warning">
               {w.message}
             </p>
           ))}
@@ -239,7 +239,7 @@ export function ScheduleAtDialog({
             {preview?.inPast ? <p role="alert">That time has passed. Pick a later time, or use Publish now.</p> : null}
             {preview && !preview.inPast ? <p>{previewText(preview, timeZone)}</p> : null}
             {preview?.warnings.map((w, n) => (
-              <p key={n} className="text-amber-800 dark:text-amber-300">
+              <p key={n} className="text-warning">
                 {w.message}
               </p>
             ))}

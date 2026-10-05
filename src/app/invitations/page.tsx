@@ -26,7 +26,7 @@ export default async function InvitationsPage() {
       ) : (
         <ul className="flex flex-col gap-4">
           {mine.map((inv) => (
-            <li key={inv.id} className="flex flex-col gap-3 rounded-lg border border-foreground/20 p-4">
+            <li key={inv.id} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
               <div>
                 <p className="font-medium">{inv.projectName}</p>
                 <p className="text-sm">

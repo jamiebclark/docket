@@ -7,6 +7,7 @@ import type { MediaView } from "@/server/services/media";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { LiveRegion } from "../ui/LiveRegion";
+import { controlStyles } from "@/components/ui/controls";
 
 /** Returns a copy with the item at `from` moved to `to`; out-of-range moves return the list unchanged. */
 export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
@@ -45,7 +46,7 @@ function AltEditor({ slug, item, onSaved }: { slug: string; item: MediaView; onS
             } else setState(res.message);
           });
         }}
-        className="rounded-md border border-foreground/40 bg-background px-2 py-1 text-sm"
+        className={controlStyles}
       />
       <p aria-live="polite" className="min-h-4 text-xs">
         {state}
@@ -86,7 +87,7 @@ export function MediaPicker({
       {value.length === 0 ? <p className="text-sm">No images attached.</p> : null}
       <ol className="flex flex-col gap-3">
         {value.map((m, i) => (
-          <li key={m.id} className="flex gap-3 rounded-lg border border-foreground/30 p-2">
+          <li key={m.id} className="flex gap-3 rounded-lg border border-border p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={m.thumbnailUrl} alt={m.altText || ""} className="size-20 shrink-0 rounded object-cover" />
             <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -203,11 +204,11 @@ function PickerDialog({
           <label className="sr-only" htmlFor="picker-q">
             Search images
           </label>
-          <input id="picker-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="rounded-md border border-foreground/40 bg-background px-2 py-1 text-sm" />
+          <input id="picker-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className={controlStyles} />
           <label className="sr-only" htmlFor="picker-tag">
             Filter by tag
           </label>
-          <select id="picker-tag" value={tag} onChange={(e) => setTag(e.target.value)} className="rounded-md border border-foreground/40 bg-background px-2 py-1 text-sm">
+          <select id="picker-tag" value={tag} onChange={(e) => setTag(e.target.value)} className={controlStyles}>
             <option value="">All tags</option>
             {(lib?.ok ? lib.data.tags : []).map((t) => (
               <option key={t} value={t}>
@@ -238,7 +239,7 @@ function PickerDialog({
                   type="button"
                   aria-pressed={on}
                   onClick={() => toggle(m)}
-                  className={`w-full rounded border-2 p-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground ${on ? "border-foreground" : "border-transparent"}`}
+                  className={`w-full rounded border-2 p-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${on ? "border-primary" : "border-transparent"}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={m.thumbnailUrl} alt={m.altText || ""} className="aspect-square w-full rounded object-cover" />

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { buttonStyles } from "./Button";
+import { controlStyles, labelStyles } from "./controls";
 
 /** Read-only value with a copy button; announces the result through a live region. */
 export function CopyField({ id, label, value }: { id: string; label: string; value: string }) {
@@ -17,7 +19,7 @@ export function CopyField({ id, label, value }: { id: string; label: string; val
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium">
+      <label htmlFor={id} className={labelStyles}>
         {label}
       </label>
       <div className="flex gap-2">
@@ -26,17 +28,17 @@ export function CopyField({ id, label, value }: { id: string; label: string; val
           readOnly
           value={value}
           onFocus={(e) => e.currentTarget.select()}
-          className="min-w-0 flex-1 rounded-md border border-foreground/40 bg-background px-3 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+          className={`${controlStyles} min-w-0 flex-1 font-mono`}
         />
         <button
           type="button"
           onClick={copy}
-          className="rounded-md border border-foreground/30 px-3 py-1.5 text-sm font-medium hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+          className={buttonStyles({ variant: "secondary" })}
         >
           Copy
         </button>
       </div>
-      <p role="status" aria-live="polite" className="min-h-4 text-xs">
+      <p role="status" aria-live="polite" className="min-h-4 text-xs text-muted-foreground">
         {status}
       </p>
     </div>

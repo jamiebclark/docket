@@ -27,7 +27,7 @@ export function CloseJobDialog({ slug, jobId, summary }: { slug: string; jobId: 
       <Dialog open={open} onClose={() => setOpen(false)} title={`Close the job “${summary}”?`}>
         <p className="mb-3 text-sm">No more items can be added. It finishes once every item is done.</p>
         {error ? (
-          <p role="alert" className="mb-2 text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="mb-2 text-sm text-danger">
             Error: {error}
           </p>
         ) : null}

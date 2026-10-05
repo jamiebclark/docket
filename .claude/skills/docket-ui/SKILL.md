@@ -9,18 +9,28 @@ Docket is a tool its owner uses daily to hop between projects. **Clean and fast
 over fancy.** Every screen must be fully usable from the keyboard.
 
 ## Before writing UI code
+- Read `docs/design-system.md` — brand, colour tokens, typography, layout,
+  component variants and do/don't. Visual decisions live there, not here.
 - Read `node_modules/next/dist/docs/01-app/` for the App Router API you are
   about to use (Next 16 differs from older versions — see `AGENTS.md`).
-- Reuse components in `src/components/ui/` before adding new ones. If you add
-  one, put it there with a short JSDoc comment on its props.
+- Reuse components in `src/components/ui/` before adding new ones (`Button` /
+  `buttonStyles()`, `Field`, `Select`, `controlStyles`, `Card`, `PageHeader`,
+  `Table`, `Badge`/`StatusBadge`, `Alert`, `EmptyState`, `FilterTabs`,
+  `Dialog`, `Menu`, `Pagination`, `Skeleton`, `Icon`). If you add one, put it
+  there with a short JSDoc comment on its props and list it in the design doc.
+- In interactive sessions, delegate UI work to the `docket-ui-designer` agent.
+  Pipeline phases cannot spawn agents, so they follow this skill and the design
+  doc directly.
 
 ## Structure
 - Routes: `/p/[projectSlug]/...` for everything project-scoped; `/login`,
   `/signup` (invitation token only), `/setup` (first-run), `/invitations`.
-- App shell (`src/app/p/[projectSlug]/layout.tsx`): left nav (Calendar, Posts,
-  Compose, Generate, Jobs, Review, Media, Accounts, Voice, Settings), top bar
-  with the **project switcher** and a scheduler-health indicator (last
-  successful tick; red banner when stale).
+- App shell (`src/app/p/[projectSlug]/layout.tsx`): grouped left nav — Publish
+  (Calendar, Posts, Compose, Review, Failures), Create (Generate, Jobs, Media,
+  Voice), Project (Accounts, Settings) — from `NAV_SECTIONS` in
+  `src/components/shell/LeftNav.tsx`; sticky top bar with the logo, the
+  **project switcher** and a scheduler-health indicator (last successful tick;
+  red banner when stale). Signed-out pages use `AuthShell`.
 - **Server components by default.** Fetch through `src/server/services/` (never
   the DB directly). Client components (`"use client"`) only for interactivity:
   composer, calendar drag/drop, switcher, live validation. Keep them leaf-level.
@@ -71,8 +81,12 @@ Every data view handles four states explicitly:
 ## Accessibility and style
 - Visible focus rings (`focus-visible:ring-2`), logical tab order, skip link
   to main content, `<main>`/`<nav>` landmarks, page `<title>` per route.
-- Colour contrast ≥ 4.5:1 for text. Support dark mode via Tailwind's `dark:`
-  variant on CSS custom properties defined in `src/app/globals.css` `@theme`.
+- Colour contrast ≥ 4.5:1 for text (3:1 for control borders and focus rings);
+  `node scripts/check-contrast.mjs` checks every token pair. Use only the
+  semantic token classes from `src/app/globals.css` (`bg-surface`,
+  `text-muted-foreground`, `border-input`, `text-danger`, …); dark mode comes
+  from those tokens, so never add `dark:` colour variants or raw palette
+  classes.
 - Tailwind 4 only (CSS-first config); no additional UI framework unless a spec
   justifies it and it is logged in `docs/decisions.md`.
 - Dates/times always shown with the project time zone; relative times

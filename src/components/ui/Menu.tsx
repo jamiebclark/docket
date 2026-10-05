@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { buttonStyles } from "./Button";
 
 export interface MenuItem {
   label: string;
@@ -38,7 +39,18 @@ export function nextMenuIndex(key: string, current: number, disabled: readonly b
  * Button-triggered `role="menu"`. Arrow keys, Home/End move focus, Enter/Space choose, Escape closes and
  * returns focus to the button, Tab closes. Used for "Move to slot…" and row actions.
  */
-export function Menu({ label, items, children }: { label: string; items: readonly MenuItem[]; children?: ReactNode }) {
+export function Menu({
+  label,
+  items,
+  children,
+  triggerClassName,
+}: {
+  label: string;
+  items: readonly MenuItem[];
+  children?: ReactNode;
+  /** Replaces the default secondary-button look (e.g. a calendar chip); the menu then spans its container. */
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -58,7 +70,7 @@ export function Menu({ label, items, children }: { label: string; items: readonl
   };
 
   return (
-    <div className="relative inline-block">
+    <div className={triggerClassName ? "relative block" : "relative inline-block"}>
       <button
         ref={button}
         type="button"
@@ -72,7 +84,7 @@ export function Menu({ label, items, children }: { label: string; items: readonl
             setOpen(true);
           }
         }}
-        className="rounded-md border border-foreground/30 px-3 py-1.5 text-sm hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+        className={triggerClassName ?? buttonStyles({ variant: "secondary", size: "sm" })}
       >
         {children ?? label}
       </button>
@@ -81,7 +93,7 @@ export function Menu({ label, items, children }: { label: string; items: readonl
           id={menuId}
           role="menu"
           aria-label={label}
-          className="absolute z-10 mt-1 min-w-48 rounded-md border border-foreground/30 bg-background p-1 shadow-md"
+          className="absolute z-20 mt-1 min-w-48 rounded-xl border border-border bg-surface p-1 shadow-overlay"
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.preventDefault();
@@ -112,7 +124,7 @@ export function Menu({ label, items, children }: { label: string; items: readonl
                 close(true);
                 item.onSelect();
               }}
-              className="block w-full rounded px-3 py-1.5 text-left text-sm hover:bg-foreground/10 focus-visible:bg-foreground/10 focus-visible:outline-none disabled:opacity-50"
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-accent/60 focus-visible:text-accent-foreground focus-visible:outline-none disabled:opacity-50"
             >
               {item.label}
             </button>

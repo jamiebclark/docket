@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import type { ActionResult } from "@/lib/action-result";
 import type { EmptySlot, PullExpected, PullMove, QueuedItem } from "@/server/services/queue";
 import { formatPlanned } from "./calendar-logic";
+import { buttonStyles } from "@/components/ui/Button";
 
 type Loaded<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; data: T };
 
@@ -29,7 +30,7 @@ function useLoaded<T>(open: boolean, load: () => Promise<ActionResult<T>>): Load
 
 function Status({ loaded, empty }: { loaded: Loaded<unknown[]>; empty: string }) {
   if (loaded.state === "loading") return <p role="status" className="text-sm">Loading…</p>;
-  if (loaded.state === "error") return <p role="alert" className="text-sm text-red-700 dark:text-red-400">{loaded.message}</p>;
+  if (loaded.state === "error") return <p role="alert" className="text-sm text-danger">{loaded.message}</p>;
   if (loaded.data.length === 0) return <p className="text-sm">{empty}</p>;
   return null;
 }
@@ -55,7 +56,7 @@ export function MoveToSlotDialog({ open, onClose, accountName, listSlots, onPick
               <button
                 type="button"
                 onClick={() => onPick(s)}
-                className="w-full rounded border border-dashed border-foreground/40 px-3 py-1.5 text-left text-sm hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+                className="w-full rounded border border-dashed border-input px-3 py-1.5 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
                 {formatPlanned(s.localTime)}
               </button>
@@ -95,10 +96,10 @@ export function SwapDialog({ open, onClose, exceptTargetId, listQueued, onPick }
               <button
                 type="button"
                 onClick={() => onPick(i)}
-                className="w-full rounded border border-foreground/30 px-3 py-1.5 text-left text-sm hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+                className={buttonStyles({ variant: "secondary", className: "w-full text-left" })}
               >
                 <span className="block font-medium">{formatPlanned(i.localTime)}</span>
-                <span className="block truncate text-foreground/70">{i.excerpt || "(no text)"}</span>
+                <span className="block truncate text-muted-foreground">{i.excerpt || "(no text)"}</span>
               </button>
             </li>
           ))}
@@ -140,7 +141,7 @@ export function PullForwardDialog({ open, onClose, accountName, preview, confirm
           ))}
         </ul>
       ) : null}
-      {error ? <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>
           Cancel

@@ -10,6 +10,7 @@ import * as posts from "@/server/services/posts";
 import { TargetResolution } from "@/components/targets/TargetResolution";
 import { safeExternalHref } from "@/lib/safe-redirect";
 import { DeletePostButton } from "./DeletePostButton";
+import { buttonStyles } from "@/components/ui/Button";
 
 export const metadata: Metadata = { title: "Post" };
 export const dynamic = "force-dynamic";
@@ -63,7 +64,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
         </div>
         <div className="flex items-center gap-2">
           {!started && scope.can({ post: ["edit"] }) ? (
-            <Link href={`/p/${projectSlug}/compose/${view.post.id}`} className="rounded-md border border-foreground/30 px-3 py-1.5 text-sm font-medium hover:bg-foreground/10">
+            <Link href={`/p/${projectSlug}/compose/${view.post.id}`} className={buttonStyles({ variant: "secondary" })}>
               Edit
             </Link>
           ) : null}
@@ -81,7 +82,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
             {view.media.map((m) => (
               <li key={m.id}>
                 {m.deleted ? (
-                  <span className="inline-flex h-20 w-20 items-center justify-center rounded border border-dashed border-foreground/30 p-1 text-center text-xs">Image deleted</span>
+                  <span className="inline-flex h-20 w-20 items-center justify-center rounded border border-dashed border-border p-1 text-center text-xs">Image deleted</span>
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={m.thumbnailUrl} alt={m.altText} className="h-20 w-20 rounded object-cover" />
@@ -93,7 +94,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
       </section>
 
       {view.targets.map((t) => (
-        <section key={t.id} aria-labelledby={`target-${t.id}`} className="rounded-lg border border-foreground/20 p-4">
+        <section key={t.id} aria-labelledby={`target-${t.id}`} className="rounded-xl border border-border bg-surface p-5 shadow-card">
           <h2 id={`target-${t.id}`} className="text-lg font-semibold">
             {t.accountName}
           </h2>
@@ -143,13 +144,13 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
             {t.lastError ? (
               <>
                 <dt className="font-medium">Last error</dt>
-                <dd className="text-red-700 dark:text-red-400">{t.lastError}</dd>
+                <dd className="text-danger">{t.lastError}</dd>
               </>
             ) : null}
           </dl>
 
           {t.status === "ambiguous" ? (
-            <div role="group" aria-label="Needs your decision" className="mt-3 rounded-md border border-amber-600 bg-amber-50 p-3 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+            <div role="group" aria-label="Needs your decision" className="mt-3 rounded-md border border-warning-border bg-warning-bg p-3 text-warning">
               <p className="font-medium">
                 <Badge tone="warning">Needs your decision</Badge>
               </p>
@@ -170,7 +171,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
             <table className="mt-1 w-full border-collapse text-left text-xs">
               <caption className="sr-only">Attempts for {t.accountName}</caption>
               <thead>
-                <tr className="border-b border-foreground/30">
+                <tr className="border-b border-border">
                   {["Time", "Step", "Outcome", "Who", "Request", "Response"].map((c) => (
                     <th key={c} scope="col" className="px-2 py-1 font-medium">
                       {c}
@@ -180,14 +181,14 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
               </thead>
               <tbody>
                 {t.attempts.map((a) => (
-                  <tr key={a.id} className="border-b border-foreground/10 align-top">
+                  <tr key={a.id} className="border-b border-border align-top">
                     <td className="px-2 py-1">
                       <LocalTime value={a.at} timeZone={tz} />
                     </td>
                     <td className="px-2 py-1">{a.step}</td>
                     <td className="px-2 py-1">
                       {a.outcome.replaceAll("_", " ")}
-                      {a.error ? <div className="text-red-700 dark:text-red-400">{a.error}</div> : null}
+                      {a.error ? <div className="text-danger">{a.error}</div> : null}
                     </td>
                     <td className="px-2 py-1">{a.actor.kind === "member" ? a.actor.name : "System"}</td>
                     <td className="px-2 py-1">

@@ -60,7 +60,7 @@ export function CreateKeyForm({ slug, onCreated }: { slug: string; onCreated: ()
         <fieldset aria-describedby="key-permissions-error" className="flex flex-col gap-2">
           <legend className="text-sm font-medium">Permissions</legend>
           {PERMISSIONS.map((p) => (
-            <div key={p.value} className={`flex items-start gap-2 ${"warning" in p ? "rounded-md border border-amber-700 p-2 dark:border-amber-400" : ""}`}>
+            <div key={p.value} className={`flex items-start gap-2 ${"warning" in p ? "rounded-md border border-warning-border p-2" : ""}`}>
               <input
                 id={`perm-${p.value}`}
                 type="checkbox"
@@ -74,14 +74,14 @@ export function CreateKeyForm({ slug, onCreated }: { slug: string; onCreated: ()
                 <label htmlFor={`perm-${p.value}`} className="font-mono text-sm">
                   {p.label}
                 </label>
-                <p id={`perm-${p.value}-help`} className="text-xs text-foreground/70">
+                <p id={`perm-${p.value}-help`} className="text-xs text-muted-foreground">
                   {"warning" in p ? "Warning: " : ""}
                   {p.help}
                 </p>
               </div>
             </div>
           ))}
-          <p id="key-permissions-error" aria-live="polite" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+          <p id="key-permissions-error" aria-live="polite" className="min-h-4 text-xs text-danger">
             {errors.permissions ?? ""}
           </p>
         </fieldset>
@@ -103,7 +103,7 @@ export function CreateKeyForm({ slug, onCreated }: { slug: string; onCreated: ()
           <option value="365">365 days</option>
         </Select>
         {formError ? (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             {formError}
           </p>
         ) : null}

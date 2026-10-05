@@ -39,7 +39,7 @@ export function DecisionForm({
         </form>
       </div>
       {error && !error.ok ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {error.message}
         </p>
       ) : null}

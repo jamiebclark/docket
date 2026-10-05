@@ -56,7 +56,7 @@ export function EndpointRowActions({
       <Dialog open={open} onClose={() => setOpen(false)} title={`Delete the webhook to ${host}?`}>
         <p className="mb-4 text-sm">Its delivery log is deleted too.</p>
         {error ? (
-          <p role="alert" className="mb-2 text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="mb-2 text-sm text-danger">
             {error}
           </p>
         ) : null}

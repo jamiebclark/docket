@@ -1,27 +1,174 @@
 @import "tailwindcss";
 
+/*
+ * Docket design tokens. Components use the semantic names (bg-surface, text-muted-foreground,
+ * border-input, bg-primary, text-danger …), never raw palette classes, so one edit here re-themes
+ * the app and dark mode needs no `dark:` variants. See docs/design-system.md.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  color-scheme: light;
 
-/* System font stacks: no build-time font download, nothing fetched from third parties. */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* Brand palette (Concept 2) */
+  --brand-purple: #4a148c;
+  --brand-magenta: #e91e63;
+  --brand-lavender: #e1bee7;
+
+  /* Surfaces and text */
+  --background: #f8f9fa;
+  --surface: #ffffff;
+  --muted: #f4eef8;
+  --foreground: #212121;
+  --muted-foreground: #5e5768;
+  --heading: #4a148c;
+  --border: #e4ddeb;
+  --input: #9a8cad;
+  --focus: #9c27b0;
+
+  /* Actions */
+  --primary: #4a148c;
+  --primary-hover: #6a1b9a;
+  --primary-foreground: #ffffff;
+  --cta: #c2185b;
+  --cta-hover: #ad1457;
+  --cta-foreground: #ffffff;
+  --accent: #e1bee7;
+  --accent-foreground: #4a148c;
+
+  /* Status: text, tinted background, border */
+  --danger: #b3261e;
+  --danger-bg: #fdecec;
+  --danger-border: #e6a5a1;
+  --warning: #8a4b00;
+  --warning-bg: #fff4e0;
+  --warning-border: #e3b46b;
+  --success: #1b6e3a;
+  --success-bg: #e8f5ec;
+  --success-border: #9bcdaa;
+  --info: #1f5ba8;
+  --info-bg: #e8f0fb;
+  --info-border: #a7c1e6;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+    --background: #120c19;
+    --surface: #1b1424;
+    --muted: #261d33;
+    --foreground: #ece6f2;
+    --muted-foreground: #b4aac2;
+    --heading: #e1bee7;
+    --border: #342845;
+    --input: #7a6d8f;
+    --focus: #e1bee7;
+
+    --primary: #d1a8f5;
+    --primary-hover: #e1c4fa;
+    --primary-foreground: #24063f;
+    --cta: #f06292;
+    --cta-hover: #f48fb1;
+    --cta-foreground: #2b0612;
+    --accent: #3a2350;
+    --accent-foreground: #ebd3f5;
+
+    --danger: #ffb4ab;
+    --danger-bg: #3a1414;
+    --danger-border: #8c3a33;
+    --warning: #ffc772;
+    --warning-bg: #33230a;
+    --warning-border: #8a6420;
+    --success: #8fd9a8;
+    --success-bg: #0f2a1a;
+    --success-border: #2f6b45;
+    --info: #a9c7ff;
+    --info-bg: #10203a;
+    --info-border: #35588f;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
+/* Fonts are vendored (src/app/fonts) and loaded with next/font/local: nothing is fetched from third parties. */
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-heading: var(--heading);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-focus: var(--focus);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-cta: var(--cta);
+  --color-cta-hover: var(--cta-hover);
+  --color-cta-foreground: var(--cta-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-brand-purple: var(--brand-purple);
+  --color-brand-magenta: var(--brand-magenta);
+  --color-brand-lavender: var(--brand-lavender);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-heading: var(--font-poppins), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --shadow-card: 0 1px 2px rgb(33 17 54 / 0.06), 0 1px 3px rgb(33 17 54 / 0.08);
+  --shadow-overlay: 0 12px 32px -8px rgb(33 17 54 / 0.28), 0 4px 8px -4px rgb(33 17 54 / 0.12);
+}
+
+/* The logo's purple → magenta sweep, for brand moments only (auth backdrop, logo tile). */
+@utility bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--brand-purple), var(--brand-magenta));
+}
+
+@layer base {
+  html {
+    accent-color: var(--primary);
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.01em;
+  }
+
+  h1 {
+    color: var(--heading);
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  dialog::backdrop {
+    background: rgb(18 12 25 / 0.55);
+    backdrop-filter: blur(2px);
+  }
+
+  code,
+  kbd {
+    font-family: var(--font-mono);
+  }
 }

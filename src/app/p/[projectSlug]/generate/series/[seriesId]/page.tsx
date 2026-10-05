@@ -30,7 +30,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ project
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">Series</h1>
-      <p className="max-w-2xl text-sm text-foreground/70">{detail.series.brief}</p>
+      <p className="max-w-2xl text-sm text-muted-foreground">{detail.series.brief}</p>
       <SeriesWriter slug={projectSlug} seriesId={seriesId} angles={detail.angles} initialSlots={initialSlots} />
       <Link href={`/p/${projectSlug}/review`} className="text-sm underline">
         Go to the review queue

@@ -77,7 +77,7 @@ export default async function AccountsPage({
     <section className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Accounts</h1>
       {banner ? (
-        <p role="alert" className="rounded-md border border-foreground/30 p-3 text-sm">
+        <p role="alert" className="rounded-lg border border-border bg-surface p-3 text-sm">
           {banner}
         </p>
       ) : null}
@@ -99,7 +99,7 @@ export default async function AccountsPage({
       {canManage && mockEnabled ? <ConnectMockForm slug={projectSlug} /> : null}
       {canManage
         ? credentialProviders.map((p) => (
-            <section key={p.key} aria-labelledby={`connect-${p.key}-heading`} className="flex flex-col gap-3 rounded-lg border border-foreground/20 p-4">
+            <section key={p.key} aria-labelledby={`connect-${p.key}-heading`} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
               <h2 id={`connect-${p.key}-heading`} className="text-lg font-semibold">
                 Connect a {p.displayName} account
               </h2>
@@ -119,19 +119,19 @@ export default async function AccountsPage({
               key={account.id}
               id={`account-${account.id}`}
               aria-labelledby={`account-${account.id}-name`}
-              className="flex flex-col gap-3 rounded-lg border border-foreground/20 p-4"
+              className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card"
             >
               <header className="flex flex-wrap items-center gap-2">
                 <h2 id={`account-${account.id}-name`} className="text-lg font-semibold">
                   {account.displayName}
                 </h2>
-                <span className="text-sm text-foreground/70">{account.providerName}</span>
+                <span className="text-sm text-muted-foreground">{account.providerName}</span>
                 <Badge tone={status.tone}>{status.label}</Badge>
               </header>
               {account.lastError ? (
-                <p className="text-sm text-red-700 dark:text-red-400">Last error: {account.lastError}</p>
+                <p className="text-sm text-danger">Last error: {account.lastError}</p>
               ) : null}
-              <p className="text-sm text-foreground/70">
+              <p className="text-sm text-muted-foreground">
                 Connected <LocalTime value={account.connectedAt} timeZone={timeZone} />
               </p>
               {account.notes.map((note, i) => (
@@ -163,8 +163,8 @@ export default async function AccountsPage({
                 ? credentialProviders
                     .filter((p) => p.key === account.providerKey)
                     .map((p) => (
-                      <details key={p.key} className="rounded-md border border-foreground/20 p-3">
-                        <summary className="cursor-pointer text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground">
+                      <details key={p.key} className="rounded-lg border border-border bg-surface p-3">
+                        <summary className="cursor-pointer text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                           Reconnect
                         </summary>
                         <div className="mt-3">
@@ -182,7 +182,7 @@ export default async function AccountsPage({
                 : null}
               <h3 className="text-base font-medium">Posting slots ({timeZone})</h3>
               {rows.length === 0 ? (
-                <p className="text-sm text-foreground/70">No posting slots yet.</p>
+                <p className="text-sm text-muted-foreground">No posting slots yet.</p>
               ) : (
                 <Table caption={`Posting slots for ${account.displayName}`} columns={canManage ? ["Day", "Time", "Status", "Actions"] : ["Day", "Time", "Status"]}>
                   {rows.map((slot) => (

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ZodError } from "zod";
+import { buttonStyles } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Select } from "@/components/ui/Select";
 import { firstParam } from "@/lib/validation/media";
@@ -18,7 +19,8 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const linkClass = "rounded-md border border-foreground/30 px-3 py-1.5 text-sm hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground";
+const linkClass = buttonStyles({ variant: "secondary" });
+const segmentClass = "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
 export default async function CalendarPage({ params, searchParams }: Props) {
   const { projectSlug } = await params;
@@ -57,7 +59,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">
-        {calendar.title} <span className="text-base font-normal text-foreground/70">· {calendar.timeZone}</span>
+        {calendar.title} <span className="text-base font-normal text-muted-foreground">· {calendar.timeZone}</span>
       </h1>
       <div className="flex flex-wrap items-end gap-2">
         <nav aria-label="Calendar navigation" className="flex gap-2">
@@ -71,9 +73,9 @@ export default async function CalendarPage({ params, searchParams }: Props) {
             Next
           </Link>
         </nav>
-        <nav aria-label="Calendar view" className="flex gap-2">
+        <nav aria-label="Calendar view" className="flex gap-1 rounded-xl border border-border bg-surface p-1 shadow-card">
           {(["month", "week"] as const).map((v) => (
-            <Link key={v} href={href({ view: v })} aria-current={calendar.view === v ? "page" : undefined} className={`${linkClass} ${calendar.view === v ? "bg-foreground text-background" : ""}`}>
+            <Link key={v} href={href({ view: v })} aria-current={calendar.view === v ? "page" : undefined} className={`${segmentClass} ${calendar.view === v ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
               {v === "month" ? "Month" : "Week"}
             </Link>
           ))}
@@ -81,7 +83,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
         <form method="get" action={`/p/${projectSlug}/calendar`} className="flex items-end gap-2">
           <input type="hidden" name="view" value={calendar.view} />
           <input type="hidden" name="date" value={calendar.today} />
-          <Select id="calendar-account" name="account" label="Account" defaultValue={account ?? ""}>
+          <Select id="calendar-account" name="account" label="Account" compact defaultValue={account ?? ""}>
             <option value="">All accounts</option>
             {calendar.accounts.map((a) => (
               <option key={a.id} value={a.id}>
@@ -89,7 +91,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
               </option>
             ))}
           </Select>
-          <button type="submit" className={`${linkClass} mb-5`}>
+          <button type="submit" className={linkClass}>
             Filter
           </button>
         </form>
