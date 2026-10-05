@@ -1,80 +1,123 @@
-# Review: Facebook Pages and Instagram providers (Meta, part 1)
+# Review: Facebook Pages and Instagram providers (Meta, part 1), re-review after remediation
 
-Reviewed 110 file(s) changed across 13 commit(s), against `7c15677` (merge-base with `origin/main`)...HEAD **plus the uncommitted working tree** (14 files the last implement pass left staged/modified — see NOTE F6). Evidence is the diff, not just the present state.
+**This is the scoped re-review that constitution v1.4.0 calls for** ("Review is exhaustive once, then scoped", `.specify/memory/constitution.md:115-128`). It checks only two things:
 
-Read in full: `src/providers/types.ts`, `src/providers/registry.ts`, `src/providers/meta/{config,graph,errors,oauth,candidates,credentials,connect-group}.ts`, `src/providers/facebook/{index,capabilities,settings,steps,links,publish,validate}.ts`, `src/providers/instagram/{index,capabilities,settings,state,steps,quota,publish,validate}.ts`, `src/server/services/connect.ts`, `src/server/dal/connect-attempts.ts`, `src/server/db/schema/connect.ts`, `drizzle/0003_empty_roxanne_simpson.sql`, `src/server/provider-env.ts`, the diffs of `src/server/scheduler/publishing.ts` (plus the whole `execute` function), `src/server/dal/{accounts,scope}.ts`, `src/server/services/accounts.ts`, `src/server/startup/index.ts`, `src/server/db/project-owned.ts`, `src/app/connect/callback/route.ts`, `src/app/connect/invalid/page.tsx`, `src/app/p/[projectSlug]/accounts/{actions.ts,page.tsx (diff),ConnectGroupSection.tsx,ReconnectGroupButton.tsx}`, `src/app/p/[projectSlug]/accounts/connect/[attemptId]/{page.tsx,ChooserForm.tsx}`, `docs/decisions.md` (005 section), `README.md` (diff), `.env.example` (diff).
-Sampled: `src/providers/validation.ts`, `src/providers/media.ts` (planner adaptation), `src/server/services/posts/validate.ts`, `docs/meta-setup.md` and `docs/adding-a-provider.md` (headings and the U1/U2/Threads/G7 passages), `tests/integration/connect/state-security.test.ts`, `tests/integration/instagram/outcomes.test.ts`, `tests/integration/meta/engine-unchanged.test.ts`, `tests/helpers/connect-group.ts`, `research.md` (R7–R10).
-Not reviewed line by line: the remaining ~40 test files (run, not read), `drizzle/meta/0003_snapshot.json` (generated), `tests/helpers/fake-graph.ts` beyond its use.
+- whether each blocking finding from the first review (MAJOR F1, MAJOR F2) and the merge-gating NOTE F6 is fixed;
+- whether the files the remediation changed introduced a regression.
 
-Gates run in this phase: `pnpm typecheck` passed; `pnpm lint` passed (0 errors, 2 warnings in test files); `pnpm vitest run` over `src/providers`, `src/server/startup`, `tests/helpers` and `tests/integration/{connect,facebook,instagram,meta}`, plus the credentials-invalid, accounts-ui, compose-check-route, no-plaintext, actions-authz and scope-check tests: **53 files, 510 tests passed**. I did not run the full `pnpm test`, `pnpm build` or `pnpm db:check`.
+It opens no new lines of inquiry. Anything new it noticed is recorded as MINOR, for the hardening entry.
+
+The first review's full text is in git at `b65778d` (`git show b65778d:specs/005-meta-facebook-instagram/review.md`). Its file list, gates and coverage notes are there. Its findings are kept below, with a `re-review:` line added to each one in scope.
+
+**What I reviewed.** The feature merged to `main` as PR #10 (`4285587`), from base `7c15677`. The remediation landed as two commits inside that PR, plus the three commits that carried the work F6 found uncommitted:
+
+- `d712732` (F1): `src/providers/meta/candidates.ts`, `src/providers/meta/candidates.test.ts` and a new `tests/integration/connect/meta-connect.test.ts`;
+- `08f53d0` (F2): `src/app/p/[projectSlug]/accounts/ConnectGroupSection.tsx`, `src/providers/meta/connect-group.ts` and `tests/integration/meta/engine-unchanged.test.ts`;
+- `ee07e17`, `18d125b`, `1f5d738` (F6): Instagram validation, the no-secrets tests and the Meta docs, all now committed.
+
+Since the merge, later entries changed some of the same files. `be617ae` (006, G12) added the per-group `callbackHint` that `page.tsx` shows for `no_candidates`. `f18b361` and `08b5a8b` also touch `connect.ts`, `page.tsx` and the connect group. So I judged F1 and F2 against the present state of `main` (HEAD `69cff5d`), not against the merge commit alone.
+
+**Read in full:**
+
+- `git show d712732 08f53d0`;
+- `src/providers/meta/candidates.ts:60-77`;
+- `src/providers/meta/connect-group.ts:1-50`;
+- `src/server/services/connect.ts:310-370`, the callback result and the paste empty-list path;
+- `src/app/p/[projectSlug]/accounts/page.tsx:30-58`, the banners and how the hint is chosen;
+- `src/providers/threads/connect-group.ts:90-100`, to see how a sibling group uses `callbackHint`;
+- `tests/integration/connect/meta-connect.test.ts`;
+- `tests/integration/meta/engine-unchanged.test.ts`;
+- `tests/integration/connect/paste.test.ts:83-88`.
+
+**Not re-reviewed:**
+
+- MINOR F3–F5 and NOTE F7: out of scope for a re-review.
+- The rest of what 006–010 changed in these files, beyond the G12 hint path that F1 now depends on.
+
+**Run:** following the constitution, I did not re-run the full suite, lint, typecheck or build. I ran only the affected tests: `pnpm vitest run src/providers/meta/candidates.test.ts tests/integration/connect/{meta-connect,paste,callback-hint}.test.ts tests/integration/meta/engine-unchanged.test.ts tests/integration/accounts-ui.test.ts`. That is 6 files and 34 tests, and all of them passed.
 
 ## Verdict
 
-The feature mostly does what the spec asks and the parts fit together. The shared Meta module is used by both providers, and there is one Graph client and one error table. G5–G8 are generic and were proven with a throwaway provider. The callback security order (shape → lookup → binding → role → conditional consume → exchange) matches research D5. The Instagram step machine is pure and total, and never sleeps. The may-publish/ambiguous rules hold in the code and in the outcome matrices. Two cross-pass defects block the merge, and both are small to fix:
+**F2 and F6 are fixed. F1 is only half fixed, so one MAJOR remains, and the fix is one line.**
 
-- **F1.** The Meta connect group and the generic callback disagree on how "no Pages" is signalled. A person who deselects every Page in the login dialog (a spec edge case) is told to check the app id and secret instead of which permissions are needed.
-- **F2.** A generic accounts-screen component hard-codes Meta's five permission names, which FR-002 forbids. The FR-002 source-scan test does not cover that directory, so it missed this.
+- **F2 (fixed).** The generic `ConnectGroupSection` now renders only `paste.help`. The permission names have moved into the Meta group. The FR-002 scan now covers the accounts and connect UI, and it rejects `pages_*` and `instagram_*` tokens there. Nothing regressed.
+- **F1, fixed part.** An OAuth login that lists no Pages now lands on `?connect=no_candidates` instead of `exchange_failed`. The person is no longer sent to check the app id and secret.
+- **F1, open part.** That `no_candidates` banner still does not list the permissions. The spec edge case requires it, the contract's messages table requires it, and T076's own test requirement asks for it. The code comment added by the fix also says it is shown, and it is not.
 
-Fix both through the two remediation tasks, then review again. The working tree also has to be committed before merge (NOTE F6).
+The G12 `callbackHint` mechanism, added later in 006, makes the fix a single field on `metaConnectGroup` plus one assertion. One remediation task has been appended.
 
 ## Findings
 
-- [x] MAJOR F1 — An OAuth login that yields no Pages shows the "check app id/secret/redirect" banner, not the needed permissions
+- [ ] MAJOR F1 — An OAuth login that yields no Pages shows the "check app id/secret/redirect" banner, not the needed permissions
       where:  src/providers/meta/candidates.ts:73, src/providers/meta/connect-group.ts:13-14, src/server/services/connect.ts:314-315, src/app/p/[projectSlug]/accounts/page.tsx:29-36, tests/helpers/connect-group.ts:16
-      why:    The two sides were built in different passes and disagree. `handleOAuthCallback` treats `{ ok: false }` as `exchange_failed`, and only `{ ok: true, candidates: [] }` as `no_candidates`; the throwaway test group returns the second form. The Meta group returns `{ ok: false, message: NO_PAGES }` when the listing is empty, so a real Meta login with zero Pages (the person deselected all Pages in the dialog, or the token lacks `pages_show_list`) lands on `?connect=exchange_failed`. The banner then reads "Could not finish signing in. Check the app id, secret and redirect address", which sends the owner to the wrong fix. The spec edge case says "If no Pages come back, the chooser says so and lists the needed permissions", and contracts/connect.md maps `no_candidates` to the group's permissions message. The paste path happens to work, because it shows `result.message` directly (`paste.test.ts:83`). Nothing tests the OAuth path with the real Meta group and an empty `/me/accounts`.
-      owed:   Make one side match the other. Either `listPageCandidates` returns `{ ok: true, candidates: [] }` when no Page is listed (paste then shows its own no-accounts message at connect.ts:352), or the callback passes the group's refusal through to a `no_candidates` banner that names the permissions. Add a `meta-connect` (or `state-security`) case: real Meta group, fake-graph `/me/accounts` → `{ data: [] }` → `?connect=no_candidates` with a message listing the permissions.
-      traces: Edge case "Person deselects Pages or permissions", US2 AS4, FR-009, contracts/connect.md messages table
+      why:    (first review) The Meta group returned `{ ok: false, message: NO_PAGES }` for an empty `/me/accounts`. `handleOAuthCallback` maps that to `exchange_failed`, so the banner sent the owner to the app id and secret. The spec edge case says "If no Pages come back, the chooser says so and lists the needed permissions". contracts/connect.md:68 maps `no_candidates` to "the group's message (for Meta, which permissions are needed)".
+      re-review: **Partly fixed, still open.**
+        - **Fixed.** `listPageCandidates` now returns `{ ok: true, candidates: [] }` (src/providers/meta/candidates.ts:71-76). The callback therefore routes to `no_candidates` (src/server/services/connect.ts:329), and tests/integration/connect/meta-connect.test.ts:78-94 proves this with the real Meta group.
+        - **Open: the banner names no permissions.** `page.tsx` shows the generic `no_candidates` text, "No accounts were found for this login. Check the permissions you granted and try again." (src/app/p/[projectSlug]/accounts/page.tsx:34). It then appends the group's `callbackHint` (page.tsx:52-57), but `metaConnectGroup` defines none (src/providers/meta/connect-group.ts:16-50, unlike src/providers/threads/connect-group.ts:98).
+        - **Result.** Someone who deselected every Page in the login dialog is never told which five permissions Docket needs.
+        - **Misleading comment.** The comment the fix added at src/providers/meta/candidates.ts:71 says "the callback shows the permissions banner", and that is not true.
+        - **Weak test.** The new test asserts only that the result contains `no_candidates`. It does not check the permissions message that T076 asked for.
+        - **Paste path is fine.** connect.ts:366 appends `paste.help`, which lists the permissions.
+      owed:   Give `metaConnectGroup` a `callbackHint` that names `pages_show_list`, `pages_manage_posts`, `pages_read_engagement`, `instagram_basic` and `instagram_content_publish`. Word it so it also reads sensibly after the `platform_error` and `exchange_failed` banners, which share the hint. Then correct the comment at candidates.ts:71. Finally, extend the meta-connect F1 case to assert the hint: `findConnectGroup("meta")?.group.callbackHint` contains `pages_show_list`, and the callback result carries `group=meta`.
+      traces: Edge case "Person deselects Pages or permissions", US2 AS4, FR-009, contracts/connect.md:68
 
 - [x] MAJOR F2 — The generic connect UI hard-codes Meta's permission names, and the FR-002 guard test does not scan that code
       where:  src/app/p/[projectSlug]/accounts/ConnectGroupSection.tsx:83, tests/integration/meta/engine-unchanged.test.ts:63
-      why:    `ConnectGroupSection` is the generic per-group component that every OAuth group renders through, but its paste hint appends the literal "Needed permissions: pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic, instagram_content_publish." This is Meta-specific code in a route/UI file, which FR-002 says MUST NOT exist, and it breaks SC-008. The next entry (meta-threads) adds another group, which would show Facebook's permission list under Threads. The test written to catch this only scans `src/server/{scheduler,services,db/schema}` and `src/app/p/[projectSlug]/posts`, not `src/app/p/[projectSlug]/accounts/**` or `src/app/connect/**`. It also matches only quoted provider keys, so it would not catch permission strings anyway.
-      owed:   Move the permission text into `metaConnectGroup.pasteToken.help` (src/providers/meta/connect-group.ts:46), and have the component render `paste.help` only. Extend the scan roots to include `src/app/p/[projectSlug]/accounts` and `src/app/connect`, and add `pages_`/`instagram_` permission tokens to the forbidden pattern.
+      why:    (first review) The generic paste hint appended Meta's five permission names, and the FR-002 scan did not cover the accounts UI.
+      re-review: **Fixed.**
+        - `ConnectGroupSection` now uses `hint={paste.help}` (src/app/p/[projectSlug]/accounts/ConnectGroupSection.tsx:83).
+        - The permission names live in `metaConnectGroup.pasteToken.help` (src/providers/meta/connect-group.ts:46).
+        - The scan roots now include `src/app/p/[projectSlug]/accounts` and `src/app/connect` (tests/integration/meta/engine-unchanged.test.ts:66-73).
+        - The pattern now forbids `\b(pages|instagram)_[a-z_]+\b` (engine-unchanged.test.ts:81).
+        - The test passes on HEAD. The later 006 Threads group adds no provider strings to those roots.
+        - The paste path still lists the permissions, through connect.ts:366.
       traces: FR-002, SC-008, Constitution V
 
 - [ ] MINOR F3 — Facebook attempt summaries leave out the step detail that FR-033 requires, and are inconsistent with Instagram's
       where:  src/providers/facebook/publish.ts:67, src/providers/facebook/publish.ts:75, src/providers/instagram/publish.ts:21-32
-      why:    Instagram's `summarize` records the step, media type, image index, container id and status. Facebook records only `graphSummary` (HTTP status and Graph code, subcode, type and trace id). An `upload_photo_N` attempt therefore keeps neither the image index nor the returned photo id, and the final `attached_media` post does not record which photo ids it attached. This is safe to ship, but it leaves FR-033 partial for Facebook and makes a U1 failure harder to diagnose after the fact.
-      owed:   Add `request: { step, imageIndex? }` and `response: { photoId? / photoIds? }` to the Facebook summaries.
+      why:    (first review, unchanged) Facebook records only `graphSummary`, with no step, image index or photo ids.
       traces: FR-033
 
 - [ ] MINOR F4 — Candidates are not validated or de-duplicated as contracts/providers.md specifies
       where:  src/server/services/connect.ts:157-158, src/server/services/connect.ts:219-237
-      why:    The contract says the framework drops and `console.warn`s (key only) any candidate with a foreign provider key, invalid settings, or a duplicate `(providerKey, externalId)`. The code drops only foreign keys. A candidate with invalid settings makes `settingsSchema.parse` throw inside the chooser transaction, so the whole choice fails with a 500 instead of just that candidate being skipped. A duplicate is upserted twice. The Meta group never produces either today, so this is latent.
-      owed:   Filter candidates once, at store time (`encryptCandidates`) or read time: drop invalid settings and duplicates, and warn with the key only.
+      why:    (first review, unchanged) Only foreign provider keys are dropped. Invalid settings throw inside the chooser transaction, and duplicates are upserted twice. This is latent for Meta.
       traces: contracts/providers.md G5 rules
 
 - [ ] MINOR F5 — decisions.md says expired attempts are purged on callback traffic, but the callback never purges
-      where:  docs/decisions.md:263, src/server/services/connect.ts:262-320 (purge is called only at connect.ts:98 and connect.ts:344)
-      why:    The D9 entry lists "start, paste and callback" as purge points. `handleOAuthCallback` does not call `purgeExpiredConnectAttempts`. Expired rows are still unreadable straight away (`bound` requires `expires_at > now`), so this is a documentation inaccuracy about how long encrypted candidate rows persist (FR-010), not a leak path.
-      owed:   Either call the purge in the callback or correct the decisions entry.
+      where:  docs/decisions.md:263, src/server/services/connect.ts:262-320
+      why:    (first review, unchanged) This is a documentation inaccuracy, not a leak, because expired rows are unreadable anyway.
       traces: FR-010, FR-040
 
-- NOTE F6 — The last implement pass's work is uncommitted. `git status` shows `src/providers/instagram/validate.ts` (T062), `src/providers/{facebook,instagram}/validate.test.ts`, `docs/meta-setup.md`, `README.md`, `docs/adding-a-provider.md`, `docs/decisions.md`, `tests/integration/meta/{no-secrets,engine-unchanged}.test.ts`, `tests/integration/connect/meta-connect.test.ts` and four extended tests as staged or modified but not committed. A PR cut from `HEAD` alone would have no Instagram validation rules (US9), no setup doc (FR-036/037) and no no-secrets test (FR-034). This review judged the working tree. The remediation pass must commit these files with its own changes.
+- [ ] MINOR F8 — The paste "no Pages" test drives a shape the real Meta group no longer produces
+      where:  tests/integration/connect/paste.test.ts:83-88, src/server/services/connect.ts:366
+      why:    New in this re-review, for the hardening entry. The test stubs the throwaway group to return `{ ok: false, message: NO_PAGES }`. After `d712732`, the real Meta group returns `{ ok: true, candidates: [] }` instead. The pasted token then reaches connect.ts:366, which appends `paste.help`, and that text lists the permissions. The behaviour is correct by reading, but no test pastes a token into the real Meta group with an empty `/me/accounts`. This is spec.md:201 (US8 AS3).
+      owed:   Add a real-Meta-group paste case to `meta-connect.test.ts` asserting that the message contains `pages_show_list`.
+      traces: US8 AS3
 
-- NOTE F7 — `check_quota` deliberately goes ahead on any non-190 failure, rate limits included (src/providers/instagram/publish.ts:160-171, asserted at tests/integration/instagram/outcomes.test.ts:74-78). This follows FR-029/US5 AS3 ("an unreadable quota MUST NOT block") rather than the general US6 AS4 rule. It is safe, because a rate-limited `media_publish` is itself `retryable_error` (src/providers/meta/errors.ts:99). It is recorded here so the departure from the US6 table is visible.
+- NOTE F6 — The uncommitted working tree that the first review found is resolved. `ee07e17`, `18d125b` and `1f5d738` committed the Instagram validation, the no-secrets and UI tests, and the Meta docs before the merge at `4285587`.
+
+- NOTE F7 — `check_quota` deliberately goes ahead on any non-190 failure (first review, unchanged).
+
+- NOTE F9 — In tasks.md, `T076` and `T077` are still unticked, but the first review's text marked F1 and F2 as resolved. T077's work is done (see F2). T076's is half done (see F1). The new remediation task tells implement to tick both once F1 is closed, so `tasks.md` stops disagreeing with the code.
 
 ## Coverage
 
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-040) | 40 | 37 | 3 (FR-002 F2, FR-033 F3, FR-010 F5 doc only) | 0 | 0 |
-| Success criteria needing buildable work | 10 | 6 (SC-002–SC-007) | 2 (SC-008 F2; SC-010 — typecheck/lint/feature tests run here, full suite/build not re-run) | 0 | 0 (SC-001, SC-009 not checkable — live) |
-| User stories (acceptance scenarios) | 10 (US1–US10) | 9 | 1 (edge case under US1/US2 — F1) | 0 | 0 |
-| Constitution principles | 7 | 6 | 1 (V — F2) | 0 | 0 |
-| Plan touch-points (framework gaps G5–G8, one migration, registry lines) | 6 | 6 | 0 | 0 | 0 |
+| Blocking findings from the first review (F1, F2) | 2 | 1 (F2) | 1 (F1: routing fixed, permissions not listed) | 0 | 0 |
+| Merge-gating notes (F6) | 1 | 1 | 0 | 0 | 0 |
+| Remediation commits checked for regression | 5 (`d712732`, `08f53d0`, `ee07e17`, `18d125b`, `1f5d738`) | 5 (no regression found in the files they changed) | 0 | 0 | 0 |
+| Obligations F1/F2 trace to (edge case "deselects Pages", US2 AS4, US8 AS3, FR-002, FR-009, SC-008, Constitution V) | 7 | 5 | 2 (edge case and contracts/connect.md:68, the permissions message on the OAuth path) | 0 | 0 |
 
-How the major obligations were checked:
-- **Callback order (FR-007/008, SC-002):** connect.ts:266-283 against research D5. Every refusal comes before `consumeState` and before `exchangeCode`. Single use is enforced by a conditional `UPDATE … WHERE callback_at IS NULL AND expires_at > now` (connect-attempts.ts:85-91).
-- **G7 (FR-017):** publishing.ts:352-392. The error becomes "Reconnect … to publish", and `markCredentialsInvalid` runs only while the ciphertext is unchanged (accounts.ts:248-262). The result is `fatal_error`, never `ambiguous`.
-- **Ambiguity (FR-030/US6):** errors.ts:61-104. On `mayPublish` steps, after-send network errors, unparseable replies, 5xx and temporary codes are ambiguous, and rate limits are retryable. A 2xx with no id is ambiguous in both providers (facebook/publish.ts:83-85, instagram/publish.ts:194-200).
-- **Instagram machine (FR-026/028):** state.ts:3-7 and publish.ts:118-153. Checks back off from 10 s, doubling, to at most 5 min. The 60-minute cap runs from `createdAt`. `EXPIRED` recreates at most twice, and `PUBLISHED` is ambiguous. The only recreation after the create step is the 23 h guard in `check_quota`, which runs before any publish request.
-- **Variants (US4 AS9):** the engine resolves media via `resolvePublishMedia` with Instagram's capabilities (JPEG only, `maxWidth` 1440, 8 MB), using the 003 planner (media.ts:111-147).
-- **Secrets (FR-034):** tokens go in POST bodies, GET tokens are scrubbed from every message (errors.ts:24-33), and the pasted and user tokens are never persisted (connect.ts:331-373). This is backed by the passing no-secrets test.
+For coverage of FR-001–FR-040, the success criteria and the constitution as a whole, see the first review at `b65778d`. This scoped pass does not re-derive it.
+
+Regression checks on the remediated files:
+- `d712732` has two callers of `listPageCandidates`: the OAuth exchange and the paste exchange, both at `src/providers/meta/connect-group.ts:6-14`. Both handle `{ ok: true, candidates: [] }`. The callback maps it to `no_candidates` (connect.ts:329), and paste returns a message containing `paste.help` (connect.ts:366). The truncation notice is unaffected (candidates.ts:75).
+- In `08f53d0`, the widened scan regex does not flag the Threads group, because it lives under `src/providers/`, which the scan does not cover. All 6 targeted test files pass.
 
 ## What I could not check
 
-- **Anything live against Meta:** the real login dialog and `config_id` vs `scope` (R4), the code and long-lived exchanges, the real `/me/accounts` shape, multi-photo `attached_media` (U1), a `localhost` redirect (U2), the real Graph error codes (R3) and `content_publishing_limit` fields (R5). All of this is mocked. T075 (owner, quickstart §8) remains open, as intended.
-- **SC-001 and SC-009** (a 2-minute connect; a new deployer completing `docs/meta-setup.md` without help). Both need a human and a real Meta app.
-- **The browser flow:** the redirect from a Server Action to an external URL in the running Next 16 app, client-side focus and announcement behaviour on the chooser, and the clipboard in `CopyField`. These were checked only through Vitest-rendered components, not a browser.
-- **The full gate set** (`pnpm test` across the whole repo, `pnpm build`, `pnpm db:check`). The implement pass recorded these as passing in docs/decisions.md. I re-ran only typecheck, lint and the 53 feature-related test files.
-- **Load and concurrency beyond the tests:** behaviour with 500 Pages and a ~1 MB candidate ciphertext, and purge behaviour on a large `connect_attempts` table.
+- **The rendered banner in a browser.** I traced the `no_candidates` banner and hint from source (page.tsx:30-58), and did not render it in the running app.
+- **A live Meta login with every Page deselected.** I could not confirm that the real `/me/accounts` returns `{ data: [] }` there, rather than an error. That needs a real Meta app, which is still owner task T075.
+- **Whether F3–F5 were fixed by later entries.** That is out of scope for this re-review.
+- **The full gate set** (`pnpm test`, `pnpm build`, `pnpm db:check`). The constitution leaves these to implement's final pass and CI. I ran only the 6 affected test files.

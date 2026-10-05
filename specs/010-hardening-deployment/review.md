@@ -1,242 +1,186 @@
-# Review: Hardening for real use — failures view, limits audit, security pass, configuration and deployment
+# Review: Hardening for real use — failures view, limits audit, security pass, configuration and deployment (010), re-review after remediation
 
-Reviewed 122 files changed across 12 commits, against `a50f8ba...HEAD` (the merge base with `origin/main`). This is a review of the diff, not of the present state alone.
+This is a **re-review**, so it is scoped. The constitution (`.specify/memory/constitution.md:125-128`) says a re-review "checks ONLY that each earlier finding is fixed and that the files changed by the remediation introduced no regression". Anything else it notices is recorded as MINOR.
 
-**Read in full** (the file, or its whole diff plus the helpers it calls):
+The first review is in git at `e48d1ea`. It covered the full 122-file feature diff (`a50f8ba...3cd060a`) across every category, and found two MAJOR findings (F1, F2), seven MINOR (F3–F9) and three NOTEs (F10–F12).
 
-- Services, DAL and engine:
-  - `src/server/services/failures.ts`
-  - `src/server/services/posts/{index,view,validate}.ts`, plus `gate`, `withLockedTarget` and `queueTargetsInTx`
-  - `src/server/services/queue/index.ts` (`peekNextFree`, `allocateNextFree`)
-  - `src/server/dal/{targets,attempts,audit}.ts`
-  - `src/server/scheduler/{publishing,limits,http}.ts` (all of `execute()`)
-  - `src/server/services/webhooks/{deliver,destination,endpoints}.ts`
-  - `src/server/net/safe-fetch.ts`
-  - `src/server/services/{audit,accounts}.ts`
-  - `src/providers/{limits,types}.ts`, `src/providers/bluesky/{index,settings}.ts`
-  - `drizzle/0007_shallow_stephen_strange.sql` and the schema diff
-- Screens:
-  - `src/app/p/[projectSlug]/failures/page.tsx`
-  - `src/components/targets/TargetResolution.tsx`
-  - `src/app/p/[projectSlug]/posts/actions.ts`
-  - `src/app/p/[projectSlug]/posts/[postId]/page.tsx`
-  - `src/app/p/[projectSlug]/layout.tsx`, `src/components/shell/LeftNav.tsx`
-- HTTP and security:
-  - `src/proxy.ts`, `src/lib/http/{same-origin,security-headers}.ts`
-  - `next.config.ts`, `src/app/layout.tsx`
-  - `src/server/http/body.ts`, `src/server/api/handle.ts`, `src/app/p/[projectSlug]/compose/check/route.ts`
-- Configuration and deployment:
-  - `src/server/startup/{validate,index}.ts`, `src/worker.ts`, `scripts/prestart.mjs`
-  - `src/server/env.ts`, `src/server/llm/config.ts`, `src/server/config-registry.ts`, `drizzle.config.ts`
-  - `docker-compose.yml`, `package.json`, `scripts/smoke.ts`
-- Docs: `docs/{deployment,limits,security}.md` and the 010 section of `docs/decisions.md`.
-- Tests:
-  - `tests/integration/limits/enforcement.test.ts`
-  - `tests/integration/docs/{limits-inventory,security-findings,provider-guide}.test.ts`
-  - `tests/integration/security/{secret-scan,csrf,headers}.test.ts`
-  - `tests/integration/failures/{concurrency,authz,ui,nav}.test.ts(x)`
-  - `tests/integration/scheduler/pre-call-failures.test.ts`
-  - `tests/integration/webhooks/destination.test.ts`
-  - `tests/lint/env-coverage.test.ts`
-  - `tests/integration/posts/resolve-url.test.ts`
-  - the diffs of `tests/integration/{audit,scope-check,tick-endpoint}.test.ts` and `src/server/net/safe-fetch.test.ts`
+The feature has since been merged to `main` (PR #15, merge `e6c61e0`). The branch tip is `85f6d88` (`origin/010-hardening-deployment`). `git diff --stat 85f6d88 main -- tests/ src/server/services/media.ts docs/limits.md docs/security.md` is empty, and no commit since the merge touches `src/` or `tests/` (`git log e6c61e0..main -- src tests`). So the remediated code on `main` is exactly what is reviewed here.
 
-**Sampled:**
+- **Remediation diff, read in full:** 4 commits and 11 files, `e48d1ea..85f6d88`.
+  - `b070fc3` (F1): `tests/integration/security/secret-scan.test.ts`, `docs/security.md`
+  - `fdf43b4` (F2):
+    - `tests/helpers/limit-rows.ts` (new)
+    - `tests/integration/limits/enforcement.test.ts`
+    - `tests/integration/docs/limits-inventory.test.ts`
+    - `docs/limits.md`
+    - `src/server/services/media.ts` (`ACCEPTED_TYPES` renamed and exported as `UPLOAD_MIME_TYPES`)
+    - the F2 note in `docs/decisions.md:428`
+  - `5e62266`: bookkeeping — `review.md` F1/F2 ticked, `tasks.md` T076/T077 ticked, and the F1 judgement call in `docs/decisions.md:455`.
+  - `85f6d88`: `docs/deployment.md` "Verified run" table, and T068 ticked (`tasks.md:153`).
+- **Present state on `main`, checked:** the files above, plus whether F3–F9 are still open (see each finding).
+- **Not re-reviewed:** the rest of the 122-file feature diff. The first review covered it, and the re-review rule excludes new lines of inquiry.
 
-- `README.md` (section order and quick start).
-- The test titles of `tests/integration/{instagram,threads}/carousel.test.ts`, `tests/integration/facebook/multi-photo.test.ts`, `tests/integration/bluesky/images.test.ts` and `src/providers/media.test.ts`.
-- `src/server/services/media-variants.ts` (`adaptedMediaFor`).
-- Next's own Server Action origin check, `node_modules/next/dist/server/app-render/action-handler.js:427-470`.
+**Probes:**
 
-**Not reviewed:**
-
-- Generated files, which `pnpm db:check` already covers: `drizzle/meta/0007_snapshot.json` and `_journal.json`.
-- The body of `.env.example`, which `tests/lint/env-coverage.test.ts` checks.
-- The body of `docs/adding-a-provider.md`, which `provider-guide.test.ts` checks.
-- Tests I did not read: `tests/integration/failures/{list,attempts,resolve,requeue,retry}.test.ts`, `tests/integration/security/{body-limit,cookies}.test.ts`, `tests/integration/docs/{deployment,readme}.test.ts`, the startup and prestart tests, and the unit tests next to `body.ts`, `same-origin.ts`, `security-headers.ts` and `services/failures.ts`.
-- `DeletePostButton.tsx`, `failures/loading.tsx` and `tests/helpers/failures.ts`.
-- `contracts/ui.md`, `contracts/docs-and-config.md`, `research.md` and `quickstart.md`.
-
-I did not re-run the suite (constitution: review reads the implement phase's results). I relied on the final gate recorded in `docs/decisions.md` (010 "Final gate results": tsc, lint, db:check, vitest 306 files / 2,579 tests and build all green). The only things I ran were read-only probes: the proxy matcher regex, and `docker info`, which reports the daemon unreachable.
+- **Remediation tests.** On `main` I ran `pnpm vitest run tests/integration/security/secret-scan.test.ts tests/integration/limits/enforcement.test.ts tests/integration/docs/limits-inventory.test.ts`: 3 files, 85 tests, all passed.
+- **Test isolation.** The new scan deletes every user (`secret-scan.test.ts:182-183`). I checked that this is safe:
+  - `vitest.config.ts` gives each worker its own database clone, and files run serially within a worker.
+  - `tests/integration/bootstrap.test.ts:80-81` already uses the same pattern.
+  - The only other reader of install state, `tests/integration/anonymous-entry.test.ts:14`, expects setup to be unavailable, which the scan leaves true.
+- **The rename.** `UPLOAD_MIME_TYPES` (`src/server/services/media.ts:43`) is display-only. It lists the same three types the upload processor stores (`src/server/media/process.ts:10`). No reference to `ACCEPTED_TYPES` remains.
+- **Not run:** the full suite, lint, typecheck and build, per the constitution's review rule.
 
 ## Verdict
 
-**Not yet.** The feature mostly works and hangs together, but two P1 deliverables claim more than they prove.
+**The remediation holds, and nothing blocks the merge** (which has already happened).
 
-What holds up:
+**F1 is fixed.** The secret scan now:
 
-- **Code structure.** The three implement passes reuse one another's work rather than duplicating it:
-  - one shared `TargetResolution` component for both screens;
-  - one `retryBlockedReason`, shared by the service, the failures rows and the post view;
-  - one allocator (`allocateNextFree`) for requeue;
-  - one `validateResolvedContent`, shared by the scheduling gate and the engine;
-  - one `validateConfiguration`, used by the web process, the worker and prestart;
-  - one webhook address policy, checked at save time and inside the socket lookup.
-- **Behaviour I traced:**
-  - the locking and guarded updates for resolve, requeue and retry;
-  - the pre-call classification in the engine;
-  - the tick refusals;
-  - the bounded body reader;
-  - the migration.
+- seeds `META_APP_SECRET` and `THREADS_APP_SECRET`;
+- runs first-user setup through the setup service;
+- signs in for real, and scans the session token everywhere except the three appearances it asserts by location;
+- drives Meta and Threads connects whose platform errors echo the app secret;
+- resolves two ambiguous targets (published with a URL; not published and requeued).
 
-  All of them match the spec and data model. I found no secret leak and no authorization gap.
+`docs/security.md` now lists exactly what is scanned, and what is not.
 
-What blocks the merge — two pieces of evidence the spec makes the point of P1 stories:
+**F2 is fixed.** Every `docs/limits.md` row now cites a test generated from that provider's own capability values. The doc test now rejects a citation that names no real test, or a test that sits in a suite other than the row's enforcement point.
 
-- **The end-to-end secret scan (US3, FR-020).** It omits secrets the spec names: session tokens, and the Meta and Threads app secrets. It also skips the setup and resolution steps the spec requires it to drive. Even so, `docs/security.md` says it covers "every environment secret".
-- **The limits inventory (US2, FR-014, FR-017, SC-004).** About 15 of its rows cite tests that never break the limit in that row. Its doc test only checks that the cited file exists, so it cannot notice.
-
-Neither is a runtime defect. Both make the artifact the owner is meant to trust misleading, and both are cheap to fix. I would fix both (two tasks below), leave the MINORs for later, and have a human run the Docker walkthrough (T068) before calling deployment verified.
+Neither fix introduced a regression I could find. The seven MINOR findings from the first review are all still open and are carried forward unchanged. I add one new MINOR (F13): the recorded Docker run does not show SC-009, and the doc already says so.
 
 ## Findings
 
-- [x] MAJOR F1 — The end-to-end secret scan does not seed or drive everything FR-020 lists, and the findings record says it does
-      where:  tests/integration/security/secret-scan.test.ts:5-20, tests/integration/security/secret-scan.test.ts:158-279, tests/integration/security/secret-scan.test.ts:219, docs/security.md:9-10
-      why:
-        - **No session token.** The scan never creates a real session. It mocks `getSession` with a fake id (line 219), and the only sign-in it attempts is for a user who does not exist, so no session token is ever produced or scanned.
-        - **No Meta or Threads app secrets.** `META_APP_SECRET` and `THREADS_APP_SECRET` are absent from `ENV` (lines 5-20). They are real secrets the app holds, read through the provider-declared environment, and contracts/http-security.md §6 lists them.
-        - **Two required steps are not driven.** The flow never runs setup (it uses factory fixtures) and never resolves an ambiguous target, though FR-020 names both "setup" and "resolution".
-
-        So a leak of a session token, or of a Meta or Threads app secret (for example into a log line, an error page or an attempt summary), would pass this test. Meanwhile `docs/security.md:9` says the scan covers "every environment secret, stored credential …", which the code does not support. The spec makes this test the proof for US3 ("proof — not a promise"), so the record should not overstate it.
-      owed:
-        - Seed distinctive `META_APP_ID`/`META_APP_SECRET` and `THREADS_APP_ID`/`THREADS_APP_SECRET` values.
-        - Create a real user and sign in through the auth handler, so a real session token exists. Add the token to the scanned secrets, excluding only its own `Set-Cookie` header by location, and assert that one appearance separately.
-        - Drive first-user setup through the setup service, and an ambiguous target through `resolveAmbiguous` (published with a URL, and not-published with requeue).
-        - Bring the "Secrets in …" rows of `docs/security.md` into line with what the test actually covers.
+- [x] MAJOR F1 — The end-to-end secret scan did not seed or drive everything FR-020 lists — **resolved**
+      where:  tests/integration/security/secret-scan.test.ts:17-23, tests/integration/security/secret-scan.test.ts:151-152, tests/integration/security/secret-scan.test.ts:181-216, tests/integration/security/secret-scan.test.ts:238-254, tests/integration/security/secret-scan.test.ts:270-281, tests/integration/security/secret-scan.test.ts:349-356, tests/integration/security/secret-scan.test.ts:386-391, docs/security.md:9-10, docs/security.md:23
+      why (each point from the first review, checked against the code):
+        - **Meta and Threads app secrets.** They are now seeded in `ENV` (:17-20) and added to `ENV_SECRETS` (:151-152).
+          - The connect runs through `connect.startOAuthConnect` and `handleOAuthCallback`, bound to the real session.
+          - The fake Graph returns errors that echo each secret (:240-241).
+          - The test asserts that both exchanges sent the secret to the platform (:252), so the secret really is in play in this run.
+        - **Session token.** A real `sign-in/email` goes through the auth handler, and the token is read from the `session` table (:190-200).
+          - Its three appearances are asserted: the `Set-Cookie` (:205), the sign-in body's `token` (:207) and `get-session`'s `session.token` (:353).
+          - Each is then removed by location. The rest of both responses is scanned (:208-210, :354-356), and the token is in the scanned set (:387).
+          - The JSON-body appearances are a real finding. They are recorded honestly as low and accepted (`docs/security.md:23`, `docs/decisions.md:455`), not hidden.
+        - **Setup.** It is driven through `setup.createFirstUser`, including a refused second call (:181-187), and the setup password is scanned (:386).
+        - **Resolution.** `resolveAmbiguous` runs on two genuinely ambiguous targets: 502s on `createRecord` whose messages echo tokens (:260-261, :270-281). The test asserts the results `["published", "scheduled"]`.
+        - **The record now matches the code.** The "Secrets in …" rows of `docs/security.md` list exactly these steps and secrets, and name what is not scanned (database URL password, `BOOTSTRAP_ADMIN_PASSWORD`, `MINIO_ROOT_PASSWORD`).
+        - **Regression check.** The scope now comes from the setup user added as owner (`addMember`, :215-216) rather than `env.scope`. The page renders use the real session id (:310). The deliberate-leak test (:165) is unchanged, so the scan is still proven able to fail.
       traces: FR-020, FR-028, SC-005, US3 AS1
 
-- [x] MAJOR F2 — About 15 limits-inventory rows cite a test that does not break that limit, and the doc test cannot notice
-      where:  docs/limits.md:22, docs/limits.md:25, docs/limits.md:31, docs/limits.md:33-37, docs/limits.md:49-51, docs/limits.md:53-54, docs/limits.md:82, docs/limits.md:85, tests/integration/limits/enforcement.test.ts:53-70, tests/integration/limits/enforcement.test.ts:86-88, tests/integration/limits/enforcement.test.ts:117, tests/integration/docs/limits-inventory.test.ts:96-101
-      why:
-        - **Instagram planner rows** (bytes, formats, max width, min aspect, max aspect; limits.md:33-37) cite `tests/integration/instagram/carousel.test.ts`. That file's only test publishes 2- and 4-image carousels; nothing in it is oversize, PNG, too wide or out of aspect range.
-        - **Threads planner rows** (bytes, formats, min width, min aspect, max aspect; :49-51, :53-54) cite `tests/integration/threads/carousel.test.ts`. Of these limits, it only exercises max width.
-        - **Facebook "formats"** (:22) cites `facebook/multi-photo.test.ts`, which never uploads a PNG.
-        - **Mock "formats"** (:82) cites the "capabilities are refused" describe, but `violations()` (enforcement.test.ts:53-70) generates no format row.
-        - **Facebook and mock "publish limit: account limit"** (:25, :85) cite "publish limits defer". That describe loops over `providerPublishLimits(provider)` (:117), which is empty for both, so neither provider gets a test there.
-        - **Instagram "text length"** (:31) cites "text rows:", but that describe skips media-required providers (:86-88).
-
-        Some of these limits are probably enforced and tested elsewhere. The generic planner has refusal tests in `src/providers/media.test.ts:63-80`, but those use generic constraints, not each provider's values. Even so, the inventory, which FR-014 requires to name "the test that proves enforcement", points at the wrong place. US2's Independent Test ("for each row, run the named test") proves nothing for these rows, and SC-004 ("100% of entries … have a passing test") is not met as written.
-
-        `limits-inventory.test.ts:96-101` only checks that the file exists. A quoted title fragment is optional, and when present it is matched anywhere in the file's text. So a wrong citation passes, and the next drift will pass too.
-      owed:
-        - For every row, cite a test that breaks exactly that limit using the provider's own capability values and asserts the documented outcome: refusal, adaptation, or deferral with no platform request.
-        - Where no such test exists, add rows to `enforcement.test.ts`:
-          - planner refusals and adaptations driven through `mediaConstraintsOf(provider.capabilities)` / `planImage`, per provider;
-          - a format row;
-          - an account-level publish-limit deferral for Facebook and the mock.
-        - Make the doc test require a quoted fragment on every row, and match it against a real `it(` / `describe(` title, or a generated `"<providerKey>: <field>"` name, rather than raw file text.
+- [x] MAJOR F2 — About 15 limits-inventory rows cited a test that did not break that limit — **resolved**
+      where:  tests/helpers/limit-rows.ts:48-69, tests/helpers/limit-rows.ts:92-176, tests/helpers/limit-rows.ts:193-197, tests/integration/limits/enforcement.test.ts:50-56, tests/integration/limits/enforcement.test.ts:67-95, tests/integration/limits/enforcement.test.ts:97-111, tests/integration/limits/enforcement.test.ts:113-157, tests/integration/docs/limits-inventory.test.ts:119-138, docs/limits.md:22-87
+      why (each point from the first review, checked against the code):
+        - **Instagram and Threads planner rows.** These are bytes, formats, min/max width and min/max aspect. They now drive `planImage` over `mediaConstraintsOf(provider.capabilities)` (`limit-rows.ts:178-179`), with each provider's own values:
+          - an oversize file must derive a `compress` step to `c.maxBytes`;
+          - a type the provider does not accept must derive `convert`;
+          - too wide must derive `downscale` to exactly `maxWidth`;
+          - too small and out-of-aspect must refuse with `image_too_small` or `aspect_ratio_out_of_range`.
+          Each row also checks an asset just inside the limit, which must not trigger the same rule (`enforcement.test.ts:102-107`). That gives every row a case that fails if the boundary moves.
+        - **Formats for Facebook, Bluesky and the mock.** These rows use the first uploadable type the provider does not accept (WebP), so a real conversion is exercised (`limit-rows.ts:119-131`).
+        - **Account-level limits.** For Facebook and the mock, a `none` publish limit is now proved with an account-level limit set through `accounts.setPublishLimit` (`enforcement.test.ts:119-124`). The test asserts the provider really declares none.
+        - **Instagram text length.** It now runs end to end with a stored JPEG attached (`enforcement.test.ts:75-76`), so only the text breaks the limit.
+        - **The doc test.** It now:
+          - requires a quoted name on every row (`limits-inventory.test.ts:125`);
+          - for `enforcement.test.ts`, requires exactly `<provider>: <category>` and that a test of that name is generated in the suite matching the row's "Enforced in" cell (:127-134);
+          - elsewhere, matches only literal `describe`/`it`/`test` titles, not raw file text (:136).
+          So the wrong-citation case F2 described now fails.
+        - **The Threads carousel-minimum note.** It moved to a real literal title in `tests/integration/threads/publish-e2e.test.ts`.
+        - **Regression check.** `UPLOAD_MIME_TYPES` (`src/server/services/media.ts:43`) is a rename and export only. `mediaStatus` returns the same list, and nothing else in `src/` read the old name.
       traces: FR-014, FR-017, SC-004, US2 AS1
 
-- [ ] MINOR F3 — The proxy's same-origin guard is skipped for any path ending in a static-file extension, and Server Actions are reachable there
-      where:  src/proxy.ts:92, src/proxy.ts:49-59, node_modules/next/dist/server/app-render/action-handler.js:440-445
-      why:
-        - **The matcher skips these paths.** It excludes `.*\.(?:ico|png|jpg|…)$`. Probed: `/p/acme/posts/x.png` does not match, while `/p/acme/posts/abc` does.
-        - **A page still answers there.** That path is served by `posts/[postId]/page.tsx`, whose bundle includes the post actions. A Server Action can be invoked on it, either with the `Next-Action` header or with a no-JS form carrying a `$ACTION_ID_…` field.
-        - **Next's own check has the hole D16 closes.** It refuses a mismatched `Origin`, but it lets a request with no `Origin` through with only a warning (action-handler.js:440-445). That missing-`Origin` case is exactly what D16 added the proxy guard to close, and on these paths the guard does not run.
-
-        It is hard to exploit. Browsers send `Origin` on cross-origin POSTs, and `SameSite=Lax` keeps the session cookie off cross-site POSTs. So this is a defence-in-depth gap rather than a working CSRF. The CSRF tests call `proxy()` directly, so they bypass `config.matcher` and cannot see it.
-      owed: Apply the guard to non-GET requests whatever the extension. For example, narrow the matcher exclusion to `GET`/`HEAD` (via `has`/`missing`), or exclude only `/_next/*` and real `public/` files. Then add a test that asserts the matcher includes a POST to a `.png` page path.
+- [ ] MINOR F3 — The proxy's same-origin guard is skipped for any path ending in a static-file extension, and Server Actions are reachable there (carried forward, still open)
+      where:  src/proxy.ts:92, node_modules/next/dist/server/app-render/action-handler.js:440-445
+      why: The matcher is unchanged on `main`, so the reasoning in the first review (`e48d1ea`) still applies. Next's own action check lets a request with no `Origin` header through with only a warning, which is the gap D16 added the proxy guard to close. On these paths the guard never runs. This is defence in depth, not a working CSRF: `SameSite=Lax` and browsers' `Origin` header block the practical attack.
+      owed: Apply the guard to non-GET requests whatever the extension, and add a matcher test for a POST to a `.png` page path.
       traces: FR-021, SC-006
 
-- [ ] MINOR F4 — Past the last page, the failures view says "Nothing needs attention"
-      where:  src/app/p/[projectSlug]/failures/page.tsx:166-167, src/app/p/[projectSlug]/failures/page.tsx:202-216
-      why:
-        - `empty` is `rows.length === 0`, and `filtered` ignores `page`.
-        - So `?page=N` past the end shows the "Nothing needs attention. Every post that was due went out…" empty state and no pagination. This happens after resolving the last row on page 2, which calls `refresh()` on the same URL.
-        - Meanwhile the summary line above it still says, for example, "3 need your decision · 30 failed".
-      owed: When `list.filtered > 0` but the page is empty, show "This page is empty" with a link to the last page, or clamp the page in `listFailures`.
+- [ ] MINOR F4 — Past the last page, the failures view says "Nothing needs attention" (carried forward, still open)
+      where:  src/app/p/[projectSlug]/failures/page.tsx:166, src/app/p/[projectSlug]/failures/page.tsx:202
+      why: `empty` is still `list.rows.length === 0`, and it ignores how many rows match in total (`list.filtered`).
+      owed: Show "This page is empty" with a link to the last page, or clamp the page in `listFailures`.
       traces: FR-004, FR-013
 
-- [ ] MINOR F5 — Requeue skips the variant preparation that every other scheduling path runs, so a missing variant becomes a spurious conflict
-      where:  src/server/services/posts/index.ts:710, src/server/services/posts/index.ts:440
-      why:
-        - `addToQueue` (:440), `scheduleAt` and `publishNow` call `prepareForScheduling` before their transaction.
-        - The requeue branch of `resolveAmbiguous` calls `gate` (:710) directly. `adaptedMediaFor` only reads variants (media-variants.ts:204-215). An image target whose variant is missing therefore fails the gate with `variant_failed`.
-        - A variant goes missing when, for example, a deploy changes the provider's media constraints and so the variant hash. When that happens, the preview offers only "don't requeue", and the server raises a `ConflictError`, although Add to queue would have succeeded.
-      owed: Call `prepareForScheduling(scope, target.postId, { targetIds: [targetId] })` before `withLockedTarget` when `requeue` is true, as `addToQueue` does.
+- [ ] MINOR F5 — Requeue skips `prepareForScheduling`, so a missing variant becomes a spurious conflict (carried forward, still open)
+      where:  src/server/services/posts/index.ts:681-752, src/server/services/posts/index.ts:440
+      why: `addToQueue` (:440), `scheduleAt` (:581) and `publishNow` (:596) prepare variants first. `resolveAmbiguous` still does not.
+      owed: When `requeue` is true, call `prepareForScheduling(scope, target.postId, { targetIds: [targetId] })` before `withLockedTarget`.
       traces: FR-008, constitution IV
 
-- [ ] MINOR F6 — On the failures view, the result announcement and the focus are probably lost when the row disappears
-      where:  src/components/targets/TargetResolution.tsx:106, src/components/targets/TargetResolution.tsx:55-71, src/app/p/[projectSlug]/posts/actions.ts:33
-      why:
-        - The `LiveRegion` lives inside the row's `TargetResolution`.
-        - Every successful action calls `refresh()`, and the refreshed list no longer contains the row. The component unmounts in the same update that sets the message, so a screen reader probably hears nothing.
-        - The focused button is removed, so focus probably falls back to `<body>`.
-        - The post detail page keeps its target mounted, so it is unaffected.
-        - This is plausible from the code, not observed: it needs a browser.
-      owed: Lift the announcement into a page-level live region (or one in the layout), and move focus to the table caption or the next row after a successful action.
+- [ ] MINOR F6 — On the failures view, the result announcement and the focus are probably lost when the row disappears (carried forward, still open; needs a browser to confirm)
+      where:  src/components/targets/TargetResolution.tsx:106, src/app/p/[projectSlug]/posts/actions.ts:33
+      owed: Move the announcement to a page-level live region. After a successful action, move focus to the table caption or the next row.
       traces: FR-013
 
-- [ ] MINOR F7 — A blocked retry always links "Reconnect <account>", even when reconnecting cannot help
+- [ ] MINOR F7 — A blocked retry always links "Reconnect <account>", even when reconnecting cannot help (carried forward, still open)
       where:  src/components/targets/TargetResolution.tsx:116-122, src/server/services/failures.ts:161
-      why:
-        - For a removed account, the row reads "This account was removed, so the post can't be retried. Reconnect Removed account".
-        - For an unregistered provider, it offers a reconnect link that cannot help.
-      owed: Show the reconnect link only when the account exists and needs reconnecting. Otherwise show the reason alone.
+      owed: Show the reconnect link only when the account exists and needs reconnecting.
       traces: FR-009, US1 AS7
 
-- [ ] MINOR F8 — The save-time "couldn't look up that host" warning never reaches the user
+- [ ] MINOR F8 — The save-time "couldn't look up that host" warning never reaches the user (carried forward, still open)
       where:  src/server/services/webhooks/endpoints.ts:108, src/app/p/[projectSlug]/settings/webhooks/actions.ts:37
-      why: `createEndpoint` returns `destinationWarning`, but the settings action destructures only `endpoint`, `secret` and `httpWarning`. Someone who mistypes a hostname gets a silently saved endpoint, which every delivery then refuses or fails. The warning is a dead end: one pass produced it and no later pass shows it.
-      owed: Pass `destinationWarning` through the action and show it next to the `http` warning.
-      traces: FR-023 (contracts/services.md §5)
+      why: `createEndpoint` still returns `destinationWarning`, and no caller in `src/` reads it.
+      owed: Pass it through the action and show it next to the `http` warning.
+      traces: FR-023
 
-- [ ] MINOR F9 — Two new behaviours have no test
+- [ ] MINOR F9 — Two new behaviours have no test (carried forward, still open)
       where:  src/app/p/[projectSlug]/posts/[postId]/page.tsx:131-163, src/server/scheduler/publishing.ts:379-380
-      why:
-        - **The post detail page additions (FR-011).** These are the attempt count, the "Who" column, the `safeExternalHref` fallback to plain text, and the shared resolution dialogs. No test renders the page; the plan's `tests/integration/posts/detail-resolution.test.tsx` was not written. Only the pure helpers are tested (`resolve-url.test.ts`).
-        - **The engine's new "any other pre-call throw is retryable" branch.** This is a behaviour change from ambiguous to retryable for, say, a database error before `advance`. `pre-call-failures.test.ts` covers only unreadable credentials, unparsable settings and the post-call ambiguous case.
-      owed: Render `PostPage` for an ambiguous target and a failed target, with a `javascript:` external URL stored. Add a pre-call test that makes `getCredentialsCiphertext` throw and expects `retryable_error`, never `ambiguous`.
+      why: Neither of these tests exists in `tests/`:
+        - the plan's `tests/integration/posts/detail-resolution.test.tsx`;
+        - a pre-call test that makes `getCredentialsCiphertext` throw and expects the target to be retried, not marked ambiguous.
+      owed: as in the first review.
       traces: FR-011, FR-012
 
-- NOTE F10 — The empty-means-unset rule is implemented three times; the helper meant to be the single reading is used only by a test.
-  - `directUrlOf` (`src/server/env.ts:302`) is called only from `tests/startup/prestart.test.ts`.
-  - The rule is inlined at `src/server/env.ts:310`, `scripts/prestart.mjs:14` and `drizzle.config.ts:4`. That last one is justified in decisions D28: drizzle-kit cannot resolve the alias.
-  - All three use `||`, so FR-033 holds today.
+- [ ] MINOR F13 — The recorded Docker run does not show SC-009 (the restored backup contains the posts created before it), though §4 reads as if the backup was proven
+      where:  docs/deployment.md:56, docs/deployment.md:86, scripts/smoke.ts
+      why:
+        - SC-009 requires that "a database backup … restored with the documented procedure contains the posts created before the backup".
+        - The run in `85f6d88` shows only that `pg_dump`/`pg_restore` exit 0 and the app comes back healthy. Line 56 says this honestly.
+        - But the backup section's footnote now reads "(Run 2026-10-04 — see 'Verified run' above.)" (:86). A reader who stops there sees a proven backup.
+        - The smoke script creates a post in each run, but never checks that an earlier run's post survived.
+      owed: Either:
+        - make the second smoke run (or a separate check) assert that the post id from the first run is still listed after the restore, and record that; or
+        - change :86 to say the restore ran but data survival was not checked.
+      traces: SC-009, FR-035
 
-- NOTE F11 — Import cycle: `services/posts/index.ts:19` re-exports `./view`, `view.ts:8` imports `../failures`, and `failures.ts:10` imports `./posts`. It works because every use happens at call time, but a top-level use added later would see `undefined`.
+- NOTE F10 — The empty-means-unset rule is still implemented three times (`src/server/env.ts:302`, `src/server/env.ts:310`, `scripts/prestart.mjs:14`, `drizzle.config.ts:4`), and `directUrlOf` is still used only by a test. Unchanged from the first review; FR-033 holds.
 
-- NOTE F12 — The Docker checks are honestly not done, so deployment is unverified.
-  - The clean-checkout run (FR-037), backup and restore (FR-035, SC-009), SC-008 and the browser CSP-console check (FR-024) are all recorded as NOT VERIFIED (`docs/deployment.md:43`, `:61`). This is what the spec requires when Docker is unavailable, and I confirmed the Docker daemon is unreachable here.
-  - T068 (`tasks.md:153`) stays open and blocked for a human. It is not counted as a defect, but the feature is not deploy-verified until it runs.
+- NOTE F11 — The import cycle `services/posts/index.ts` → `./view` → `../failures` → `./posts` is unchanged. It works because every use happens at call time.
+
+- NOTE F12 — Deployment is now partly verified.
+  - **Run:** a clean-checkout Compose run, the smoke script, and backup and restore. They are recorded with commands, results and a date at `docs/deployment.md:44-56`, so FR-037 moves from "reported as not run" to satisfied.
+  - **Not run:** the browser check for CSP errors in the console (FR-024, U5) and the manual UI walkthrough (SC-008). The doc says so.
+  - **T068 is ticked anyway** (`specs/010-hardening-deployment/tasks.md:153`). An inline caveat says the browser check was not run, so the box is not misleading, but that check is still owed by a human.
 
 ## Coverage
 
+Scope: this re-review re-checked the obligations the remediation touched. For everything else, the counts are the first review's (`e48d1ea`), adjusted only where the remediation or the recorded run changed the evidence.
+
 | Checked | Count | Satisfied | Partial | Absent | Contradicted | Not verifiable here |
 |---|---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-042) | 42 | 38 | 4 (FR-014, FR-017, FR-020, FR-028) | 0 | 0 | — (FR-035 and FR-037 are satisfied by their "report as not run" clause) |
-| Success criteria (SC-001–SC-011) | 11 | 6 (SC-002, 003, 006, 007, 010, 011) | 2 (SC-004, SC-005) | 0 | 0 | 3 (SC-001, SC-008, SC-009) |
-| User stories (P1–P3) | 6 | 4 (US1, US4, US5 as documented, US6) | 2 (US2, US3) | 0 | 0 | — |
-| Edge cases (spec list) | 16 | 16 | 0 | 0 | 0 | — |
+| Earlier blocking findings (F1, F2) | 2 | 2 fixed | 0 | 0 | 0 | — |
+| Earlier MINOR findings (F3–F9) | 7 | 0 fixed (all still open, none worse) | — | — | — | — |
+| Functional requirements (FR-001–FR-042) | 42 | 42 (FR-014, FR-017, FR-020 and FR-028 now satisfied; FR-037 now by a real run) | 0 | 0 | 0 | — |
+| Success criteria (SC-001–SC-011) | 11 | 8 (SC-004 and SC-005 now satisfied) | 1 (SC-009, F13) | 0 | 0 | 2 (SC-001, SC-008) |
+| User stories (P1–P3) | 6 | 6 (US2 and US3 now satisfied) | 0 | 0 | 0 | — |
 | Constitution core principles (I–VII) | 7 | 7 | 0 | 0 | 0 | — |
 
-Notes on the counts:
+**Regression check of the remediation files:**
 
-- **Edge cases.** One edge case differs only in wording. When a target was requeued by someone else and then claimed by the tick, a late resolve answers "This post was already resolved." rather than "Publishing in progress". Both are true, so I counted it as satisfied.
-- **Plan touch-points.** I checked the plan's "Source Code" list against the diff. Every source file is there except `src/lib/validation/api.ts`. That is a logged deviation: decisions D20 moved the literal-address check into `services/webhooks/destination.ts`, because the schema is shared with client code. Of the test files the plan names, two are missing:
-  - `tests/integration/posts/detail-resolution.test.tsx` was not written (F9).
-  - `src/server/env.test.ts` and `src/server/llm/config.test.ts` were not extended. The new `NODE_ENV`, `PORT`, `HOSTNAME` and `llmEnvIssues` rules are still exercised, by `tests/lint/env-coverage.test.ts` (a malformed-value probe for every variable) and by `src/server/startup/validate.test.ts`.
-
-- **FR-013** is counted as satisfied, with F6 as a plausible gap that only a browser can confirm.
-- **FR-021** is counted as satisfied, with F3 as a defence-in-depth gap.
-- **FR-028** is partial only because of the overclaim in F1.
-- **The constitution** passes on behaviour:
-  - VII: no leak found; F1 is about the proof, not a leak.
-  - IV: one allocator and one validator; F5 is a missed preparation step, not a duplicate path.
-- **Cross-pass coherence** (duplicated helpers, interface drift, producer/consumer shapes, dead ends):
-  - no duplicated abstraction;
-  - no interface drift: `ResolveResult`, `FailureActions` and `AttemptEntryView` are each used consistently by the service, both screens and the tests;
-  - two dead ends: F8 (`destinationWarning`) and F10 (`directUrlOf`).
+- **`secret-scan.test.ts`:**
+  - It deletes every user (:182-183) and leaves the install marked as set up. That is safe under one database clone per worker, and `anonymous-entry.test.ts` expects exactly that state.
+  - `BETTER_AUTH_URL` is set to `https://docket.scan.test` inside `vi.hoisted` (:23), so the change is scoped to this file.
+  - Auth does not use Better Auth's cookie cache (no `cookieCache` in `src/server/auth`). So dropping the whole sign-in `Set-Cookie` header (:209) hides only the session cookie.
+- **`limit-rows.ts` and `enforcement.test.ts`:**
+  - The `afterEach` that fails any platform request (:32-35) still guards every generated row.
+  - The per-row timeout (`60_000`) covers seeding up to 11,666 rows for Bluesky's daily limit.
+- **`limits-inventory.test.ts`:** the old existence check (:107-117) is kept, and the new test is added alongside it.
+- **`media.ts`:** a rename and export only (see the probes above).
 
 ## What I could not check
 
-- **The Docker walkthrough.** The Docker daemon is unreachable here. Unchecked: `docker compose up` from a clean clone, the smoke script against a live stack, the backup and restore commands, SC-008's 15-minute walkthrough, and whether `scripts/smoke.mjs` actually lands at `/app/scripts/smoke.mjs` in the image. That last one follows from the `COPY` of `.next/standalone` at `Dockerfile:33`, but it was not run.
-- **Browser checks.** Unchecked:
-  - whether the shipped screens satisfy the CSP with no console violations (FR-024, U5);
-  - whether Next actually puts the nonce on every `<script>` in production;
-  - the live-region and focus behaviour in F6;
-  - keyboard operation of the dialogs and `<details>` in a real browser.
-- **SC-001** (reach and resolve in under 30 seconds) is a human timing measure.
-- **Live platforms.** The real Meta, Threads and Bluesky limits, and the U2 and U3 facts, are verified with mocks only, as the spec intends.
-- **The test suite.** I did not re-run it, as the constitution asks. The green final gate comes from `docs/decisions.md`, not from CI on a PR, and no PR exists yet.
-- **The Unraid steps** are generic and labelled unverified (U1). Whether they match a given Unraid version cannot be checked here.
+- **The browser CSP check (FR-024, U5) and the manual walkthrough (SC-008).** Neither was run in the recorded Docker run (`docs/deployment.md:56`), and this phase has no browser.
+- **The Docker run itself.** I did not re-run it. I am relying on the table in `docs/deployment.md:44-54`, which `85f6d88` added from a session outside this pipeline.
+- **SC-001**, the 30-second reach-and-resolve time, is a human timing measure.
+- **F6 (live region and focus)** is still plausible from the code, but not observed.
+- **The full suite, lint, typecheck and build.** Not re-run, per the constitution. I ran only the three remediation test files, and they passed. I did not read CI for PR #15.
+- **Live platforms.** Meta, Threads and Bluesky limits and token-exchange errors are exercised only against fakes (`createFakeGraph`, `createFakePds`), as the spec intends.

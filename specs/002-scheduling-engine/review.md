@@ -1,233 +1,181 @@
-# Review: Docket Scheduling Engine (002), fourth pass
+# Review: Docket Scheduling Engine (002), fifth pass
 
-Reviewed 140 files changed across 18 commits, diffed against `a74a9cc...HEAD` (merge-base with `origin/main`; `git fetch` was refused, so the local `origin/main` ref was used). This is the first review of the implementation **as committed**: the prior three reviewed an uncommitted working tree (old F10). This is a fresh read of the whole body, not a delta.
+**This reviews the present state, not a branch diff.** Feature 002 was merged long ago (PR #6, `e6cb73c`), and features 003–010 have been built on top of it. Diffing against `origin/main` shows only bookkeeping (`6391f7f...18981ed` changes nothing but `tasks.md`), so it is no evidence about 002.
+
+Instead, this pass reviews three things:
+- the current code of 002's modules;
+- the two fix commits for the previous pass's blocking findings: `01ca121` (F20) and `417d414` (F19), both merged in PR #6;
+- whether any later feature changed how far a carried finding reaches.
+
+**The checkout changed mid-review.** It started on `chore/review-bookkeeping` at `18981ed`. By the time this file was written, it was on `docs/self-hosting-setup` at `915c32d`, which does not contain `18981ed`. Something outside this phase did that. I checked `git diff --stat 18981ed 915c32d -- src tests specs/002-scheduling-engine`: `src/` and `tests/` are byte-identical, so every code finding below holds on both. The only difference is `specs/002-scheduling-engine/tasks.md`: on this branch, T090 and T091 are still **unticked**, because their tick lives only in `18981ed`. Both are fixed in the code (see F19 and F20). The implement pass must not redo them.
 
 - **Read in full:**
-  - **Scheduler:** `src/server/scheduler/{publishing,record,recovery,limits,index,config,token-refresh,http,loop,in-process,schema-wait,redact,backoff}.ts`, `src/worker.ts`, `src/instrumentation.ts`, `src/app/api/internal/tick/route.ts`.
-  - **DAL:** `src/server/dal/{scheduler,targets,accounts,posts,slots,scope,clock,attempts,heartbeats,schema-ready,media,index,errors}.ts`.
-  - **Services:** `src/server/services/posts/{index,cancel,status,content}.ts`, `src/server/services/queue/{index,occurrences}.ts`, `src/server/services/{accounts,slots,media,scheduler-health}.ts`.
-  - **Providers:** `src/providers/{types,validation,registry,text,errors}.ts`, `src/providers/mock/{index,settings}.ts`.
-  - **Schema:** `src/server/db/schema/{posts,accounts}.ts`.
-  - **UI:** `src/components/shell/SchedulerHealth.tsx`.
-  - **Diffs:** the diffs of `src/server/{env,db/client,db/project-owned,auth/access}.ts`, `src/lib/{auth-gate,action-result}.ts`, `src/app/p/[projectSlug]/layout.tsx`, `docker-compose.yml`, `README.md`, `docs/decisions.md`.
-  - **Spec artifacts:** `spec.md`, `plan.md`, `tasks.md`, `contracts/{scheduler,dal}.md`, the constitution.
+  - the fix diffs `01ca121` and `417d414`, with their tests;
+  - `src/server/services/queue/index.ts:154-231` (swap, and the pull-forward walk);
+  - `src/server/services/posts/cancel.ts`;
+  - `src/server/services/posts/index.ts`: lines 180-195 (queue gate), 343-368 (review state, delete), 432-506 (`addToQueue`) and 606-637 (cancel);
+  - `src/server/scheduler/publishing.ts:95-112` and `:220-392` (account gate, `execute`);
+  - `src/server/scheduler/token-refresh.ts:50-70`;
+  - `src/server/dal/accounts.ts:222-250`;
+  - `src/server/dal/targets.ts:60-83` and `:223-261`;
+  - `tests/integration/scheduler/refresh.test.ts:36-75`;
+  - `tests/integration/queue/{actions,concurrency}.test.ts`, at the F19 and F20 cases;
+  - `research.md` D11, and `spec.md` FR-029 and the edge cases at :328-330.
 - **Sampled:**
-  - tests: `tests/integration/scheduler/{concurrency,budget,refresh}.test.ts`, `tests/integration/queue/{actions,concurrency}.test.ts`, `tests/helpers/{scheduling,posts-env,db}.ts`, `tests/setup/global-setup.ts`;
-  - `drizzle/0001_fixed_susan_delgado.sql` (checks and indexes);
-  - `research.md` D8.
-- **Not reviewed this pass:**
-  - `drizzle/meta/0001_snapshot.json` (generated; `pnpm db:check` vouches for it);
-  - `docs/adding-a-provider.md`, `.env.example`, `contracts/{providers,services,env}.md`, `data-model.md`, `quickstart.md`;
-  - the remaining test files.
+  - `src/components/targets/TargetResolution.tsx:120-147`, the Cancel button on draft targets;
+  - `src/server/services/generation/save.ts:53` and `src/server/services/jobs/runner.ts:142-160`, which produce `needs_review` posts;
+  - `src/server/auth/access.ts`, the role matrix;
+  - `contracts/scheduler.md:83-90`.
+- **Not re-read this pass:** the remaining 002 modules. The fourth pass read them in full. Since then, the only commits touching 002's modules are the two fixes and later features' additions, and the latter were reviewed in their own entries (003–010).
 
-  The first review read all of these in full, and no commit since then touches them except a one-line edit to `contracts/providers.md`.
-
-**Executed during this review.** Nothing was written outside `specs/`. Scratch tests lived only in `$TMPDIR`, and `git status` was clean before and after.
-
-- **The gates:**
-  - `pnpm typecheck`, `pnpm lint` and `pnpm db:check` all exit 0.
-  - `pnpm test`: **78 files and 551 tests passed, exit 0.** So F16 is resolved in practice.
-  - `pnpm build` was not re-run. Per a teammate's request, CI owns it.
-- **Four scratch tests** against the real test database, run through a `$TMPDIR` Vitest config. They reproduced F19, F20, F21 and F22 below; the exact numbers are quoted in each finding.
+**Executed:**
+- **`pnpm test`:** **306 files and 2611 tests passed, 1 skipped, exit 0.** This was run on `18981ed`, which has the same code as the current checkout.
+- **Two scratch tests** against the real test database, through a `$TMPDIR` Vitest config. Nothing was written outside `specs/`.
+  - **F19, deleted-slot case:** slots on Mon and Wed; targets queued on Mon 10-05, Wed 10-07 and Mon 10-12; Wed slot deleted; pull forward. Result `moved: []`, with all three times unchanged, so this holds.
+  - **F22:** a `needs_review` post with two draft targets; one target cancelled. Result: `reviewState` became `"draft"`, and `addToQueue` then returned `ok: true` for both targets. So F22 still reproduces.
 
 ## Verdict
 
-**Not ready to merge: two MAJOR defects in the queue, both reproduced. The scheduler tick itself holds up.**
+**Not ready to sign off. One MAJOR, F22, which earlier passes graded MINOR.**
 
-**What holds up.** I re-traced the cross-pass seams that earlier reviews fixed, and they are coherent in the committed code:
-- **Claim → lease → advance → record.** The lease token guards the record; the claim skips locked rows.
-- **Lock order** has no cycle between the tick and the post services.
-- **Limit counting** follows T087/T088.
-- **Status derivation** runs after every target change.
+**What changed since the fourth pass:**
+- **F19 and F20 are fixed correctly.** Both have tests that fail on the old code, and the full suite is green.
+- **Later features fixed two carried MINORs:** F21 in `1d127e4`, and F7 in `7198e3c`.
 
-Every FR has an implementation, and the tick's guarantees (concurrency, kill-recovery, budget, no retry of ambiguous targets) are tested with real assertions.
+**Why F22 is now MAJOR.** When F22 was found, nothing set `needs_review`, so the defect was unreachable. Features 007 and 008 now create `needs_review` posts as standard practice (`generation/save.ts:53`). The post page offers **Cancel** on draft targets (`TargetResolution.tsx:124`).
 
-**What blocks.** Both blockers are in the queue (US4), and both break a rule the spec states in absolute terms:
-- **F19, pull-forward.** "Pull the queue forward" moves targets **later**, and cascades the delay down the queue, whenever one of them holds an occurrence of a slot that has since been paused or deleted. This contradicts FR-021 ("never later than their current time") and the paused-slot edge case.
-- **F20, multi-account queueing.** Queueing multi-account posts concurrently **deadlocks**: 25 of 60 requests failed with `40P01` in my reproduction. This contradicts FR-018 / US4-AS1 ("none fails because of the race"). The SC-003 test missed it because it only queues single-account posts.
+So the ordinary review action "don't post this one to Instagram" does three things:
+- silently takes the post out of review;
+- drops it from the "Needs review" filter;
+- makes it queueable without approval.
 
-Each needs a few lines plus a test, appended as T090 and T091.
+This contradicts FR-029, which keeps `needs_review` when no live targets remain and returns to `draft` only when *all* targets are cancelled. It is not an authorisation hole: every role that can cancel can also approve. But it is a realistic input producing a spec-contradicting result. The fix is a few lines plus tests, appended as T092.
 
-**What remains, and is safe to ship.**
-- **New MINORs:**
-  - F21: an engine-side failure before the provider call is recorded as `ambiguous`.
-  - F22: cancelling a draft target silently clears `needs_review`.
-- **Carried MINORs, all re-checked at their lines:** F3–F9, F14 and F17.
+**Everything else is safe to ship:**
+- the carried MINORs F3, F4, F5, F6, F8, F9, F14 and F17, all re-checked at their current lines;
+- one new MINOR, F24: T090 is ticked, but the deleted-slot test it asked for was never written.
 
 ## Findings
 
-- [x] MAJOR F19 — `pullQueueForward` moves queued targets *later* when one holds an occurrence of a paused or deleted slot, and every target after it moves later too
-      where:  src/server/services/queue/index.ts:192-205, src/server/services/queue/index.ts:39, src/server/services/slots.ts:38, specs/002-scheduling-engine/spec.md:207, specs/002-scheduling-engine/spec.md:312-314, tests/integration/queue/actions.test.ts:87-116
-      why:    How the walk works:
-              - `pullQueueForward` releases every queued occurrence (:192), then re-allocates each target in order with `allocateNextFree(…, { after })` (:197).
-              - It accepts whatever comes back (:198-200). Its only fallback is for "nothing free in the horizon" (:201-205).
-              - `allocateNextFree` draws candidates from `listActiveForAccount` (:39), so an occurrence of a **paused** slot is never offered. A **deleted** slot's occurrence is not offered either: `slot_id` goes NULL by the FK (slots.ts:38).
-              - So a target sitting on such an occurrence cannot get its own time back. It takes the next active occurrence, which can be later, and then `after` pushes every later target later as well.
-            Reproduced (UTC project, now = Thu 2026-10-01 12:00, slots Mon 09:00 and Wed 09:00):
-              - queued t1 = Mon 10-05, t2 = Wed 10-07, t3 = Mon 10-12;
-              - paused the Wed slot, then pulled forward;
-              - result `moved` = t2 10-07 → **10-12**, and t3 10-12 → **10-19**.
-            Why it matters:
-              - This breaks FR-021, US4-AS9 ("no target moves later than it was") and the edge case "Pausing or deleting a slot … those targets keep their times".
-              - Entry 3 will put this action behind a button, and pausing a slot is an ordinary owner action.
-              - No test covers a paused or deleted slot (actions.test.ts:87-116).
-      owed:   Never accept a candidate later than the target's current instant `from`:
-              - peek first; if the earliest free occurrence after `after` is later than `from`, or there is none, re-hold `from` (with its current `slot_id`, which may be null) and set `after = from`.
-              - Add tests to `tests/integration/queue/actions.test.ts` for a paused-slot target and a deleted-slot target: both keep their times, and the targets after them still move only earlier.
-      traces: FR-021, US4-AS9, edge case "Pausing or deleting a slot"
-
-- [x] MAJOR F20 — Concurrent `addToQueue` calls for posts aimed at two or more shared accounts deadlock, and the losing request fails with `40P01` instead of taking the next occurrence
-      where:  src/server/services/posts/index.ts:369-383, src/server/dal/targets.ts:62-67, src/server/dal/targets.ts:114-133, src/server/services/queue/index.ts:85-90, tests/integration/queue/concurrency.test.ts:25-40
+- [ ] MAJOR F22 — (escalated from MINOR) Cancelling one *draft* target of a `needs_review` post resets the post to `draft`, so it leaves review and can be queued without approval. Since entries 007 and 008, generated posts reach this state through ordinary UI use.
+      where:  src/server/services/posts/cancel.ts:27-33, src/server/services/posts/index.ts:627-637, src/server/services/accounts.ts:380, src/components/targets/TargetResolution.tsx:124-126, src/server/services/generation/save.ts:53, specs/002-scheduling-engine/spec.md:399, specs/002-scheduling-engine/spec.md:328-330, specs/002-scheduling-engine/research.md:135
       why:    The mechanism:
-              - `addToQueue` allocates a post's targets in `listForPost` order: `created_at, id` (targets.ts:62-67).
-              - Targets inserted by one `insertMany` share `created_at`, so the account order is effectively random per post (random UUIDs).
-              - Each `tryHoldOccurrence` (targets.ts:114-133) writes a uniquely indexed `(account, instant)`. A second transaction that wants the same instant waits for the first to commit, which is how FR-018 is meant to work.
-              - But take tx1 holding (A, X) and wanting (B, Y), while tx2 holds (B, Y) and wants (A, X). That is a wait cycle.
-              - Postgres aborts one of them with `40P01`. `tryHoldOccurrence` only maps `23505`, so the error escapes and the whole request fails.
-            Reproduced:
-              - 2 mock accounts with 21 weekly slots each, and 5 bursts of 12 concurrent `addToQueue` calls, each post targeting both accounts.
-              - **25 of 60 requests rejected with `40P01 deadlock detected`.**
-            Why it matters:
-              - US4-AS1 and FR-018 require that a request losing the race moves on and does not fail. Posts aimed at several accounts are the product's core case.
-              - "A person and a generation job" queueing at once is the spec's own example (spec.md:172-174).
-              - The SC-003 test queues single-account posts only, so it cannot see this.
-      owed:   Acquire occurrences in one global order:
-              - in `addToQueue`, process the chosen targets sorted by `social_account_id` (one target per account per post, so this removes the cross-account cycle);
-              - optionally, retry the transaction once on `40P01`/`40001` as a backstop.
-              Test it: add a case to `tests/integration/queue/concurrency.test.ts` with ≥ 10 concurrent posts each aimed at the same 2–3 accounts, repeated, asserting every result is `ok: true` and no occurrence is held twice.
-      traces: FR-018, US4-AS1, SC-003
+              - `resetEmptyReview` sets `reviewState = 'draft'` whenever every target is `draft` or `cancelled` (cancel.ts:29-30).
+              - Research D11 (research.md:135) read the spec's "all-cancelled returns to draft" as "no live targets remain". That reading also catches a post that never had a live target.
+              - FR-029 (spec.md:399) says the opposite: with no live targets, the post "keeps or returns to its editorial status (`draft`, `needs_review` or `approved`; all-cancelled returns to `draft`)".
+            Why it is now reachable:
+              - Generation saves posts as `needs_review` with draft targets (generation/save.ts:53).
+              - The post page shows **Cancel** for draft targets (TargetResolution.tsx:124).
+              - A reviewer who drops one platform therefore turns the post into a `draft`. It vanishes from the "Needs review" list, and anyone with `schedule` can queue it with no approval step.
+              - `removeAccount` runs the same helper (accounts.ts:380), so removing one account demotes every generated post under review that targeted it.
+              - An `approved`-but-unqueued post (auto-approve without add-to-queue) is also demoted to `draft`, against FR-029's "keeps … `approved`".
+            Reproduced on current code: a `needs_review` post with targets on accounts A and B; `cancelTarget(A)` gives `reviewState: "draft"`, and `addToQueue` then gives `[ok: true, ok: true]`.
+      owed:   Fix the rule:
+              - In `resetEmptyReview`, return to `draft` only when **every** target is `cancelled` (the spec's literal "all-cancelled"). Otherwise leave `reviewState` alone and just re-derive status.
+              - Correct research D11 (research.md:135) to match.
+            Add tests to `tests/integration/posts/actions.test.ts`:
+              - (a) `needs_review` post with two draft targets: cancel one; it stays `needs_review` and `addToQueue` is refused with `not_queueable`;
+              - (b) the same post with both cancelled returns to `draft`;
+              - (c) an `approved` post with two draft targets, one cancelled, stays `approved`;
+              - (d) `removeAccount` on one of two accounts leaves a `needs_review` post in review.
+      traces: FR-029, edge case "A post in `needs_review`", edge case "All targets of a post cancelled"
 
-- [ ] MINOR F21 — An engine-side failure *before* the provider is called (credential decryption, content load, settings parse) is recorded as `ambiguous` on a may-publish step
-      where:  src/server/scheduler/publishing.ts:233-263
-      why:    Why it happens:
-              - The `try` that classifies a lost call by `mayPublish` (:259-263) also wraps `effectiveContent` (:234-235), `decryptCredentials` (:236-238) and `settingsSchema.parse` (:239).
-              - So a failure that never reached the platform is reported as "may have gone out".
-            Reproduced:
-              - A due target on a mock account whose stored ciphertext cannot be decrypted ended `ambiguous` with "Secret could not be decrypted".
-              - The provider was never called. Counts: `ambiguous: 1, done: 0`.
-            Impact:
-              - Safe, because nothing duplicates. But one misconfigured `CREDENTIALS_ENCRYPTION_KEY` would turn every due post on credentialed accounts into a manual "check the platform" task.
-              - It also contradicts the spec's rule that `ambiguous` is for a step whose outcome cannot be known (edge case "A provider throws").
-      owed:   Do the pre-call work outside the `try` that wraps `advance`, and record those failures as `fatal_error` (or `retryable_error`) with a clear message. Only a throw or timeout from `advance` itself should use `mayPublish`. Add a `runTick` test with undecryptable credentials.
-      traces: FR-011, FR-034, edge case "A provider throws instead of returning a result"
+- [x] MAJOR F19 — **Resolved** in `417d414`. `pullQueueForward` no longer moves a target later than its current occurrence.
+      where:  src/server/services/queue/index.ts:207-212, tests/integration/queue/actions.test.ts:106-120
+      why:    When the offered occurrence is later than `from`, the walk releases it and re-holds `from` with the target's own `slot_id` (null after a delete), then sets `after = from`.
+              - The paused-slot test fails on the old code: t1 would move from Mon 10-05 to Tue 10-06.
+              - The deleted-slot case passed in this pass's scratch test (`moved: []`).
+              - Re-holding `from` cannot race: the occurrence was released in this same transaction, so a concurrent insert of that key waits for this commit.
 
-- [ ] MINOR F22 — Cancelling a *draft* target of a `needs_review` post resets the post to `draft`, so it can then be queued without approval
-      where:  src/server/services/posts/cancel.ts:26-31, src/server/services/posts/index.ts:527-537, src/server/services/posts/index.ts:159-167, src/server/services/accounts.ts:177, specs/002-scheduling-engine/spec.md:329-330
-      why:    Why it happens:
-              - `resetEmptyReview` sets `review_state = 'draft'` whenever every target is `draft` or `cancelled`.
-              - That is also true when the post never had a live target.
-            Reproduced: a `needs_review` post with two draft targets; cancel one, and `reviewState` becomes `draft`, after which `addToQueue` schedules the other (`ok: true`).
-            Impact: no caller sets `needs_review` in this feature, and editors can approve directly, so it is safe now. But it is the second hole (with F14) in the review gate that the generator entry will rely on. The same helper runs on `removeAccount`.
-      owed:   Reset to `draft` only when the cancel took the post from having a live target (`scheduled`/`publishing`) to none, or never lower `needs_review`. Test both paths.
-      traces: edge case "A post in needs_review", edge case "All targets of a post cancelled", FR-029
+- [x] MAJOR F20 — **Resolved** in `01ca121`. `addToQueue` holds occurrences in `social_account_id` order, then restores the caller's order in the result.
+      where:  src/server/services/posts/index.ts:467-470, src/server/services/posts/index.ts:504-505, tests/integration/queue/concurrency.test.ts:42-62
+      why:    Every transaction now waits on accounts in the same global order. While it waits on account A, it holds nothing on B, so no cycle can form.
+              - The new test runs 10 posts × 10 repetitions, half created in [A, B] order and half in [B, A].
+              - It asserts every result is `ok` and 10 distinct occurrences per account. It passed in the full run.
 
-- [ ] MINOR F17 — (carried over, unchanged) The scheduler contract still describes the superseded limit rules (`publish_started_at ??= now`, no own-row exclusion)
-      where:  specs/002-scheduling-engine/contracts/scheduler.md:85, specs/002-scheduling-engine/contracts/scheduler.md:89, specs/002-scheduling-engine/research.md:108, docs/decisions.md:162-169
-      why:    The code re-stamps every first-step lease (publishing.ts:162) and excludes the checked target's own row (publishing.ts:120). `docs/decisions.md` records both; `contracts/` and D8 do not.
-      owed:   Update `contracts/scheduler.md:85,:89` and research D8, or point both at the decisions entry.
-      traces: FR-036
+- [x] MINOR F21 — **Resolved** in `1d127e4` (entry 010). Failures before the provider call are now classified as engine failures, not `ambiguous`.
+      where:  src/server/scheduler/publishing.ts:289, src/server/scheduler/publishing.ts:318-323, src/server/scheduler/publishing.ts:354, src/server/scheduler/publishing.ts:379
+      why:    `providerCalled` is set right before `advance`. Credential, settings, content and media failures each throw a typed error, and they are classified on the `!providerCalled` branch.
 
-- [ ] MINOR F14 — (carried over, unchanged) A scheduled post moved back to `needs_review` is still published by the tick
-      where:  src/server/services/posts/index.ts:271-281, src/server/dal/scheduler.ts:62-75
-      why:    `setReviewState` leaves `scheduled` targets in place, and the claim never reads review state.
-      owed:   Refuse `needs_review` while any target is `scheduled`/`publishing`, or cancel those targets. Test the chosen behaviour.
-      traces: edge case "A post in needs_review", FR-029
+- [x] MINOR F7 — **Resolved** in `7198e3c`. The refresh test now creates the due target only after the account is flagged.
+      where:  tests/integration/scheduler/refresh.test.ts:66-74
 
-- [ ] MINOR F3 — (carried over, unchanged) A due target on a `needs_reauth` or unregistered-provider account fails with one generic message that never says to reconnect
-      where:  src/server/scheduler/publishing.ts:101-106, docs/decisions.md:176
-      why:    All three causes get "The account is no longer available for publishing." US5-AS5 wants "must be reconnected", and the decisions log quotes a "Reconnect … to publish" message the code does not produce.
-      owed:   Give each cause its own message, matching the service gate (posts/index.ts:139-146), and fix the decisions entry.
-      traces: FR-038, US5-AS5, US7-AS1
+- [ ] MINOR F24 — T090 is ticked, but the deleted-slot test it required was not added. Only the paused-slot case is tested.
+      where:  tests/integration/queue/actions.test.ts:106-120, specs/002-scheduling-engine/tasks.md:275
+      why:    T090 asked for a paused-slot test "and, separately, delete it". The delete path differs in that it re-holds with a `null` `slot_id` (queue/index.ts:211, `t.slotId as string`). That path is correct today: it passed this pass's scratch test. But no committed test would catch a regression there, for example someone replacing the cast with a non-null assertion that also validates.
+      owed:   Add a deleted-slot case beside the paused one in `tests/integration/queue/actions.test.ts`.
+      traces: FR-021, edge case "Pausing or deleting a slot" (test integrity)
 
-- [ ] MINOR F4 — (carried over, unchanged) A token refresh in flight can write credentials back onto an account that was removed or reconnected meanwhile
-      where:  src/server/scheduler/token-refresh.ts:64-77, src/server/dal/accounts.ts:142-155
-      why:    `recordRefresh` is guarded only by `refresh_lease_owner`. `markRemoved` and `upsertConnected` do not clear the refresh lease.
-      owed:   Guard `recordRefresh` with `removed_at IS NULL`, and clear the refresh lease on remove and on reconnect.
+- [ ] MINOR F14 — (carried) Setting a scheduled post back to `needs_review` leaves its targets scheduled, so the tick still publishes it.
+      where:  src/server/services/posts/index.ts:343-354, src/server/dal/scheduler.ts:62-75
+      why:    Unchanged. Its reach shrank: `setReviewState` now has no caller outside tests, and entry 007's review flow (`services/review.ts`) does not go through it. So this cannot be reached from the UI today.
+      owed:   Refuse `needs_review` while any target is `scheduled`/`publishing`, or delete `setReviewState` if nothing needs it.
+      traces: edge case "A post in `needs_review`", FR-029
+
+- [ ] MINOR F3 — (carried) A due target on a removed, `needs_reauth` or unregistered-provider account fails with one generic message.
+      where:  src/server/scheduler/publishing.ts:105-110
+      why:    All three causes still get "The account is no longer available for publishing." The dead-credentials path (:392) now says "Reconnect … to publish", but this gate does not.
+      owed:   Give each cause its own message, and say "Reconnect" for `needs_reauth`.
+      traces: FR-038, US5-AS5
+
+- [ ] MINOR F4 — (carried) `recordRefresh` is guarded only by the refresh lease owner, so a refresh in flight can write credentials onto a removed or reconnected account.
+      where:  src/server/dal/accounts.ts:228-237, src/server/dal/accounts.ts:155, src/server/dal/accounts.ts:222
+      owed:   Add `removed_at IS NULL` to the guard, and clear the refresh lease in `markRemoved` and `upsertConnected`.
       traces: FR-037, FR-001
 
-- [ ] MINOR F5 — (carried over, unchanged) `refreshCredentials` has no hard timeout, unlike `advance`
-      where:  src/server/scheduler/token-refresh.ts:55-60, src/server/scheduler/publishing.ts:193-199
-      why:    Only an `AbortSignal` is passed. A provider that ignores it holds `runTick` open with no bound.
-      owed:   Wrap the call in the same `withTimeout` race.
+- [ ] MINOR F5 — (carried) The background token refresh has no hard timeout. It passes only an `AbortSignal`.
+      where:  src/server/scheduler/token-refresh.ts:58-63
+      owed:   Wrap the call in the same `withTimeout` race that `advance` uses.
       traces: FR-030, FR-037
 
-- [ ] MINOR F6 — (carried over, unchanged) The DAL's `releaseLease` and `recordWithLease` are dead and differ from the inline versions the scheduler actually uses
-      where:  src/server/dal/scheduler.ts:189-213, src/server/dal/index.ts:37-38, src/server/scheduler/publishing.ts:213-220, src/server/scheduler/record.ts:126
-      why:    The exported `releaseLease` restores neither `status`, `first_step_at` nor `publish_started_at`, so a future caller would leave a start counted against the limit.
-      owed:   Delete both exports, or route the scheduler through them with the restore semantics.
+- [ ] MINOR F6 — (carried) The DAL exports `releaseLease` and `recordWithLease`, which are dead and diverge from the scheduler's inline versions.
+      where:  src/server/dal/scheduler.ts:210, src/server/dal/scheduler.ts:223, src/server/dal/index.ts:49-50
+      owed:   Delete both exports.
       traces: constitution IV
 
-- [ ] MINOR F7 — (carried over, unchanged) `refresh.test.ts` still depends on the token-refresh section flagging the account before the concurrent publishing section claims its due target
-      where:  tests/integration/scheduler/refresh.test.ts:40-59, src/server/scheduler/index.ts:39-42
-      why:    If publishing claims the target first, it publishes (mock `succeed`) and :56 fails. The second `runTick` added at :54 does not help, because the target is then already `published`. It did not fire this pass.
-      owed:   Run the refresh in its own tick before creating the due target, or set `needs_reauth` directly for the FR-038 half.
-      traces: FR-037, FR-038 (test integrity)
-
-- [ ] MINOR F8 — (carried over, unchanged) A `publishing` target whose lease expired during a may-publish step can be cancelled before recovery marks it `ambiguous`
-      where:  src/server/services/posts/index.ts:527-537, src/server/services/posts/cancel.ts:16-23, src/server/services/accounts.ts:171-176
-      why:    Cancel clears `in_flight_may_publish`, so the "may have gone out" signal is lost (FR-035).
-      owed:   Treat an expired lease with `in_flight_may_publish = true` as not cancellable, or as ambiguous on cancel.
+- [ ] MINOR F8 — (carried) A `publishing` target whose lease expired during a may-publish step can be cancelled, which erases `in_flight_may_publish`.
+      where:  src/server/services/posts/index.ts:628-636, src/server/services/posts/cancel.ts:6-24
+      owed:   Treat an expired lease with `in_flight_may_publish = true` as not cancellable, or record it as `ambiguous` when cancelled.
       traces: FR-035, constitution V
 
-- [ ] MINOR F9 — (carried over, unchanged) No way to preview an explicit time's proximity warning before scheduling
-      where:  src/server/services/posts/index.ts:323-353, src/server/services/posts/index.ts:468
-      why:    US4-AS10 says "schedules **or previews**". The warning is computed only after the write.
-      owed:   A read-only `previewScheduleAt(scope, postId, { at, targetIds? })`.
+- [ ] MINOR F9 — (carried) There is still no way to preview an explicit time's proximity warning: no `previewScheduleAt` exists anywhere in `src/`.
+      where:  src/server/services/posts/index.ts:432
       traces: US4-AS10, FR-022
 
-- [x] MAJOR F16 — **Resolved.** `pnpm test` exited 1 on an unhandled `57P01` from throwaway-database teardown
-      where:  src/server/db/client.ts:31-36, tests/integration/db-pool-error.test.ts:1-29
-      why:    The pool `error` listener in `createDatabase` covers the throwaway pools as well (tests/helpers/db.ts:30). The full suite exited 0 this pass (78 files, 551 tests).
+- [ ] MINOR F17 — (carried) The scheduler contract still describes the superseded limit rule, `publish_started_at ??= now`.
+      where:  specs/002-scheduling-engine/contracts/scheduler.md:85-89
+      owed:   Update it to match `docs/decisions.md`.
+      traces: FR-036
 
-- [x] MINOR F10 — **Resolved.** The implementation is now committed in 14 conventional implementation commits (`812668e`…`7a2a4f4`, plus `360913c`).
-      where:  .specify/memory/constitution.md:84-86
+- NOTE F23 — (carried) A claim batch made up entirely of rows on accounts locked by another tick comes back empty, and the publishing loop exits. This costs throughput, not correctness.
 
-- [x] MAJOR F13 / MAJOR F2 / 🛑 BLOCKER F1 — **Resolved** (earlier passes); re-confirmed in the committed code
-      where:  src/server/scheduler/publishing.ts:116-129, src/server/scheduler/publishing.ts:161-162, src/server/services/posts/index.ts:81-87, src/server/services/queue/index.ts:126-131
-      why:    Re-confirmed:
-              - first-step leases re-stamp `publish_started_at`, and the own-row exclusion holds;
-              - post services lock the post's target rows right after the post row, so a claimed target is refused;
-              - `claim-race.test.ts` and `limits-retry.test.ts` passed in the full run.
+- NOTE F18 — (carried) A multi-step publish is counted at its first step (D8). Revisit with the first long container → publish flow.
 
-- NOTE F23 — When every row in a claim batch belongs to an account another tick has locked, the batch comes back empty and the publishing loop exits (src/server/scheduler/publishing.ts:168, src/server/dal/scheduler.ts:108).
-  - Due targets on *other* accounts, further down the order, then wait for the next tick.
-  - This costs throughput (at most one interval of delay), not correctness. Worth revisiting if one account ever floods the head of the due queue.
+- NOTE F11 — (carried) The tick and the services still have no lock-order cycle. F20's fix adds a consistent per-account order among queue requests.
 
-- NOTE F18 — (carried) A multi-step publish is counted at its first step (research D8). So a target held between steps for longer than the window drops out of the limit count while it is still in flight. No shipped provider has a long multi-step flow; revisit with the first real container → publish provider.
+- NOTE F12 — (carried) The SC-002 test runs on the shared pool, not a dedicated pool of 20. It still uses real parallel connections.
 
-- NOTE F11 — (re-confirmed) Lock order has no cycle between the tick and any service:
-  - services lock the post, then its targets (posts/index.ts:81-87);
-  - the record step locks the post, then the target (record.ts:125-126);
-  - the claim uses `SKIP LOCKED` on targets and accounts and never waits (dal/scheduler.ts:75, :84);
-  - `removeAccount` locks the account first, which makes claims skip it (accounts.ts:167).
-
-  F20 is a cycle *among queue requests*, not with the tick.
-
-- NOTE F12 — (carried) The SC-002 test runs its 5 parallel ticks on the shared pool (tests/integration/scheduler/concurrency.test.ts:45), not a dedicated pool of 20 as T043 described. It still gets real parallel connections and asserts 0 duplicate `done` rows across 20 repetitions.
-
-- NOTE F15 — (carried) `scheduleAt` / `publishNow` without `targetIds` silently skip a target that is mid-publish (src/server/services/posts/index.ts:422). Entry 3's composer should pass `targetIds` when it needs a result row per target.
+- NOTE F15 — (carried) `scheduleAt`/`publishNow` without `targetIds` skip mid-publish targets silently.
 
 ## Coverage
 
 | Checked | Count | Satisfied | Partial | Absent | Contradicted | Not checked |
 |---|---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-048) | 48 | 46 | 2 (FR-018 → F20; FR-021 → F19) | 0 | 0 | 0 |
+| Functional requirements (FR-001–FR-048) | 48 | 47 | 1 (FR-029 → F22) | 0 | 0 | 0 |
 | Success criteria (SC-001–SC-013) | 13 | 12 | 0 | 0 | 0 | 1 (SC-013, needs Docker) |
-| User stories (acceptance scenarios) | 7 | 5 (US1, US2, US3, US6, US7) | 2 (US4 → F19, F20, F9; US5 → F3) | 0 | 0 | 0 |
-| Edge cases (spec.md:305-354) | 18 | 16 | 2 ("Pausing or deleting a slot" → F19; "A post in needs_review" → F14, F22) | 0 | 0 | 0 |
+| User stories | 7 | 5 (US1, US2, US3, US6, US7) | 2 (US4 → F9; US5 → F3) | 0 | 0 | 0 |
+| Edge cases (spec.md:305-354) | 18 | 17 | 1 ("A post in `needs_review`" → F22, F14) | 0 | 0 | 0 |
 | Constitution (I–VII + Engineering constraints + Workflow) | 9 | 9 | 0 | 0 | 0 | 0 |
 
-How each was judged:
-- **Satisfied:** the code path was read in this pass, and a test exercising it passed in this pass's full run.
-- **SC-003:** counted Satisfied *as measured*, since the 50-way single-account test passes 20 of 20 runs. F20 shows that the property it stands for does not hold for multi-account posts.
-- **Constitution "Workflow":** moved to Satisfied. F10 is resolved by the commits and F16 by a green `pnpm test`. `pnpm build` was not re-run here.
+How these were judged:
+- **FR-018 and FR-021** moved from Partial to Satisfied. The code was read, the fix tests passed in the full run, and the deleted-slot case was reproduced by hand.
+- **FR-029** moved from Satisfied to Partial. F22 is reachable now, so the letter of the requirement is what decides it.
+- **All other rows** carry over from the fourth pass. No change to their code since then was found, and the full suite is green.
 
 ## What I could not check
 
-- **SC-013 / T084, `docker compose up`.** There is no Docker daemon in this sandbox, so the web healthcheck, the worker start-up and "indicator shows a tick within two minutes" are unobserved.
+- **SC-013 / T084, `docker compose up`.** There is no Docker daemon in this sandbox.
 - **Neon / research U1 / T085.** No Neon URL is available.
-- **`pnpm build` and the `worker.mjs` no-`next` check.** Not re-run this pass, at a teammate's request (CI runs it). The previous pass saw the build green and the bundle free of `next` imports, and no commit since then touches build inputs except `src/server/db/client.ts`.
-- **CI itself.** I did not see a CI run of this branch. The local suite was green once this pass; F7 is a known latent flake.
-- **The in-process loop under a real `next start`, and the tick endpoint over real HTTP.** Only their unit and handler tests ran.
-- **The health banner in a browser.** No visual or assistive-technology check was done; only server-rendered HTML is tested.
-- **How often F20 occurs in production.** That depends on real concurrency. I measured it only in a synthetic 12-way burst.
+- **`pnpm build`, `pnpm typecheck` and `pnpm lint`.** Not re-run this pass; only `pnpm test` was. No 002 source file changed since entry 010's CI run.
+- **The F22 path in a browser.** I traced it from code: Cancel button → `cancelTargetAction` → `cancelTarget`. I did not click it. The "Needs review" list filtering was inferred from the derived status (`posts/page.tsx:26`), not observed.
+- **Which branch these artifacts belong on.** The checkout switched to `docs/self-hosting-setup` during the review (see the header). This file and the T092 append were written into whatever is checked out now. A human should move them to the right branch.
