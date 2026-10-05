@@ -41,9 +41,9 @@ export function Dialog({
         returnTo.current?.focus();
         onClose();
       }}
-      className="m-auto w-full max-w-md rounded-lg border border-foreground/30 bg-background p-6 text-foreground backdrop:bg-black/50"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-border bg-surface p-6 text-foreground shadow-overlay"
     >
-      <h2 id={titleId} className="mb-3 text-lg font-semibold">
+      <h2 id={titleId} className="mb-3 text-lg font-semibold text-heading">
         {title}
       </h2>
       {children}

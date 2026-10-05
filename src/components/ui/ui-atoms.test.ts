@@ -13,7 +13,8 @@ const html = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticM
 describe("StatusBadge", () => {
   it("always renders text, with an amber 'Needs your decision' for ambiguous targets", () => {
     expect(html(createElement(StatusBadge, { status: "ambiguous" }))).toContain("Needs your decision");
-    expect(html(createElement(StatusBadge, { status: "ambiguous" }))).toContain("amber");
+    // The amber tone is the `warning` token family (docs/design-system.md §3).
+    expect(html(createElement(StatusBadge, { status: "ambiguous" }))).toContain("text-warning");
     expect(html(createElement(StatusBadge, { status: "partially_failed" }))).toContain("Partly failed");
     expect(html(createElement(StatusBadge, { status: "rejected" }))).toContain("Rejected");
     expect(statusLabel("something_new")).toBe("something new");

@@ -1,19 +1,22 @@
 import type { ReactNode } from "react";
 
-type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+export type BadgeTone = "neutral" | "brand" | "info" | "success" | "warning" | "danger";
 
-const tones: Record<Tone, string> = {
-  neutral: "border-foreground/40",
-  info: "border-blue-700 text-blue-800 dark:border-blue-400 dark:text-blue-300",
-  success: "border-green-700 text-green-800 dark:border-green-400 dark:text-green-300",
-  warning: "border-amber-700 text-amber-800 dark:border-amber-400 dark:text-amber-300",
-  danger: "border-red-700 text-red-800 dark:border-red-400 dark:text-red-300",
+const tones: Record<BadgeTone, { pill: string; dot: string }> = {
+  neutral: { pill: "border-border bg-muted text-muted-foreground", dot: "bg-muted-foreground" },
+  brand: { pill: "border-accent bg-accent/60 text-accent-foreground", dot: "bg-primary" },
+  info: { pill: "border-info-border bg-info-bg text-info", dot: "bg-info" },
+  success: { pill: "border-success-border bg-success-bg text-success", dot: "bg-success" },
+  warning: { pill: "border-warning-border bg-warning-bg text-warning", dot: "bg-warning" },
+  danger: { pill: "border-danger-border bg-danger-bg text-danger", dot: "bg-danger" },
 };
 
-/** Status badge. Always carries text; colour only reinforces it. */
-export function Badge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
+/** Status badge. Always carries text; the tint and dot only reinforce it. */
+export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: ReactNode }) {
+  const t = tones[tone];
   return (
-    <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${t.pill}`}>
+      <span aria-hidden="true" className={`size-1.5 rounded-full ${t.dot}`} />
       {children}
     </span>
   );

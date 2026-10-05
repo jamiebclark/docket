@@ -1,4 +1,5 @@
 import type { ReactNode, SelectHTMLAttributes } from "react";
+import { controlStyles, errorStyles, hintStyles, labelStyles } from "./controls";
 
 /** Labelled native select with the same hint/error wiring as `Field`. */
 export function Select({
@@ -7,6 +8,7 @@ export function Select({
   hint,
   error,
   className = "",
+  compact = false,
   children,
   ...rest
 }: Omit<SelectHTMLAttributes<HTMLSelectElement>, "id"> & {
@@ -14,17 +16,19 @@ export function Select({
   label: ReactNode;
   hint?: ReactNode;
   error?: string;
+  /** Toolbar use: don't reserve the empty error line under the control (it still appears when there is an error). */
+  compact?: boolean;
 }) {
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
   const describedBy = [hint ? hintId : null, errorId].filter(Boolean).join(" ");
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium">
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className={labelStyles}>
         {label}
       </label>
       {hint ? (
-        <p id={hintId} className="text-xs text-foreground/70">
+        <p id={hintId} className={hintStyles}>
           {hint}
         </p>
       ) : null}
@@ -32,12 +36,12 @@ export function Select({
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={`rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground ${className}`}
+        className={`${controlStyles} ${className}`}
         {...rest}
       >
         {children}
       </select>
-      <p id={errorId} aria-live="polite" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+      <p id={errorId} aria-live="polite" className={compact && !error ? "sr-only" : errorStyles}>
         {error ?? ""}
       </p>
     </div>

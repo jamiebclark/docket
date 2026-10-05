@@ -1,4 +1,5 @@
 import type { InputHTMLAttributes, ReactNode } from "react";
+import { controlStyles, errorStyles, hintStyles, labelStyles } from "./controls";
 
 /**
  * Labelled input. `error` is rendered in an `aria-live` region linked through
@@ -21,12 +22,12 @@ export function Field({
   const errorId = `${id}-error`;
   const describedBy = [hint ? hintId : null, `${errorId}`].filter(Boolean).join(" ");
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium">
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className={labelStyles}>
         {label}
       </label>
       {hint ? (
-        <p id={hintId} className="text-xs text-foreground/70">
+        <p id={hintId} className={hintStyles}>
           {hint}
         </p>
       ) : null}
@@ -34,10 +35,10 @@ export function Field({
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={`rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground ${className}`}
+        className={`${controlStyles} ${className}`}
         {...rest}
       />
-      <p id={errorId} aria-live="polite" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+      <p id={errorId} aria-live="polite" className={errorStyles}>
         {error ?? ""}
       </p>
     </div>
