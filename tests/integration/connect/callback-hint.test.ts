@@ -85,6 +85,13 @@ describe("accounts banner hint", () => {
     const html = await renderAccounts({ connect: code, group: "throwaway-strict" });
     expect(html).not.toContain(HINT);
   });
+  it("names the needed Meta permissions when a Meta login found no Pages (re-review F1)", async () => {
+    const html = await renderAccounts({ connect: "no_candidates", group: "meta" });
+    expect(html).toContain("No accounts were found for this login.");
+    for (const scope of ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "instagram_basic", "instagram_content_publish"]) {
+      expect(html).toContain(scope);
+    }
+  });
   it("shows nothing extra for an unknown or hint-less group", async () => {
     expect(await renderAccounts({ connect: "platform_error", group: "no-such-group" })).not.toContain(HINT);
     const plain = await renderAccounts({ connect: "platform_error", group: "throwaway" });

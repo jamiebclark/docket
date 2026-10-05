@@ -1,60 +1,60 @@
-# Review: Docket Scheduler Screens and Media (003-scheduler-ui-media)
+# Review: Docket Scheduler Screens and Media (003-scheduler-ui-media), re-review after remediation
 
-Reviewed 147 file(s) changed across 4 commit(s), against `23b4209` (merge-base with `origin/main`)...working tree.
-Most of the feature is **not committed** (see F4), so this reviews the present working tree, not only `HEAD`.
-That means the 94 tracked files in `git diff 23b4209`, plus 53 untracked files. Only 2 of the 4 commits contain code (`8796521`, `29c22df`).
+**This is the scoped re-review that constitution v1.4.0 ("Review is exhaustive once, then scoped") calls for.** It checks only two things:
+
+- that each blocking finding from the first review (F1–F4) is fixed;
+- that the files the remediation changed introduced no regression.
+
+It opens no new lines of inquiry. Anything new it noticed is recorded as MINOR.
+
+The first review's full text, including its file list and sweep, is in git at `27c700b` and `df499cb`. Its findings are kept below unchanged, with a `re-review:` line added to F1–F4.
+
+**What I reviewed.** The feature merged to `main` as PR #8 (`e542733`). Its 16 commits run from `9aa85e8` to `7198e3c`, merged from base `23b4209`. The remediation was folded into the area commits made for T090:
+
+- `2fe4f8e` (F1);
+- `a2d9400` (F2);
+- `b3ee426` (F3);
+- `569c810`…`f46bf68` (F4).
+
+Later entries (004–010) have since changed some of the same files, and each had its own review. So I read the **present state** of the remediated code on `docs/self-hosting-setup` (HEAD `915c32d`, merge-base with `origin/main` `6391f7f`), plus the remediation diffs themselves.
 
 **Read in full:**
 
-- Services: `src/server/services/{media.ts,media-variants.ts,calendar.ts}`, `src/server/services/posts/{validate.ts,compose.ts,list.ts,view.ts}`, and the diffs to `posts/index.ts`, `queue/index.ts`, `queue/occurrences.ts` and `accounts.ts`.
-- Data access: `src/server/dal/media.ts`; the diffs to `dal/posts.ts` and `dal/accounts.ts`; `dal/targets.ts` (`listInRange`, `tryHoldOccurrence`, `effectiveContent`).
-- Storage and media: `src/server/storage/*`, `src/server/media/{process,variants,hash}.ts`, `src/providers/media.ts`, and the diffs to `providers/{types,validation}.ts` and `providers/mock/index.ts`.
-- Scheduler: the diff to `src/server/scheduler/publishing.ts`.
-- Config: the diffs to `src/server/env.ts`, `next.config.ts`, `package.json`, `.env.example` and `docker-compose.yml`, plus `Dockerfile` and `scripts/storage-init.mjs`.
-- Shared libraries: `src/lib/validation/media.ts` and `src/lib/action-result.ts`.
-- Screens: every page, action and client component under `src/app/p/[projectSlug]/{compose,calendar,posts,media,accounts}/`, plus `run-action.ts` and the `layout.tsx` and `[section]/page.tsx` diffs.
-- Components: `src/components/media/*`, `src/components/shell/ReauthBanner.tsx`, and `src/components/ui/{LocalTime,StatusBadge}.tsx`. `Menu.tsx` was read in part.
-- Docs: `docs/storage.md`, and the diffs to `README.md`, `docs/adding-a-provider.md` and `docs/decisions.md`.
-- Tests: `tests/integration/{actions-authz,compose-check-route}.test.ts`, `tests/integration/queue/move-to-occurrence.test.ts`, `tests/integration/media/{publish-media,publish-resolution-retry}.test.ts`, `tests/lint/worker-bundle.test.ts`, the `no-plaintext.test.ts` diff, the SC-006 block of `calendar.test.ts`, and `tests/helpers/actions.ts`.
+- `git show b3ee426`;
+- `src/server/scheduler/publishing.ts:200–400`;
+- `src/app/p/[projectSlug]/media/page.tsx:1–80`;
+- `src/app/p/[projectSlug]/posts/page.tsx:1–80`;
+- `src/lib/validation/media.ts`;
+- `src/server/services/posts/list.ts:1–70`;
+- `src/server/services/media.ts:205–217`;
+- `tests/integration/media/{library,publish-resolution-retry}.test.ts` (the F1/F3 parts);
+- `src/lib/validation/post-search.test.ts`;
+- `contracts/services.md:80–87`.
 
-**Sampled** (test titles and greps): `tests/integration/media/{library,upload}.test.ts`, `tests/integration/compose/check.test.ts`, `Composer.test.ts`, `CalendarBoard.test.ts`, `MediaPicker.test.ts`, and `tests/setup/scope-recorder.ts`.
+**Not re-reviewed:**
 
-**Not reviewed:**
+- MINOR F5–F17: out of scope for a re-review, and deferred to the hardening entry;
+- code that later entries added to these files.
 
-- `drizzle/0002_*.sql` and its snapshot: generated, and covered by `pnpm db:check`.
-- `src/server/db/schema/media.ts` column details.
-- `tests/helpers/{images,storage,provider-fixtures}.ts`, `env.test.ts`, `s3.test.ts`, the `process`/`variants` unit tests, `storage-init.test.ts`, `storage-docs.test.ts`, `ui-atoms.test.ts` and the `section-placeholders` test.
-- `Pagination`, `FilterTabs` and `LiveRegion`, and the `loading.tsx` files.
+**Run:** following the constitution, I did not re-run the full suite, lint, typecheck or build.
 
-Per the constitution I did not re-run the full suite, lint, typecheck or build. I ran two targeted probes instead (below).
-
-**Probes run** (throwaway Vitest files under `$TMPDIR`, nothing written to the repo):
-
-1. The media page's own parse of `?unused=1` and `?missingAlt=1`, passed into `listMedia`, throws a `ZodError` (`expected boolean, received string`). This confirms F1.
-2. `z.url()` accepts `javascript:alert(1)`, and React 19's `renderToStaticMarkup` replaces such an `href` with a throwing stub (relevant to F15).
+- **Targeted tests.** `pnpm vitest run src/lib/validation/post-search.test.ts tests/integration/media/library.test.ts tests/integration/media/publish-resolution-retry.test.ts`: 3 files, 20 tests, all passed.
+- **One probe.** A throwaway Vitest file and config under `$TMPDIR`; nothing was written to the repo. `resolvePublishMedia` was mocked to never return, with `runTick({ config: { timeBudgetMs: 4000, providerTimeoutMs: 1000 } })`. The tick returned in 3057 ms with counts `{ claimed: 1, retried: 1, released: 0, ambiguous: 0 }` and zero `advance` calls. The target ended `scheduled` with `attemptCount: 1` and `lastError: "Preparing media took too long; will retry."`
 
 ## Verdict
 
-Mostly yes. The engine-facing half is solid and fits together:
+Yes. All four blocking findings are fixed, and the remediation introduced no regression in the files it touched.
 
-- the storage interface;
-- the upload pipeline;
-- the pure planner and the variant generator;
-- the single validation path that the check route and every gate share;
-- `moveTargetToOccurrence`, with a real 20× race test and the savepointed unique index;
-- the pull-forward preview by rollback;
-- the post-first lock order for media delete and attach;
-- the needs-reauth banner;
-- the authorization table.
+- **F1 (media filters):** fixed at a single mapping point, with a test that goes through the page's own parse.
+- **F2 (post-list statuses):** fixed by deriving the tabs and the parsing from one shared list, with a test for every status.
+- **F4 (uncommitted work):** resolved; the work merged as Conventional Commits in PR #8.
+- **F3 (publish-time media resolution):** the tick is now bounded and no provider call can follow a hung or failed resolution. I confirmed this by probe. Two deviations from what the remediation task asked for remain, both recorded as MINOR:
+  - an overrun is *retried* (it uses an attempt) rather than *released* (uncounted), so the contract wording has drifted (F20);
+  - the overrun branch has no test, and there is no re-check between resolution and the provider call (F21).
 
-Four things block the merge:
+Neither deviation affects correctness or safety.
 
-1. **F1:** two passes disagree on a schema, so the media library's "Unused" and "Missing alt text" filter links (FR-008, a P1 story) render "The library could not be loaded" every time.
-2. **F2:** the post list cannot filter by four of the eight post statuses, including the "partially failed" the spec names (FR-029).
-3. **F3:** publish-time media resolution has no deadline or timeout, although the contract and the ticked T054/T055 say it does. This breaks the bounded-tick constraint.
-4. **F4:** roughly half the feature (76 files) is uncommitted.
-
-All four are small, local fixes. I would run one remediation pass and re-review only those. The 14 MINOR items can go to the hardening entry.
+Nothing blocks. The open MINORs (F5–F17, F20–F21) belong to the hardening entry. Rather than inventing them, I note that the open checkboxes T090–T093 in `tasks.md` are bookkeeping (F22).
 
 ## Findings
 
@@ -64,11 +64,15 @@ All four are small, local fixes. I would run one remediation pass and re-review 
       owed:   Map the parsed params to the service's input in one place: either `unused: filter.unused === "1"` (and the same for `missingAlt`) in the page, or make `listMedia` accept the search-param shape. Then add a test that feeds `mediaSearchParamsSchema` output into `listMedia`.
       traces: FR-008, US3-AS5, T024/T046/T049
 
+      re-review: **fixed.** `toMediaListInput` (src/lib/validation/media.ts:38) is the one place the URL flags become booleans, and the page now calls it (src/app/p/[projectSlug]/media/page.tsx:54). tests/integration/media/library.test.ts:78 feeds `mediaSearchParamsSchema` output into `listMedia`. It passed when I re-ran it.
+
 - [x] MAJOR F2 — The post list offers filters for only 4 of 8 post statuses, and drops any other `?status=` to "All".
       where:  src/app/p/[projectSlug]/posts/page.tsx:23, src/app/p/[projectSlug]/posts/page.tsx:52, src/lib/validation/media.ts:49
       why:    `FILTERS` lists All, draft, scheduled, published, failed and needs_decision. `needs_review`, `approved`, `publishing` and `partially_failed` are missing. `known` (line 52) only accepts keys from `FILTERS`, so a shared link such as `?status=partially_failed` silently shows every post. The service (`list.ts:12`) and the unused `postSearchParamsSchema` (T024) both support every status. The page re-implemented the parsing instead of using them. US6's story and independent test name "partially failed" explicitly ("filter the list by each status").
       owed:   Build the tabs and the param parsing from one list of every post status plus `needs_decision`, e.g. `POST_LIST_STATUSES` and `postSearchParamsSchema`, with counts from `list.counts`. Add a test that `?status=partially_failed` is honoured.
       traces: FR-029, US6-AS1, T071
+
+      re-review: **fixed.** The tabs and the parsing both come from `POST_LIST_STATUSES` (src/app/p/[projectSlug]/posts/page.tsx:38, :60). `src/lib/validation/post-search.test.ts:5` keeps every status, including `partially_failed`, and passed when I re-ran it. (`rejected` was added to the list later by 007.)
 
 - [x] MAJOR F3 — Publish-time media resolution is not bounded by the tick deadline, and its storage calls have no timeout.
       where:  src/server/scheduler/publishing.ts:217, src/server/scheduler/publishing.ts:244, src/server/services/media-variants.ts:222, src/server/services/media-variants.ts:233
@@ -81,6 +85,8 @@ All four are small, local fixes. I would run one remediation pass and re-review 
       After that, the provider call still gets its full `providerTimeoutMs`. So a slow or hanging bucket, or a few regenerations, pushes `runTick` past its budget. The constitution requires "bounded (well under 30 s)". contracts/services.md:85 requires "if resolution finishes past `deadline − providerTimeout`, the lease is released as 002 does". T054 and T055 are ticked for exactly that clause ("deadline respected"), but no test covers it: `media/publish-media.test.ts` and `publish-resolution-retry.test.ts` only test regeneration, a deleted original and retry.
       owed:   After resolution, re-check `now + providerTimeoutMs > deadline` and release the lease exactly as lines 217–231 do. Give the resolution step a time bound, for example an abort or timeout on the storage calls, or race it against the remaining budget, so a hung bucket cannot hold the tick. Add the missing "deadline respected" test: slow storage double, release, no provider call.
       traces: FR-016, Constitution "Engineering Constraints" (runTick bounded), contracts/services.md "Scheduler change", T054, T055
+
+      re-review: **fixed in substance, not as the contract words it.** Resolution now races a budget of `deadline − now − providerTimeoutMs`, and an overrun or error becomes a retryable result with no provider call (src/server/scheduler/publishing.ts:300–304, :363). I confirmed this with a probe: a resolution that never returns, under `timeBudgetMs: 4000, providerTimeoutMs: 1000`, returned in 3.06 s with `retried: 1` and no `advance` call. Two gaps remain, both safe to ship (see F20 and F21).
 
 - [x] MAJOR F4 — 76 of the feature's files are uncommitted, against the constitution's commit-per-task workflow.
       where:  specs/003-scheduler-ui-media/tasks.md:103, src/app/p/[projectSlug]/media/page.tsx:1, src/server/services/calendar.ts:1
@@ -100,6 +106,8 @@ All four are small, local fixes. I would run one remediation pass and re-review 
       - `docs`;
       - (`tasks.md`, including its ticks, and this `review.md` are committed by the review phase itself.)
       traces: Constitution "Development Workflow — Commits"
+
+      re-review: **fixed.** Phases 4–11 landed as area commits `569c810`…`f46bf68` and merged in PR #8 (`e542733`). `git status` shows no uncommitted 003 file.
 
 - [ ] MINOR F5 — A variant generation failure reaches the editor as a generic "could not be adapted", without the generator's reason.
       where:  src/server/services/posts/index.ts:160, src/server/services/media-variants.ts:192
@@ -202,39 +210,54 @@ All four are small, local fixes. I would run one remediation pass and re-review 
   Update the contract before the public-api entry relies on it. Location: src/server/services/posts/compose.ts:106.
 - NOTE F19 — The implement pass's own final gate was not fully green. `quickstart-verification.md` records `pnpm test`: 823 passed, 1 failed. The failure is an `afterEach` hook timeout in the pre-existing `scheduler/concurrency.test.ts` under full parallel load, and it passes alone. This feature adds many integration files, so watch for it in CI before merging. Location: specs/003-scheduler-ui-media/quickstart-verification.md:5.
 
+- [ ] MINOR F20 — A media-resolution overrun is retried, which uses an attempt, where the contract says the lease is released, which does not.
+      where:  src/server/scheduler/publishing.ts:363, src/server/scheduler/publishing.ts:304, specs/003-scheduler-ui-media/contracts/services.md:85
+      why:    The two outcomes differ:
+      - `MediaNotReady` maps to `retryable_error`, so `applyStepResult` increments `attemptCount` (the probe ended with `attemptCount: 1`) and applies backoff;
+      - contracts/services.md:85 and T093 ask for "released as 002 does": uncounted, with one `released` attempt.
+
+      With a bucket that is slow on every tick, a scheduled post exhausts `maxAttempts` and fails, instead of waiting for storage to recover. That is defensible: it surfaces a broken bucket instead of retrying silently forever. But it is undocumented: `docs/decisions.md` has no entry for it, and the contract still says the other thing.
+      owed:   Either log the choice in `docs/decisions.md` and amend contracts/services.md:85 to say "retryable, counted", or switch the overrun case (not the thrown-error case) to `release()`.
+      traces: FR-016, contracts/services.md "Scheduler change", T093
+
+- [ ] MINOR F21 — The overrun branch has no test, and the provider call can start up to 1 s past the deadline.
+      where:  src/server/scheduler/publishing.ts:300, src/server/scheduler/publishing.ts:236, tests/integration/media/publish-resolution-retry.test.ts:10
+      why:    There are two parts.
+      - **No test.** Both tests in `publish-resolution-retry.test.ts` mock `resolvePublishMedia` to *throw*. Nothing makes it *hang*, so the `withinBudget` timer and its "took too long" message (line 238) are never exercised. T093 asked for exactly that "deadline respected" test. My probe shows the branch works, but no committed test would catch a regression.
+      - **1 s overrun.** The budget is floored at `Math.max(1_000, …)`, and resolution is not followed by a `fitsDeadline()` re-check. So a resolution that finishes in its floor second still gets a full `providerTimeoutMs` provider call. The tick can overrun its budget by up to 1 s. That is still bounded, so this is not a constitution breach.
+      - **Abandoned storage calls.** The race abandons the storage calls rather than cancelling them, because `src/server/storage/s3.ts` sets no request timeout. A hung socket outlives the tick.
+      owed:   Add the hanging-resolution scheduler test: small `timeBudgetMs`, assert `retried` (or `released`, per F20) with no `advance` call and elapsed time under budget. Call `fitsDeadline()` after resolution and `release()` if it fails. Optionally, give the S3 client a request timeout.
+      traces: Constitution "Engineering Constraints" (runTick bounded), T055, T093
+
+- NOTE F22 — `tasks.md` on this branch still shows T090–T093 unchecked (specs/003-scheduler-ui-media/tasks.md:253–256), although this re-review confirms all four were done in PR #8. The tick exists as commit `18981ed` on the unmerged branch `chore/review-bookkeeping`. This phase may not re-tick existing tasks, so merging that branch is what closes them. T089 (browser and screen-reader survey) remains 🛑 BLOCKED, on the owner.
+
 ## Coverage
+
+Scoped re-review: the denominator is the first review's blocking findings, plus the remediated files.
+
+| Checked | Count | Fixed | Partial | Not fixed | Regressed |
+|---|---|---|---|---|---|
+| Blocking findings from the first review (F1–F4) | 4 | 4 | 0 (F3's two deviations are MINOR F20/F21) | 0 | 0 |
+| Files changed by the remediation, checked for regression | 6 | — | — | — | 0 |
+
+The six files are `media/page.tsx`, `posts/page.tsx`, `lib/validation/media.ts`, `scheduler/publishing.ts`, `publish-resolution-retry.test.ts` and `post-search.test.ts`.
+
+The first review's coverage of every requirement still stands, apart from the items F1, F2 and F3 fixed:
 
 | Checked | Count | Satisfied | Partial | Absent | Contradicted | Not checkable here |
 |---|---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-041) | 41 | 35 | 6 (FR-008 F1, FR-016 F3/F5, FR-024 F7, FR-029 F2, FR-030 F9, FR-034 F10) | 0 | 0 | — (FR-004, FR-039 code present; behaviour needs Docker / a browser) |
-| Success criteria (SC-001–SC-011) | 11 | 9 | 0 | 0 | 0 | 2 (SC-001 timing, SC-007 keyboard-only in a browser) |
-| User-story acceptance scenarios (US1–US8) | 66 | 60 | 6 (US3-AS5, US4-AS5 F5, US5-AS3 date, US6-AS1, US6-AS3, US7-AS2) | 0 | 0 | — |
-| Edge cases | 16 | 13 | 3 (partial batch in picker F16, empty override F12, unregistered provider F11) | 0 | 0 | — |
-| Constitution principles + engineering/workflow sections | 9 | 6 (I, II, III, V, VI, VII) | 3 (IV F17, bounded `runTick` F3, commits F4) | 0 | 0 | — |
-
-The constitution's mandated first-review categories were all swept. In each, the specific finding is noted and everything else held.
-
-- **Concurrency and locking:** the media delete and attach lock order and the move-to-occurrence race hold, as do the pull-preview rollback and variant insert races.
-- **Idempotency and retries:** variant cache and `markUsed` hold.
-- **Authorization and scoping:** checked every action, the check route, storage keys and cross-project ids. One gap is in F14.
-- **Time zones and DST:** checked `resolveLocalDateTime`, calendar ranges and 23/25-hour days. Navigation is F7.
-- **Error, timeout and ambiguous paths:** see F3, F5 and F16; the media-unavailable path is `fatal_error` with no provider call.
-- **Secrets:** checked `MediaView`, `StorageError`, delete and orphan logs, and the SC-011 scans.
-- **Requirements:** every FR and SC was checked one by one.
+| Functional requirements (FR-001–FR-041) | 41 | 37 | 4 (FR-016 F5/F20, FR-024 F7, FR-030 F9, FR-034 F10) | 0 | 0 | — (FR-004, FR-039 need Docker / a browser) |
+| Success criteria (SC-001–SC-011) | 11 | 9 | 0 | 0 | 0 | 2 (SC-001 timing, SC-007 keyboard-only) |
+| Constitution principles + engineering/workflow sections | 9 | 7 | 2 (IV F17; bounded `runTick` holds, with a ≤1 s overrun, F21) | 0 | 0 | — |
 
 ## What I could not check
 
-- **Anything that needs a browser:**
-  - real HTML5 drag and drop between calendar slots;
-  - focus returning to the moved chip after `router.refresh()`;
-  - live-region announcements with a screen reader;
-  - keyboard-only completion of every screen (SC-007, T089, still 🛑 BLOCKED);
-  - the composer staying under 0.5 s while typing (SC-002 timing), and the 2-minute composing flow (SC-001).
-- **The offline stack:**
-  - `docker compose --profile offline up` was never run;
-  - nobody checked that the pinned MinIO tag pulls, has `curl` for its healthcheck (F13), or serves objects anonymously after `PutBucketPolicy` (research U2);
-  - `tests/integration/storage-minio.test.ts` is skipped without `S3_TEST_ENDPOINT`.
-- **Real R2 or S3:** path-style addressing (U1) and the checksum settings are verified against an in-memory request handler only.
-- **sharp on Linux:** `sharp` resolving inside the Linux Docker image's worker bundle (U3) was inspected on darwin only during planning.
-- **Wall-clock performance:** SC-006 (the test guards the query count, not the time) and SC-010 (operator setup time).
-- **The full gate set and CI:** I did not re-run them (constitution). No PR exists yet to read CI from, and F19 records one failing test in implement's last full run.
+- **CI on PR #8.** `gh pr view 8` failed from this sandbox with a TLS error to `api.github.com`, so I could not read the checks for the merged commit. The first review's F19 (one parallel-load `afterEach` timeout) was addressed by two test-only commits (`480ffcd` and `7198e3c`) before the merge, but I have not seen a green CI run.
+- **Everything the first review listed is still unverified:**
+  - browser drag and drop, focus return, live regions, keyboard-only use (SC-007, T089 BLOCKED);
+  - composer timing (SC-001, SC-002);
+  - the offline MinIO stack running for real (F13);
+  - real R2/S3 path-style addressing;
+  - sharp in the Linux worker image;
+  - wall-clock SC-006 and SC-010.
+- **Real storage.** The F3 probe used a mocked `resolvePublishMedia`, not a real hung S3 socket. Abandoning a real in-flight SDK request (F21) was not observed.

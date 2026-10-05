@@ -1,45 +1,58 @@
-# Review: Bluesky provider (004)
+# Review: Bluesky provider (004), re-review after remediation
 
-Reviewed 61 files changed across 10 commits, against `e542733...HEAD` (merge-base with `origin/main`).
+**This is the scoped re-review that constitution v1.4.0 calls for** ("Review is exhaustive once, then scoped", `.specify/memory/constitution.md:115-128`). It checks only two things:
+
+- that the one blocking finding from the first review (MAJOR F1) is fixed;
+- that the files the remediation changed introduced no regression.
+
+It opens no new lines of inquiry. Anything new it noticed is recorded as MINOR, for the hardening entry.
+
+The first review's full text is in git at `b48bed0`. Its file list, the gates it ran and the probe it used for F1 are there. Its findings are kept below unchanged, with a `re-review:` line added to F1.
+
+**What I reviewed.** The feature merged to `main` as PR #9 (`7c15677`), from base `e542733`. It has 13 commits, `a8ce8b0`…`6ef87b0`. The remediation is two commits, and neither touched any other file:
+
+- `3626a24`: `src/providers/bluesky/session.ts` and `tests/integration/accounts-credentials-connect.test.ts`;
+- `6ef87b0`: the same two files, plus `src/providers/bluesky/session.test.ts`.
+
+`git log 6ef87b0..HEAD` shows no later commit to any of those three files, so the present state on `main` (HEAD `69cff5d`) is the remediated code.
 
 **Read in full:**
-- **Provider:** every source file in `src/providers/bluesky/` (`index`, `settings`, `client`, `session`, `steps`, `facets`, `publish`, `errors`, `validate`).
-- **Framework diffs:** `src/providers/types.ts`, `src/providers/registry.ts`, `src/server/dal/accounts.ts`, `src/server/dal/scheduler.ts`, `src/server/scheduler/{credentials,publishing,token-refresh,index}.ts` and `src/server/services/accounts.ts`.
-- **Accounts screen:** `src/app/p/[projectSlug]/accounts/{actions.ts,page.tsx,ConnectCredentialsForm.tsx}`.
-- **Tests:** `tests/helpers/fake-pds.ts`, plus `tests/integration/bluesky/{sessions,publish-e2e,images,no-secrets}.test.ts` and `tests/integration/scheduler/refresh-concurrency.test.ts`.
-- **Docs:** the README, `docs/decisions.md` and `docs/adding-a-provider.md` diffs.
 
-**Sampled** (by test name and the key tables): `src/providers/bluesky/{publish,session}.test.ts`, `tests/integration/bluesky/ambiguous.test.ts` and `tests/integration/accounts-credentials-connect.test.ts`.
+- `git show 3626a24 6ef87b0`;
+- `src/providers/bluesky/session.ts:1-125`;
+- `tests/integration/accounts-credentials-connect.test.ts:82-112`;
+- `src/providers/bluesky/session.test.ts:64-95`;
+- `src/app/p/[projectSlug]/accounts/ConnectCredentialsForm.tsx:9-61`, to see how a failure with no field is shown.
 
-**Not read line by line:** `tests/integration/scheduler/{publish-refresh,step-content,refresh}.test.ts`, `tests/integration/{accounts-ui,actions-authz,compose-check-route,no-plaintext,scope-check}.test.ts`, and the remaining provider unit tests (`errors`, `facets`, `settings`, `steps`, `validate`). I ran all of them (below), but did not audit their assertions. I also did not re-review the spec, plan, research and contract documents in `specs/`; they were inputs here, not output.
+**Not re-reviewed:**
 
-**Gates I ran:**
-- `pnpm typecheck`: exits 0.
-- `pnpm lint`: 0 errors, 1 warning (an unused `_ctx` at `tests/integration/scheduler/publish-refresh.test.ts:28`).
-- `pnpm vitest run` over `src/providers`, `tests/integration/bluesky`, `tests/integration/scheduler`, `tests/helpers` and the six extended integration files: **40 files, 318 tests, all passed**.
+- MINOR F2–F6 and NOTE F7–F8: out of scope for a re-review.
+- Code that later entries (005–010) added elsewhere in the provider, for example `10a4ff1`.
 
-I did **not** re-run `pnpm build`, `pnpm db:check` or the full `pnpm test`.
-
-**Probe:** I also ran one throwaway script, outside the repo's code, against the installed `@atproto/api` to confirm how the XRPC client reports a 404 or 405 from a host that is not a PDS (used in F1).
+**Run:** following the constitution, I did not re-run the full suite, lint, typecheck or build. I ran only the affected tests: `pnpm vitest run src/providers/bluesky/session.test.ts tests/integration/accounts-credentials-connect.test.ts`, 2 files, 48 tests, all passed.
 
 ## Verdict
 
-The feature substantially satisfies the spec, and the passes fit together well:
+**F1 is fixed and nothing regressed. The feature satisfies the spec and is clear to stay merged; no remediation tasks were added.**
 
-- **The framework fixes are generic, and each has one owner.**
-  - G1: one `connectWithCredentials`, one action and one form.
-  - G2 and G3: one `applyRefreshResult`, shared by the scheduled refresh and the publish-time refresh, plus one refresh lease.
-  - G4: `contentShape` uses the same `override_text ?? base_text` and media set as `effectiveContent`.
-- **The safety properties hold and are tested through the real `runTick`:**
-  - `create_post` is the only `mayPublish` step.
-  - Timeout, reset, unparseable 2xx and 5xx on create are `ambiguous`.
-  - A refresh runs outside `advance`, and rotated tokens are persisted under the lease before use.
-  - Secrets are absent on every path.
-- **No schema change.** The scope matches SC-008.
+`connectAccount` now separates the three failure shapes:
 
-**One blocking defect: MAJOR F1.** The connect flow tells the user their handle or app password was rejected when the server address is not a PDS at all. A real 404 (or 405) from an ordinary website maps to the credentials message. That partly fails FR-008, and the test table never covers it. It is a small fix in `session.ts`.
+- A 401 is the only status still blamed on the credentials (`src/providers/bluesky/session.ts:75`).
+- A 404 or other non-400 4xx says the address "did not answer as a Bluesky server (PDS)" and marks `pdsUrl` (`src/providers/bluesky/session.ts:83`).
+- An ambiguous 400 `InvalidRequest` names handle, password and server, with no field (`src/providers/bluesky/session.ts:80`).
 
-The remaining findings are minor (docs drift, two test gaps, two edge behaviours) and safe to ship. I recommend fixing F1, then merging.
+The more specific branches still run first: sign-in code, takedown (a 400) and 429 (`src/providers/bluesky/session.ts:65-69`). So no earlier mapping changed.
+
+Both new shapes are in both failure tables:
+
+- unit: `src/providers/bluesky/session.test.ts:68-69`;
+- integration: `tests/integration/accounts-credentials-connect.test.ts:92-93`.
+
+Each row asserts the field (or no field), that the password never appears in the result, and that no account row was written.
+
+The form already handles a failure with no field: it moves focus to the alert (`src/app/p/[projectSlug]/accounts/ConnectCredentialsForm.tsx:38-43`).
+
+**Two new MINOR bookkeeping items (F9, F10).** Both are safe to ship.
 
 ## Findings
 
@@ -55,6 +68,10 @@ The remaining findings are minor (docs drift, two test gaps, two edge behaviours
               The ticked task T022 ("each failure row") only tests "not a PDS" as a 2xx with a junk JSON body. The 404 and 405 shapes are untested.
       owed:   Map 404 / `XRPCNotSupported` to the `pdsUrl` "Could not reach a Bluesky server at …" message. Do the same for a 400 / 405 that carries no platform error body (the client's synthetic `InvalidRequest` whose message equals its name). Keep 401 / `AuthenticationRequired` as the credentials message. Add both shapes to the connect failure tables in `src/providers/bluesky/session.test.ts` and `tests/integration/accounts-credentials-connect.test.ts:87-92`.
       traces: FR-008, US1-AS3, FR-027 ("connect success and each connect failure")
+      re-review: **fixed** in `3626a24` and `6ef87b0`; see `src/providers/bluesky/session.ts:75-85`.
+              - The 404 shape maps to `pdsUrl` as owed. The message is "did not answer as a Bluesky server (PDS)" rather than "Could not reach", which fits FR-008's "not a PDS" better.
+              - The 400 shape departs from what was owed, deliberately. A real PDS also answers 400 `InvalidRequest` to a malformed sign-in, so the code names all three places to look and marks no field, rather than blaming the address. That still meets FR-008: the credentials are no longer the only suspect, and the server address is named. See F10 for the record of this choice.
+              - Both shapes are tested: `src/providers/bluesky/session.test.ts:68-69` and `tests/integration/accounts-credentials-connect.test.ts:92-93`. Both pass.
 
 - [ ] MINOR F2 — The upload step does not check that the fetched image matches its recorded size or type.
       where:  src/providers/bluesky/publish.ts:105-116
@@ -100,6 +117,22 @@ The remaining findings are minor (docs drift, two test gaps, two edge behaviours
       owed:   Add a `hang` row to the upload table. Extend the integration test with a third tick that asserts exactly one more upload, then a successful `createRecord` that embeds both blobs.
       traces: FR-027, US3-AS4
 
+- [ ] MINOR F9 — `tasks.md` still shows the F1 remediation task as open, though the fix has merged.
+      where:  specs/004-bluesky-provider/tasks.md:201
+      why:    T055 is unchecked. `review.md` marks F1 resolved, and the code landed in `3626a24` and `6ef87b0`, both in PR #9. Anyone reading `tasks.md` alone would think a MAJOR was still owed. This phase may not re-tick existing tasks, so it is left for a human or the next implement pass.
+
+              T055's own text also still asks for the 400/405 shape to map to `pdsUrl`, which the code deliberately does not do (F1 re-review line).
+      owed:   Tick T055. A one-line note that the 400 case became the "check all three" message would keep the task and the code consistent.
+      traces: F1, FR-008
+
+- [ ] MINOR F10 — The judgement call on the ambiguous 400 is recorded only in a code comment, not in `docs/decisions.md`.
+      where:  src/providers/bluesky/session.ts:78-82, docs/decisions.md
+      why:    The constitution says each entry "appends any judgement call to `docs/decisions.md`". The remediation chose not to do what the review asked for one of its two shapes. That choice and its reason sit only in the comment at `src/providers/bluesky/session.ts:78-79`.
+
+              A grep of `docs/decisions.md` for `InvalidRequest`, "ambiguous 400" or "not a PDS" finds nothing.
+      owed:   Add a decisions entry, written as *What / Why / Reverse*. A 400 `InvalidRequest` on `createSession` names handle, password and server, with no field, because a PDS and a non-PDS host can both send it. *Reverse:* map it to `pdsUrl`.
+      traces: F1, constitution "Docs"
+
 - NOTE F7 — Rate-limit timing reads only `Retry-After` (`src/providers/bluesky/errors.ts:22-33`). Reading Bluesky's own `ratelimit-*` headers is deferred as NEEDS RESEARCH U1 and recorded at `docs/decisions.md:242`. Until U1 is closed:
   - a 429 on publish falls back to engine backoff, which the spec allows;
   - the connect form may show "try again later" with no time (US1-AS4 says "when the platform states one").
@@ -112,26 +145,25 @@ The remaining findings are minor (docs drift, two test gaps, two edge behaviours
 
 ## Coverage
 
+These are the first review's counts, updated only where the remediation changed a verdict: FR-008, FR-027 (its F1 half) and US1-AS3.
+
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-030) | 30 | 26 | 4 | 0 | 0 |
+| Earlier blocking findings (F1) | 1 | 1 fixed | 0 | 0 | 0 |
+| Functional requirements (FR-001–FR-030) | 30 | 27 | 3 | 0 | 0 |
 | Success criteria (SC-001–SC-009) | 9 | 8 | 1 | 0 | 0 |
-| User-story acceptance scenarios (US1–US6) | 32 | 30 | 2 | 0 | 0 |
+| User-story acceptance scenarios (US1–US6) | 32 | 31 | 1 | 0 | 0 |
 | Constitution principles (I–VII) | 7 | 7 | 0 | 0 | 0 |
 | Plan framework gaps (G1–G4) | 4 | 4 | 0 | 0 | 0 |
 
-**Partial items:**
-- FR-008 (F1).
+**Still partial,** none of them blocking:
 - FR-015 (F2).
-- FR-027 (F1 and F6).
+- FR-027 (F6 only; its F1 half is now covered).
 - FR-029 (F5).
-- SC-009: lint, typecheck and the tests I ran pass. I did not re-run build or `db:check`; `docs/decisions.md` records them as passing at T051.
-- US1-AS3 (F1).
-- US3-AS4: the test gap in F6.
+- SC-009: the first review did not re-run build or `db:check`. CI ran the full gates on PR #9 before it merged.
+- US3-AS4 (F6).
 
-**Notes on specific items:**
-- **FR-024 / G3:** I count it satisfied for publishing. F3 is a scheduled-section refinement.
-- **Constitution V:** the deviation is the documented, generic one in the plan's Complexity Tracking. Outside the provider folder, the diff has no Bluesky-specific branch; `page.tsx` excludes only the mock, by key.
+**Newly satisfied:** FR-008 and US1-AS3 (F1 fixed).
 
 ## What I could not check
 
@@ -141,3 +173,4 @@ The remaining findings are minor (docs drift, two test gaps, two edge behaviours
 - **The build gates.** I did not re-run `pnpm build`, the worker bundle or `pnpm db:check`. The esbuild worker bundle with `@atproto/api` is attested only by `docs/decisions.md`.
 - **Grapheme parity.** The tests show the shared validator and `RichText.graphemeLength` agree on the test strings. I did not show they agree on every Unicode version the server and the platform may run.
 - **Concurrency across processes.** The refresh race is tested with separate pool connections in one process, 20 iterations. It was not tested across real worker processes.
+- **The re-review's limits.** I did not re-check whether later entries (005–010) fixed MINOR F2–F6, and I did not re-run the probe from the first review. The 404 and 400 shapes in the new test rows match what that probe recorded.
