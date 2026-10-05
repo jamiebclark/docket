@@ -4,6 +4,15 @@
 
 Phases cannot fetch the web. Every fact below was read from the repository (code, committed migrations, `docs/research/`) or from installed packages in `node_modules`. Anything that could not be confirmed that way is marked **UNVERIFIED** and kept to one constant.
 
+**Revision, 2026-10-05.** This revision follows the review ([review.md](./review.md)), which found design gaps behind three of its findings. The changes:
+
+- **D5**: the limit now raises its own error class, so server actions keep its message (review F2).
+- **D12**: one shared function chooses Try it's default accounts (F5).
+- **D13**: the client keys variant edits by group key, and problem labels use the stored group label (F1, F4).
+- **F12**: a new fact, how `failFromError` treats messages.
+
+Nothing else changed.
+
 ## 1. Facts
 
 ### F1: How prompts are assembled today
@@ -107,6 +116,19 @@ Source: `services/jobs/create.ts`, `runner.ts` and `append.ts`, and `db/schema/j
 - `appendItems` only adds items. They run through the same runner.
 - The item error enum already has `bad_request`.
 
+### F12: How server actions report errors
+
+Source: `src/lib/action-result.ts`, `src/server/dal/errors.ts` and `src/server/api/errors.ts`, read 2026-10-05.
+
+- **Mapping by name**: `failFromError` maps a thrown error by its `name`, so the module stays free of server imports.
+- **Which messages survive**: it keeps the error's own message only for `last_owner`, `conflict` and names in `KEEPS_MESSAGE_NAMES` (today only `PolicyNotAllowedError`). Every other code gets a generic message. For `validation` that is "Some posts have validation problems."
+- **The `validation` branch**: it returns `issues` but never `fieldErrors`. A thrown error's `field` becomes a field error only in the non-validation branch.
+- **Other `ValidationIssuesError` throwers**: `posts/index.ts`, `jobs/create.ts` and `jobs/sources/{csv,api,media}.ts`. Their messages are generic or meant for listing through `issues`.
+- **Consumers**:
+  - `JobForm` flattens `issues`;
+  - `GenerateForm`, `RegenerateDialog` and `TryItPanel` read only `message` and `fieldErrors`.
+- **API**: `mapServiceError` tests `e instanceof ValidationIssuesError`, so a subclass keeps the 400 `validation_failed` envelope.
+
 ## 2. Decisions
 
 ### D1: Store instructions in one nullable, trimmed text column on `social_accounts`
@@ -170,7 +192,7 @@ Source: `services/jobs/create.ts`, `runner.ts` and `append.ts`, and `db/schema/j
 ### D5: Group limit of 16, enforced before any model call by one assertion
 
 - **Decision**:
-  - `assertGroupLimit(groups)` sits in `src/server/services/generation/groups.ts`. Over the limit it throws `ValidationIssuesError([{ code: "too_many_groups", field: "targetAccountIds", message }], message)`.
+  - `assertGroupLimit(groups)` sits in `src/server/services/generation/groups.ts`. Over the limit it throws `GroupLimitError(message)`. This new class goes in `src/server/dal/errors.ts`: it `extends ValidationIssuesError`, sets `name = "GroupLimitError"` and `field = "targetAccountIds"`, and carries `issues = [{ code: "too_many_groups", field: "targetAccountIds", message }]`.
   - The message reads: "These accounts need {n} different versions of the post; one generation can write at most 16. Choose fewer accounts, or give accounts on the same platform the same posting instructions."
   - It is called after the accounts load and before any model call or write in each of these:
     - `generateSingle`
@@ -180,13 +202,22 @@ Source: `services/jobs/create.ts`, `runner.ts` and `append.ts`, and `db/schema/j
     - `regeneratePost`
     - `tryVoice`
     - `createJob` (on the snapshot)
-  - The API maps it to 400 `validation_failed` (`src/server/api/errors.ts`), and server actions map it to a `validation` result (`src/lib/action-result.ts`).
+  - **API**: `src/server/api/errors.ts` tests `instanceof ValidationIssuesError`, so the subclass still gets a 400 `validation_failed` with its own message and `details` ([contracts/http-api.md](./contracts/http-api.md) is unchanged).
+  - **Server actions**: `src/lib/action-result.ts` changes in two ways:
+    - **mapping**: `ERROR_NAME_TO_CODE` gains `GroupLimitError: "validation"`, and `KEEPS_MESSAGE_NAMES` gains `GroupLimitError`;
+    - **field error**: the `validation` branch of `failFromError` also returns `fieldErrors: { [field]: message }` when the error has a string `field`. That is the same rule the non-validation branch already applies.
+
+    The result is `{ ok: false, error: "validation", message, fieldErrors: { targetAccountIds: message }, issues }`. So every form shows the real text, through `message` (regenerate, Try it, job form) or next to the account picker through `fieldErrors.targetAccountIds` (Generate, job form). No UI caller has to read `issues`.
+  - **Other throwers**: `ValidationIssuesError` itself keeps its generic action message, so the other throwers (posts, job sources) behave as before (F12).
 - **Rationale**:
   - R1's interim value: 16 is the strictest count in the documented limits (F3).
   - Refusing before the call means no post, failure row or job is written (FR-012). That covers `POST /api/v1/generate` too, because it calls `generateSingle`.
   - Under 009 decision 7, a 4xx after the idempotency claim is stored and replayed. The stored result is the refusal, not the result of a model call (US3 scenario 4).
+  - **Why a subclass**: the first version threw a plain `ValidationIssuesError`, and `failFromError` swapped its message for "Some posts have validation problems." (review F2). A named subclass marks this one message as written for users. It does so without making the other `ValidationIssuesError` messages public, and without changing the API mapping.
 - **Alternatives**:
   - 24, the optional-parameter limit: rejected, because it is not the strictest documented number.
+  - Keeping the message of every `ValidationIssuesError`: rejected. The other throwers' messages were not reviewed as user-facing copy.
+  - Making each form render `issues`: rejected. That logic would live in four client components, and Generate's account picker would still have no field error.
   - Splitting one request into several model calls: rejected. That is a different feature, and the prompt and voice would no longer be shared across groups.
 
 ### D6: A `POSTING INSTRUCTIONS` section takes the place of `PLATFORM GUIDANCE`
@@ -288,7 +319,7 @@ Source: `services/jobs/create.ts`, `runner.ts` and `append.ts`, and `db/schema/j
 
 - **Decision**:
   - **Input**: `tryVoiceSchema` replaces `providerKeys` with `accountIds` (optional, 1 to 50, unique). The only caller is `TryItPanel`.
-  - **Defaults**: when `accountIds` is absent, the project's accounts (`accounts.list()`, not removed) are taken in list order. Accounts are added while the groups stay within the limit.
+  - **Defaults**: when `accountIds` is absent, the project's accounts (`accounts.list()`, not removed) are taken in list order. Accounts are added while the groups stay within the limit. This rule lives in one function, `defaultTryItSelection(accounts)`, in `src/lib/generation/groups.ts`. Both `tryVoice` and `TryItPanel`'s initial checkboxes call it, so the two cannot drift (constitution IV, review F5).
   - **No accounts**: `ConflictError("Connect an account to try the voice.")`. The panel shows an empty state that links to Accounts instead.
   - **Result**: one sample per group, `{ key, providerKey, providerName, accountNames, text, count, limit, countingRule, issues }`.
   - **What is used**: the accounts' saved instructions (spec assumption). Nothing is written.
@@ -301,6 +332,9 @@ Source: `services/jobs/create.ts`, `runner.ts` and `append.ts`, and `db/schema/j
 - **Decision**:
   - **One grouping for display**: `variantGroupsForPost(scope, post, targets)` lives in `src/server/services/posts/variant-groups.ts`. It groups a post's live targets by the latest generation record's `accounts[].groupKey`. Targets the record does not name, and older records, fall back to the platform key. The result page and `review.buildItem` both use it.
   - **Edits**: in `updatePostVariants` and `approvePost` the edits become `{ accountIds: uuid[] (1..50), text }`. The text is applied to those accounts' draft targets only, through the same `updatePost` and gate paths. The server actions and `VariantEditor` and `ReviewList` change to match.
+  - **Client state**: `VariantEditor`'s edited texts are keyed by the card's group `key`, never by `providerKey`. A platform split into `bluesky_1` and `bluesky_2` has two cards with the same `providerKey`. Lookups by `providerKey` miss, and keystrokes are dropped (review F1).
+    - The mapping from cards and edited texts to displayed text and `{ accountIds, text }` edits is a pure helper in `generate/result/[postId]/variant-logic.ts`. It is unit-tested there, because the repository has no DOM test environment.
+  - **Problem labels**: every surface labels a remaining problem with `label ?? groupKey ?? providerKey` from the stored record: the result screen, Review and `POST /api/v1/generate`. The cards never show a bare `bluesky_2` (review F4).
   - **API**: the `problems` in `POST /api/v1/generate` use the D7 label.
 - **Rationale**: FR-011. Edits keyed by platform cannot address two groups on one platform. Keying by account ids needs no knowledge of group keys on the client.
 - **Alternatives**:

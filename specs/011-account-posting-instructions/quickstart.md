@@ -75,7 +75,18 @@ Expected (US2, US3, US6, FR-005 to FR-015, FR-019, SC-002, SC-004, SC-005):
   - (c) one account per platform, with no instructions, gives the same keys, texts and prompt as before.
 - **Record**: the latest generation record has an `accounts[]` entry per target (id, display name, platform, instructions, group key). Editing the account afterwards leaves the record unchanged.
 - **Retry**: one group on a platform breaks its limit. The retry prompt names `bluesky_2 (Bluesky: …)`, and the retry asks for the same keys.
-- **Group limit**: 17 groups are refused on each of single, series plan, series start, series post, regenerate, Try it, job creation, `POST /api/v1/generate` and `POST /api/v1/jobs`. Each refusal names 17 and 16, and the fake model has `requests.length === 0`. No post, failure row or job is created. Exactly 16 groups proceed.
+- **Group limit**: 17 groups are refused on each of these callers:
+  - single, series plan, series start and series post;
+  - regenerate and Try it (`tryVoice` with 17 groups through `accountIds`);
+  - job creation, `POST /api/v1/generate` and `POST /api/v1/jobs`.
+
+  Each refusal is a `GroupLimitError` (an API 400) naming 17 and 16, and the fake model has `requests.length === 0`. Exactly 16 groups proceed.
+  - **Nothing is written**: for single, assert no post for the refused request's own `requestId`, not a fresh random id. For single and `/generate`, the generation-failure row count is unchanged. For `/generate`, no post is created. For jobs, no job.
+- **Group limit through server actions** (research D5): `src/lib/action-result.test.ts` adds two cases.
+  - `failFromError(new GroupLimitError(groupLimitMessage(17)))` returns `message` and `fieldErrors.targetAccountIds` equal to that text, which names 17 and 16.
+  - A plain `ValidationIssuesError` still returns the generic message and no `fieldErrors`.
+
+  An action-level integration case, `regenerateAction` or `generateSingleAction` over the limit, returns the same text in `message`.
 - **Callers**: series plans and posts include the section; regenerate uses the **current** instructions.
 
 ## 5. Jobs
@@ -87,12 +98,15 @@ pnpm vitest run tests/integration/jobs/posting-instructions.test.ts
 Expected (US5, FR-016 to FR-018, SC-006):
 
 - **Snapshot**: creating a job (UI, CSV and API sources) stores a snapshot.
-- **Mid-job edits**: edit an account's instructions, then run ticks (`runTick` with the fake model). Every item's prompt and record show the snapshot text. That includes an item appended over the API after the edit, a deferred correction retry and a manually retried item.
+- **Mid-job edits**: edit an account's instructions, then run ticks (`runTick` with the fake model). Every item's prompt and record show the snapshot text. That includes three cases, each with its own assertion:
+  - an item appended over the API after the edit;
+  - a deferred correction retry (`pending_retry`, made by a fake response that breaks a limit);
+  - an item retried with `retryItem` after a failure.
 - **Next job**: a second job uses the new text.
 - **Removed account**: an account removed mid-job is dropped. The remaining accounts still use their snapshot.
 - **Pre-feature job** (`posting_instructions_snapshot = NULL`, seeded directly): items use current instructions, and records show what was used.
 - **Over the limit at creation**: a job with more than 16 groups is refused.
-- **Job page**: shows the snapshot per account, and "Not recorded" for the pre-feature job.
+- **Job page**: a render assertion shows "Posting instructions (as of job creation)" with the snapshot per account, and "Not recorded" for the pre-feature job.
 
 ## 6. Voice editor, history and Try it
 
@@ -105,6 +119,7 @@ Expected (US4 scenarios 6 and 7, US6 scenarios 1 and 2, FR-020, FR-024, FR-025):
 - **Saving a voice**: `platformGuidance` in input is not stored. An unchanged save of a pre-upgrade version creates no new version.
 - **Editor and history**: the editor has no guidance field. History shows old guidance under "Platform guidance (no longer used)", with a link to Accounts.
 - **Try it with accounts**: two Bluesky accounts with different instructions return two samples, each labelled with its account. Nothing is written: post, failure and version counts are unchanged.
+- **Try it defaults**: `defaultTryItSelection` (`src/lib/generation/groups.test.ts`) keeps list order and stops adding accounts at 16 groups. `tryVoice` without `accountIds` returns the samples for that same selection.
 - **Try it without accounts**: the panel shows the empty state, and the service throws "Connect an account to try the voice."
 
 ## 7. Result screen, Review and edits
@@ -116,7 +131,9 @@ pnpm vitest run 'src/app/p/[projectSlug]/generate/result/result.test.tsx' tests/
 Expected (FR-011, US2 scenario 7):
 
 - Two Bluesky groups show two cards, labelled with their accounts, each with `used / limit`.
+- **Editor logic** (`variant-logic.ts` unit test, research D13): with cards `bluesky_1` and `bluesky_2`, editing `bluesky_2` changes only that card's displayed text and only its `{ accountIds, text }` edit. The other card keeps its original text.
 - Saving or approving an edit to one card changes only that group's targets.
+- **Problem labels**: remaining problems on the result screen use the stored label, for example `mock_2 (Mock (offline): Acme News): …`, never a bare `mock_2: …`.
 - Older posts (records without `accounts`) still group by platform and show "Not recorded".
 
 ## 8. Public API and OpenAPI

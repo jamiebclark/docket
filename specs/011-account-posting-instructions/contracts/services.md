@@ -17,14 +17,39 @@ export function groupTargets<A extends GroupAccount>(accounts: readonly A[]): Va
 export function groupLimitMessage(count: number): string;
 // "These accounts need {count} different versions of the post; one generation can write at most 16.
 //  Choose fewer accounts, or give accounts on the same platform the same posting instructions."
+
+export function defaultTryItSelection<A extends GroupAccount>(accounts: readonly A[]): A[];
+// The accounts in the given order, each added while groupTargets(selected).length stays <= GROUP_LIMIT.
+// The only copy of Try it's default rule: tryVoice and TryItPanel both call it (research D12).
 ```
 
 It imports nothing from `src/server`. The forms use it to count groups live (FR-013).
 
+## Errors: `src/server/dal/errors.ts` and `src/lib/action-result.ts`
+
+```ts
+export class GroupLimitError extends ValidationIssuesError {
+  readonly field = "targetAccountIds";
+  constructor(message: string) {          // message = groupLimitMessage(n)
+    super([{ code: "too_many_groups", field: "targetAccountIds", message }], message);
+    this.name = "GroupLimitError";
+  }
+}
+```
+
+How `failFromError` (`src/lib/action-result.ts`) treats it (research D5, F12):
+
+- **Mapping**: `ERROR_NAME_TO_CODE.GroupLimitError = "validation"`, and `KEEPS_MESSAGE_NAMES` includes `"GroupLimitError"`.
+- **Field error**: in the `validation` branch, when the error has a string `field`, the result also carries `fieldErrors: { [field]: message }`.
+- **Result**: `{ ok: false, error: "validation", message: groupLimitMessage(n), fieldErrors: { targetAccountIds: … }, issues }`.
+- **Plain `ValidationIssuesError`**: unchanged. It keeps its generic message and has no `field`.
+
+The API (`mapServiceError`) still reaches it through `instanceof ValidationIssuesError`, so the response is 400 `validation_failed` with `message` and `details` ([http-api.md](./http-api.md)).
+
 ## Generation: `src/server/services/generation/groups.ts`
 
 ```ts
-export function assertGroupLimit(groups: readonly VariantGroup[]): void;   // throws ValidationIssuesError (code "too_many_groups")
+export function assertGroupLimit(groups: readonly VariantGroup[]): void;   // throws GroupLimitError (issue code "too_many_groups")
 export function groupsForAccounts(accounts: readonly AccountRecord[],
   instructionsOf?: (a: AccountRecord) => string | null): VariantGroup<AccountRecord>[];
 // When instructionsOf is absent, the account's own postingInstructions are used. The job runner passes the snapshot.
@@ -102,7 +127,7 @@ z.object({
 
 - `tryVoice` resolves the accounts:
   - with `accountIds`: `loadAccounts`, where an unknown id is `NotFoundError`;
-  - otherwise the project's accounts in list order, added while the groups stay within the limit;
+  - otherwise `defaultTryItSelection(project accounts in list order)`;
   - with no accounts at all: `ConflictError("Connect an account to try the voice.")`.
 
   It then groups them, applies `assertGroupLimit` and runs `runGeneration`. It writes nothing.

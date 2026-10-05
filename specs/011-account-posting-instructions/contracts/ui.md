@@ -45,7 +45,8 @@ Before writing any route or action code, read `node_modules/next/dist/docs/01-ap
 ## Try it panel (FR-020, FR-013)
 
 - **Account choice**: in `voice/TryItPanel.tsx`, an "Accounts" fieldset replaces the "Platforms" fieldset. It has one checkbox per account, labelled "{displayName} ({providerName})" and grouped by platform as on Generate.
-  - By default, the accounts are taken in list order while the groups stay within the limit (computed with `groupTargets`).
+  - The default selection is `defaultTryItSelection(accounts)` from `src/lib/generation/groups.ts`, the same function the service uses. It is not re-implemented in the panel.
+  - **Server refusal**: a server refusal (for example after instructions changed while the page was open) shows `result.message` as the panel error. For the group limit that is the full `groupLimitMessage(n)` (research D5).
   - The live group-limit message sits under the fieldset (`role="status"`, `aria-live="polite"`) when the selection exceeds 16 groups.
 - **Props**: `platforms` and `defaults` are replaced by `accounts: AccountOption[]`.
 - **No accounts**: the panel shows the `EmptyState`: "Connect an account to try this voice. Go to Accounts" (a link).
@@ -55,7 +56,10 @@ Before writing any route or action code, read `node_modules/next/dist/docs/01-ap
 
 - **`AccountOption`** (`generate/generate-logic.ts`) gains `postingInstructions: string | null`. It is filled in `generate/page.tsx`, `jobs/new/form-data.ts` and the voice page, from `AccountView.postingInstructions`.
 - **Live group-limit message**: `generate/GenerateForm.tsx` and `jobs/new/JobForm.tsx` (also used by the CSV job form) compute `groupTargets(selected).length`. Past 16, they show `groupLimitMessage(n)` under the account fieldset (`role="status"`, `aria-live="polite"`) before submit.
-  - Submit stays enabled ("disable only while pending"). The server refuses with the same message, which the form shows next to the account picker (field `targetAccountIds`).
+  - Submit stays enabled ("disable only while pending"). The server refuses with the same message.
+    - The form shows it next to the account picker from `result.fieldErrors.targetAccountIds`, which `failFromError` fills from `GroupLimitError` (see [services.md](./services.md) § Errors).
+    - The form-level error is `result.message`, the same text. A form may skip the banner when the field error already shows it, but it must not show the generic "Some posts have validation problems.".
+  - **Regenerate** (`generate/result/[postId]/RegenerateDialog.tsx`): it has no live count, because the groups come from the post's current accounts. A refusal shows `result.message`, that is the full group-limit text naming the count, the maximum and the fix, as the dialog error.
 - **Account hint**: the account fieldset's hint gains: "Accounts on the same platform with different posting instructions each get their own version."
 
 ## Result screen and Review (FR-011, FR-015)
@@ -64,9 +68,11 @@ Before writing any route or action code, read `node_modules/next/dist/docs/01-ap
   - `VariantCard` gains `key` and `instructions`.
   - The card heading is "{providerName}: {accountNames}".
   - Under "Generation details", a "Posting instructions used" list shows each account's name, platform and the instructions used: "None", or "Not recorded" for older records.
-- **`VariantEditor`**: it sends `edits: cards.map(c => ({ accountIds: c.accountIds, text: c.text }))`. The `used / limit` counts come from the existing check route per card (first account), unchanged.
+- **`VariantEditor`**: it sends `edits: cards.map(c => ({ accountIds: c.accountIds, text: <edited text> }))`. The `used / limit` counts come from the existing check route per card (first account), unchanged.
+  - **Keying**: all client state is keyed by the card's group `key`: the edited-text map, the controlled `<textarea>` value, the counts and the issues. It is never keyed by `providerKey`, because two cards can share one.
+  - **Pure helper**: the card + edited-texts → `{ key, text }[]` display and `{ accountIds, text }[]` edits mapping lives in `variant-logic.ts` and is unit-tested. Editing `bluesky_2` changes only that card's text and its edit (research D13).
 - **Review**: `review/ReviewList.tsx` renders one entry per `ReviewVariant` (now per group), with the same heading. Its approve-with-edits sends `{ accountIds, text }`.
-- **Remaining problems**: shown as `{label}: {message}`, where the label comes from the group (D7).
+- **Remaining problems**: shown as `{label}: {message}`. The label is `p.label ?? p.groupKey ?? p.providerKey` from the record's `remainingProblems`, the same expression `POST /api/v1/generate` uses (D7, D13). A bare group key such as `bluesky_2` is never shown on its own.
 
 ## Job page (FR-016)
 
