@@ -83,10 +83,10 @@ export function ConnectCredentialsForm({
           error={fieldErrors[field.name]}
         />
       ))}
-      <p ref={alertRef} tabIndex={-1} role="alert" className="min-h-4 text-sm text-red-700 dark:text-red-400">
+      <p ref={alertRef} tabIndex={-1} role="alert" className="min-h-4 text-sm text-danger">
         {message}
       </p>
-      <p role="status" aria-live="polite" className="text-sm text-foreground/80">
+      <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
         {announcement}
       </p>
       <div>

@@ -56,7 +56,7 @@ export function RemoveAccountDialog({ slug, id, name }: { slug: string; id: stri
             Already published posts are kept.
           </p>
         ) : null}
-        <p role="alert" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+        <p role="alert" className="min-h-4 text-xs text-danger">
           {error}
         </p>
         <div className="mt-3 flex justify-end gap-2">

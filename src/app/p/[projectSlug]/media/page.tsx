@@ -12,6 +12,8 @@ import * as media from "@/server/services/media";
 import { MediaSelection, SelectBox } from "./MediaSelection";
 import { MediaCardActions } from "./MediaCardActions";
 import { UploadDropzone } from "./UploadDropzone";
+import { buttonStyles } from "@/components/ui/Button";
+import { controlStyles } from "@/components/ui/controls";
 
 export const metadata: Metadata = { title: "Media" };
 export const dynamic = "force-dynamic";
@@ -80,9 +82,9 @@ export default async function MediaPage({ params, searchParams }: Props) {
               name="q"
               defaultValue={filter.q ?? ""}
               placeholder="Search alt text or file name"
-              className="w-full max-w-sm rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm"
+              className={`${controlStyles} w-full max-w-sm`}
             />
-            <button type="submit" className="rounded-md border border-foreground/30 px-3 py-1.5 text-sm hover:bg-foreground/10">
+            <button type="submit" className={buttonStyles({ variant: "secondary" })}>
               Search
             </button>
           </form>
@@ -91,12 +93,12 @@ export default async function MediaPage({ params, searchParams }: Props) {
             unusedCount > 0 ? (
               <Link
                 href={`/p/${projectSlug}/jobs/new?source=media&mode=unused`}
-                className="self-start rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background"
+                className={buttonStyles({ variant: "primary", className: "self-start" })}
               >
                 Generate for all unused images ({unusedCount > 500 ? "500+" : unusedCount})
               </Link>
             ) : (
-              <span aria-disabled="true" className="self-start rounded-md border border-foreground/30 px-3 py-1.5 text-sm text-foreground/60">
+              <span aria-disabled="true" className="self-start rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground">
                 No unused images to generate for
               </span>
             )
@@ -111,13 +113,13 @@ export default async function MediaPage({ params, searchParams }: Props) {
                 ...(filter.missingAlt ? { missingAlt: "1" } : {}),
                 ...(filter.q ? { q: filter.q } : {}),
               }).toString()}`}
-              className="self-start rounded-md border border-foreground/40 px-3 py-1.5 text-sm font-medium hover:bg-foreground/10"
+              className={buttonStyles({ variant: "secondary", className: "self-start" })}
             >
               Generate posts for these {list.total} images
             </Link>
           ) : null}
           {failed || !list ? (
-            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+            <p role="alert" className="text-sm text-danger">
               The library could not be loaded. Reload the page to try again.
             </p>
           ) : list.items.length === 0 ? (

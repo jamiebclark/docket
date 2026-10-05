@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { counterLabel } from "../generate/generate-logic";
 import { rejectAction } from "./actions";
 import { REJECT_NAME_MAX, truncate } from "./review-logic";
+import { controlStyles } from "@/components/ui/controls";
 
 export const REJECT_REASON_MAX = 500;
 
@@ -47,13 +48,13 @@ export function RejectDialog({ slug, postId, text }: { slug: string; postId: str
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           aria-describedby={`${id}-count`}
-          className="mt-1 w-full rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm"
+          className={`${controlStyles} mt-1 w-full`}
         />
-        <p id={`${id}-count`} className="text-right text-xs text-foreground/70">
+        <p id={`${id}-count`} className="text-right text-xs text-muted-foreground">
           {counterLabel(reason.length, REJECT_REASON_MAX)}
         </p>
         {error ? (
-          <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="mt-2 text-sm text-danger">
             Error: {error}
           </p>
         ) : null}

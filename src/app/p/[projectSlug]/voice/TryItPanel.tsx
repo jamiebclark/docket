@@ -6,6 +6,7 @@ import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { TryItResult } from "@/server/services/voice";
 import { tryVoiceAction } from "./actions";
 import type { PlatformOption } from "./VoiceEditor";
+import { controlStyles } from "@/components/ui/controls";
 
 export interface TryItPanelProps {
   slug: string;
@@ -47,11 +48,11 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
   }
 
   return (
-    <section aria-labelledby={`${uid}-h`} className="flex flex-col gap-3 rounded-md border border-foreground/20 p-4">
+    <section aria-labelledby={`${uid}-h`} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
       <h2 id={`${uid}-h`} className="text-lg font-semibold">
         Try it
       </h2>
-      <p className="text-xs text-foreground/70">Samples are not saved.</p>
+      <p className="text-xs text-muted-foreground">Samples are not saved.</p>
       <fieldset className="flex flex-wrap gap-4">
         <legend className="mb-1 text-sm font-medium">Platforms</legend>
         {platforms.map((p) => (
@@ -75,7 +76,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
           required
           value={brief}
           onChange={(e) => setBrief(e.target.value)}
-          className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+          className={controlStyles}
         />
       </div>
       <div>
@@ -84,7 +85,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
         </Button>
       </div>
       {error ? (
-        <p role="alert" className="rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
+        <p role="alert" className="rounded-md border border-danger-border p-3 text-sm">
           Error: {error}
         </p>
       ) : null}
@@ -92,14 +93,14 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
       {result ? (
         <div className="flex flex-col gap-3">
           {result.variants.map((v) => (
-            <article key={v.providerKey} aria-label={`${nameOf(v.providerKey)} sample`} className="rounded-md border border-foreground/20 p-3 text-sm">
+            <article key={v.providerKey} aria-label={`${nameOf(v.providerKey)} sample`} className="rounded-lg border border-border bg-surface p-3 text-sm">
               <h3 className="font-medium">{nameOf(v.providerKey)}</h3>
               <p className="mt-1 whitespace-pre-wrap">{v.text}</p>
-              <p className="mt-1 text-xs text-foreground/70">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {v.count} / {v.limit} ({v.countingRule})
               </p>
               {v.issues.length > 0 ? (
-                <ul className="mt-1 list-disc pl-5 text-xs text-amber-900 dark:text-amber-300">
+                <ul className="mt-1 list-disc pl-5 text-xs text-warning">
                   {v.issues.map((m) => (
                     <li key={m}>{m}</li>
                   ))}
@@ -107,7 +108,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
               ) : null}
             </article>
           ))}
-          <p className="text-xs text-foreground/70">Took {(result.latencyMs / 1000).toFixed(1)} s.</p>
+          <p className="text-xs text-muted-foreground">Took {(result.latencyMs / 1000).toFixed(1)} s.</p>
         </div>
       ) : null}
     </section>

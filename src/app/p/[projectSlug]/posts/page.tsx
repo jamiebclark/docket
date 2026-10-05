@@ -12,6 +12,7 @@ import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as posts from "@/server/services/posts";
 import { POST_LIST_STATUSES, postSearchParamsSchema } from "@/lib/validation/media";
+import { buttonStyles } from "@/components/ui/Button";
 
 export const metadata: Metadata = { title: "Posts" };
 export const dynamic = "force-dynamic";
@@ -79,7 +80,7 @@ export default async function PostsPage({ params, searchParams }: Props) {
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Posts</h1>
         {scope.can({ post: ["edit"] }) ? (
-          <Link href={`/p/${projectSlug}/compose`} className="rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background">
+          <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "primary" })}>
             New post
           </Link>
         ) : null}
@@ -87,7 +88,7 @@ export default async function PostsPage({ params, searchParams }: Props) {
       <FilterTabs label="Filter posts by status" tabs={tabs} />
       <div className="mt-4">
         {list === null ? (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             Posts couldn&apos;t be loaded. Reload the page to try again.
           </p>
         ) : list.items.length === 0 ? (

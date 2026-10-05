@@ -40,7 +40,7 @@ export function RevokeKeyDialog({
       <Dialog open={open} onClose={() => setOpen(false)} title={`Revoke the key "${name}"?`}>
         <p className="mb-4 text-sm">Anything using it stops working on its next request. This cannot be undone.</p>
         {error ? (
-          <p role="alert" className="mb-2 text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="mb-2 text-sm text-danger">
             {error}
           </p>
         ) : null}

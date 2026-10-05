@@ -9,7 +9,7 @@ type Props = { slug: string; form: JobFormData };
 
 export function CsvProblemList({ problems }: { problems: { line: number | null; message: string }[] }) {
   return (
-    <div role="alert" className="rounded border border-red-300 p-3 text-sm">
+    <div role="alert" className="rounded border border-danger-border p-3 text-sm">
       <p className="font-medium">This file can&apos;t be used:</p>
       <ul className="mt-1 list-disc pl-5">
         {problems.map((p, i) => (
@@ -53,13 +53,13 @@ export function CsvJobForm({ slug, form }: Props) {
           className="mt-1 block text-sm"
           onChange={(e) => void onChange(e.target.files?.[0] ?? null)}
         />
-        <p className="mt-1 text-sm text-neutral-600">
+        <p className="mt-1 text-sm text-muted-foreground">
           The first row names the columns. Up to 500 rows and 1 MB. Use a column in your instructions as {"{{column}}"}.
         </p>
       </div>
       {busy && <p role="status">Checking the file…</p>}
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}

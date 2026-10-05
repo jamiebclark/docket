@@ -67,7 +67,7 @@ function Radios<T extends string>(props: {
             {c.label}
           </label>
           {c.help ? (
-            <p id={c.helpId} className="ml-6 text-xs text-foreground/70">
+            <p id={c.helpId} className="ml-6 text-xs text-muted-foreground">
               {c.help}
             </p>
           ) : null}
@@ -86,12 +86,12 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
   if (unreviewed && !expanded) {
     return (
       <fieldset
-        className="flex flex-col gap-2 rounded-md border-2 border-amber-700 p-3 dark:border-amber-400"
+        className="flex flex-col gap-2 rounded-md border-2 border-warning-border p-3"
         aria-describedby={explainId}
       >
         <legend className="px-1 text-sm font-semibold">Review and scheduling</legend>
         <p className="text-sm font-semibold">{UNREVIEWED_QUEUE_LABEL}</p>
-        <p id={explainId} className="text-xs text-foreground/80">
+        <p id={explainId} className="text-xs text-muted-foreground">
           {UNREVIEWED_QUEUE_EXPLANATION}
         </p>
         <label className="flex items-center gap-2 text-sm">
@@ -104,7 +104,7 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
           />
           {UNREVIEWED_QUEUE_CONFIRM}
         </label>
-        {error ? <p className="text-xs text-red-700 dark:text-red-400">{error}</p> : null}
+        {error ? <p className="text-xs text-danger">{error}</p> : null}
         <button type="button" className="self-start text-sm underline" onClick={() => setExpanded(true)}>
           Change review and scheduling
         </button>
@@ -144,7 +144,7 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
       />
       {unreviewed ? (
         <>
-          <p id={explainId} className="text-xs text-foreground/80">
+          <p id={explainId} className="text-xs text-muted-foreground">
             {UNREVIEWED_QUEUE_EXPLANATION}
           </p>
           <label className="flex items-center gap-2 text-sm">
@@ -158,7 +158,7 @@ export function PolicyPicker({ idPrefix, defaults, canAutoApprove, value, onChan
           </label>
         </>
       ) : null}
-      {error ? <p className="text-xs text-red-700 dark:text-red-400">{error}</p> : null}
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
     </fieldset>
   );
 }

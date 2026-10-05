@@ -35,7 +35,7 @@ export function RotateSecretDialog({ slug, id, onDone }: { slug: string; id: str
           update the receiver without missing events.
         </p>
         {error ? (
-          <p role="alert" className="mb-2 text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="mb-2 text-sm text-danger">
             {error}
           </p>
         ) : null}

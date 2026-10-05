@@ -60,7 +60,7 @@ export function UploadDropzone({ slug, maxMegabytes }: { slug: string; maxMegaby
         setOver(false);
         void upload([...e.dataTransfer.files]);
       }}
-      className={`flex flex-col gap-3 rounded-lg border border-dashed p-4 ${over ? "border-foreground bg-foreground/5" : "border-foreground/40"}`}
+      className={`flex flex-col gap-3 rounded-lg border border-dashed p-4 ${over ? "border-primary bg-muted" : "border-input"}`}
     >
       <div className="flex flex-wrap items-center gap-3">
         <input

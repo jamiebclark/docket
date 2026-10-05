@@ -15,6 +15,7 @@ import {
   removeAngle,
   type Angle,
 } from "./series-logic";
+import { controlStyles } from "@/components/ui/controls";
 
 export interface SeriesPlanEditorProps {
   slug: string;
@@ -52,10 +53,10 @@ export function SeriesPlanEditor({ slug, request, initialAngles, initial }: Seri
       }}
     >
       <h2 className="text-lg font-semibold">Plan</h2>
-      <p className="text-sm text-foreground/70">Edit, reorder, remove or add angles. One post is written for each, in this order.</p>
+      <p className="text-sm text-muted-foreground">Edit, reorder, remove or add angles. One post is written for each, in this order.</p>
       <ol className="flex flex-col gap-4">
         {angles.map((angle, i) => (
-          <li key={i} className="flex flex-col gap-2 rounded-md border border-foreground/30 p-3">
+          <li key={i} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
             <label htmlFor={`${uid}-title-${i}`} className="text-sm font-medium">
               Angle {i + 1} title
             </label>
@@ -64,7 +65,7 @@ export function SeriesPlanEditor({ slug, request, initialAngles, initial }: Seri
               value={angle.title}
               maxLength={TITLE_MAX}
               onChange={(e) => setAngles((a) => editAngle(a, i, { title: e.target.value }))}
-              className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+              className={controlStyles}
             />
             <label htmlFor={`${uid}-description-${i}`} className="text-sm font-medium">
               Angle {i + 1} description
@@ -75,7 +76,7 @@ export function SeriesPlanEditor({ slug, request, initialAngles, initial }: Seri
               value={angle.description}
               maxLength={DESCRIPTION_MAX}
               onChange={(e) => setAngles((a) => editAngle(a, i, { description: e.target.value }))}
-              className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+              className={controlStyles}
             />
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" disabled={i === 0 || busy} onClick={() => setAngles((a) => moveAngle(a, i, -1))}>
@@ -101,12 +102,12 @@ export function SeriesPlanEditor({ slug, request, initialAngles, initial }: Seri
         </Button>
       </div>
       {problem ? (
-        <p role="note" className="text-sm text-red-700 dark:text-red-400">
+        <p role="note" className="text-sm text-danger">
           {problem}
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           Error: {error}
         </p>
       ) : null}

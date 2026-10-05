@@ -66,7 +66,7 @@ export function EndpointForm({
           onChange={(e) => setInsecure(e.currentTarget.value.trim().toLowerCase().startsWith("http:"))}
         />
         {insecure ? (
-          <p className="text-xs text-amber-800 dark:text-amber-300">
+          <p className="text-xs text-warning">
             This address is not encrypted (http). Use https unless the receiver is on your own network.
           </p>
         ) : null}
@@ -92,12 +92,12 @@ export function EndpointForm({
               {EVENT_LABELS[type]}
             </label>
           ))}
-          <p id="webhook-events-error" aria-live="polite" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+          <p id="webhook-events-error" aria-live="polite" className="min-h-4 text-xs text-danger">
             {errors.events ?? ""}
           </p>
         </fieldset>
         {formError ? (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             {formError}
           </p>
         ) : null}

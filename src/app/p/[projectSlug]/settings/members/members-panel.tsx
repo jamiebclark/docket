@@ -25,7 +25,7 @@ export interface MemberItem {
 type Confirm = "remove" | "leave" | "transfer";
 type Action = (prev: ActionResult<null> | null, formData: FormData) => Promise<ActionResult<null>>;
 
-const errorClass = "mt-1 text-xs text-red-700 dark:text-red-400";
+const errorClass = "mt-1 text-xs text-danger";
 const joined = (iso: string) => new Date(iso).toISOString().slice(0, 10);
 
 export function MembersPanel({ slug, members }: { slug: string; members: MemberItem[] }) {
@@ -170,7 +170,7 @@ function ConfirmDialog({
     <Dialog open={open} onClose={onClose} title={title}>
       <p className="mb-4 text-sm">{body}</p>
       {error ? (
-        <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className="mb-3 text-sm text-danger">
           {error}
         </p>
       ) : null}

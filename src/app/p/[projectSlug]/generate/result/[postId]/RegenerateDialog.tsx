@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { INSTRUCTIONS_MAX } from "@/lib/validation/generation";
 import { regenerateAction } from "../../actions";
 import { counterLabel } from "../../generate-logic";
+import { controlStyles } from "@/components/ui/controls";
 
 export function RegenerateDialog({ slug, postId }: { slug: string; postId: string }) {
   const router = useRouter();
@@ -44,13 +45,13 @@ export function RegenerateDialog({ slug, postId }: { slug: string; postId: strin
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           aria-describedby={`${id}-count`}
-          className="mt-1 w-full rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm"
+          className={`${controlStyles} mt-1 w-full`}
         />
-        <p id={`${id}-count`} className="text-right text-xs text-foreground/70">
+        <p id={`${id}-count`} className="text-right text-xs text-muted-foreground">
           {counterLabel(instruction.length, INSTRUCTIONS_MAX)}
         </p>
         {error ? (
-          <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">
+          <p role="alert" className="mt-2 text-sm text-danger">
             Error: {error}
           </p>
         ) : null}

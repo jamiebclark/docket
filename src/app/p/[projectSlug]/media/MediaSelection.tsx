@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { buttonStyles } from "@/components/ui/Button";
 
 type Selection = { ids: ReadonlySet<string>; toggle: (id: string) => void; clear: () => void };
 const SelectionContext = createContext<Selection | null>(null);
@@ -26,11 +27,11 @@ export function MediaSelection({ slug, children }: { slug: string; children: Rea
   return (
     <SelectionContext.Provider value={value}>
       {ids.size > 0 ? (
-        <div role="region" aria-label="Selection" className="sticky top-0 z-10 flex items-center gap-3 rounded-md border border-foreground/30 bg-background px-3 py-2 text-sm">
-          <Link href={href} className="rounded-md bg-foreground px-3 py-1.5 font-medium text-background">
+        <div role="region" aria-label="Selection" className="sticky top-0 z-10 flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm">
+          <Link href={href} className={buttonStyles({ variant: "primary" })}>
             Generate posts for {ids.size} selected
           </Link>
-          <button type="button" onClick={value.clear} className="rounded-md border border-foreground/30 px-3 py-1.5 hover:bg-foreground/10">
+          <button type="button" onClick={value.clear} className={buttonStyles({ variant: "secondary" })}>
             Clear selection
           </button>
         </div>

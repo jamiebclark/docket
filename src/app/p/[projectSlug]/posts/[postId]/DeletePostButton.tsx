@@ -36,7 +36,7 @@ export function DeletePostButton({
             ? "At least one account has published, is publishing or needs your decision. Cancel what is still waiting instead."
             : "Anything still scheduled will be cancelled and the post will be removed from your lists."}
         </p>
-        <p role="alert" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+        <p role="alert" className="min-h-4 text-xs text-danger">
           {error}
         </p>
         <div className="mt-3 flex justify-end gap-2">

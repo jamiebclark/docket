@@ -50,7 +50,7 @@ export function SeriesWriter({ slug, seriesId, angles, initialSlots }: SeriesWri
         {angles.map((angle, i) => {
           const slot = slots[i]!;
           return (
-            <li key={i} className="flex flex-col gap-1 rounded-md border border-foreground/30 p-3 text-sm">
+            <li key={i} className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-3 text-sm">
               <p className="font-medium">
                 {i + 1}. {angle.title}
               </p>
@@ -66,7 +66,7 @@ export function SeriesWriter({ slug, seriesId, angles, initialSlots }: SeriesWri
                   </Button>
                 </div>
               ) : (
-                <p className="text-foreground/70">{slot.state === "writing" ? "Writing…" : "Waiting"}</p>
+                <p className="text-muted-foreground">{slot.state === "writing" ? "Writing…" : "Waiting"}</p>
               )}
             </li>
           );

@@ -75,7 +75,7 @@ export function TargetResolution({
     setUrlError("");
   };
   const errorLine = (
-    <p role="alert" className="min-h-4 text-xs text-red-700 dark:text-red-400">
+    <p role="alert" className="min-h-4 text-xs text-danger">
       {error}
     </p>
   );
@@ -159,14 +159,14 @@ export function TargetResolution({
             placeholder="https://"
             aria-describedby={`url-help-${targetId}`}
             aria-invalid={urlError ? true : undefined}
-            className="mt-1 w-full rounded-md border border-foreground/30 bg-background px-2 py-1.5"
+            className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5"
           />
         </label>
         <p id={`url-help-${targetId}`} className="mt-1 text-xs">
           An http or https address.
         </p>
         {urlError ? (
-          <p role="alert" className="text-xs text-red-700 dark:text-red-400">
+          <p role="alert" className="text-xs text-danger">
             {urlError}
           </p>
         ) : null}

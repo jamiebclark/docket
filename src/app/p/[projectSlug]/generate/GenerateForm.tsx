@@ -24,6 +24,7 @@ import {
   platformsNeedingImage,
   type AccountOption,
 } from "./generate-logic";
+import { controlStyles } from "@/components/ui/controls";
 
 export interface VoiceOption {
   id: string;
@@ -62,7 +63,7 @@ function TextArea(props: {
       <label htmlFor={props.id} className="text-sm font-medium">
         {props.label}
       </label>
-      <p id={hintId} className="text-xs text-foreground/70">
+      <p id={hintId} className="text-xs text-muted-foreground">
         {props.hint}
       </p>
       <textarea
@@ -73,9 +74,9 @@ function TextArea(props: {
         value={props.value}
         aria-describedby={`${hintId} ${countId}`}
         onChange={(e) => props.onChange(e.target.value)}
-        className="rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+        className={controlStyles}
       />
-      <p id={countId} className={`text-right text-xs ${props.value.length > props.max ? "text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
+      <p id={countId} className={`text-right text-xs ${props.value.length > props.max ? "text-danger" : "text-muted-foreground"}`}>
         {counterLabel(props.value.length, props.max)}
       </p>
     </div>
@@ -170,7 +171,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
     >
       <input type="hidden" name="requestId" value={requestId} />
       {isUnreviewedQueue(defaults) ? (
-        <p role="note" className="rounded-md border-2 border-amber-700 p-2 text-sm font-semibold dark:border-amber-400">
+        <p role="note" className="rounded-md border-2 border-warning-border p-2 text-sm font-semibold">
           This project is set to: {UNREVIEWED_QUEUE_LABEL}.
         </p>
       ) : null}
@@ -201,14 +202,14 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
         required
         onChange={setBrief}
       />
-      {fieldErrors.brief ? <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.brief}</p> : null}
+      {fieldErrors.brief ? <p className="text-xs text-danger">{fieldErrors.brief}</p> : null}
 
       {series ? (
         <div className="flex flex-col gap-1">
           <label htmlFor={`${uid}-count`} className="text-sm font-medium">
             Number of posts
           </label>
-          <p className="text-xs text-foreground/70">
+          <p className="text-xs text-muted-foreground">
             {SERIES_COUNT_MIN} to {SERIES_COUNT_MAX}. You can edit the plan before anything is written.
           </p>
           <input
@@ -218,9 +219,9 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
             max={SERIES_COUNT_MAX}
             value={count}
             onChange={(e) => setCount(Number(e.target.value))}
-            className="w-24 rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+            className={`${controlStyles} w-24`}
           />
-          {fieldErrors.count ? <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.count}</p> : null}
+          {fieldErrors.count ? <p className="text-xs text-danger">{fieldErrors.count}</p> : null}
         </div>
       ) : null}
 
@@ -251,12 +252,12 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
 
       <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
         <legend className="text-sm font-semibold">Accounts</legend>
-        <p id={`${uid}-accounts-hint`} className="text-xs text-foreground/70">
+        <p id={`${uid}-accounts-hint`} className="text-xs text-muted-foreground">
           One version is written for each platform you choose.
         </p>
         {groupByPlatform(accounts).map((group) => (
           <div key={group.providerName} className="flex flex-col gap-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground/70">{group.providerName}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.providerName}</p>
             {group.accounts.map((a) => (
               <label key={a.id} className="flex items-center gap-2 text-sm">
                 <input
@@ -272,14 +273,14 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
           </div>
         ))}
         {fieldErrors.targetAccountIds ? (
-          <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.targetAccountIds}</p>
+          <p className="text-xs text-danger">{fieldErrors.targetAccountIds}</p>
         ) : null}
       </fieldset>
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-semibold">Images</legend>
         {selected.length > 0 ? (
-          <p className="text-xs text-foreground/70">
+          <p className="text-xs text-muted-foreground">
             {maxImages === 0 ? "The chosen accounts do not take images." : `Up to ${maxImages} image${maxImages === 1 ? "" : "s"} for the chosen accounts.`}
           </p>
         ) : null}
@@ -291,7 +292,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
           onChange={(next) => setMedia(maxImages > 0 ? next.slice(0, maxImages) : next)}
         />
         {needImage.map((name) => (
-          <p key={name} role="note" className="rounded-md border border-amber-700 p-2 text-sm text-amber-900 dark:border-amber-400 dark:text-amber-300">
+          <p key={name} role="note" className="rounded-md border border-warning-border p-2 text-sm text-warning">
             Warning: {imageWarning(name)}
           </p>
         ))}
@@ -307,7 +308,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       />
 
       {error ? (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
+        <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-danger-border p-3 text-sm">
           <p>Error: {error}</p>
           <Button variant="secondary" onClick={() => submit(freshRequestId())} disabled={busy}>
             Try again

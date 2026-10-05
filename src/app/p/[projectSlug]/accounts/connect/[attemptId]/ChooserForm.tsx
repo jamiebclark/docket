@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { chooseConnectCandidatesAction } from "../../actions";
+import { buttonStyles } from "@/components/ui/Button";
 
 export interface ChooserCandidate {
   key: string;
@@ -37,12 +38,12 @@ function Option({
       <div className="flex flex-wrap items-center gap-2">
         <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4" />
         <label htmlFor={id} className="text-sm">
-          {c.displayName} <span className="text-foreground/70">({c.providerName})</span>
+          {c.displayName} <span className="text-muted-foreground">({c.providerName})</span>
         </label>
         {badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : null}
       </div>
       {c.notes.map((note) => (
-        <p key={note} className="ml-6 text-sm text-foreground/70">
+        <p key={note} className="ml-6 text-sm text-muted-foreground">
           {note}
         </p>
       ))}
@@ -92,7 +93,7 @@ export function ChooserForm({ slug, attemptId, candidates }: { slug: string; att
   return (
     <form onSubmit={submit} className="flex max-w-xl flex-col gap-4" aria-label="Choose accounts to connect">
       {roots.map((root) => (
-        <fieldset key={root.key} className="flex flex-col gap-2 rounded-lg border border-foreground/20 p-4">
+        <fieldset key={root.key} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
           <legend className="px-1 text-sm font-semibold">{root.displayName}</legend>
           <Option c={root} checked={selected.has(root.key)} onChange={(on) => toggle(root.key, on)} />
           {childrenOf(root.key).map((child) => (
@@ -102,14 +103,14 @@ export function ChooserForm({ slug, attemptId, candidates }: { slug: string; att
           ))}
         </fieldset>
       ))}
-      <p ref={alertRef} tabIndex={-1} role="alert" className="min-h-4 text-sm text-red-700 dark:text-red-400">
+      <p ref={alertRef} tabIndex={-1} role="alert" className="min-h-4 text-sm text-danger">
         {message}
       </p>
       <div className="flex gap-2">
         <Button type="submit" pending={pending} pendingLabel="Connecting…">
           Connect
         </Button>
-        <Link href={`/p/${slug}/accounts`} className="rounded-md border border-foreground/30 px-3 py-1.5 text-sm font-medium hover:bg-foreground/10">
+        <Link href={`/p/${slug}/accounts`} className={buttonStyles({ variant: "secondary" })}>
           Cancel
         </Link>
       </div>

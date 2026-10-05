@@ -40,7 +40,7 @@ export interface VoiceEditorProps {
 }
 
 const box =
-  "rounded-md border border-foreground/40 bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground";
+  "rounded-md border border-input bg-surface px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
 function Area(props: {
   id: string;
@@ -58,7 +58,7 @@ function Area(props: {
       <label htmlFor={props.id} className="text-sm font-medium">
         {props.label}
       </label>
-      {props.hint ? <p className="text-xs text-foreground/70">{props.hint}</p> : null}
+      {props.hint ? <p className="text-xs text-muted-foreground">{props.hint}</p> : null}
       <textarea
         id={props.id}
         rows={props.rows ?? 3}
@@ -68,14 +68,14 @@ function Area(props: {
         onChange={(e) => props.onChange(e.target.value)}
         className={box}
       />
-      {props.error ? <p className="text-xs text-red-700 dark:text-red-400">{props.error}</p> : null}
+      {props.error ? <p className="text-xs text-danger">{props.error}</p> : null}
     </div>
   );
 }
 
 function Group({ legend, children }: { legend: string; children: ReactNode }) {
   return (
-    <fieldset className="flex flex-col gap-3 rounded-md border border-foreground/20 p-4">
+    <fieldset className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
       <legend className="px-1 text-sm font-semibold">{legend}</legend>
       {children}
     </fieldset>
@@ -144,7 +144,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       {conflict ? (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-amber-700 p-3 text-sm dark:border-amber-400">
+        <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-warning-border p-3 text-sm">
           <p>This profile changed since you opened it. Your changes are still here.</p>
           <div className="flex gap-3">
             <Link href={`/p/${slug}/voice/${profile?.id ?? ""}/history?v=${version + 1}`} className="underline">
@@ -177,7 +177,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
             {...(fieldErrors.name ? { error: fieldErrors.name } : {})}
           />
           {profile ? (
-            <p className="text-sm text-foreground/80">
+            <p className="text-sm text-muted-foreground">
               Version {version}
               {isDefault ? " · Default profile" : ""}
             </p>
@@ -192,7 +192,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
         </Group>
 
         <Group legend="Examples">
-          <p className="text-xs text-foreground/70">Up to {EXAMPLES_MAX} posts that sound right.</p>
+          <p className="text-xs text-muted-foreground">Up to {EXAMPLES_MAX} posts that sound right.</p>
           {form.examplePosts.map((text, i) => (
             <div key={i} className="flex flex-col gap-1">
               <Area id={`${uid}-ex-${i}`} label={`Example ${i + 1}`} value={text} rows={3} readOnly={readOnly} onChange={(v) => set("examplePosts", form.examplePosts.map((x, j) => (j === i ? v : x)))} />
@@ -208,7 +208,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
               Add example
             </Button>
           ) : null}
-          {readOnly && form.examplePosts.length === 0 ? <p className="text-sm text-foreground/70">No examples.</p> : null}
+          {readOnly && form.examplePosts.length === 0 ? <p className="text-sm text-muted-foreground">No examples.</p> : null}
         </Group>
 
         <Group legend="Links and hashtags">
@@ -254,7 +254,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
         </Group>
 
         {error ? (
-          <p role="alert" className="rounded-md border border-red-700 p-3 text-sm dark:border-red-400">
+          <p role="alert" className="rounded-md border border-danger-border p-3 text-sm">
             Error: {error}
           </p>
         ) : null}
