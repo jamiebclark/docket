@@ -1,11 +1,23 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { TryItResult } from "@/server/services/voice";
+import { GROUP_LIMIT, groupLimitMessage, groupTargets } from "@/lib/generation/groups";
 import { tryVoiceAction } from "./actions";
-import type { PlatformOption } from "./VoiceEditor";
+import type { AccountOption } from "./VoiceEditor";
+
+/** Accounts in list order, as many as fit in one generation. */
+function defaultSelection(accounts: AccountOption[]): string[] {
+  const picked: AccountOption[] = [];
+  for (const a of accounts) {
+    if (groupTargets([...picked, a]).length <= GROUP_LIMIT) picked.push(a);
+  }
+  return picked.map((a) => a.id);
+}
 
 export interface TryItPanelProps {
   slug: string;
@@ -14,27 +26,27 @@ export interface TryItPanelProps {
   versionId: string;
   /** The unsaved form content; what owners and admins try. */
   draft: () => unknown;
-  platforms: PlatformOption[];
-  defaults: string[];
+  accounts: AccountOption[];
   /** Starting state for server rendering and tests. */
   initial?: { result?: TryItResult };
 }
 
-export function TryItPanel({ slug, canManage, versionId, draft, platforms, defaults, initial }: TryItPanelProps) {
+export function TryItPanel({ slug, canManage, versionId, draft, accounts, initial }: TryItPanelProps) {
   const uid = useId();
-  const [chosen, setChosen] = useState<string[]>(defaults.length > 0 ? defaults : platforms.slice(0, 1).map((p) => p.key));
+  const [chosen, setChosen] = useState<string[]>(() => defaultSelection(accounts));
   const [brief, setBrief] = useState("");
   const [result, setResult] = useState<TryItResult | null>(initial?.result ?? null);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
-  const nameOf = (key: string) => platforms.find((p) => p.key === key)?.displayName ?? key;
+  const groupCount = groupTargets(accounts.filter((a) => chosen.includes(a.id))).length;
+  const overLimit = groupCount > GROUP_LIMIT;
 
   function run() {
     setError("");
     start(async () => {
       const r = await tryVoiceAction(slug, {
         brief,
-        providerKeys: chosen,
+        accountIds: accounts.filter((a) => chosen.includes(a.id)).map((a) => a.id),
         versionId,
         ...(canManage ? { draft: draft() } : {}),
       });
@@ -52,19 +64,35 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
         Try it
       </h2>
       <p className="text-xs text-foreground/70">Samples are not saved.</p>
-      <fieldset className="flex flex-wrap gap-4">
-        <legend className="mb-1 text-sm font-medium">Platforms</legend>
-        {platforms.map((p) => (
-          <label key={p.key} className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={chosen.includes(p.key)}
-              onChange={(e) => setChosen((c) => (e.target.checked ? [...c, p.key].slice(0, 4) : c.filter((k) => k !== p.key)))}
-            />
-            {p.displayName}
-          </label>
-        ))}
-      </fieldset>
+      {accounts.length === 0 ? (
+        <EmptyState
+          message="Connect an account to try this voice."
+          action={
+            <Link href={`/p/${slug}/accounts`} className="text-sm underline">
+              Go to Accounts
+            </Link>
+          }
+        />
+      ) : (
+        <fieldset className="flex flex-wrap gap-4">
+          <legend className="mb-1 text-sm font-medium">Accounts</legend>
+          {accounts.map((a) => (
+            <label key={a.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={chosen.includes(a.id)}
+                onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((id) => id !== a.id)))}
+              />
+              {a.displayName} ({a.providerName})
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {overLimit ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          {groupLimitMessage(groupCount)}
+        </p>
+      ) : null}
       <div className="flex flex-col gap-1">
         <label htmlFor={`${uid}-brief`} className="text-sm font-medium">
           Brief
@@ -79,7 +107,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
         />
       </div>
       <div>
-        <Button pending={pending} pendingLabel="Trying…" disabled={pending || chosen.length === 0 || brief.trim() === ""} onClick={run}>
+        <Button pending={pending} pendingLabel="Trying…" disabled={pending || chosen.length === 0 || overLimit || brief.trim() === ""} onClick={run}>
           Try it
         </Button>
       </div>
@@ -92,8 +120,10 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
       {result ? (
         <div className="flex flex-col gap-3">
           {result.variants.map((v) => (
-            <article key={v.providerKey} aria-label={`${nameOf(v.providerKey)} sample`} className="rounded-md border border-foreground/20 p-3 text-sm">
-              <h3 className="font-medium">{nameOf(v.providerKey)}</h3>
+            <article key={v.key} aria-label={`${v.providerName}: ${v.accountNames.join(", ")} sample`} className="rounded-md border border-foreground/20 p-3 text-sm">
+              <h3 className="font-medium">
+                {v.providerName}: {v.accountNames.join(", ")}
+              </h3>
               <p className="mt-1 whitespace-pre-wrap">{v.text}</p>
               <p className="mt-1 text-xs text-foreground/70">
                 {v.count} / {v.limit} ({v.countingRule})

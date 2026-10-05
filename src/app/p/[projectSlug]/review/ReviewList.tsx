@@ -105,9 +105,9 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
                   {item.variants.map((v) => {
                     const over = v.limit > 0 && v.count > v.limit;
                     return (
-                      <li key={v.providerKey} className="rounded-md bg-foreground/5 p-3">
+                      <li key={v.key} className="rounded-md bg-foreground/5 p-3">
                         <p className="text-sm font-medium">
-                          {v.displayName} <span className="font-normal text-foreground/70">for {v.accountNames.join(", ")}</span>
+                          {v.displayName}: <span className="font-normal text-foreground/70">{v.accountNames.join(", ")}</span>
                         </p>
                         <p className="whitespace-pre-wrap text-sm">{v.text}</p>
                         <p className={`text-xs ${over ? "font-semibold text-red-700 dark:text-red-400" : "text-foreground/70"}`}>
@@ -156,6 +156,7 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
                     slug={slug}
                     postId={item.postId}
                     cards={item.variants.map((v) => ({
+                      key: v.key,
                       providerKey: v.providerKey,
                       providerName: v.displayName,
                       accountIds: v.accountIds,

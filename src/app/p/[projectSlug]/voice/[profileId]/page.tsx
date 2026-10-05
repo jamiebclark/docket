@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { NotFoundError } from "@/server/dal";
 import { getVoiceProfile } from "@/server/services/voice";
-import { connectedProviderKeys, platformOptions, scopeOrNotFound } from "../scope";
+import { accountOptions, scopeOrNotFound } from "../scope";
 import { VoiceEditor } from "../VoiceEditor";
 import { ArchivedBanner } from "./ArchivedBanner";
 
@@ -39,8 +39,7 @@ export default async function VoiceProfilePage({ params }: Props) {
         }}
         initialName={found.profile.name}
         initialContent={found.current.content}
-        platforms={platformOptions()}
-        tryDefaults={await connectedProviderKeys(scope)}
+        accounts={await accountOptions(scope)}
       />
     </section>
   );

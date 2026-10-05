@@ -6,6 +6,7 @@ import { api, createKey, type ApiPermission } from "../../../helpers/api";
 import { closeDb, testDb } from "../../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../../helpers/fake-llm";
 import { createVoiceProfile } from "../../../helpers/factories";
+import { setPostingInstructions } from "../../../../src/server/services/accounts";
 import { postsEnv } from "../../../helpers/posts-env";
 
 afterAll(closeDb);
@@ -109,5 +110,20 @@ describe("POST /generate", () => {
     const r = await call({}, undefined, readOnly);
     expect(r.status).toBe(403);
     expect(r.json.error.details).toEqual({ permission: "generate" });
+  });
+
+  it("groups accounts with different posting instructions and labels problems by group", async () => {
+    const { env, account, profile, key, call } = await setup();
+    const second = await env.account({}, true);
+    await setPostingInstructions(env.scope, second.id, { instructions: "Be playful." });
+    const tooLong = "x".repeat(600);
+    const llm = createFakeLlm(Array.from({ length: 6 }, () => ({ ok: { variants: { mock_1: { text: tooLong }, mock_2: { text: tooLong } } } }) as FakeStep));
+    setLlmForTests(llm);
+    const r = await call({ accountIds: [account.id, second.id], voiceProfileId: profile.id });
+    expect(r.status, JSON.stringify(r.json)).toBe(201);
+    expect(Object.keys(r.json)).toEqual(expect.arrayContaining(["post", "decision", "queued", "problems"]));
+    expect(r.json.problems.length).toBeGreaterThan(0);
+    expect(r.json.problems.map((p: { message: string }) => p.message).join("\n")).toMatch(/mock_2 \(Mock/);
+    void key;
   });
 });

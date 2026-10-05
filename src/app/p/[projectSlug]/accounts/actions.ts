@@ -142,3 +142,12 @@ export async function pasteConnectTokenAction(
   if (!result.data.ok) return fail("validation", result.data.message);
   redirect(`/p/${slug}/accounts/connect/${result.data.attemptId}`);
 }
+
+export async function setPostingInstructionsAction(
+  slug: string,
+  input: { accountId: string; instructions: string },
+): Promise<ActionResult<{ changed: boolean; instructions: string | null }>> {
+  return mutate(slug, (scope) =>
+    accounts.setPostingInstructions(scope, input?.accountId, { instructions: input?.instructions }),
+  );
+}

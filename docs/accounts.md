@@ -60,6 +60,15 @@ The person who clicks **Connect** needs two things:
 | Instagram | The same as Facebook, for the Page the Instagram account is linked to |
 | Threads | To be logged in to Threads **as that account**, and that account must be a Threads Tester on your app |
 
+## Posting instructions
+
+Each connected account has an optional **Posting instructions** field (up to 2,000 characters) on the Accounts screen, just above its posting slots. It tells the generator how posts for that account are written: hashtags, links, how a post opens. The brand voice stays on the voice profile; see [generator.md](generator.md#posting-instructions) for how the instructions are used.
+
+- **Who can edit.** Owners and admins, enforced on the server. Editors see the text read-only.
+- **Audit.** Each change appears in the project's activity log (Settings → Members) with the previous and new text. Saving without changing the text writes nothing.
+- **Reconnecting** an account keeps its instructions. Removing an account and connecting it again starts it with none.
+- **Also available** read-only as `postingInstructions` from `GET /api/v1/accounts` and in `account.*` webhook bodies.
+
 ## Bluesky
 
 Bluesky connects with an **app password**, not the account's main password.

@@ -12,7 +12,7 @@ type Rejected = Awaited<ReturnType<typeof rejectPost>>;
 /** Approves a post, optionally saving edits first. A refusal (already reviewed, blocking problems) is data. */
 export async function approveAction(
   slug: string,
-  input: { postId: string; edits?: { providerKey: string; text: string }[] },
+  input: { postId: string; edits?: { accountIds: string[]; text: string }[] },
 ): Promise<ActionResult<ApproveResult>> {
   const result = await runAction(slug, (scope) => approvePost(scope, input?.postId, { edits: input?.edits }));
   if (result.ok) revalidate(slug);

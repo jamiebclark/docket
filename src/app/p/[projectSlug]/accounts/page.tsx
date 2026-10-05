@@ -15,6 +15,7 @@ import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
 import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
+import { PostingInstructionsForm } from "./PostingInstructionsForm";
 import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
 
 export const metadata: Metadata = { title: "Accounts" };
@@ -180,6 +181,19 @@ export default async function AccountsPage({
                       </details>
                     ))
                 : null}
+              <h3 className="text-base font-medium">Posting instructions</h3>
+              {canManage ? (
+                <PostingInstructionsForm
+                  slug={projectSlug}
+                  accountId={account.id}
+                  accountName={account.displayName}
+                  initial={account.postingInstructions}
+                />
+              ) : account.postingInstructions ? (
+                <p className="whitespace-pre-wrap text-sm">{account.postingInstructions}</p>
+              ) : (
+                <p className="text-sm text-foreground/70">No posting instructions.</p>
+              )}
               <h3 className="text-base font-medium">Posting slots ({timeZone})</h3>
               {rows.length === 0 ? (
                 <p className="text-sm text-foreground/70">No posting slots yet.</p>

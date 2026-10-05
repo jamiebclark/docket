@@ -463,6 +463,18 @@ Baseline before any 010 change: `pnpm tsc --noEmit` clean, `pnpm lint` 0 errors 
 - `pnpm build` (includes `build:prestart`, `build:storage-init`, `build:smoke`, `build:worker`): succeeds.
 - Not verified headlessly: Docker compose bring-up and browser checks (no Docker/browser in this run).
 
+## 011 — Account posting instructions
+
+- **Job snapshot.** *What:* `generation_jobs.posting_instructions_snapshot` (`{ v: 1, byAccount }`) is written at job creation; the runner, deferred and manual retries and appended items all read it. *Why:* mirrors the pinned voice version, so editing an account mid-job changes 0 items (SC-006). *Reverse:* drop the column and read current instructions.
+- **Migration and removal of per-platform guidance from the voice.** *What:* `0009_copy_platform_guidance` copies each project's default profile's highest-numbered version's non-empty `platformGuidance` onto matching not-removed accounts whose instructions are empty; idempotent, no audit rows. New voice input (`voiceContentInputSchema`) strips `platformGuidance`; the prompt never reads it; history shows old guidance read-only. *Why:* one source of per-channel advice (FR-023 to FR-025). Version rows are immutable, so they are not rewritten.
+- **16-group limit, UNVERIFIED basis.** *What:* `assertGroupLimit` refuses more than 16 groups before any model call, on every caller. *Why:* 16 is the strictest number in the documented Anthropic structured-output limits (research R1, `docs/research/llm-and-storage.md` §2); no documented limit on required properties exists, so the real ceiling is unverified. It is one constant (`GROUP_LIMIT`). *Reverse:* raise the constant once measured.
+- **2,000-character limit.** *What:* Zod `.max(2000)` on the normalised text (UTF-16 units) plus a DB check on code points, which never refuses what the service accepted. *Why:* matches the old per-platform guidance limit.
+- **"Identical" rule.** *What:* accounts group when provider key and normalised instructions are equal: CRLF/CR to LF, trimmed, exact and case-sensitive, `null` equals `null`. *Why:* cheap, predictable, and the stored text is already normalised.
+- **Pre-existing jobs use current instructions.** *What:* jobs with a `NULL` snapshot read each account's current instructions at run time; an over-limit result fails the item with `bad_request`, no model call. *Why:* no snapshot exists to honour (FR-018).
+- **Regenerate uses current instructions.** *What:* `regeneratePost` builds groups from the live targets and their current instructions, and records them. *Why:* a regenerate is a new request, and the person expects the accounts' present settings.
+- **Plan reading (a): stray `platformGuidance` is stripped.** A `platformGuidance` key in voice input (an editor tab opened before the upgrade, or an API caller) is dropped, not refused, so such a save still succeeds.
+- **Plan reading (b): `/generate` limit 400 is replayed.** The too-many-groups 400 is a 4xx after the idempotency claim, so under 009 decision 7 it is stored and replayed under the same key; the replay is the refusal, not a model result.
+
 ## Release fix (2026-10-04)
 
 - `conventional-changelog-conventionalcommits` is pinned to `^9`: `@semantic-release/release-notes-generator` 14 bundles `conventional-changelog-writer` 8, and preset 10 requires writer 9+, so releases failed on every merge to `main` until this fix. *Reverse:* move to preset 10 once release-notes-generator ships writer 9.

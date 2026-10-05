@@ -190,7 +190,7 @@ const CASES: Case[] = [
   { name: "bulkApproveAction", run: (s, f) => reviewActions.bulkApproveAction(s, { postIds: f.reviewPostIds }) },
   {
     name: "updatePostVariantsAction",
-    run: (s, f) => generateActions.updatePostVariantsAction(s, { postId: f.generatedPostId, edits: [{ providerKey: "mock", text: "Edited" }] }),
+    run: (s, f) => generateActions.updatePostVariantsAction(s, { postId: f.generatedPostId, edits: [{ accountIds: [f.accountId], text: "Edited" }] }),
   },
   { name: "createVoiceAction", manage: true, run: (s) => voiceActions.createVoiceAction(s, { name: `Voice ${randomUUID()}`, content: {} }) },
   {

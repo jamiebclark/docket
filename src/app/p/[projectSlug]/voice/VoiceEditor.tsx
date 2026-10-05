@@ -20,9 +20,12 @@ import {
   type VoiceFormState,
 } from "./voice-logic";
 
-export interface PlatformOption {
-  key: string;
+export interface AccountOption {
+  id: string;
   displayName: string;
+  providerKey: string;
+  providerName: string;
+  postingInstructions: string | null;
 }
 
 export interface VoiceEditorProps {
@@ -32,9 +35,8 @@ export interface VoiceEditorProps {
   profile?: { id: string; version: number; versionId: string; isDefault: boolean };
   initialName: string;
   initialContent: VoiceContent;
-  platforms: PlatformOption[];
-  /** Providers of connected accounts; Try it starts with these ticked. */
-  tryDefaults: string[];
+  /** The project's accounts, in list order; Try it lets the reader pick among them. */
+  accounts: AccountOption[];
   /** Starting state for server rendering and tests. */
   initial?: { conflict?: boolean; message?: string };
 }
@@ -83,7 +85,7 @@ function Group({ legend, children }: { legend: string; children: ReactNode }) {
 }
 
 export function VoiceEditor(props: VoiceEditorProps) {
-  const { slug, canManage, profile, platforms } = props;
+  const { slug, canManage, profile, accounts } = props;
   const readOnly = !canManage;
   const router = useRouter();
   const uid = useId();
@@ -237,20 +239,12 @@ export function VoiceEditor(props: VoiceEditorProps) {
             onChange={(e) => set("hashtags", e.target.value)}
             onBlur={() => set("hashtags", normaliseHashtags(form.hashtags))}
           />
-        </Group>
-
-        <Group legend="Platform guidance">
-          {platforms.map((p) => (
-            <Area
-              key={p.key}
-              id={`${uid}-pg-${p.key}`}
-              label={p.displayName}
-              value={form.platformGuidance[p.key] ?? ""}
-              readOnly={readOnly}
-              max={FIELD_MAX}
-              onChange={(v) => set("platformGuidance", { ...form.platformGuidance, [p.key]: v })}
-            />
-          ))}
+          <p className="text-sm">
+            Per-platform guidance now lives on each account.{" "}
+            <Link href={`/p/${slug}/accounts`} className="underline">
+              Edit it on Accounts
+            </Link>
+          </p>
         </Group>
 
         {error ? (
@@ -313,8 +307,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
           canManage={canManage}
           versionId={profile.versionId}
           draft={() => toContent(form)}
-          platforms={platforms}
-          defaults={props.tryDefaults}
+          accounts={accounts}
         />
       ) : null}
     </div>

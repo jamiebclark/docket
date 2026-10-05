@@ -11,11 +11,18 @@ import { MembersPanel } from "./members-panel";
 export const metadata: Metadata = { title: "Members & invitations" };
 export const dynamic = "force-dynamic";
 
-/** API key and webhook audit rows name their subject in `details` (a key name, or an endpoint host). */
+/** API key, webhook and account audit rows name their subject in `details` (a key name, an endpoint host, or an account name). */
 function detailSubject(a: { action: string; details: unknown }): string | null {
-  if (!/^(api_key|webhook)_/.test(a.action)) return null;
-  const d = (a.details ?? {}) as { name?: unknown; host?: unknown };
-  const label = typeof d.name === "string" ? d.name : typeof d.host === "string" ? d.host : null;
+  if (!/^(api_key|webhook)_|^account_posting_instructions_update$/.test(a.action)) return null;
+  const d = (a.details ?? {}) as { name?: unknown; host?: unknown; displayName?: unknown };
+  const label =
+    typeof d.name === "string"
+      ? d.name
+      : typeof d.host === "string"
+        ? d.host
+        : typeof d.displayName === "string"
+          ? d.displayName
+          : null;
   return label ? `"${label}"` : null;
 }
 

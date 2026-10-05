@@ -2,6 +2,8 @@
 import type { CheckResult } from "../../../compose/composer-logic";
 
 export interface VariantCard {
+  /** The variant key: the platform, or `<platform>_<n>` when the post has several variants for it. */
+  key: string;
   providerKey: string;
   providerName: string;
   accountIds: string[];
@@ -10,6 +12,16 @@ export interface VariantCard {
 }
 
 export const CHECK_DEBOUNCE_MS = 300;
+
+/** The cards carrying the live text, keyed by the card's own `key` (two cards can share a provider). */
+export function liveCards(cards: readonly VariantCard[], texts: Readonly<Record<string, string>>): VariantCard[] {
+  return cards.map((c) => ({ ...c, text: texts[c.key] ?? c.text }));
+}
+
+/** The `{ accountIds, text }` edits to save for the current cards. */
+export function editsFor(cards: readonly VariantCard[]) {
+  return cards.map((c) => ({ accountIds: c.accountIds, text: c.text }));
+}
 
 export function checkInputFor(postId: string, cards: readonly VariantCard[], mediaIds: readonly string[]) {
   return {

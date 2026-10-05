@@ -16,6 +16,8 @@ import * as posts from "../../src/server/services/posts";
 import * as slots from "../../src/server/services/slots";
 import { closeDb, testDb } from "../helpers/db";
 import { postsEnv } from "../helpers/posts-env";
+import { sessionFor } from "../helpers/connect-group";
+import MembersPage from "../../src/app/p/[projectSlug]/settings/members/page";
 
 afterAll(async () => {
   await closeDb();
@@ -151,5 +153,63 @@ describe("accounts page with the Meta connect group", () => {
     expect(html).toContain("is not configured on this server");
     expect(html).toContain("connect-group-meta-redirect");
     expect(html).not.toContain('id="connect-group-meta-token"');
+  });
+});
+
+async function renderAs<T>(userId: string, render: () => Promise<T>): Promise<T> {
+  const session = await sessionFor(userId);
+  const { sessionModule } = await import("../helpers/actions");
+  const original = sessionModule.getSession;
+  sessionModule.getSession = (async () => ({ user: { id: userId }, session: { id: session.sessionId } })) as never;
+  try {
+    return await render();
+  } finally {
+    sessionModule.getSession = original;
+  }
+}
+
+describe("posting instructions on the accounts page", () => {
+  it("shows owners the form with label, counter and help text", async () => {
+    const env = await postsEnv();
+    const a = await env.account({}, false);
+    await accounts.setPostingInstructions(env.scope, a.id, { instructions: "One hashtag." });
+    const html = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    expect(html).toContain("<h3");
+    expect(html).toContain("Posting instructions</h3>");
+    expect(html).toContain(`Posting instructions for ${a.displayName}`);
+    expect(html).toContain("<textarea");
+    expect(html).toContain("One hashtag.");
+    expect(html).toContain("12 / 2,000");
+    expect(html).toContain("How posts for this account are written");
+    expect(html).toContain("Save");
+    expect(html.indexOf("Posting instructions</h3>")).toBeLessThan(html.indexOf("Posting slots"));
+  });
+
+  it("shows editors read-only text and no form control", async () => {
+    const env = await postsEnv();
+    const a = await env.account({}, false);
+    const b = await env.account({}, false);
+    await accounts.setPostingInstructions(env.scope, a.id, { instructions: "Line one\nLine two" });
+    const html = await renderAs(env.editor.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    expect(html).toContain("whitespace-pre-wrap");
+    expect(html).toContain("Line one\nLine two");
+    expect(html).toContain("No posting instructions.");
+    expect(html).not.toContain("<textarea");
+    expect(b.id).toBeTruthy();
+  });
+
+  it("names the account in the members activity list", async () => {
+    const env = await postsEnv();
+    const a = await env.account({}, false);
+    await accounts.setPostingInstructions(env.scope, a.id, { instructions: "Rule" });
+    const html = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await MembersPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    expect(html).toContain("changed the posting instructions for");
+    expect(html).toContain(`&quot;${a.displayName}&quot;`);
   });
 });

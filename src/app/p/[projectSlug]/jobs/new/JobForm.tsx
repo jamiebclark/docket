@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MARK_CLOSE, MARK_OPEN, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
 import { INSTRUCTIONS_MAX } from "@/lib/validation/generation";
 import { createJobAction } from "../actions";
-import { groupByPlatform, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
+import { ACCOUNTS_HINT, groupLimitNotice, groupByPlatform, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
 
@@ -59,6 +59,7 @@ export function JobForm(props: JobFormProps) {
   const preview = firstFields ? renderTemplate(template, firstFields, { mark: true }) : null;
   const empties = Object.entries(emptyByField).filter(([name, n]) => n > 0 && new RegExp(`\\{\\{\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\}\\}`).test(template));
   const selected = accounts.filter((a) => chosen.includes(a.id));
+  const limitNotice = groupLimitNotice(selected);
   const needImage = source.kind === "csv" ? [...new Set(selected.filter((a) => a.mediaRequired).map((a) => a.providerName))] : [];
 
   function insertField(name: string) {
@@ -207,7 +208,7 @@ export function JobForm(props: JobFormProps) {
       <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
         <legend className="text-sm font-semibold">Target accounts</legend>
         <p id={`${uid}-accounts-hint`} className="text-xs text-foreground/70">
-          One version is written for each platform you choose.
+          {ACCOUNTS_HINT}
         </p>
         {groupByPlatform(accounts).map((group) => (
           <div key={group.providerName} className="flex flex-col gap-1">
@@ -231,6 +232,11 @@ export function JobForm(props: JobFormProps) {
             Warning: {imageWarning(name)}
           </p>
         ))}
+        {limitNotice ? (
+          <p role="status" aria-live="polite" className="text-xs text-red-700 dark:text-red-400">
+            {limitNotice}
+          </p>
+        ) : null}
         {fieldErrors.targetAccountIds ? <p className={red}>{fieldErrors.targetAccountIds}</p> : null}
       </fieldset>
 

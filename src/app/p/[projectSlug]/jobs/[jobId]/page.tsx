@@ -107,6 +107,23 @@ export default async function JobPage({ params, searchParams }: Props) {
         </dd>
         <dt className="font-medium">Targets</dt>
         <dd>{job.targets.map((t) => (t.removed ? `${t.displayName} (removed)` : t.displayName)).join(", ")}</dd>
+        <dt className="font-medium">Posting instructions (as of job creation)</dt>
+        <dd>
+          <ul className="flex flex-col gap-1">
+            {job.targets.map((t) => (
+              <li key={t.id}>
+                <span className="font-medium">{t.displayName}:</span>{" "}
+                {t.instructions === "not_recorded" ? (
+                  <span className="text-muted-foreground">Not recorded: uses each account&apos;s current instructions</span>
+                ) : t.instructions === null ? (
+                  <span className="text-muted-foreground">None</span>
+                ) : (
+                  <span className="whitespace-pre-wrap">{t.instructions}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </dd>
         <dt className="font-medium">Policies</dt>
         <dd>{job.unreviewedQueue ? UNREVIEWED_QUEUE_LABEL : `${APPROVAL_LABEL[job.approval]} + ${SCHEDULING_LABEL[job.scheduling]}`}</dd>
       </dl>

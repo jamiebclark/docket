@@ -78,14 +78,23 @@ export function failFromError(err: unknown): ActionResult<never> {
   const code = err instanceof Error ? ERROR_NAME_TO_CODE[err.name] : undefined;
   if (!code) throw err;
   // These carry a deliberate, user-facing message; the rest stay generic so nothing leaks.
-  const keepsMessage = code === "last_owner" || code === "conflict" || (err instanceof Error && KEEPS_MESSAGE_NAMES.has(err.name));
+  const flatIssues = code === "validation" ? (err as { issues?: ValidationIssues }).issues : undefined;
+  // A flat issue list is a whole-request refusal whose message was written for the person; grouped ones are per post.
+  const keepsMessage =
+    code === "last_owner" ||
+    code === "conflict" ||
+    (Array.isArray(flatIssues) && flatIssues.length > 0) ||
+    (err instanceof Error && KEEPS_MESSAGE_NAMES.has(err.name));
   const message =
     keepsMessage && err instanceof Error && err.message
       ? err.message
       : (GENERIC_MESSAGE[code] ?? "Something went wrong.");
   if (code === "validation") {
     const issues = (err as { issues?: ValidationIssues }).issues;
-    return issues ? { ok: false, error: code, message, issues } : fail(code, message);
+    if (!issues) return fail(code, message);
+    const fieldErrors: Record<string, string> = {};
+    if (Array.isArray(issues)) for (const i of issues) if (i.field) fieldErrors[i.field] ??= i.message;
+    return { ok: false, error: code, message, issues, ...(Object.keys(fieldErrors).length > 0 ? { fieldErrors } : {}) };
   }
   const field = (err as { field?: unknown }).field;
   return typeof field === "string" && field

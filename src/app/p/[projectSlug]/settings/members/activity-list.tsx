@@ -8,6 +8,7 @@ const LABEL: Record<string, string> = {
   member_leave: "left the project:",
   role_change: "changed the role of",
   ownership_transfer: "transferred ownership to",
+  account_posting_instructions_update: "changed the posting instructions for",
   api_key_create: "created the API key",
   api_key_revoke: "revoked the API key",
   webhook_create: "added the webhook to",

@@ -17,7 +17,9 @@ import {
   SCHEDULING_LABEL,
   counterLabel,
   freshRequestId,
+  ACCOUNTS_HINT,
   groupByPlatform,
+  groupLimitNotice,
   imageWarning,
   LIMITS,
   maxImagesFor,
@@ -101,6 +103,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
   const busy = pending || initial?.pending === true;
 
   const selected = accounts.filter((a) => chosen.includes(a.id));
+  const limitNotice = groupLimitNotice(selected);
   const maxImages = maxImagesFor(selected);
   const needImage = platformsNeedingImage(selected, media.length);
 
@@ -252,7 +255,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
         <legend className="text-sm font-semibold">Accounts</legend>
         <p id={`${uid}-accounts-hint`} className="text-xs text-foreground/70">
-          One version is written for each platform you choose.
+          {ACCOUNTS_HINT}
         </p>
         {groupByPlatform(accounts).map((group) => (
           <div key={group.providerName} className="flex flex-col gap-1">
@@ -271,6 +274,11 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
             ))}
           </div>
         ))}
+        {limitNotice ? (
+          <p role="status" aria-live="polite" className="text-xs text-red-700 dark:text-red-400">
+            {limitNotice}
+          </p>
+        ) : null}
         {fieldErrors.targetAccountIds ? (
           <p className="text-xs text-red-700 dark:text-red-400">{fieldErrors.targetAccountIds}</p>
         ) : null}

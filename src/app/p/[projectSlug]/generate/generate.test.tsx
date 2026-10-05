@@ -22,7 +22,7 @@ import { createVoiceProfile } from "../../../../../tests/helpers/factories";
 import { postsEnv } from "../../../../../tests/helpers/posts-env";
 import { sessionModule } from "../../../../../tests/helpers/actions";
 import { GenerateForm } from "./GenerateForm";
-import { freshRequestId, imageWarning, platformsNeedingImage, type AccountOption } from "./generate-logic";
+import { freshRequestId, groupLimitNotice, imageWarning, platformsNeedingImage, type AccountOption } from "./generate-logic";
 import GeneratePage from "./page";
 
 afterAll(() => setLlmForTests(null));
@@ -118,6 +118,7 @@ describe("image warning", () => {
     providerAvailable: true,
     maxImages: 4,
     mediaRequired: false,
+    postingInstructions: null,
     ...over,
   });
   const instagram = option({ providerKey: "instagram", providerName: "Instagram", mediaRequired: true });
@@ -127,6 +128,32 @@ describe("image warning", () => {
     expect(platformsNeedingImage([instagram], 1)).toEqual([]);
     expect(platformsNeedingImage([option({})], 0)).toEqual([]);
     expect(imageWarning("Instagram")).toBe("Instagram needs an image. Without one, the Instagram version will go to review.");
+  });
+});
+
+describe("group limit notice", () => {
+  const acct = (i: number, instructions: string | null): AccountOption => ({
+    id: `a${i}`,
+    displayName: `A${i}`,
+    providerKey: "bluesky",
+    providerName: "Bluesky",
+    status: "active",
+    providerAvailable: true,
+    maxImages: 4,
+    mediaRequired: false,
+    postingInstructions: instructions,
+  });
+
+  it("is silent at 16 groups and names 17 and 16 past it", () => {
+    const sixteen = Array.from({ length: 16 }, (_, i) => acct(i, `rule ${i}`));
+    expect(groupLimitNotice(sixteen)).toBeNull();
+    const notice = groupLimitNotice([...sixteen, acct(16, "rule 16")]);
+    expect(notice).toContain("17");
+    expect(notice).toContain("16");
+  });
+
+  it("does not count accounts that share instructions twice", () => {
+    expect(groupLimitNotice(Array.from({ length: 30 }, (_, i) => acct(i, "same")))).toBeNull();
   });
 });
 
