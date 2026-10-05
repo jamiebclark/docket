@@ -11,6 +11,7 @@ import * as accounts from "../../../src/server/services/accounts";
 import { generateSingle } from "../../../src/server/services/generation/single";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { createVoiceProfile } from "../../helpers/factories";
+import { variantGroupsForPost } from "../../../src/server/services/posts/variant-groups";
 
 afterAll(async () => {
   await closeDb();
@@ -216,6 +217,19 @@ describe("grouped variants", () => {
     expect(item.variants).toHaveLength(2);
     expect(item.variants[0]).toMatchObject({ key: "mock_1", text: "Formal text", count: 11, limit: 500, accountIds: [a.id], accountNames: ["Acme A"] });
     expect(item.variants[1]).toMatchObject({ key: "mock_2", text: "Casual text", count: 11, limit: 500, accountIds: [b.id] });
+  });
+
+  it("orders groups as recorded, whatever order the targets are stored in", async () => {
+    const { env, a, b, postId } = await generated();
+    const post = (await env.scope.posts.get(postId))!;
+    const targets = await env.scope.targets.listForPost(postId);
+    for (const order of [targets, [...targets].reverse()]) {
+      const groups = await variantGroupsForPost(env.scope, post, order);
+      expect(groups.map((g) => [g.key, g.accountIds])).toEqual([
+        ["mock_1", [a.id]],
+        ["mock_2", [b.id]],
+      ]);
+    }
   });
 
   it("editing one group changes only that group's targets", async () => {
