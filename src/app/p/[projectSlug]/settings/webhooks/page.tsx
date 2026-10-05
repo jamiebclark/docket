@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { docsUrl } from "@/lib/docs";
 import { ForbiddenError, forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as webhooks from "@/server/services/webhooks";
@@ -29,7 +30,7 @@ export default async function WebhooksPage({ params }: { params: Promise<{ proje
         Docket can tell another service when posts publish or fail, when a job finishes, or when an account needs reconnecting.
       </p>
       <p className="text-sm">
-        <a href="https://github.com/jamiebclark/docket/blob/main/docs/n8n.md#verifying-webhook-signatures" className="underline">
+        <a href={docsUrl("n8n", "6-verifying-webhook-signatures")} className="underline">
           Verifying webhook signatures
         </a>
       </p>

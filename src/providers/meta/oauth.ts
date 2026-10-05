@@ -1,3 +1,4 @@
+import { docsUrl } from "@/lib/docs";
 import { scrub } from "./errors";
 import { graphRequest, DEFAULT_GRAPH_BASE, type GraphOutcome, type MetaApp } from "./graph";
 import type { MetaConfig } from "./config";
@@ -31,7 +32,7 @@ export function dialogUrl(cfg: MetaConfig, input: { state: string; redirectUri: 
 function failure(reason: string): TokenResult {
   return {
     ok: false,
-    message: `Could not finish signing in with Facebook (${reason}). Check the Meta app id, secret and redirect address in docs/meta-setup.md.`,
+    message: `Could not finish signing in with Facebook (${reason}). Check the Meta app id, secret and redirect address in ${docsUrl("meta-setup")}`,
   };
 }
 

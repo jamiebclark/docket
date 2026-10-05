@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { docsUrl } from "../../../src/lib/docs";
 import { threadsConnectGroup } from "../../../src/providers/threads/connect-group";
 
 const root = resolve(__dirname, "../../..");
@@ -36,11 +37,7 @@ describe("Threads setup documentation (FR-035 to FR-039)", () => {
   it("has the local HTTPS heading that the G10 message links to", () => {
     const doc = read("docs/meta-setup.md");
     expect(doc).toMatch(/^#+ Local HTTPS for Threads\s*$/m);
-    const link = threadsConnectGroup.redirectRequirement?.doc;
-    expect(link).toBeDefined();
-    const [file, anchor] = (link ?? "").split("#");
-    expect(existsSync(resolve(root, file ?? ""))).toBe(true);
-    expect(anchor).toBe("local-https-for-threads");
+    expect(threadsConnectGroup.redirectRequirement?.doc).toBe(docsUrl("meta-setup", "local-https-for-threads"));
   });
 
   it("starts the dev server over HTTPS with flags documented by the installed Next.js", () => {

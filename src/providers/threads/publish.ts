@@ -1,3 +1,4 @@
+import { docsUrl } from "@/lib/docs";
 import { graphRequest, type GraphOutcome } from "../meta/graph";
 import { classifyGraphError, graphStepError, graphSummary, scrub } from "../meta/errors";
 import type { AttemptSummary, PublishContext, StepResult } from "../types";
@@ -8,7 +9,7 @@ import { CHECK_INTERVAL_MS, CONTAINER_SAFE_AGE_MS, FIRST_CHECK_DELAY_MS, initial
 import { threadsStepFor, validState } from "./steps";
 
 const PLATFORM = "Threads";
-const URL_HINT = " Images must be at a public URL (see docs/storage.md).";
+const URL_HINT = ` Images must be at a public URL (see ${docsUrl("storage")}).`;
 const RETRY_HINT = " Retry the post to create it again.";
 
 const fatal = (error: string, summary?: AttemptSummary): StepResult => ({ kind: "fatal_error", error, ...(summary ? { summary } : {}) });

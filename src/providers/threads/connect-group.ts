@@ -1,3 +1,4 @@
+import { docsUrl } from "@/lib/docs";
 import { scrub } from "../meta/errors";
 import type { CandidatesResult, OAuthConnectGroup } from "../types";
 import { THREADS_AUTHORIZE_URL, THREADS_LONG_LIVED_SECONDS, parseThreadsEnv, requireThreadsConfig } from "./config";
@@ -10,7 +11,7 @@ function refused(f: ThreadsCallFailure, secrets: readonly string[]): { ok: false
   if (f.transient) return { ok: false, message: "Threads could not be reached. Nothing changed. Try again." };
   return {
     ok: false,
-    message: `Could not finish signing in with Threads (${scrub(f.reason, secrets)}). Check THREADS_APP_ID, THREADS_APP_SECRET, the redirect address and that the account accepted the tester invite (docs/meta-setup.md).`,
+    message: `Could not finish signing in with Threads (${scrub(f.reason, secrets)}). Check THREADS_APP_ID, THREADS_APP_SECRET, the redirect address and that the account accepted the tester invite (${docsUrl("meta-setup")})`,
   };
 }
 
@@ -79,7 +80,7 @@ async function exchangePastedToken(input: { token: string; now: Date; signal: Ab
 export const threadsConnectGroup: OAuthConnectGroup = {
   key: "threads",
   displayName: "Threads",
-  setupDoc: "docs/meta-setup.md",
+  setupDoc: docsUrl("meta-setup"),
   environment: {
     variables: [
       { name: "THREADS_APP_ID", secret: false, required: false },
@@ -93,7 +94,7 @@ export const threadsConnectGroup: OAuthConnectGroup = {
     https: true,
     publicHost: true,
     reason: "Threads needs an HTTPS address that is not localhost.",
-    doc: "docs/meta-setup.md#local-https-for-threads",
+    doc: docsUrl("meta-setup", "local-https-for-threads"),
   },
   callbackHint:
     "If Threads refused the login, check that this Threads account accepted the tester invite in Threads under Settings → Website permissions.",
