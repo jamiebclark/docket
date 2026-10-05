@@ -3,7 +3,6 @@
 import { useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
-import { Select } from "@/components/ui/Select";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MARK_CLOSE, MARK_OPEN, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
 import { INSTRUCTIONS_MAX } from "@/lib/validation/generation";
@@ -11,7 +10,9 @@ import { createJobAction } from "../actions";
 import { groupByPlatform, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
-import { controlStyles } from "@/components/ui/controls";
+import { checkStyles, controlStyles } from "@/components/ui/controls";
+import { ChoiceField } from "@/components/ui/ChoiceField";
+import { ActionBar } from "@/components/ui/ActionBar";
 
 export type JobFormSource =
   | { kind: "media"; selection: unknown; includeUsed: boolean }
@@ -133,21 +134,16 @@ export function JobForm(props: JobFormProps) {
         {summary}
       </fieldset>
 
-      <Select
+      <ChoiceField
         id={`${uid}-voice`}
+        name={`${uid}-voice`}
         label="Voice profile"
         hint="How every post should sound."
         value={voiceProfileId}
-        onChange={(e) => setVoiceProfileId(e.target.value)}
-        {...(fieldErrors.voiceProfileId ? { error: fieldErrors.voiceProfileId } : {})}
-      >
-        {profiles.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-            {p.isDefault ? " (default)" : ""}
-          </option>
-        ))}
-      </Select>
+        onChange={setVoiceProfileId}
+        error={fieldErrors.voiceProfileId}
+        options={profiles.map((p) => ({ value: p.id, label: p.isDefault ? `${p.name} (default)` : p.name }))}
+      />
 
       <div className="flex flex-col gap-1">
         <label htmlFor={`${uid}-template`} className="text-sm font-medium">
@@ -219,8 +215,7 @@ export function JobForm(props: JobFormProps) {
                   type="checkbox"
                   checked={chosen.includes(a.id)}
                   disabled={!a.providerAvailable}
-                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))}
-                />
+                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))} className={checkStyles} />
                 <span>{a.displayName}</span>
                 <StatusBadge status={a.status} />
               </label>
@@ -245,11 +240,11 @@ export function JobForm(props: JobFormProps) {
       />
 
       <LiveRegion message={pending ? "Starting the job…" : ""} />
-      <div className="flex justify-end">
+      <ActionBar stickyFrom="md" message={chosen.length === 0 ? "Choose at least one account." : undefined}>
         <Button type="submit" pending={pending} pendingLabel="Starting…" disabled={pending || chosen.length === 0 || unknown.length > 0}>
           {`Start job (${itemCount} items)`}
         </Button>
-      </div>
+      </ActionBar>
     </form>
   );
 }

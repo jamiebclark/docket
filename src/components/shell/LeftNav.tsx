@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { Icon, type IconName } from "@/components/ui/Icon";
 
 export const NAV_GROUPS = ["Publish", "Create", "Project"] as const;
@@ -25,16 +26,28 @@ function count(slug: string, reviewCount: number, failuresCount: number): number
 }
 
 /**
- * Left navigation for a project, grouped by job; a scrolling strip on small screens. The active entry
+ * Left navigation for a project, grouped by job. Below `md` it is a horizontally scrolling strip that
+ * sticks under the header and keeps the current section scrolled into view. The active entry
  * carries `aria-current="page"`. Review and Failures show how many posts wait: the accessible name
  * reads "Review (3)" and the number is also drawn as a pill.
  */
 export function LeftNav({ projectSlug, reviewCount = 0, failuresCount = 0 }: { projectSlug: string; reviewCount?: number; failuresCount?: number }) {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
+
+  // On the phone strip the current section may be off to the side; bring it into view (horizontally only).
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return;
+    nav.scrollTo({ left: active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2, behavior: "smooth" });
+  }, [pathname]);
+
   return (
     <nav
+      ref={navRef}
       aria-label="Project"
-      className="shrink-0 overflow-x-auto border-b border-border bg-surface md:sticky md:top-14 md:h-[calc(100dvh-3.5rem)] md:w-60 md:overflow-y-auto md:border-r md:border-b-0"
+      className="sticky top-14 z-20 shrink-0 overflow-x-auto border-b border-border bg-surface/95 backdrop-blur [scrollbar-width:none] md:h-[calc(100dvh-3.5rem)] md:w-60 md:overflow-y-auto md:border-r md:border-b-0 md:bg-surface md:[scrollbar-width:auto]"
     >
       <div className="flex gap-1 px-3 py-2 md:flex-col md:gap-5 md:px-3 md:py-5">
         {NAV_GROUPS.map((group) => (

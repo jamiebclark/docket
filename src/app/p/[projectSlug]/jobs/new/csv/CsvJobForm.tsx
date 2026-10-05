@@ -50,7 +50,7 @@ export function CsvJobForm({ slug, form }: Props) {
           id="csv-file"
           type="file"
           accept=".csv,text/csv"
-          className="mt-1 block text-sm"
+          className="mt-1.5 block w-full text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-primary/60 file:bg-surface file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           onChange={(e) => void onChange(e.target.files?.[0] ?? null)}
         />
         <p className="mt-1 text-sm text-muted-foreground">

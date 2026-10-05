@@ -16,6 +16,7 @@ import {
   type Angle,
 } from "./series-logic";
 import { controlStyles } from "@/components/ui/controls";
+import { ActionBar } from "@/components/ui/ActionBar";
 
 export interface SeriesPlanEditorProps {
   slug: string;
@@ -112,11 +113,11 @@ export function SeriesPlanEditor({ slug, request, initialAngles, initial }: Seri
         </p>
       ) : null}
       <LiveRegion message={busy ? "Starting…" : error ? `Error: ${error}` : ""} />
-      <div className="flex justify-end">
+      <ActionBar stickyFrom="md">
         <Button type="submit" pending={busy} pendingLabel="Starting…" disabled={busy || problem !== null}>
           Write posts
         </Button>
-      </div>
+      </ActionBar>
     </form>
   );
 }

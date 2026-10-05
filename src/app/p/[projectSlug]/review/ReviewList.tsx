@@ -10,6 +10,8 @@ import { VariantEditor } from "../generate/result/[postId]/VariantEditor";
 import { approveAction, bulkApproveAction } from "./actions";
 import { RejectDialog } from "./RejectDialog";
 import { BRIEF_PREVIEW_MAX, EXCERPT_MAX, bulkDetails, bulkSummary, policyText, toggle, toggleAll, truncate } from "./review-logic";
+import { ActionBar } from "@/components/ui/ActionBar";
+import { checkStyles } from "@/components/ui/controls";
 
 export interface ReviewListProps {
   slug: string;
@@ -64,8 +66,7 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
           <input
             type="checkbox"
             checked={ids.length > 0 && ids.every((id) => live.includes(id))}
-            onChange={() => setSelected(toggleAll(live, ids))}
-          />
+            onChange={() => setSelected(toggleAll(live, ids))} className={checkStyles} />
           Select all on this page
         </label>
       ) : null}
@@ -85,7 +86,7 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
                       aria-label={`Select post: ${excerpt}`}
                       checked={live.includes(item.postId)}
                       onChange={() => setSelected(toggle(live, item.postId))}
-                      className="mt-1.5"
+                      className={`${checkStyles} mt-1.5`}
                     />
                   ) : null}
                   <h2 id={`${id}-title`} className="text-base font-semibold">
@@ -173,15 +174,14 @@ export function ReviewList({ slug, items, canApprove, canRegenerate }: ReviewLis
         })}
       </ul>
       {live.length > 0 ? (
-        <div className="sticky bottom-0 flex items-center gap-3 border-t border-border bg-surface py-3" role="region" aria-label="Bulk actions">
-          <p className="text-sm font-medium">{live.length} selected</p>
-          <Button onClick={approveSelected} pending={pending} pendingLabel="Approving…">
-            Approve selected
-          </Button>
+        <ActionBar label="Bulk actions" message={<span className="font-medium text-foreground">{live.length} selected</span>}>
           <Button variant="secondary" onClick={() => setSelected([])}>
             Clear selection
           </Button>
-        </div>
+          <Button onClick={approveSelected} pending={pending} pendingLabel="Approving…">
+            Approve selected
+          </Button>
+        </ActionBar>
       ) : null}
       <LiveRegion message={message} />
       {message ? <p className="text-sm">{message}</p> : null}

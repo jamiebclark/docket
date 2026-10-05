@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { buttonStyles } from "@/components/ui/Button";
+import { ActionBar } from "@/components/ui/ActionBar";
+import { checkStyles } from "@/components/ui/controls";
 
 type Selection = { ids: ReadonlySet<string>; toggle: (id: string) => void; clear: () => void };
 const SelectionContext = createContext<Selection | null>(null);
@@ -27,14 +29,14 @@ export function MediaSelection({ slug, children }: { slug: string; children: Rea
   return (
     <SelectionContext.Provider value={value}>
       {ids.size > 0 ? (
-        <div role="region" aria-label="Selection" className="sticky top-0 z-10 flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm">
-          <Link href={href} className={buttonStyles({ variant: "primary" })}>
-            Generate posts for {ids.size} selected
-          </Link>
+        <ActionBar edge="top" label="Selection" message={<span className="font-medium text-foreground">{ids.size} selected</span>}>
           <button type="button" onClick={value.clear} className={buttonStyles({ variant: "secondary" })}>
             Clear selection
           </button>
-        </div>
+          <Link href={href} className={buttonStyles({ variant: "primary" })}>
+            Generate posts for {ids.size} selected
+          </Link>
+        </ActionBar>
       ) : null}
       {children}
     </SelectionContext.Provider>
@@ -47,7 +49,7 @@ export function SelectBox({ id, label }: { id: string; label: string }) {
   if (!sel) return null;
   return (
     <label className="flex items-center gap-2 text-xs">
-      <input type="checkbox" checked={sel.ids.has(id)} onChange={() => sel.toggle(id)} />
+      <input type="checkbox" checked={sel.ids.has(id)} onChange={() => sel.toggle(id)} className={checkStyles} />
       <span>Select {label}</span>
     </label>
   );

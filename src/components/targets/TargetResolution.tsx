@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { controlStyles, hintStyles, labelStyles } from "@/components/ui/controls";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { ActionResult } from "@/lib/action-result";
 import type { FailureActions, RequeuePreview } from "@/server/services/failures";
@@ -149,7 +150,7 @@ export function TargetResolution({
 
       <Dialog open={open === "published"} onClose={close} title={`Mark as published to ${accountName}?`}>
         <p className="text-sm">Confirm you saw this post on the account. It will be recorded as published.</p>
-        <label className="mt-3 block text-sm" htmlFor={`url-${targetId}`}>
+        <label className={`mt-3 block ${labelStyles}`} htmlFor={`url-${targetId}`}>
           Link to the post (optional)
           <input
             id={`url-${targetId}`}
@@ -159,10 +160,10 @@ export function TargetResolution({
             placeholder="https://"
             aria-describedby={`url-help-${targetId}`}
             aria-invalid={urlError ? true : undefined}
-            className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5"
+            className={`${controlStyles} mt-1.5`}
           />
         </label>
-        <p id={`url-help-${targetId}`} className="mt-1 text-xs">
+        <p id={`url-help-${targetId}`} className={`mt-1 ${hintStyles}`}>
           An http or https address.
         </p>
         {urlError ? (

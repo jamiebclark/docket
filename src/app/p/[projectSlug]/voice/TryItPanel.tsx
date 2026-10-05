@@ -6,7 +6,7 @@ import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { TryItResult } from "@/server/services/voice";
 import { tryVoiceAction } from "./actions";
 import type { PlatformOption } from "./VoiceEditor";
-import { controlStyles } from "@/components/ui/controls";
+import { checkStyles, controlStyles } from "@/components/ui/controls";
 
 export interface TryItPanelProps {
   slug: string;
@@ -60,8 +60,7 @@ export function TryItPanel({ slug, canManage, versionId, draft, platforms, defau
             <input
               type="checkbox"
               checked={chosen.includes(p.key)}
-              onChange={(e) => setChosen((c) => (e.target.checked ? [...c, p.key].slice(0, 4) : c.filter((k) => k !== p.key)))}
-            />
+              onChange={(e) => setChosen((c) => (e.target.checked ? [...c, p.key].slice(0, 4) : c.filter((k) => k !== p.key)))} className={checkStyles} />
             {p.displayName}
           </label>
         ))}

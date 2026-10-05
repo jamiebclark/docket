@@ -191,6 +191,31 @@ text/UI pairs in both themes.
 3. Content in `Card`s / `Table` / `EmptyState`; one topic per card.
 4. `Pagination` at the bottom of lists.
 
+### Sticky elements
+
+Everything that sticks reads its offset from `--sticky-top`, set on the shell
+body: header plus phone nav strip (`6.875rem`) below `md`, header only
+(`3.5rem`) from `md` up. Never hard-code `top-0` inside the shell; it slides
+under the header.
+
+| Element | Sticks | Where |
+|---|---|---|
+| App header | top, always | `SignedInHeader` (`z-30`) |
+| Project nav | phone strip under the header; sidebar from `md` | `LeftNav` (`z-20`); the strip scrolls the current section into view |
+| Commit row of long forms | bottom, from `md` up | `ActionBar stickyFrom="md"` — Compose, Generate, Jobs, Series plan |
+| Selection bars | bottom (Review bulk actions) or under the header (Media selection), always | `ActionBar` with `label` |
+| Composer preview | top, from `lg` up | `Composer` preview card |
+| In-page anchors | `scroll-mt-[calc(var(--sticky-top)+1rem)]` | Accounts sections, so jumps land below the sticky chrome |
+
+### Responsiveness
+
+Built in, not per-page: the shell becomes a sticky icon strip below `md`; the
+header collapses labels to icons with screen-reader text; content gutters step
+`px-4 → sm:px-6 → lg:px-10`; `PageHeader`, toolbars and form rows stack with
+`flex-col sm:flex-row` / `flex-wrap`; `Table` rows become labelled cards below
+`sm`; dialogs are `w-[calc(100%-2rem)]`; segmented controls wrap. Checked by
+an overflow sweep of every route at 390 px (no page scrolls sideways).
+
 ### Signed-out and first-run pages
 
 `AuthShell` (`src/components/brand/AuthShell.tsx`): soft lavender and magenta
@@ -204,11 +229,16 @@ full width, size `lg`.
 | Component | Variants / props | Notes |
 |---|---|---|
 | `Button`, `buttonStyles()` | `primary`, `cta`, `secondary`, `ghost`, `danger`; sizes `sm`/`md`/`lg`; `pending` + `pendingLabel` | Use `buttonStyles()` on `<Link>` so links and buttons match. **One** `primary` per form; **at most one** `cta` per screen (Schedule / Publish now). `danger` always confirms in a `Dialog` that names the thing. |
-| `Field`, `Select` | `label`, `hint`, `error`; `Select` also `compact` | Errors in an `aria-live` region; invalid styling from `aria-invalid`. `compact` (toolbars) drops the reserved empty error line. |
-| `controlStyles`, `labelStyles`, `hintStyles`, `errorStyles`, `checkStyles` | — | For raw `<input>`, `<textarea>`, `<select>`, checkboxes (brand `accent-color`). |
+| `Field`, `Select` | `label`, `hint`, `error`; `Select` also `compact` | Errors in an `aria-live` region; invalid styling from `aria-invalid`. `compact` (toolbars) drops the reserved empty error line. Prefer the choice controls below to `Select`. |
+| `controlStyles`, `labelStyles`, `hintStyles`, `errorStyles`, `checkStyles` | — | For raw `<input>`, `<textarea>`, checkboxes (brand `accent-color`). Every checkbox uses `checkStyles`. |
+| `SegmentedControl` | `name`, `label`, `options` (`value`, `label`, `description`, `disabled`), `layout` `pills`/`cards`, `size`, `hideLabel` | Short exclusive choices as a button row on native radios (arrow keys, form submit, no JS needed). `cards` stacks options with an explanation each. |
+| `Combobox` | `id`, `name`, `label`, `options`, `value`/`defaultValue`, `onChange`, `compact` | Autocomplete for long or growing lists: type to filter (every word, `_ / -` read as spaces), ↑/↓, Enter, Escape restores. Submits through a hidden input. Options render only while open. |
+| `ChoiceField` | `Combobox` props + `autoSubmit` | Lists of unknown length (accounts, voice profiles, tags): ≤ 5 short options → `SegmentedControl`, otherwise `Combobox`. `autoSubmit` applies GET filters on choice; keep a `<noscript>` submit button. |
+| `TimeZoneField` | `id`, `name`, `defaultValue` or `value`/`onChange` | `Combobox` over every IANA zone with its current offset ("new york", "GMT+1" both work). |
+| `ActionBar` | `message`, `label`, `edge` `top`/`bottom`, `stickyFrom` `always`/`md` | Floating commit/selection row; primary action last. |
 | `Card`, `cardStyles` | `title`, `description`, `actions`, `as`, `padded` | `cardStyles` for a `<form>` or `<fieldset>` that is itself the card. |
 | `PageHeader` | `title`, `description`, `actions`, `eyebrow` | The route's only `h1`. |
-| `Table`, `Row`, `Cell` | `caption`, `columns`, `header` cell | Card-wrapped, scrolls sideways on mobile, uppercase muted column heads, row hover. |
+| `Table`, `Row`, `Cell` | `caption`, `columns`, `header` cell | Card-wrapped, uppercase muted column heads, row hover. Below `sm` each row stacks into a card and every cell is labelled with its column name (CSS variables `--col-N` + `.stack-table` in globals.css, so rows can come from any server or client component). |
 | `Badge`, `StatusBadge` | tones `neutral`, `brand`, `info`, `success`, `warning`, `danger` | Tinted pill + dot + text. Status → tone map lives in `StatusBadge` (scheduled = brand, approved/publishing/running = info). |
 | `Alert`, `alertStyles()` | tones `info`, `success`, `warning`, `danger`; `banner` | `role="alert"` for danger/warning, `status` otherwise. |
 | `EmptyState` | `message`, `action`, `icon` | Dashed card, lavender icon disc, one sentence, one action. |
@@ -221,6 +251,19 @@ full width, size `lg`.
 | `Skeleton` | `className` | `bg-muted`, pulses only with `motion-safe`. |
 | `Icon` | `name`, `size` | 24-px grid, 1.75 stroke, `currentColor`, always `aria-hidden`. Add glyphs to the `PATHS` map. |
 | `Logo`, `LogoMark`, `AuthShell` | — | §2, §6. |
+
+### Choosing a control for one-of-many
+
+| Options | Control |
+|---|---|
+| 2–6 fixed, short labels (role, expiry, weekday, view) | `SegmentedControl` (`pills`) |
+| 2–4 fixed, each needs explaining (approval, scheduling policy) | `SegmentedControl layout="cards"` |
+| A list that grows with data (accounts, voice profiles, tags) | `ChoiceField` (switches by size) |
+| Long or open-ended (time zones, anything > 6) | `Combobox` / `TimeZoneField` |
+| Many-of-many | Checkboxes with `checkStyles` |
+
+Native `<select>` is no longer used in the app; `Select` stays only for
+callers outside the design system.
 
 ## 8. States
 
@@ -270,6 +313,24 @@ What the makeover found, and what was done about it.
 | A15 | Calendar: plain grid, today underlined only, post chips styled as buttons. | Medium | Card-wrapped grid, uppercase weekday heads, filled purple today marker, lavender post chips, softer empty slots, segmented Month/Week toggle. |
 | A16 | Settings sub-nav had no active state. | Low | `SubNav` with `aria-current` and a purple underline. |
 
+## 12. Controls and layout audit (2026-10-05)
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| B1 | Time zone was a free-text box ("IANA name, e.g. America/New_York") over ~400 valid values; typos only surfaced on save. | High | `TimeZoneField` autocomplete in project settings and project creation (browser zone still pre-filled). |
+| B2 | Eleven native `<select>`s regardless of length: 2-option policies, 3-option roles, 4-option expiry, 7 weekdays, and growing lists of accounts and voice profiles. | Medium | Short sets → `SegmentedControl`; policies → option cards with explanations; growing lists → `ChoiceField`; mock behaviour and tags → autocomplete. |
+| B3 | Account filters needed a second "Filter"/"Apply" click. | Low | `ChoiceField autoSubmit`; the button remains in `<noscript>`. |
+| B4 | Media selection bar stuck at `top-0`, underneath the sticky header. | Medium | `ActionBar edge="top"` using `--sticky-top`. |
+| B5 | Phone nav strip scrolled away, and the current section could sit off-screen in it. | Medium | Strip sticks under the header and scrolls the active item into view. |
+| B6 | Long forms (Generate, Jobs, Series plan) put the only action at the very bottom. | Medium | Shared sticky `ActionBar` (from `md`), same as Compose; Review bulk actions use it too. |
+| B7 | Tables on phones hid columns behind a sideways scroll (Members' role and actions were off-screen). | Medium | Tables stack into labelled cards below `sm`. |
+| B8 | Accounts page buried connected accounts below three connect forms; the mock form had no card. | Medium | Connected accounts first, "Add an account" jump link, connect options in a two-column grid, mock form in its own card. |
+| B9 | Project not-found rendered a second `<main id="main">` inside the shell; `/connect/invalid` had no `#main` for the skip link. | Medium (a11y) | Section inside the shell; branded `AuthShell` pages for global not-found and invalid connect. |
+| B10 | Checkboxes and a few inputs (resolve-URL field, CSV file input) skipped the shared styles; alignment relied on `mt-6` offsets. | Low | `checkStyles` on every checkbox, `controlStyles` and a styled file button; rows align with `items-end`. |
+
+No page scrolls sideways at 390 px (sweep of all 20 project routes plus
+`/p/new` and `/invitations`).
+
 ### Backlog (not yet done)
 
 1. Adopt `PageHeader` on every route (most still use the older
@@ -281,7 +342,7 @@ What the makeover found, and what was done about it.
    (today marker, chips and grid are done).
 4. Composer: inline per-platform preview styling (avatar, platform frame) in
    the preview card; the two-column layout and cta are done.
-5. Checkbox and radio inputs: apply `checkStyles` everywhere.
+5. Composer account picker: selectable account cards instead of a checkbox list once projects have many accounts (with a filter box past ~8).
 6. Toasts for "Saved" / "Scheduled" confirmations (live region already exists).
 7. Optional manual theme toggle (light / dark / system) stored per user.
 8. Visual regression screenshots for the shell and three key pages in CI.

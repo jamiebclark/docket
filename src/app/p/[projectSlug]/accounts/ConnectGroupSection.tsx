@@ -55,9 +55,9 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
-      <h2 id={headingId} className="text-lg font-semibold">
+      <h3 id={headingId} className="text-lg font-semibold">
         Connect {displayName}
-      </h2>
+      </h3>
       <p className="text-sm text-muted-foreground">Connects {providerNames.join(" and ")} accounts with one sign-in.</p>
       {!configured ? (
         <div className="flex max-w-xl flex-col gap-2 text-sm">
