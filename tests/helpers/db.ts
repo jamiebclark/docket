@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { inject } from "vitest";
 import { closeDb, createDatabase, getDb, type Database } from "../../src/server/db/client";
 import { runMigrations } from "../../src/server/db/migrate";
+import { adminUrl, createLabelledDatabase } from "../setup/test-databases";
 
 /** The shared, migrated test database (same one the app code under test uses). */
 export function testDb(): Database {
@@ -19,10 +21,9 @@ export async function createThrowawayDb(): Promise<{
   const base = process.env.DATABASE_URL;
   if (!base) throw new Error("DATABASE_URL is required");
   const name = `docket_tmp_${randomUUID().replace(/-/g, "")}_test`;
-  const admin = new URL(base);
-  admin.pathname = "/postgres";
-  const adminPool = new pg.Pool({ connectionString: admin.toString(), max: 1 });
-  await adminPool.query(`create database "${name}"`);
+  const adminPool = new pg.Pool({ connectionString: adminUrl(base), max: 1 });
+  // Labelled with this run, so global teardown drops it even when a test never calls drop().
+  await createLabelledDatabase(adminPool, name, inject("testRunLabel"));
 
   const url = new URL(base);
   url.pathname = `/${name}`;
