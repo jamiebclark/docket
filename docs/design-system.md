@@ -249,7 +249,9 @@ full width, size `lg`.
 | `Pagination` | — | `secondary sm` buttons; disabled ends at 50% opacity. |
 | `CopyField` | — | Mono read-only input plus secondary Copy button. |
 | `Skeleton` | `className` | `bg-muted`, pulses only with `motion-safe`. |
-| `Icon` | `name`, `size` | 24-px grid, 1.75 stroke, `currentColor`, always `aria-hidden`. Add glyphs to the `PATHS` map. |
+| `Icon` | `name`, `size` | The one UI icon set: Lucide (ISC), 24-px grid, 1.75 stroke, `currentColor`, always `aria-hidden` beside a text label. Names say what they mean (`failures`, `arrowLeft`). Add one by adding a line to `ICONS` in `scripts/generate-icons.mjs` and running `pnpm icons`; never hand-draw paths, and never use emoji or Unicode symbols (← ✓ ⚠) as icons. |
+| `ProviderIcon` | `providerKey`, `size` | Platform mark (Simple Icons, CC0) on a tile in the brand colour; the mock provider gets a neutral "flask" tile. Decorative — show the platform name as text. Used on account cards, the Accounts page and composer previews. |
+| `AccountPicker` | `legend`, `hint`, `accounts` (with `unavailableReason`), `value`, `onChange`, `idPrefix`, `showStatus` | Many-of-many account choice as checkbox cards (mark, name, platform, status, reason). "n of m selected" and Select all / Clear; a filter box past 8 accounts. Used by Compose, Generate and Jobs. |
 | `Logo`, `LogoMark`, `AuthShell` | — | §2, §6. |
 
 ### Choosing a control for one-of-many
@@ -342,7 +344,6 @@ No page scrolls sideways at 390 px (sweep of all 20 project routes plus
    (today marker, chips and grid are done).
 4. Composer: inline per-platform preview styling (avatar, platform frame) in
    the preview card; the two-column layout and cta are done.
-5. Composer account picker: selectable account cards instead of a checkbox list once projects have many accounts (with a filter box past ~8).
-6. Toasts for "Saved" / "Scheduled" confirmations (live region already exists).
-7. Optional manual theme toggle (light / dark / system) stored per user.
-8. Visual regression screenshots for the shell and three key pages in CI.
+5. Toasts for "Saved" / "Scheduled" confirmations (live region already exists).
+6. Optional manual theme toggle (light / dark / system) stored per user.
+7. Visual regression screenshots for the shell and three key pages in CI.
