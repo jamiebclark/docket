@@ -6,9 +6,10 @@ import { UNREVIEWED_QUEUE_CONFIRM, UNREVIEWED_QUEUE_EXPLANATION, UNREVIEWED_QUEU
 import { updateProjectSettings } from "./actions";
 import { buttonStyles } from "@/components/ui/Button";
 import { alertStyles } from "@/components/ui/Alert";
-import { controlStyles } from "@/components/ui/controls";
-
-const input = controlStyles;
+import { Field } from "@/components/ui/Field";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { TimeZoneField } from "@/components/ui/TimeZoneField";
+import { checkStyles } from "@/components/ui/controls";
 
 export interface SettingsValues {
   name: string;
@@ -34,13 +35,9 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
         {errors[n]}
       </span>
     ) : null;
-  const a11y = (n: string) => ({
-    "aria-invalid": errors[n] ? true : undefined,
-    "aria-describedby": errors[n] ? `${n}-error` : undefined,
-  });
 
   return (
-    <form action={action} className="flex max-w-xl flex-col gap-4">
+    <form action={action} className="flex max-w-2xl flex-col gap-3">
       <input type="hidden" name="currentSlug" value={values.slug} />
       {!canEdit ? (
         <p className="rounded border border-border px-3 py-2 text-sm">
@@ -57,58 +54,44 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
           Settings saved.
         </p>
       ) : null}
-      <label className="flex flex-col gap-1 text-sm">
-        Name
-        <input name="name" required defaultValue={values.name} disabled={!canEdit} className={input} {...a11y("name")} />
-        {err("name")}
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        URL name
-        <input name="slug" required defaultValue={values.slug} disabled={!canEdit} className={input} {...a11y("slug")} />
-        {errors.slug ? err("slug") : <span className="text-xs text-muted-foreground">Changing this moves the project to a new URL</span>}
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Time zone
-        <input
-          name="timezone"
-          required
-          defaultValue={values.timezone}
-          disabled={!canEdit}
-          className={input}
-          {...a11y("timezone")}
-        />
-        {errors.timezone ? err("timezone") : <span className="text-xs text-muted-foreground">IANA name, e.g. America/New_York</span>}
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Default approval
-        <select
-          name="defaultApprovalPolicy"
-          value={approval}
-          onChange={(e) => setApproval(e.target.value as typeof approval)}
-          disabled={!canEdit}
-          className={input}
-          {...a11y("defaultApprovalPolicy")}
-        >
-          <option value="review_required">Review required</option>
-          <option value="auto_approve">Auto-approve: generated posts skip review</option>
-        </select>
-        {err("defaultApprovalPolicy")}
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Default scheduling
-        <select
-          name="defaultSchedulingPolicy"
-          value={scheduling}
-          onChange={(e) => setScheduling(e.target.value as typeof scheduling)}
-          disabled={!canEdit}
-          className={input}
-          {...a11y("defaultSchedulingPolicy")}
-        >
-          <option value="leave_as_draft">Leave as draft</option>
-          <option value="add_to_queue">Add to queue</option>
-        </select>
-        {err("defaultSchedulingPolicy")}
-      </label>
+      <Field id="name" name="name" label="Name" required defaultValue={values.name} disabled={!canEdit} error={errors.name} />
+      <Field
+        id="slug"
+        name="slug"
+        label="URL name"
+        hint="Changing this moves the project to a new URL"
+        required
+        defaultValue={values.slug}
+        disabled={!canEdit}
+        error={errors.slug}
+      />
+      <TimeZoneField id="timezone" name="timezone" defaultValue={values.timezone} disabled={!canEdit} error={errors.timezone} />
+      <SegmentedControl
+        name="defaultApprovalPolicy"
+        label="Default approval"
+        layout="cards"
+        value={approval}
+        onChange={(v) => setApproval(v as typeof approval)}
+        disabled={!canEdit}
+        error={errors.defaultApprovalPolicy}
+        options={[
+          { value: "review_required", label: "Review required", description: "Generated posts wait in Review until someone approves them." },
+          { value: "auto_approve", label: "Auto-approve", description: "Generated posts skip review. Posts that fail platform checks still go to Review." },
+        ]}
+      />
+      <SegmentedControl
+        name="defaultSchedulingPolicy"
+        label="Default scheduling"
+        layout="cards"
+        value={scheduling}
+        onChange={(v) => setScheduling(v as typeof scheduling)}
+        disabled={!canEdit}
+        error={errors.defaultSchedulingPolicy}
+        options={[
+          { value: "leave_as_draft", label: "Leave as draft", description: "Approved posts wait until someone schedules them." },
+          { value: "add_to_queue", label: "Add to queue", description: "Approved posts take the next free posting slot." },
+        ]}
+      />
       {unreviewed ? (
         <div className="flex flex-col gap-2 rounded-md border-2 border-warning-border p-3">
           <p className="text-sm font-semibold">{UNREVIEWED_QUEUE_LABEL}</p>
@@ -122,8 +105,7 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
               required
               disabled={!canEdit}
               aria-describedby={errors.confirmUnreviewedQueue ? "confirmUnreviewedQueue-error" : "unreviewed-explain"}
-              aria-invalid={errors.confirmUnreviewedQueue ? true : undefined}
-            />
+              aria-invalid={errors.confirmUnreviewedQueue ? true : undefined} className={checkStyles} />
             {UNREVIEWED_QUEUE_CONFIRM}
           </label>
           {err("confirmUnreviewedQueue")}

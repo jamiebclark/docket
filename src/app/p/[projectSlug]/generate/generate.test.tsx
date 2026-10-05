@@ -101,8 +101,10 @@ describe("generate page states", () => {
     const html = await render(env);
     expect(html).toContain("Main Bluesky");
     expect(html).toContain("Connected");
-    expect(html).toMatch(new RegExp(`<option value="${first.id}"[^>]*selected`));
-    expect(html).not.toMatch(new RegExp(`<option value="${second.id}"[^>]*selected`));
+    // Two profiles fit a button row (ChoiceField), so the default is the checked radio.
+    const checkedRadio = (id: string) => new RegExp(`<input type="radio"(?=[^>]*value="${id}")(?=[^>]*checked)[^>]*>`);
+    expect(html).toMatch(checkedRadio(first.id));
+    expect(html).not.toMatch(checkedRadio(second.id));
     expect(html).toContain("0 / 2,000");
     expect(html).not.toContain("needs an image");
   });

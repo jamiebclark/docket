@@ -4,12 +4,12 @@ import { notFound } from "next/navigation";
 import { ZodError } from "zod";
 import { buttonStyles } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Select } from "@/components/ui/Select";
 import { firstParam } from "@/lib/validation/media";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { getCalendar } from "@/server/services/calendar";
 import { CalendarBoard } from "./CalendarBoard";
+import { ChoiceField } from "@/components/ui/ChoiceField";
 
 export const metadata: Metadata = { title: "Calendar" };
 export const dynamic = "force-dynamic";
@@ -83,17 +83,23 @@ export default async function CalendarPage({ params, searchParams }: Props) {
         <form method="get" action={`/p/${projectSlug}/calendar`} className="flex items-end gap-2">
           <input type="hidden" name="view" value={calendar.view} />
           <input type="hidden" name="date" value={calendar.today} />
-          <Select id="calendar-account" name="account" label="Account" compact defaultValue={account ?? ""}>
-            <option value="">All accounts</option>
-            {calendar.accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.displayName} ({a.providerName})
-              </option>
-            ))}
-          </Select>
-          <button type="submit" className={linkClass}>
-            Filter
-          </button>
+          <ChoiceField
+            id="calendar-account"
+            name="account"
+            label="Account"
+            compact
+            autoSubmit
+            defaultValue={account ?? ""}
+            options={[
+              { value: "", label: "All accounts" },
+              ...calendar.accounts.map((a) => ({ value: a.id, label: a.displayName, description: a.providerName })),
+            ]}
+          />
+          <noscript>
+            <button type="submit" className={linkClass}>
+              Filter
+            </button>
+          </noscript>
         </form>
       </div>
       {!hasContent ? (

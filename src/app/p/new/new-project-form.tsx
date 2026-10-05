@@ -1,14 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { SLUG_MAX } from "@/lib/validation/slug";
 import { createProject } from "./actions";
 import { buttonStyles } from "@/components/ui/Button";
 import { alertStyles } from "@/components/ui/Alert";
-import { controlStyles } from "@/components/ui/controls";
-
-const input = controlStyles;
+import { Field } from "@/components/ui/Field";
+import { TimeZoneField } from "@/components/ui/TimeZoneField";
 
 function slugify(value: string): string {
   return value
@@ -25,24 +24,15 @@ export function NewProjectForm() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
-  const timezoneRef = useRef<HTMLInputElement>(null);
+  const [timezone, setTimezone] = useState("UTC");
 
   // The browser knows the user's time zone; the server can't.
   useEffect(() => {
-    const input = timezoneRef.current;
-    if (input && input.value === "UTC") input.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // A browser-only value, so it can only be read after hydration; runs once.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (local) setTimezone((tz) => (tz === "UTC" ? local : tz));
   }, []);
-
-  const err = (name: string) =>
-    errors[name] ? (
-      <span id={`${name}-error`} className="text-xs text-danger">
-        {errors[name]}
-      </span>
-    ) : null;
-  const a11y = (n: string) => ({
-    "aria-invalid": errors[n] ? true : undefined,
-    "aria-describedby": errors[n] ? `${n}-error` : undefined,
-  });
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -51,52 +41,36 @@ export function NewProjectForm() {
           {formError}
         </p>
       ) : null}
-      <label className="flex flex-col gap-1 text-sm">
-        Name
-        <input
-          name="name"
-          required
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            if (!slugEdited) setSlug(slugify(e.target.value));
-          }}
-          className={input}
-          {...a11y("name")}
-        />
-        {err("name")}
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        URL name
-        <input
-          name="slug"
-          required
-          value={slug}
-          onChange={(e) => {
-            setSlugEdited(true);
-            setSlug(e.target.value);
-          }}
-          className={input}
-          {...a11y("slug")}
-        />
-        {errors.slug ? err("slug") : <span className="text-xs text-muted-foreground">Lowercase letters, numbers and hyphens</span>}
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Time zone
-        <input
-          name="timezone"
-          required
-          ref={timezoneRef}
-          defaultValue="UTC"
-          className={input}
-          {...a11y("timezone")}
-        />
-        {errors.timezone ? err("timezone") : <span className="text-xs text-muted-foreground">IANA name, e.g. America/New_York</span>}
-      </label>
+      <Field
+        id="name"
+        name="name"
+        label="Name"
+        required
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+          if (!slugEdited) setSlug(slugify(e.target.value));
+        }}
+        error={errors.name}
+      />
+      <Field
+        id="slug"
+        name="slug"
+        label="URL name"
+        hint="Lowercase letters, numbers and hyphens"
+        required
+        value={slug}
+        onChange={(e) => {
+          setSlugEdited(true);
+          setSlug(e.target.value);
+        }}
+        error={errors.slug}
+      />
+      <TimeZoneField id="timezone" name="timezone" defaultValue="UTC" value={timezone} onChange={setTimezone} error={errors.timezone} />
       <button
         type="submit"
         disabled={pending}
-        className={buttonStyles({ variant: "primary" })}
+        className={buttonStyles({ variant: "primary", className: "self-start" })}
       >
         {pending ? "Creating…" : "Create project"}
       </button>

@@ -5,7 +5,6 @@ import { useId, useState, useTransition } from "react";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
-import { Select } from "@/components/ui/Select";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { MediaView } from "@/server/services/media";
 import { generateSingleAction, planSeriesAction } from "./actions";
@@ -24,7 +23,9 @@ import {
   platformsNeedingImage,
   type AccountOption,
 } from "./generate-logic";
-import { controlStyles } from "@/components/ui/controls";
+import { checkStyles, controlStyles } from "@/components/ui/controls";
+import { ChoiceField } from "@/components/ui/ChoiceField";
+import { ActionBar } from "@/components/ui/ActionBar";
 
 export interface VoiceOption {
   id: string;
@@ -176,21 +177,16 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
         </p>
       ) : null}
 
-      <Select
+      <ChoiceField
         id={`${uid}-voice`}
+        name={`${uid}-voice`}
         label="Voice profile"
         hint="How the post should sound."
         value={voiceProfileId}
-        onChange={(e) => setVoiceProfileId(e.target.value)}
-        {...(fieldErrors.voiceProfileId ? { error: fieldErrors.voiceProfileId } : {})}
-      >
-        {profiles.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-            {p.isDefault ? " (default)" : ""}
-          </option>
-        ))}
-      </Select>
+        onChange={setVoiceProfileId}
+        error={fieldErrors.voiceProfileId}
+        options={profiles.map((p) => ({ value: p.id, label: p.isDefault ? `${p.name} (default)` : p.name }))}
+      />
 
       <TextArea
         id={`${uid}-brief`}
@@ -264,8 +260,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
                   type="checkbox"
                   checked={chosen.includes(a.id)}
                   disabled={!a.providerAvailable}
-                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))}
-                />
+                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))} className={checkStyles} />
                 <span>{a.displayName}</span>
                 <StatusBadge status={a.status} />
               </label>
@@ -308,7 +303,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       />
 
       {error ? (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-danger-border p-3 text-sm">
+        <div role="alert" className="flex flex-col items-start gap-2 rounded-lg border border-danger-border bg-danger-bg p-3 text-sm text-danger">
           <p>Error: {error}</p>
           <Button variant="secondary" onClick={() => submit(freshRequestId())} disabled={busy}>
             Try again
@@ -317,7 +312,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       ) : null}
       <LiveRegion message={busy ? (series ? "Planning…" : "Generating…") : error ? `Error: ${error}` : ""} />
 
-      <div className="flex justify-end">
+      <ActionBar stickyFrom="md" message={chosen.length === 0 ? "Choose at least one account." : undefined}>
         <Button
           type="submit"
           pending={busy}
@@ -326,7 +321,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
         >
           {series ? "Plan series" : "Generate"}
         </Button>
-      </div>
+      </ActionBar>
     </form>
     {plan ? <SeriesPlanEditor slug={slug} request={{ ...request, count }} initialAngles={plan} /> : null}
     </>

@@ -7,7 +7,8 @@ import type { MediaView } from "@/server/services/media";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { LiveRegion } from "../ui/LiveRegion";
-import { controlStyles } from "@/components/ui/controls";
+import { checkStyles, controlStyles, labelStyles } from "@/components/ui/controls";
+import { ChoiceField } from "@/components/ui/ChoiceField";
 
 /** Returns a copy with the item at `from` moved to `to`; out-of-range moves return the list unchanged. */
 export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
@@ -200,24 +201,24 @@ function PickerDialog({
   return (
     <Dialog open={open} onClose={onClose} title="Add images">
       <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto">
-        <div className="flex flex-wrap gap-2">
-          <label className="sr-only" htmlFor="picker-q">
-            Search images
-          </label>
-          <input id="picker-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className={controlStyles} />
-          <label className="sr-only" htmlFor="picker-tag">
-            Filter by tag
-          </label>
-          <select id="picker-tag" value={tag} onChange={(e) => setTag(e.target.value)} className={controlStyles}>
-            <option value="">All tags</option>
-            {(lib?.ok ? lib.data.tags : []).map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={unused} onChange={(e) => setUnused(e.target.checked)} /> Unused only
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <label className={labelStyles} htmlFor="picker-q">
+              Search images
+            </label>
+            <input id="picker-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="File name or alt text" className={controlStyles} />
+          </div>
+          <ChoiceField
+            id="picker-tag"
+            name="picker-tag"
+            label="Tag"
+            compact
+            value={tag}
+            onChange={setTag}
+            options={[{ value: "", label: "All tags" }, ...(lib?.ok ? lib.data.tags : []).map((t) => ({ value: t, label: t }))]}
+          />
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" checked={unused} onChange={(e) => setUnused(e.target.checked)} className={checkStyles} /> Unused only
           </label>
         </div>
         <div className="flex items-center gap-2">

@@ -7,10 +7,10 @@ import { CopyField } from "@/components/ui/CopyField";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
-import { Select } from "@/components/ui/Select";
 import { Cell, Row, Table } from "@/components/ui/Table";
 import type { ActionResult } from "@/lib/action-result";
 import { inviteMember, regenerateInvitation, revokeInvitation, type DeliveryDto } from "./actions";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 export interface InvitationView {
   id: string;
@@ -94,14 +94,22 @@ function InviteForm({
   return (
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="slug" value={slug} />
-      <div className="flex flex-wrap items-start gap-3">
-        <Field id="invite-email" name="email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
-        <Select id="invite-role" name="role" label="Role" defaultValue="editor" error={errors.role}>
-          <option value="editor">Editor</option>
-          <option value="admin">Admin</option>
-          {canInviteOwner ? <option value="owner">Owner</option> : null}
-        </Select>
-        <Button type="submit" pending={pending} pendingLabel="Inviting…" className="mt-6">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+        <div className="min-w-64 flex-1">
+          <Field id="invite-email" name="email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+        </div>
+        <SegmentedControl
+          name="role"
+          label="Role"
+          defaultValue="editor"
+          error={errors.role}
+          options={[
+            { value: "editor", label: "Editor" },
+            { value: "admin", label: "Admin" },
+            ...(canInviteOwner ? [{ value: "owner", label: "Owner" }] : []),
+          ]}
+        />
+        <Button type="submit" pending={pending} pendingLabel="Inviting…" className="mb-5">
           Invite
         </Button>
       </div>

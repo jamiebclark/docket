@@ -7,11 +7,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterTabs } from "@/components/ui/FilterTabs";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Pagination } from "@/components/ui/Pagination";
-import { Select } from "@/components/ui/Select";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { listFailures, failuresQuerySchema, type AttemptRun, type FailureList, type FailureRow } from "@/server/services/failures";
 import { buttonStyles } from "@/components/ui/Button";
+import { ChoiceField } from "@/components/ui/ChoiceField";
 
 export const metadata: Metadata = { title: "Failures" };
 export const dynamic = "force-dynamic";
@@ -180,17 +180,20 @@ export default async function FailuresPage({ params, searchParams }: Props) {
         {list ? (
           <form method="get" action={`/p/${projectSlug}/failures`} className="flex items-end gap-2">
             {query.status !== "all" ? <input type="hidden" name="status" value={query.status} /> : null}
-            <Select id="failures-account" name="account" label="Account" defaultValue={query.account ?? ""}>
-              <option value="">All accounts</option>
-              {list.accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </Select>
-            <button type="submit" className={buttonStyles({ variant: "secondary" })}>
-              Apply
-            </button>
+            <ChoiceField
+              id="failures-account"
+              name="account"
+              label="Account"
+              compact
+              autoSubmit
+              defaultValue={query.account ?? ""}
+              options={[{ value: "", label: "All accounts" }, ...list.accounts.map((a) => ({ value: a.id, label: a.name }))]}
+            />
+            <noscript>
+              <button type="submit" className={buttonStyles({ variant: "secondary" })}>
+                Apply
+              </button>
+            </noscript>
           </form>
         ) : null}
       </div>

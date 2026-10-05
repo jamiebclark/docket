@@ -3,13 +3,14 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
-import { Select } from "@/components/ui/Select";
 import { mockBehaviours } from "@/providers/mock/settings";
 import { addSlotAction, deleteSlotAction, reconnectMockAction, setMockBehaviourAction, setSlotPausedAction } from "./actions";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { ChoiceField } from "@/components/ui/ChoiceField";
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/** Add-slot form: weekday select plus a 24-hour time input. A duplicate comes back as a field error. */
+/** Add-slot form: weekday buttons plus a 24-hour time input. A duplicate comes back as a field error. */
 export function SlotEditor({ slug, accountId }: { slug: string; accountId: string }) {
   const [weekday, setWeekday] = useState("1");
   const [time, setTime] = useState("09:00");
@@ -26,18 +27,22 @@ export function SlotEditor({ slug, accountId }: { slug: string; accountId: strin
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-start gap-3" aria-label="Add a posting slot">
-      <Select id={`slot-day-${accountId}`} label="Weekday" value={weekday} onChange={(e) => setWeekday(e.target.value)}>
-        {DAYS.map((d, i) => (
-          <option key={d} value={i + 1}>
-            {d}
-          </option>
-        ))}
-      </Select>
-      <Field id={`slot-time-${accountId}`} type="time" label="Time" value={time} onChange={(e) => setTime(e.target.value)} required error={error} />
-      <Button type="submit" pending={pending} pendingLabel="Adding…" className="mt-6">
-        Add slot
-      </Button>
+    <form onSubmit={submit} className="flex flex-col gap-3" aria-label="Add a posting slot">
+      <SegmentedControl
+        name={`slot-day-${accountId}`}
+        label="Weekday"
+        value={weekday}
+        onChange={setWeekday}
+        options={DAYS.map((d, i) => ({ value: String(i + 1), label: d }))}
+      />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-40">
+          <Field id={`slot-time-${accountId}`} type="time" label="Time" value={time} onChange={(e) => setTime(e.target.value)} required error={error} />
+        </div>
+        <Button type="submit" pending={pending} pendingLabel="Adding…" className="mb-5">
+          Add slot
+        </Button>
+      </div>
     </form>
   );
 }
@@ -114,7 +119,7 @@ export function MockBehaviourForm({ slug, id, behaviour }: { slug: string; id: s
   const [pending, start] = useTransition();
   return (
     <form
-      className="flex items-start gap-2"
+      className="flex flex-wrap items-end gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
@@ -123,14 +128,18 @@ export function MockBehaviourForm({ slug, id, behaviour }: { slug: string; id: s
         });
       }}
     >
-      <Select id={`behaviour-${id}`} label="Mock behaviour" value={value} onChange={(e) => setValue(e.target.value)} error={error}>
-        {mockBehaviours.map((b) => (
-          <option key={b} value={b}>
-            {b}
-          </option>
-        ))}
-      </Select>
-      <Button type="submit" variant="secondary" pending={pending} pendingLabel="Saving…" className="mt-6">
+      <div className="w-56">
+        <ChoiceField
+          id={`behaviour-${id}`}
+          name="behaviour"
+          label="Mock behaviour"
+          value={value}
+          onChange={setValue}
+          error={error}
+          options={mockBehaviours.map((b) => ({ value: b, label: b.replaceAll("_", " ") }))}
+        />
+      </div>
+      <Button type="submit" variant="secondary" pending={pending} pendingLabel="Saving…" className="mb-5">
         Change behaviour
       </Button>
     </form>
