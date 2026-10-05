@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { alertStyles } from "@/components/ui/Alert";
 
 export interface ReauthAccount {
   id: string;
@@ -21,7 +22,7 @@ export function ReauthBanner({
 }) {
   if (accounts.length === 0) return null;
   return (
-    <div role="alert" className="border-b border-amber-700 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div role="alert" className={alertStyles("warning", true)}>
       <p className="font-semibold">
         {accounts.length === 1 ? "An account needs reconnecting" : `${accounts.length} accounts need reconnecting`}. Posts to{" "}
         {accounts.length === 1 ? "it" : "them"} will not go out until it is fixed.
@@ -30,7 +31,7 @@ export function ReauthBanner({
         {accounts.map((a) => (
           <li key={a.id}>
             {canManage ? (
-              <Link href={`/p/${projectSlug}/accounts#account-${a.id}`} className="underline">
+              <Link href={`/p/${projectSlug}/accounts#account-${a.id}`} className="font-medium underline underline-offset-2">
                 {a.displayName} ({a.providerName})
               </Link>
             ) : (
