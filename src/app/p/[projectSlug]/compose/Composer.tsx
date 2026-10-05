@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MediaPicker } from "@/components/media/MediaPicker";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
@@ -23,9 +22,11 @@ import {
 import { AddToQueueDialog, PublishNowDialog, ScheduleAtDialog } from "./ScheduleDialogs";
 import { alertStyles } from "@/components/ui/Alert";
 import { cardStyles } from "@/components/ui/Card";
-import { checkStyles, controlStyles, labelStyles } from "@/components/ui/controls";
+import { controlStyles, labelStyles } from "@/components/ui/controls";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ActionBar } from "@/components/ui/ActionBar";
+import { AccountPicker } from "@/components/accounts/AccountPicker";
+import { ProviderIcon } from "@/components/ui/Icon";
 
 // Each fieldset is a card. A floated legend is not drawn on the border, so it sits inside as the card title.
 const section = `${cardStyles} flex min-w-0 flex-col gap-3 p-5`;
@@ -34,6 +35,7 @@ const legend = "float-left mb-1 w-full font-heading text-base font-semibold text
 export interface AccountOption {
   id: string;
   displayName: string;
+  providerKey: string;
   providerName: string;
   status: string;
   providerAvailable: boolean;
@@ -161,10 +163,6 @@ export function Composer({
   const names = Object.fromEntries(accounts.map((a) => [a.id, a.displayName]));
   const byAccount = new Map(check?.targets.map((t) => [t.accountId, t]) ?? []);
 
-  function toggle(accountId: string) {
-    setSelected((cur) => (cur.includes(accountId) ? cur.filter((x) => x !== accountId) : [...cur, accountId]));
-  }
-
   async function save(): Promise<string | null> {
     setSaving(true);
     const res = await saveDraftAction(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, targets });
@@ -221,34 +219,17 @@ export function Composer({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">
-          <fieldset className={section}>
-            <legend className={legend}>Accounts</legend>
-            {accounts.map((a) => {
-              const reason = unavailableReason(a);
-              return (
-                <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg px-1 py-1 text-sm hover:bg-muted/60">
-                  <input
-                    id={`${ids}-acct-${a.id}`}
-                    type="checkbox"
-                    checked={selected.includes(a.id)}
-                    disabled={!!reason || !canSave}
-                    aria-describedby={reason ? `${ids}-acct-${a.id}-why` : undefined}
-                    onChange={() => toggle(a.id)}
-                    className={checkStyles}
-                  />
-                  <label htmlFor={`${ids}-acct-${a.id}`}>
-                    {a.displayName} <span className="text-muted-foreground">· {a.providerName}</span>
-                  </label>
-                  {a.status !== "active" ? <Badge tone="danger">{a.status === "needs_reauth" ? "Needs reconnecting" : a.status}</Badge> : null}
-                  {reason ? (
-                    <span id={`${ids}-acct-${a.id}-why`} className="text-xs text-muted-foreground">
-                      {reason}
-                    </span>
-                  ) : null}
-                </div>
-              );
-            })}
-          </fieldset>
+          <div className={section}>
+            <AccountPicker
+              legend="Accounts"
+              legendClassName={legend}
+              idPrefix={ids}
+              disabled={!canSave}
+              value={selected}
+              onChange={setSelected}
+              accounts={accounts.map((a) => ({ ...a, unavailableReason: unavailableReason(a) }))}
+            />
+          </div>
 
           <fieldset className={section}>
             <legend className={legend}>Text</legend>
@@ -328,7 +309,12 @@ export function Composer({
                 <article key={accountId} className="rounded-lg border border-border bg-surface p-3 text-sm">
                   <div className="flex items-baseline justify-between gap-2">
                     <h3 className="font-medium">
-                      {t.displayName} <span className="font-normal text-muted-foreground">· {t.providerName}</span>
+                      <span className="inline-flex items-center gap-2">
+                        <ProviderIcon providerKey={accounts.find((x) => x.id === accountId)?.providerKey ?? ""} size={22} />
+                        <span>
+                          {t.displayName} <span className="font-normal text-muted-foreground">· {t.providerName}</span>
+                        </span>
+                      </span>
                     </h3>
                     <span
                       data-testid={`counter-${accountId}`}

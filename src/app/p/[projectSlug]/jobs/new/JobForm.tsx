@@ -3,16 +3,16 @@
 import { useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MARK_CLOSE, MARK_OPEN, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
 import { INSTRUCTIONS_MAX } from "@/lib/validation/generation";
 import { createJobAction } from "../actions";
-import { groupByPlatform, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
+import { imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
-import { checkStyles, controlStyles } from "@/components/ui/controls";
+import { controlStyles } from "@/components/ui/controls";
 import { ChoiceField } from "@/components/ui/ChoiceField";
 import { ActionBar } from "@/components/ui/ActionBar";
+import { AccountPicker } from "@/components/accounts/AccountPicker";
 
 export type JobFormSource =
   | { kind: "media"; selection: unknown; includeUsed: boolean }
@@ -201,34 +201,23 @@ export function JobForm(props: JobFormProps) {
         ) : null}
       </div>
 
-      <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
-        <legend className="text-sm font-semibold">Target accounts</legend>
-        <p id={`${uid}-accounts-hint`} className="text-xs text-muted-foreground">
-          One version is written for each platform you choose.
-        </p>
-        {groupByPlatform(accounts).map((group) => (
-          <div key={group.providerName} className="flex flex-col gap-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.providerName}</p>
-            {group.accounts.map((a) => (
-              <label key={a.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(a.id)}
-                  disabled={!a.providerAvailable}
-                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))} className={checkStyles} />
-                <span>{a.displayName}</span>
-                <StatusBadge status={a.status} />
-              </label>
-            ))}
-          </div>
-        ))}
+      <div className="flex flex-col gap-3">
+        <AccountPicker
+          legend="Target accounts"
+          hint="One version is written for each platform you choose."
+          idPrefix={uid}
+          showStatus="always"
+          value={chosen}
+          onChange={setChosen}
+          error={fieldErrors.targetAccountIds}
+          accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
+        />
         {needImage.map((name) => (
-          <p key={name} role="note" className="rounded-md border border-warning-border p-2 text-sm text-warning">
+          <p key={name} role="note" className="rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning">
             Warning: {imageWarning(name)}
           </p>
         ))}
-        {fieldErrors.targetAccountIds ? <p className={red}>{fieldErrors.targetAccountIds}</p> : null}
-      </fieldset>
+      </div>
 
       <PolicyPicker
         idPrefix={`${uid}-policy`}
