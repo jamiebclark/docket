@@ -128,7 +128,10 @@ pnpm typecheck
 pnpm test
 ```
 
-`DATABASE_URL` must name a database whose name ends in `_test`; the test helpers refuse anything else. Tests use mocks only and
+`DATABASE_URL` must name a database whose name ends in `_test`; the test helpers refuse anything else. Each run makes its own
+databases from that name (`docket_<checkout>_<id>_test` plus one clone per worker), so parallel runs never collide, and drops
+them when it finishes. A run also clears databases left by runs that crashed; `pnpm db:test:clean` lists leftovers and
+`pnpm db:test:clean --yes` drops them. Set `KEEP_TEST_DB=1` to keep a run's databases for debugging. Tests use mocks only and
 never call a platform. Schema changes go through `pnpm db:generate`, `pnpm db:migrate` and `pnpm db:check`.
 
 Conventional Commits are enforced (commitlint and husky), and releases are cut by semantic-release from `main`. Features are
