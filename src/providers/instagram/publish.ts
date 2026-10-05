@@ -1,3 +1,4 @@
+import { docsUrl } from "@/lib/docs";
 import { graphRequest, DEFAULT_GRAPH_BASE, type GraphOutcome, type MetaApp } from "../meta/graph";
 import { graphVersion } from "../meta/config";
 import { readPageToken } from "../meta/credentials";
@@ -8,7 +9,7 @@ import { checkIntervalMs, FIRST_CHECK_DELAY_MS, CONTAINER_SAFE_AGE_MS, initialSt
 import { instagramStepFor, validState } from "./steps";
 
 const PLATFORM = "Instagram";
-const URL_HINT = " Images must be at a public URL (see docs/storage.md).";
+const URL_HINT = ` Images must be at a public URL (see ${docsUrl("storage")}).`;
 const RETRY_HINT = " Retry the post to create the media again.";
 
 const fatal = (error: string, summary?: AttemptSummary): StepResult => ({ kind: "fatal_error", error, ...(summary ? { summary } : {}) });

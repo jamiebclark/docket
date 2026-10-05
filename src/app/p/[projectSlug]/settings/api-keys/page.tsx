@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { docsUrl } from "@/lib/docs";
 import { ForbiddenError, forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as apiKeys from "@/server/services/api-keys";
@@ -32,7 +33,7 @@ export default async function ApiKeysPage({ params }: { params: Promise<{ projec
         <a href="/api/v1/openapi.json" className="underline">
           API reference (OpenAPI)
         </a>
-        <a href="https://github.com/jamiebclark/docket/blob/main/docs/n8n.md" className="underline">
+        <a href={docsUrl("n8n")} className="underline">
           n8n guide
         </a>
       </p>

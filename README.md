@@ -89,6 +89,10 @@ has been recorded recently. Details: [docs/deployment.md](docs/deployment.md#9-i
 
 ## Documentation
 
+The guides below are published at **https://jamiebclark.github.io/docket/**, built from `docs/` on every push to `main`
+(`mkdocs.yml`, `.github/workflows/docs.yml`). The app links to the published pages through `src/lib/docs.ts`, so keep page
+file names and headings stable or update those links.
+
 | Topic | Where |
 |---|---|
 | Deploying (Compose, Unraid, Neon, proxies, backups, Netlify) | [docs/deployment.md](docs/deployment.md) |

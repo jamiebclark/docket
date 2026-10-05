@@ -1,0 +1,70 @@
+# Published docs site: https://jamiebclark.github.io/docket/ (built by .github/workflows/docs.yml).
+# The app links here through src/lib/docs.ts; keep page file names stable or those links break.
+site_name: Docket
+site_url: https://jamiebclark.github.io/docket/
+site_description: Self-hosted social post scheduler and generator.
+repo_url: https://github.com/jamiebclark/docket
+repo_name: jamiebclark/docket
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+strict: true
+
+# Internal build history, not operator docs. Still readable in the repo.
+exclude_docs: |
+  build-prompt.md
+  decisions.md
+  requirements.txt
+
+# Platform research is linked from meta-setup.md but not worth a nav entry.
+not_in_nav: |
+  research/
+
+nav:
+  - Home: index.md
+  - Setting up:
+      - Deploying: deployment.md
+      - Media storage: storage.md
+      - Meta app (Facebook, Instagram, Threads): meta-setup.md
+  - Using Docket:
+      - Members and accounts: accounts.md
+      - Generator and jobs: generator.md
+      - n8n and the public API: n8n.md
+  - Reference:
+      - Platform limits: limits.md
+      - Security findings: security.md
+      - Adding a provider: adding-a-provider.md
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn

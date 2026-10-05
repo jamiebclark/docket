@@ -1,3 +1,4 @@
+import { docsUrl } from "@/lib/docs";
 import type { CandidatesResult, OAuthConnectGroup } from "../types";
 import { listPageCandidates } from "./candidates";
 import { parseMetaEnv, requireMetaConfig, type MetaConfig } from "./config";
@@ -17,7 +18,7 @@ async function candidatesFromUserToken(
 export const metaConnectGroup: OAuthConnectGroup = {
   key: "meta",
   displayName: "Facebook Pages and Instagram",
-  setupDoc: "docs/meta-setup.md",
+  setupDoc: docsUrl("meta-setup"),
   // Appended to the no-accounts / sign-in banners: name what the login must grant (re-review F1).
   callbackHint:
     "Facebook must grant pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic and instagram_content_publish, and at least one Page must be selected in the login dialog.",

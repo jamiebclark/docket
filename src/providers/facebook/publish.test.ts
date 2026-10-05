@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { docsUrl } from "@/lib/docs";
 import { createFakeGraph, type FakeGraph } from "../../../tests/helpers/fake-graph";
 import type { MediaItem, PublishContext } from "../types";
 import { advanceFacebook } from "./publish";
@@ -123,7 +124,7 @@ describe("Facebook publish success paths", () => {
     graph.fallback({ kind: "graph_error", code: 100, message: "Could not fetch image" });
     const r = await advanceFacebook(ctx("a", 1));
     expect(r).toMatchObject({ kind: "fatal_error" });
-    expect((r as { error: string }).error).toContain("docs/storage.md");
+    expect((r as { error: string }).error).toContain(docsUrl("storage"));
   });
 
   it("does not leak the token in results", async () => {

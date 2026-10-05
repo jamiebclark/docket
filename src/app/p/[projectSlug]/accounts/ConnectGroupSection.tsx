@@ -63,7 +63,16 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
         <div className="flex max-w-xl flex-col gap-2 text-sm">
           <p>
             {displayName} is not configured on this server.
-            {setupDoc ? <> Follow the setup guide in <code>{setupDoc}</code>.</> : null}
+            {setupDoc ? (
+              <>
+                {" "}
+                Follow the{" "}
+                <a href={setupDoc} target="_blank" rel="noreferrer" className="underline">
+                  setup guide
+                </a>
+                .
+              </>
+            ) : null}
           </p>
           <CopyField id={`connect-group-${groupKey}-redirect`} label="Redirect address to register" value={redirectUri} />
         </div>
@@ -74,7 +83,15 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
           {unavailable ? (
             <p className="max-w-xl text-sm">
               {unavailable.reason}
-              {unavailable.doc ? <> See <code>{unavailable.doc}</code>.</> : null}
+              {unavailable.doc ? (
+                <>
+                  {" "}
+                  <a href={unavailable.doc} target="_blank" rel="noreferrer" className="underline">
+                    How to fix this
+                  </a>
+                  .
+                </>
+              ) : null}
             </p>
           ) : (
             <>
