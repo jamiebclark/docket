@@ -3,8 +3,11 @@
 import { useActionState } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import { completeSetup } from "./actions";
+import { buttonStyles } from "@/components/ui/Button";
+import { alertStyles } from "@/components/ui/Alert";
+import { controlStyles } from "@/components/ui/controls";
 
-const input = "rounded border border-foreground/30 bg-transparent px-3 py-2 focus-visible:ring-2";
+const input = controlStyles;
 
 export function SetupForm() {
   const [state, action, pending] = useActionState<ActionResult<never> | null, FormData>(completeSetup, null);
@@ -23,9 +26,9 @@ export function SetupForm() {
         aria-describedby={errors[name] ? `${name}-error` : undefined}
         className={input}
       />
-      {hint && !errors[name] ? <span className="text-xs opacity-70">{hint}</span> : null}
+      {hint && !errors[name] ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
       {errors[name] ? (
-        <span id={`${name}-error`} className="text-xs text-red-700 dark:text-red-400">
+        <span id={`${name}-error`} className="text-xs text-danger">
           {errors[name]}
         </span>
       ) : null}
@@ -35,7 +38,7 @@ export function SetupForm() {
   return (
     <form action={action} className="flex flex-col gap-4">
       {formError ? (
-        <p role="alert" className="rounded border border-red-600 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+        <p role="alert" className={alertStyles("danger")}>
           {formError}
         </p>
       ) : null}
@@ -45,7 +48,7 @@ export function SetupForm() {
       <button
         type="submit"
         disabled={pending}
-        className="rounded bg-foreground px-3 py-2 text-background disabled:opacity-60 focus-visible:ring-2"
+        className={buttonStyles({ variant: "primary" })}
       >
         {pending ? "Creating…" : "Create account"}
       </button>

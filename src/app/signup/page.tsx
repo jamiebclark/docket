@@ -6,6 +6,8 @@ import { getSession } from "@/server/auth/session";
 import * as invitations from "@/server/services/invitations";
 import { acceptInvitationByToken, declineInvitationByToken } from "./actions";
 import { SignupForm } from "./signup-form";
+import { buttonStyles } from "@/components/ui/Button";
+import { AuthShell } from "@/components/brand/AuthShell";
 
 // The token is a credential: no referrer, no caching. The matching header is set in next.config.ts.
 export const metadata: Metadata = { title: "Join a project", referrer: "no-referrer" };
@@ -29,8 +31,8 @@ export default async function SignupPage({
     body = (
       <>
         <h1 className="text-2xl font-semibold">Invitation not valid</h1>
-        <p className="text-sm">This invitation is no longer valid. Ask the person who invited you for a new one.</p>
-        <Link href="/login" className="text-sm underline">Go to log in</Link>
+        <p className="text-sm text-muted-foreground">This invitation is no longer valid. Ask the person who invited you for a new one.</p>
+        <Link href="/login" className={buttonStyles({ variant: "secondary", className: "self-start" })}>Go to log in</Link>
       </>
     );
   } else {
@@ -56,7 +58,7 @@ export default async function SignupPage({
           <p className="text-sm">You already have an account for {invitation.email}.</p>
           <Link
             href={`/login?next=${encodeURIComponent(`/signup?token=${token}`)}`}
-            className="self-start rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-foreground"
+            className={buttonStyles({ variant: "primary", className: "self-start" })}
           >
             Log in to accept
           </Link>
@@ -79,9 +81,9 @@ export default async function SignupPage({
       body = (
         <>
           <h1 className="text-2xl font-semibold">This invitation is for another email address</h1>
-          <p className="text-sm">You are signed in with a different account. Sign out and open the link again with the invited address.</p>
+          <p className="text-sm text-muted-foreground">You are signed in with a different account. Sign out and open the link again with the invited address.</p>
           <form action={signOut}>
-            <button type="submit" className="rounded-md border border-foreground/30 px-3 py-1.5 text-sm font-medium hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground">
+            <button type="submit" className={buttonStyles({ variant: "secondary" })}>
               Sign out
             </button>
           </form>
@@ -91,8 +93,6 @@ export default async function SignupPage({
   }
 
   return (
-    <main id="main" className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-4 px-4 py-16">
-      {body}
-    </main>
+    <AuthShell>{body}</AuthShell>
   );
 }
