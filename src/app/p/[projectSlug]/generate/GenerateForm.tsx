@@ -5,7 +5,6 @@ import { useId, useState, useTransition } from "react";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { MediaView } from "@/server/services/media";
 import { generateSingleAction, planSeriesAction } from "./actions";
 import { SeriesPlanEditor } from "./SeriesPlanEditor";
@@ -16,16 +15,16 @@ import {
   SCHEDULING_LABEL,
   counterLabel,
   freshRequestId,
-  groupByPlatform,
   imageWarning,
   LIMITS,
   maxImagesFor,
   platformsNeedingImage,
   type AccountOption,
 } from "./generate-logic";
-import { checkStyles, controlStyles } from "@/components/ui/controls";
+import { controlStyles } from "@/components/ui/controls";
 import { ChoiceField } from "@/components/ui/ChoiceField";
 import { ActionBar } from "@/components/ui/ActionBar";
+import { AccountPicker } from "@/components/accounts/AccountPicker";
 
 export interface VoiceOption {
   id: string;
@@ -246,31 +245,16 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
         onChange={setInstructions}
       />
 
-      <fieldset className="flex flex-col gap-3" aria-describedby={`${uid}-accounts-hint`}>
-        <legend className="text-sm font-semibold">Accounts</legend>
-        <p id={`${uid}-accounts-hint`} className="text-xs text-muted-foreground">
-          One version is written for each platform you choose.
-        </p>
-        {groupByPlatform(accounts).map((group) => (
-          <div key={group.providerName} className="flex flex-col gap-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.providerName}</p>
-            {group.accounts.map((a) => (
-              <label key={a.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(a.id)}
-                  disabled={!a.providerAvailable}
-                  onChange={(e) => setChosen((c) => (e.target.checked ? [...c, a.id] : c.filter((x) => x !== a.id)))} className={checkStyles} />
-                <span>{a.displayName}</span>
-                <StatusBadge status={a.status} />
-              </label>
-            ))}
-          </div>
-        ))}
-        {fieldErrors.targetAccountIds ? (
-          <p className="text-xs text-danger">{fieldErrors.targetAccountIds}</p>
-        ) : null}
-      </fieldset>
+      <AccountPicker
+        legend="Accounts"
+        hint="One version is written for each platform you choose."
+        idPrefix={uid}
+        showStatus="always"
+        value={chosen}
+        onChange={setChosen}
+        error={fieldErrors.targetAccountIds}
+        accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
+      />
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-semibold">Images</legend>

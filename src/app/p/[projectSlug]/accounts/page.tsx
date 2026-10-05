@@ -18,7 +18,7 @@ import { RemoveAccountDialog } from "./RemoveAccountDialog";
 import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
 import { alertStyles } from "@/components/ui/Alert";
 import { buttonStyles } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, ProviderIcon } from "@/components/ui/Icon";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = { title: "Accounts" };
@@ -114,11 +114,14 @@ export default async function AccountsPage({
                 aria-labelledby={`account-${account.id}-name`}
                 className="flex scroll-mt-[calc(var(--sticky-top)+1rem)] flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card"
               >
-                <header className="flex flex-wrap items-center gap-2">
-                  <h3 id={`account-${account.id}-name`} className="text-lg font-semibold">
-                    {account.displayName}
-                  </h3>
-                  <span className="text-sm text-muted-foreground">{account.providerName}</span>
+                <header className="flex flex-wrap items-center gap-3">
+                  <ProviderIcon providerKey={account.providerKey} size={40} />
+                  <div className="flex min-w-0 flex-col">
+                    <h3 id={`account-${account.id}-name`} className="text-lg font-semibold">
+                      {account.displayName}
+                    </h3>
+                    <span className="text-sm text-muted-foreground">{account.providerName}</span>
+                  </div>
                   <Badge tone={status.tone}>{status.label}</Badge>
                 </header>
                 {account.lastError ? (
