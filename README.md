@@ -50,7 +50,7 @@ For development without Docker for the app itself (Node 24, see `.nvmrc`; run `c
 
 ```sh
 pnpm install
-pnpm dev                 # http://localhost:3000
+pnpm dev                 # http://localhost:3000, or the PORT in .env
 ```
 
 `pnpm dev` needs a Postgres of your own at `DATABASE_URL`; the Compose `postgres` service does not publish a port. For example:
