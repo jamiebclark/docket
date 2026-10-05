@@ -5,6 +5,7 @@
 # Update with `docker compose pull && docker compose up -d`.
 # To build from a source checkout instead, add docker-compose.build.yml (see that file).
 # Full setup, going live with real accounts, backups and hosting options: docs/deployment.md
+# DOCKET_IMAGE picks the tag: latest (each release, the default), 1.2.3 to pin, edge to follow main.
 x-docket-image: &docket-image ${DOCKET_IMAGE:-ghcr.io/jamiebclark/docket:latest}
 
 x-docket-env: &docket-env
