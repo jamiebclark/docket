@@ -125,7 +125,7 @@ Target: Node 24 TypeScript server, Zod-validated structured JSON, optional image
   });
   ```
   - The `auto` region is required by the SDK but unused by R2. R2 also treats an empty region or `us-east-1` as `auto`. Source: https://developers.cloudflare.com/r2/api/s3/api/
-  - `forcePathStyle` is not mentioned on the Cloudflare SDK page. Whether R2 needs it for the account endpoint is **UNVERIFIED**. The account-level endpoint with the bucket in the path is the documented form; default virtual-host style generally also works against R2. **UNVERIFIED**
+  - `forcePathStyle` is not mentioned on the Cloudflare SDK page. **Verified 2026-10-04** against a real R2 bucket: with `forcePathStyle: false` (virtual-host style, `<bucket>.<ACCOUNT_ID>.r2.cloudflarestorage.com`) and the `WHEN_REQUIRED` checksum settings below, PutObject, DeleteObject and ListObjectsV2 all succeeded, and the object was served publicly with HTTP 200 from the bucket's custom domain.
 - **PutObject on R2**
   - Supported headers: Content-Type, Cache-Control, Content-Disposition, Content-Encoding, Content-Language, Expires, Content-MD5.
   - Storage classes: STANDARD and STANDARD_IA.
@@ -172,5 +172,5 @@ Target: Node 24 TypeScript server, Zod-validated structured JSON, optional image
 
 - OpenAI per-image byte limit, URL-fetch constraints and the full error class list were not confirmed.
 - Anthropic `zodOutputFormat` behaviour with Zod 4 schemas was not tested; check by trying it with the installed `zod` version.
-- R2 `forcePathStyle` and MinIO `forcePathStyle` and checksum behaviour need a quick integration test.
+- MinIO `forcePathStyle` and checksum behaviour need a quick integration test. (R2 was verified on 2026-10-04; see above.)
 - The OpenAI models page was summarised by the fetch tool; recheck exact IDs before use.
