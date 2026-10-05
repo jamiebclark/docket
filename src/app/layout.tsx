@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { connection } from "next/server";
 import "./globals.css";
@@ -21,9 +21,25 @@ const poppins = localFont({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: { default: "Docket", template: "%s · Docket" },
-  description: "Multi-project social scheduler and post generator",
+const DESCRIPTION = "Plan, write and schedule social posts across every project.";
+
+/** Read per request: share-image URLs must be absolute, and the public address is set at run time. */
+export function generateMetadata(): Metadata {
+  return {
+    metadataBase: new URL(process.env.BETTER_AUTH_URL?.trim() || "http://localhost:3000"),
+    title: { default: "Docket", template: "%s · Docket" },
+    description: DESCRIPTION,
+    applicationName: "Docket",
+    openGraph: { siteName: "Docket", title: "Docket", description: DESCRIPTION, type: "website" },
+    twitter: { card: "summary_large_image", title: "Docket", description: DESCRIPTION },
+  };
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#1b1424" },
+  ],
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

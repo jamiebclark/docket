@@ -40,6 +40,11 @@ through the `docket-ui` skill, and interactive sessions through the
 | Mark + wordmark | `<Logo size>` | Auth pages and marketing moments |
 | Favicon | `src/app/favicon.ico` (32 + 48 px) | Legacy `/favicon.ico` requests |
 | Apple touch icon | `src/app/apple-icon.png` (180 px, white tile) | iOS home screen |
+| Install icons | `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable-512.png` | Listed in `src/app/manifest.ts` (served at `/manifest.webmanifest`, public without a session) |
+| Share image | `src/app/opengraph-image.png`, `src/app/twitter-image.png` (1200×630) + `.alt.txt` | Link previews in Slack, social sites, chat apps. Absolute URLs come from `metadataBase` = `BETTER_AUTH_URL` |
+
+All raster assets come from `src/app/icon.svg` via `node scripts/brand-icons.mjs`; the share image
+is rendered with Next's `ImageResponse` using the Poppins WOFF files in `scripts/brand-assets/`.
 
 The mark is a purple→magenta gradient "D" with two lavender broadcast waves.
 Rules: never recolour the mark, never put it on a busy background, keep clear

@@ -3,7 +3,7 @@ import { isPublicPath, lastProjectSlugFor, loginRedirectFor } from "./auth-gate"
 
 describe("auth gate", () => {
   it("lets public paths through without a session", () => {
-    for (const p of ["/login", "/setup", "/signup", "/api/auth/sign-in/email", "/api/health"]) {
+    for (const p of ["/login", "/setup", "/signup", "/manifest.webmanifest", "/api/auth/sign-in/email", "/api/health"]) {
       expect(isPublicPath(p)).toBe(true);
       expect(loginRedirectFor(p, "", false)).toBeNull();
     }

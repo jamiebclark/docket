@@ -1,7 +1,8 @@
 // Pure decision logic for src/proxy.ts (FR-013). Optimistic only: it checks that a
 // session cookie is present, never that it is valid — pages and actions re-check.
 
-const PUBLIC_EXACT = new Set(["/login", "/setup", "/signup"]);
+// The manifest is fetched without cookies by browsers installing the app, so it must not redirect.
+const PUBLIC_EXACT = new Set(["/login", "/setup", "/signup", "/manifest.webmanifest"]);
 const PUBLIC_PREFIXES = ["/api/auth/", "/api/health", "/api/internal/", "/api/v1/", "/_next/", "/favicon.ico"];
 
 export function isPublicPath(pathname: string): boolean {
