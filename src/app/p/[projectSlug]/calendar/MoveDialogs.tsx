@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Icon } from "@/components/ui/Icon";
 import type { ActionResult } from "@/lib/action-result";
 import type { EmptySlot, PullExpected, PullMove, QueuedItem } from "@/server/services/queue";
 import { formatPlanned } from "./calendar-logic";
@@ -135,8 +136,11 @@ export function PullForwardDialog({ open, onClose, accountName, preview, confirm
       {moves.length > 0 ? (
         <ul className="mb-2 flex max-h-72 flex-col gap-1 overflow-y-auto text-sm">
           {moves.map((m) => (
-            <li key={m.targetId}>
-              {formatPlanned(m.fromLocal)} → {formatPlanned(m.toLocal)}
+            <li key={m.targetId} className="flex flex-wrap items-center gap-1.5">
+              {formatPlanned(m.fromLocal)}
+              <Icon name="arrowRight" size={14} className="text-muted-foreground" />
+              <span className="sr-only">moves to</span>
+              {formatPlanned(m.toLocal)}
             </li>
           ))}
         </ul>

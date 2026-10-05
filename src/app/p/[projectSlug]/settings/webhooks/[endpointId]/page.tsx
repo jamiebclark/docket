@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Icon } from "@/components/ui/Icon";
 import { notFound } from "next/navigation";
 import { ForbiddenError, forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
@@ -61,8 +62,12 @@ export default async function EndpointPage({ params }: { params: Params }) {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-sm">
-        <Link href={`/p/${scope.project.slug}/settings/webhooks`} className="underline">
-          ← All webhooks
+        <Link
+          href={`/p/${scope.project.slug}/settings/webhooks`}
+          className="inline-flex items-center gap-1.5 rounded font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Icon name="arrowLeft" size={16} />
+          All webhooks
         </Link>
       </p>
       <h1 className="text-2xl font-semibold">Webhook: {dto.host}</h1>
