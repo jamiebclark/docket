@@ -12,6 +12,9 @@ x-docket-env: &docket-env
   # external database, change it here (see docs/deployment.md, "Container host + Neon").
   DATABASE_URL: postgres://docket:docket@postgres:5432/docket
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+  # The server always listens on 3000 inside the container. PORT in .env is for `pnpm dev`; set
+  # DOCKET_PORT to change the host port instead.
+  PORT: "3000"
   # The mock provider is off unless you turn it on. Production images default to off; set
   # MOCK_PROVIDER_ENABLED=true in .env for the local walkthrough and remove it for real use.
   # It also reaches the containers through env_file, so this line only makes the switch explicit.
