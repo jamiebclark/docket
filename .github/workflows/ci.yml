@@ -136,6 +136,18 @@ jobs:
           tag=$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1)
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
+  # Publishes every green main commit as ghcr.io/<owner>/docket:edge (and :sha-<short>), whether
+  # or not it cuts a release. `latest` stays on the last release; `edge` is for following main.
+  edge:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [static, test, build, docker]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      edge: true
+
   # Publishes ghcr.io/<owner>/docket for the release cut above. A separate `release: published`
   # workflow would never run: releases created with GITHUB_TOKEN do not trigger workflows.
   image:
