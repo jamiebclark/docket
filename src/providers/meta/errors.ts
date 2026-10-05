@@ -3,8 +3,9 @@ import type { GraphError, GraphOutcome } from "./graph";
 
 export const GRAPH_ERROR_TABLE = {
   invalidToken: [190],
-  // R3 interim, UNVERIFIED
-  rateLimited: [4, 17, 32, 613],
+  // 4/17/32/613 platform and app limits; 80001 Pages and 80002 Instagram business-use-case limits
+  // (docs/research/meta.md, "Rate limits, 2026-10-04")
+  rateLimited: [4, 17, 32, 613, 80001, 80002],
   temporary: [1, 2],
 } as const;
 

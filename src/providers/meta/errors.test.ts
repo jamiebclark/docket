@@ -19,7 +19,7 @@ describe("classifyGraphError", () => {
     expect(classifyGraphError(err({ code: 190 }))).toBe("invalid_token");
     expect(classifyGraphError(err({ code: 190, subcode: 463 }))).toBe("invalid_token");
   });
-  it.each([4, 17, 32, 613])("rate-limit code %i", (code) => {
+  it.each([4, 17, 32, 613, 80001, 80002])("rate-limit code %i", (code) => {
     expect(classifyGraphError(err({ code }))).toBe("rate_limited");
   });
   it.each([1, 2])("temporary code %i", (code) => {
