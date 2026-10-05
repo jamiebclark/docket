@@ -23,11 +23,19 @@ Docket needs one thing a lot of hosts do not give you: **something that runs the
 
 ### The published image
 
-Every release is published to GitHub Container Registry as `ghcr.io/jamiebclark/docket`, for `linux/amd64` and
-`linux/arm64`. Tags: `latest`, the exact version (`1.2.3`), and the moving `1.2` and `1` tags. One image runs everything:
-by default it migrates the database and starts the web server; with the command `node worker.mjs` it runs the scheduler
-instead. `docker-compose.yml` pulls `latest`. To update only when you choose, set `DOCKET_IMAGE=ghcr.io/jamiebclark/docket:1.2.3`
-in `.env`.
+Images are published to GitHub Container Registry as `ghcr.io/jamiebclark/docket`, for `linux/amd64` and
+`linux/arm64`. One image runs everything: by default it migrates the database and starts the web server; with the
+command `node worker.mjs` it runs the scheduler instead. Pick a tag with `DOCKET_IMAGE` in `.env`:
+
+| Tag | Moves when | Use it for |
+|---|---|---|
+| `latest` (the default) | every release | Normal installs. A release is cut for every merge that changes the app: features, fixes, performance, refactors, reverts, build and dependency updates. |
+| `1.2.3`, `1.2`, `1` | never / on each 1.2.x / on each 1.x | Pinning. `1.2.3` updates only when you change it; `1` takes everything but a major version. |
+| `edge` | every green commit on `main` | Following development, including commits that cut no release. Less tested in the wild; not for production. |
+| `sha-abc1234` | never | Running or rolling back to one exact `main` commit. |
+
+Update with `docker compose pull && docker compose up -d`; migrations run when the web container starts. To follow
+`main`: `DOCKET_IMAGE=ghcr.io/jamiebclark/docket:edge`. To pin: `DOCKET_IMAGE=ghcr.io/jamiebclark/docket:1.2.3`.
 
 To build from a source checkout instead, add the build override:
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`, or set

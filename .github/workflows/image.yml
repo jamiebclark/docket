@@ -1,21 +1,30 @@
 name: Image
 
 # Builds the Docker image for linux/amd64 and linux/arm64 and pushes it to GitHub Container
-# Registry as ghcr.io/<owner>/docket. CI calls this after semantic-release cuts a version. Run it
-# by hand (Actions → Image → Run workflow) to publish an existing tag, e.g. one released before
-# this workflow existed. The tag is checked out, so the image always matches the released source.
+# Registry as ghcr.io/<owner>/docket, on one of two channels:
+#   - release: CI calls this after semantic-release cuts a version. The `vX.Y.Z` tag is checked
+#     out, so the image always matches the released source; tags X.Y.Z, X.Y, X and (by default) latest.
+#   - edge: CI calls this after every green push to main. The pushed commit is built; tags `edge`
+#     and `sha-<short sha>`. It never touches `latest` or version tags.
+# Run it by hand (Actions → Image → Run workflow) to publish an existing release tag, e.g. one
+# released before this workflow existed.
 # Each platform builds on a native runner and pushes by digest; `merge` then tags one manifest list.
 on:
   workflow_call:
     inputs:
       version:
-        description: Release version without the leading v, e.g. 1.2.3
-        required: true
+        description: Release version without the leading v, e.g. 1.2.3. Leave empty with edge.
+        required: false
         type: string
+        default: ""
       latest:
-        description: Also move the latest tag to this version
+        description: Also move the latest tag to this version (release channel only)
         type: boolean
         default: true
+      edge:
+        description: Publish the current commit as `edge` and `sha-<short>` instead of a release
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       version:
@@ -28,8 +37,9 @@ on:
         default: true
 
 concurrency:
-  group: image-${{ inputs.version }}
-  cancel-in-progress: false
+  # A newer main push supersedes an edge build still running; release builds always finish.
+  group: image-${{ inputs.edge && 'edge' || inputs.version }}
+  cancel-in-progress: ${{ inputs.edge == true }}
 
 permissions:
   contents: read
@@ -50,17 +60,20 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - name: Check the version
+      - name: Check the inputs
         env:
           VERSION: ${{ inputs.version }}
+          EDGE: ${{ inputs.edge }}
         run: |
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [ "$EDGE" = "true" ]; then
+            if [ -n "$VERSION" ]; then echo "::error::edge builds take no version, got '$VERSION'"; exit 1; fi
+          elif ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::version must look like 1.2.3 (no leading v), got '$VERSION'"
             exit 1
           fi
       - uses: actions/checkout@v7
         with:
-          ref: v${{ inputs.version }}
+          ref: ${{ inputs.edge && github.sha || format('v{0}', inputs.version) }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -75,7 +88,7 @@ jobs:
             org.opencontainers.image.title=Docket
             org.opencontainers.image.description=Self-hosted, multi-project social scheduler and LLM post generator for Facebook Pages, Instagram, Threads and Bluesky.
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.version=${{ inputs.edge && format('edge-{0}', github.sha) || inputs.version }}
       - id: build
         uses: docker/build-push-action@v7
         with:
@@ -119,10 +132,12 @@ jobs:
           images: ${{ env.IMAGE }}
           flavor: latest=false
           tags: |
-            type=semver,pattern={{version}},value=v${{ inputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version }}
-            type=semver,pattern={{major}},value=v${{ inputs.version }}
-            type=raw,value=latest,enable=${{ inputs.latest }}
+            type=semver,pattern={{version}},value=v${{ inputs.version || '0.0.0' }},enable=${{ !inputs.edge }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version || '0.0.0' }},enable=${{ !inputs.edge }}
+            type=semver,pattern={{major}},value=v${{ inputs.version || '0.0.0' }},enable=${{ !inputs.edge }}
+            type=raw,value=latest,enable=${{ !inputs.edge && inputs.latest }}
+            type=raw,value=edge,enable=${{ inputs.edge }}
+            type=sha,prefix=sha-,format=short,enable=${{ inputs.edge }}
       - name: Tag the manifest list
         working-directory: ${{ runner.temp }}/digests
         env:
@@ -130,7 +145,10 @@ jobs:
         run: |
           args=()
           while IFS= read -r tag; do [ -n "$tag" ] && args+=(-t "$tag"); done <<< "$TAGS"
+          if [ "${#args[@]}" -eq 0 ]; then echo "::error::no tags to publish"; exit 1; fi
           for digest in *; do args+=("$IMAGE@sha256:$digest"); done
           docker buildx imagetools create "${args[@]}"
       - name: Show the result
-        run: docker buildx imagetools inspect "$IMAGE:${{ inputs.version }}"
+        env:
+          TAG: ${{ inputs.edge && 'edge' || inputs.version }}
+        run: docker buildx imagetools inspect "$IMAGE:$TAG"
