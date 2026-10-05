@@ -1,6 +1,8 @@
 # Meta platforms — verified facts
 
-Checked 2026-10-02 against developers.facebook.com. Re-verify before changing
+Checked 2026-10-04 against developers.facebook.com (see "Self-hoster setup
+verification, 2026-10-04" at the end; earlier sections last fully checked
+2026-10-02). Re-verify before changing
 provider code (use the `platform-researcher` agent). Items marked
 **UNVERIFIED** could not be confirmed on an official page; cover them with
 mocked tests and treat them as assumptions.
@@ -109,3 +111,156 @@ Get started: https://developers.facebook.com/docs/threads/get-started
   with chosen scopes (then exchange as above). Threads: the dashboard "User
   Token Generator" / Explorer "Generate Threads Access Token" — **UNVERIFIED**
   officially.
+
+## Self-hoster setup verification, 2026-10-04
+Checked 2026-10-04. Context: Business-type app, Facebook Login for Business on
+Standard Access (no App Review), plus the Threads use case. Verdicts are
+confirmed / contradicted / not determinable from official docs.
+
+### 1. App mode (Development vs Live) — CONTRADICTORY pages; partly not determinable
+- Business apps have **no app modes**: "Business apps do not have app modes and
+  instead rely exclusively on access levels to determine who can grant them
+  permissions and who will be affected by features."
+  Source: https://developers.facebook.com/docs/development/create-an-app/app-dashboard/app-types/
+  This contradicts Docket's assumption (docs/meta-setup.md step 4, Threads
+  testers) that a Development/Live toggle governs who can connect.
+- Counter-evidence (generic pages): the app-dashboard page says new apps start in
+  Development mode and the toolbar toggle switches modes, and lists pre-Live
+  requirements: privacy policy and terms URLs, category, platform, icon,
+  business verification, data-handling answers.
+  Source: https://developers.facebook.com/docs/development/create-an-app/app-dashboard/
+  The app-modes page only spells out Consumer apps: in Live mode Standard Access
+  permissions "can only be requested from role users".
+  Source: https://developers.facebook.com/docs/development/build-and-test/app-modes
+  So the dashboard page may be generic and not apply to Business apps.
+  **UNVERIFIED** whether a Business app with Facebook Login for Business shows
+  a toggle in the dashboard; test it in the live dashboard.
+- Who can connect: Standard Access "can only be requested from app users who have
+  a role on the requesting app"; Business apps are "automatically approved for
+  Standard Access for all permissions and features available to their app type".
+  Source: https://developers.facebook.com/docs/graph-api/overview/access-levels
+  Pages docs: "Apps in Development Mode can request any Permission from any app
+  User who has a Role on the app" (https://developers.facebook.com/docs/pages-api/overview).
+  Net effect for Docket: role users (admin/developer/tester) can connect; mode
+  is irrelevant on Standard Access for role users.
+- Publishing requirements: for apps used only by role users, "you do not need to
+  complete verification". Business Verification is needed for Advanced Access.
+  Source: https://developers.facebook.com/documentation/development/release/business-verification
+  The privacy-policy URL / icon / category / data deletion URL list applies to
+  going Live per the app-dashboard page above. A search snippet from Meta's docs
+  also says Advanced Access to `public_profile` is required for Facebook Login
+  for Business apps before go-live (to support external users); **UNVERIFIED**
+  (the page body fetched did not contain it). **UNVERIFIED**: a data deletion
+  URL requirement was not seen on any fetched official page.
+- Docket needs none of these while only role users connect.
+
+### 2. localhost redirect URIs — NOT DETERMINABLE for this use case
+- Confirmed rule (2018 announcement): "You will still be able to use HTTP with
+  "localhost" addresses, but only while your app is still in development mode."
+  Source: https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/
+- Current security page requires exact-match redirect URIs, Strict Mode "required
+  for all apps", and HTTPS; it does not mention localhost.
+  Source: https://developers.facebook.com/docs/facebook-login/security
+- Because Business apps have no app modes (item 1), whether the exemption
+  applies is **UNVERIFIED**. Keep the U2 test procedure and the
+  hosts-file/mkcert fallback.
+- Where the field lives: Facebook Login for Business **Settings → Client OAuth
+  Settings → Valid OAuth Redirect URIs**.
+  Source: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/business-login-for-instagram
+  (the Facebook Login for Business page itself does not cover it). The
+  per-use-case menu layout of the current dashboard is **UNVERIFIED**.
+
+### 3. Login configuration token type — CONFIRMED (inference for the choice)
+- Two types: "User access token" (real-time, user-triggered actions, tied to the
+  person's account, short-lived) and "System-user access token" (automated
+  operations, tied to the business portfolio, defaults to never expiring).
+  Source: https://developers.facebook.com/docs/facebook-login/facebook-login-for-business
+- Docket's flow is user-triggered and uses `/me/accounts`, so choose **User
+  access token**. (The choice is our inference from these definitions; the docs
+  do not name Docket's flow.) A configuration also needs the permissions picked;
+  the app must be a Business-type app.
+
+### 4. Delegated Page access — PARTLY CONFIRMED
+- A Page owner is not required: "the app User must own or be able to perform a
+  Task on the Page." Admin access in the UI grants all tasks. Source:
+  https://developers.facebook.com/docs/pages-api/overview
+- Posting needs `CREATE_CONTENT`, `MANAGE` and/or `MODERATE` per the manage-pages
+  page (https://developers.facebook.com/docs/pages-api/manage-pages); the Page
+  photos reference says a Page token "requested by a person who can perform the
+  `CREATE_CONTENT` task" (https://developers.facebook.com/docs/graph-api/reference/page/photos/).
+  So a user with task access can obtain a Page token with `pages_manage_posts`.
+  `/{user-id}/accounts` returns "Pages that a person owns or is able to perform
+  tasks on" (https://developers.facebook.com/docs/graph-api/reference/user/accounts/).
+- New Pages experience "Facebook access" vs "task access" wording: **UNVERIFIED**.
+  The new-Pages-experience page (https://developers.facebook.com/docs/pages-api/new-pages-experience)
+  says the same permissions and tasks apply per endpoint; the fetched text did
+  not describe "Facebook access" or Business Portfolio behaviour.
+- When a Business-Portfolio-only Page is missing from `/me/accounts` without
+  `business_management`/`ads_management`: **UNVERIFIED** for Facebook Pages. The
+  only official statement found is for Instagram publishing: "If the app user was
+  granted a role on the Page connected to your app user's Instagram professional
+  account via the Business Manager, your app will also need: `ads_management`,
+  `ads_read`" (https://developers.facebook.com/docs/instagram-platform/content-publishing).
+  The manage-pages page names `business_management` only for business system
+  users. Workaround that is documented: none found; practical advice (give the
+  user a direct Page task via the Page's own access settings) is **UNVERIFIED**.
+
+### 5. Instagram via Facebook Login: required Page task — CONFIRMED; IG-only NOT DETERMINABLE
+- "The app user whose token is used in the request must be able to perform
+  `MANAGE` or `CREATE_CONTENT` tasks on the Page" connected to the Instagram
+  account. Needs `instagram_basic` + `instagram_content_publish` (+
+  `pages_read_engagement` for Facebook Login).
+  Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish
+  and https://developers.facebook.com/docs/instagram-platform/content-publishing
+- Getting-started lists MANAGE, CREATE_CONTENT, MODERATE or ADVERTISE for reading
+  IG data (https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-started);
+  publishing needs MANAGE or CREATE_CONTENT specifically.
+- IG-only access without a Page role: the Facebook Login path requires Page tasks
+  and a linked Page; no official statement found that IG-only access suffices
+  (that is the Instagram Login path, a different flow). Treat as not enough.
+- Page Publishing Authorization (PPA) may block publishing until completed.
+- Doc discrepancy: the media_publish reference says 50 posts per 24 h while the
+  content-publishing guide says 100. Existing line above keeps 100;
+  **UNVERIFIED** which is current — read `content_publishing_limit` at runtime.
+
+### 6. Threads testers — PARTLY CONFIRMED
+- Add: App Dashboard → App roles → Roles → **Add People** → **Threads Tester**.
+  The docs say the invitation goes to the "Threads user's profile"; whether a
+  username is typed is **UNVERIFIED**.
+- Accept: "Website permissions" section under Account Settings on the Threads
+  website or app. The docs do not give the exact menu path; the repo's
+  "Settings → Account → Website permissions" is plausible but **UNVERIFIED**.
+- Meta developer account for invitee: not stated — **UNVERIFIED**.
+- Beyond testers: "each permission must first be approved through the App Review
+  process, and your app must be published." Source:
+  https://developers.facebook.com/docs/threads/get-started
+- No delegated/managed access: **NOT DETERMINABLE** as a negative statement.
+  The docs only describe the Threads user logging in and choosing which data to
+  allow (https://developers.facebook.com/docs/threads/get-started/get-access-tokens-and-permissions),
+  with no mention of managed or delegated roles. Treat owner-only as the working
+  assumption.
+
+### 7. One app for both use cases — LIKELY YES, with a caveat
+- "You can add the **Access Threads API** use case to an app with the **Manage
+  everything on your Page** use case"; it "can't" be combined with
+  "Authenticate and request data from users with Facebook Login" (incompatible).
+  Source: https://developers.facebook.com/documentation/development/create-an-app
+- Multiple use cases are allowed when compatible
+  (https://developers.facebook.com/docs/development/create-an-app/app-dashboard/).
+  The Pages create-an-app guide customizes Facebook Login for Business under the
+  Page use case (https://developers.facebook.com/documentation/pages-api/create-an-app).
+- **UNVERIFIED**: Docket's exact pair (a Business app with the separate-named
+  "Facebook Login for Business" use case plus Threads) was not stated; the
+  dashboard only shows compatible use cases. Docket already treats the Threads
+  app id/secret as a separate pair.
+
+### 8. Page photo `url` fetched by Facebook — CONFIRMED (public reachability implied)
+- `url` is "a photo that is already on the internet"; Facebook fetches it.
+  Sources: https://developers.facebook.com/docs/graph-api/reference/page/photos/,
+  https://developers.facebook.com/docs/pages-api/posts
+- Docs do not literally say "publicly accessible" for this endpoint (Instagram
+  and Threads guides do for media). Treat the host as needing to be public.
+
+### Code impact notes for the caller
+- No limit/endpoint/host change found. Doc claims to revisit: the Development vs
+  Live assumptions in docs/meta-setup.md, and the 50 vs 100 IG limit.

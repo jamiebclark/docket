@@ -1,7 +1,10 @@
-# One command to run Docket: `docker compose up --build`.
-# Copy .env.example to .env first and fill in the two required secrets.
-# Full setup, backups and hosting options: docs/deployment.md
+# One command to run Docket: `docker compose up -d --build`.
+# Copy .env.example to .env first and set BETTER_AUTH_SECRET and CREDENTIALS_ENCRYPTION_KEY
+# (openssl rand -base64 32). For the offline walkthrough also set MOCK_PROVIDER_ENABLED=true.
+# Full setup, going live with real accounts, backups and hosting options: docs/deployment.md
 x-docket-env: &docket-env
+  # Points at the postgres service below and overrides DATABASE_URL in .env. To use Neon or another
+  # external database, change it here (see docs/deployment.md, "Container host + Neon").
   DATABASE_URL: postgres://docket:docket@postgres:5432/docket
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
   # The mock provider is off unless you turn it on. Production images default to off; set

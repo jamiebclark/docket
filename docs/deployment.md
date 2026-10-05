@@ -15,8 +15,9 @@ Docket needs one thing a lot of hosts do not give you: **something that runs the
 ## 2. Before you start (all setups)
 
 - **Generate the secrets** with `openssl rand -base64 32`, once each, for `BETTER_AUTH_SECRET` and `CREDENTIALS_ENCRYPTION_KEY`.
-- **`BETTER_AUTH_URL` must equal the address people use** in the browser (scheme, host and port). A mismatch breaks sign-in.
-- **Instagram and Threads need a publicly reachable media bucket.** They fetch your image URLs themselves, so `localhost` will not work, and presigned URLs do not work on R2 custom domains. See [storage.md](./storage.md).
+- **`BETTER_AUTH_URL` must equal the address people use** in the browser (scheme, host and port). A mismatch breaks sign-in. It also sets the login callback that Facebook and Threads check, `<BETTER_AUTH_URL>/connect/callback`, so pick the final address before you create the Meta app.
+- **What must be public.** The media bucket: Facebook, Instagram and Threads fetch your image URLs themselves, so `localhost` will not work, and presigned URLs do not work on R2 custom domains ([storage.md](./storage.md)). Docket itself does not need to be reachable from the internet, because platform logins redirect through your browser. It does need `https://` with a trusted certificate for Threads. The tick endpoint must be reachable only from whatever cron calls it, if you use one.
+- **Restart after editing `.env`.** Configuration is read at startup: run `docker compose up -d` to recreate the containers with the new values.
 - **The mock provider is off in production images.** Set `MOCK_PROVIDER_ENABLED=true` in `.env` for the local walkthrough, and remove it for real use.
 
 ## 3. Local Docker Compose
@@ -26,7 +27,7 @@ Docket needs one thing a lot of hosts do not give you: **something that runs the
    - `BETTER_AUTH_SECRET` and `CREDENTIALS_ENCRYPTION_KEY` (with `openssl rand -base64 32`);
    - `MOCK_PROVIDER_ENABLED=true`;
    - `TICK_SECRET` (optional);
-   - `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (or use `/setup` in the browser).
+   - `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (or use `/setup` in the browser). They are used only while no account exists, so remove the password from `.env` once you have signed in.
 3. `docker compose up -d --build`, then `docker compose ps`. `web` should be healthy and `worker` running. The `postgres` service is the database.
 4. Open `http://localhost:3000`, sign in (or complete `/setup`), and create a project.
 5. Accounts → Connect **Mock (offline)**.
@@ -44,7 +45,7 @@ Optional offline media storage: `docker compose --profile offline up` adds the `
 
 | Step | Command | Result |
 |---|---|---|
-| Build | `docker build --secret id=extra_ca,src=<pem> -t docket:local .` (proxy CA, decision 12) | exit 0 |
+| Build | `docker build --secret id=extra_ca,src=<pem> -t docket:local .` (extra CA for a TLS-intercepting proxy, see §10) | exit 0 |
 | Start | `docker compose up -d --no-build` | exit 0; `postgres` healthy, `web` healthy, `worker` running |
 | Smoke | `docker compose run --rm -T worker node scripts/smoke.mjs` | all 10 steps ✓ (health, user, project, mock account, publish now, worker publishes, scheduler health 0 s, security headers, tick 401 without secret, cross-origin POST 403) |
 | Backup | `docker compose exec -T postgres pg_dump -U docket -d docket -Fc > docket.dump` | exit 0, 131 KB |
@@ -52,7 +53,19 @@ Optional offline media storage: `docker compose --profile offline up` adds the `
 | Smoke again | same smoke command | all 10 steps ✓ |
 | Tear down | `docker compose down -v` | exit 0 |
 
-Not covered by this run: the smoke script does not list the post created by the first run, so "data survived the restore" is shown only by `pg_restore` exiting 0 and the app coming back healthy; the browser CSP-console check of the shipped screens (quickstart §6, U5) and the manual UI walkthrough were **not run**.
+Not covered by this run: the smoke script does not list the post created by the first run, so "data survived the restore" is shown only by `pg_restore` exiting 0 and the app coming back healthy; the browser check for Content-Security-Policy errors in the console and the manual UI walkthrough were **not run**.
+
+### Next: connect real accounts
+
+The walkthrough above uses the mock provider. To post to real accounts, do these in order:
+
+1. **Pick the address and HTTPS.** Choose the address people will use, put Docket behind a reverse proxy with a trusted certificate (§6), and set `BETTER_AUTH_URL` to it. Threads needs `https://` on a name that is not `localhost`.
+2. **Set up a public media bucket** ([storage.md](./storage.md)). Facebook, Instagram and Threads all need it for images.
+3. **Optional: the generator.** Set `LLM_PROVIDER`, `LLM_MODEL` and the provider's API key ([generator.md](./generator.md)).
+4. **Create the Meta app** for Facebook, Instagram and Threads, register `<BETTER_AUTH_URL>/connect/callback`, add people's app roles and Threads Testers, and set the `META_*` and `THREADS_*` variables ([meta-setup.md](./meta-setup.md)).
+5. **Remove `MOCK_PROVIDER_ENABLED=true`** and `BOOTSTRAP_ADMIN_PASSWORD` from `.env`.
+6. **Restart:** `docker compose up -d`.
+7. **Invite members and connect accounts** from each project's Accounts screen. Bluesky needs only an app password. Who can connect what, and how to post for accounts other people own: [accounts.md](./accounts.md).
 
 ## 4. Backups and restore
 
@@ -90,7 +103,7 @@ These are generic steps. They assume you can run `docker compose` on the box.
 6. Back up as in §4.
 7. Update with `git pull && docker compose up -d --build`.
 
-Unverified — check against your Unraid version (U1): how Unraid exposes Compose, where it stores appdata, and how it starts containers at boot. This guide gives no plugin names, menu paths or default paths, because none were checked.
+Unverified, so check against your Unraid version: how Unraid exposes Compose, where it stores appdata, and how it starts containers at boot. This guide gives no plugin names, menu paths or default paths, because none were checked.
 
 ## 6. Reverse proxy and HTTPS
 
@@ -104,6 +117,9 @@ Proxy-product configuration is not given here: it is specific to each product an
 
 ## 7. Container host + Neon
 
+- **Build the image yourself.** No prebuilt image is published. Build it from the repository (`docker build -t docket .`), push it to a registry your host can pull from, and run it with the variables from `.env.example`. The web service listens on port 3000 (`PORT`) and serves `/api/health`; the worker runs the same image with the command `node worker.mjs`.
+- **Migrations run on start.** The web container applies migrations before serving (`MIGRATE_ON_START`, default `true`), using `DATABASE_URL_DIRECT` (or `DATABASE_URL` when that is unset). The worker never migrates, so start it after the web service is healthy.
+- **Neon with Compose.** `docker-compose.yml` sets `DATABASE_URL` to its own `postgres` service, which overrides `.env`. To use Neon with Compose, change that line to your pooled Neon URL, add `DATABASE_URL_DIRECT`, and remove the `postgres` service and the `web` service's `depends_on: postgres`.
 - **Pooled vs direct.** `DATABASE_URL` is the pooled Neon URL (the `-pooler` host, transaction mode; `SKIP LOCKED` works). `DATABASE_URL_DIRECT` is the non-pooled URL, which migrations use.
 - **The scheduler** — pick one:
   - a second service from the same image running `node worker.mjs`;

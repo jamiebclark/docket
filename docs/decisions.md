@@ -466,3 +466,9 @@ Baseline before any 010 change: `pnpm tsc --noEmit` clean, `pnpm lint` 0 errors 
 ## Release fix (2026-10-04)
 
 - `conventional-changelog-conventionalcommits` is pinned to `^9`: `@semantic-release/release-notes-generator` 14 bundles `conventional-changelog-writer` 8, and preset 10 requires writer 9+, so releases failed on every merge to `main` until this fix. *Reverse:* move to preset 10 once release-notes-generator ships writer 9.
+
+## Self-hosting docs pass (2026-10-04)
+
+- **One Meta app per install, not per project.** *What:* `META_*` and `THREADS_*` stay install-wide in `.env`, and every project connects its accounts through that app. *Why:* an install has one operator, who owns the app; per-project apps would not change delegated access (Page access is granted on the Page, and Threads has no delegated access), and the app credentials are used only to connect accounts and exchange tokens (`src/providers/meta/oauth.ts`, `src/providers/threads/oauth.ts`). *Reverse:* add an optional, encrypted per-project app id and secret that falls back to `.env`, record which app issued each account's token, and keep one callback per install. Worth it only when a client must own the app (their name on the login screen, their control over revoking, isolation from a restriction on the operator's app).
+- **Meta facts re-checked for self-hosters** (dated section in `docs/research/meta.md`). Business apps are documented as having no app modes, so `docs/meta-setup.md` no longer tells readers to stay in Development mode; login configurations use a User access token; Threads Testers are added under App roles. What could not be confirmed stays marked unverified in the docs.
+- **New `docs/accounts.md`** for roles, who can connect accounts, the Bluesky steps (dropped from the README in 010), and scheduling for accounts other people own.

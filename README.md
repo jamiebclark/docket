@@ -31,16 +31,24 @@ docker compose ps        # web healthy, worker running
 ```
 
 Generate the two secrets with `openssl rand -base64 32`. **Back up `CREDENTIALS_ENCRYPTION_KEY`**: without it, stored
-credentials cannot be decrypted. These commands have not been run end to end where this README was written (not run); the
-verified-run record is in [docs/deployment.md](docs/deployment.md#verified-run). The full walkthrough, a smoke script, backups,
-reverse proxies and other hosts are in [docs/deployment.md](docs/deployment.md).
+credentials cannot be decrypted. A clean-checkout run of these steps is recorded in
+[docs/deployment.md](docs/deployment.md#verified-run). The full walkthrough, a smoke script, backups, reverse proxies and other
+hosts are in [docs/deployment.md](docs/deployment.md).
+
+**Going live** with real Facebook, Instagram, Threads and Bluesky accounts takes a few more steps, in order: an `https://`
+address, a public media bucket, a Meta app, then connecting accounts. See
+[docs/deployment.md](docs/deployment.md#next-connect-real-accounts).
 
 For development without Docker for the app itself (Node 24, see `.nvmrc`; run `corepack enable` first):
 
 ```sh
 pnpm install
-pnpm dev                 # http://localhost:3000, needs DATABASE_URL pointing at a Postgres
+pnpm dev                 # http://localhost:3000
 ```
+
+`pnpm dev` needs a Postgres of your own at `DATABASE_URL`; the Compose `postgres` service does not publish a port. For example:
+`docker run -d --name docket-pg -p 5432:5432 -e POSTGRES_USER=docket -e POSTGRES_PASSWORD=docket -e POSTGRES_DB=docket postgres:17`.
+Set `RUN_WORKER_IN_PROCESS=true` in `.env` so the dev server also runs the scheduler, or scheduled posts never go out.
 
 ## Configuration
 
@@ -87,16 +95,19 @@ has been recorded recently. Details: [docs/deployment.md](docs/deployment.md#9-i
 | Content and rate limits per platform | [docs/limits.md](docs/limits.md) |
 | Security findings and hardening | [docs/security.md](docs/security.md) |
 | Media storage (R2, S3, MinIO) | [docs/storage.md](docs/storage.md) |
+| Members, roles and connecting accounts (including other people's) | [docs/accounts.md](docs/accounts.md) |
 | Facebook, Instagram and Threads apps | [docs/meta-setup.md](docs/meta-setup.md) |
 | Generator and jobs | [docs/generator.md](docs/generator.md) |
 | n8n and the public API | [docs/n8n.md](docs/n8n.md) |
 | Adding a provider | [docs/adding-a-provider.md](docs/adding-a-provider.md) |
 | Design decisions | [docs/decisions.md](docs/decisions.md) |
-| Original product brief | [docs/build-prompt.md](docs/build-prompt.md) |
+| Original product brief (internal build history; describes the author's own setup) | [docs/build-prompt.md](docs/build-prompt.md) |
 
 Connecting accounts: Bluesky uses an **app password** (never your main password, and it is not stored). Facebook, Instagram and
-Threads need an app you create; follow [docs/meta-setup.md](docs/meta-setup.md). Instagram and Threads fetch images by URL, so the
-bucket must be publicly readable ([docs/storage.md](docs/storage.md)); Threads also needs an HTTPS address that is not localhost.
+Threads need one Meta app you create for the whole install; follow [docs/meta-setup.md](docs/meta-setup.md). Facebook, Instagram
+and Threads fetch images by URL, so the bucket must be publicly readable ([docs/storage.md](docs/storage.md)); Threads also needs
+an HTTPS address that is not localhost. Only project owners and admins can connect accounts; see
+[docs/accounts.md](docs/accounts.md).
 
 ## Adding a provider
 
