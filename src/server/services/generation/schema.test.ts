@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { findProvider } from "../../../providers/registry";
+import { groupTargets } from "@/lib/generation/groups";
+import { groupsOfPlatforms } from "./__fixtures__/cases";
 import type { MediaRow } from "../../dal/media";
 import {
   checkGenerationOutput,
@@ -36,10 +38,43 @@ describe("generationOutputSchema", () => {
   });
 });
 
+describe("grouped output", () => {
+  const acct = (id: string, name: string, postingInstructions: string | null) => ({
+    id,
+    displayName: name,
+    providerKey: "bluesky",
+    postingInstructions,
+  });
+  const groups = groupTargets([acct("1", "Acme Science", "a"), acct("2", "Acme News", "b")]);
+
+  it("builds one required key per group, with no optional or union parameters", () => {
+    const json = JSON.stringify(z.toJSONSchema(generationOutputSchema(groups.map((g) => g.key), 0) as z.ZodType));
+    expect(json).toContain("bluesky_1");
+    expect(json).toContain("bluesky_2");
+    expect(json).not.toContain("anyOf");
+    expect(json).not.toContain("oneOf");
+    const parsed = JSON.parse(json) as { properties: { variants: { required: string[]; properties: object } } };
+    expect(parsed.properties.variants.required).toEqual(["bluesky_1", "bluesky_2"]);
+    expect(Object.keys(parsed.properties.variants.properties)).toEqual(["bluesky_1", "bluesky_2"]);
+  });
+
+  it("names the group and accounts in problem lines for split platforms only", async () => {
+    const r = await checkGenerationOutput(scope, {
+      groups,
+      assets: [],
+      output: { variants: { bluesky_1: { text: "ok" }, bluesky_2: { text: "a".repeat(312) } } },
+    });
+    expect(r.problems.map(problemLine)).toEqual([
+      "bluesky_2 (Bluesky: Acme News): Text is 312 graphemes; the limit is 300.",
+    ]);
+    expect(r.problems[0]).toMatchObject({ groupKey: "bluesky_2", providerKey: "bluesky" });
+  });
+});
+
 describe("checkGenerationOutput", () => {
   it("reports an empty post", async () => {
     const r = await checkGenerationOutput(scope, {
-      providerKeys: ["bluesky"],
+      groups: groupsOfPlatforms(["bluesky"]),
       assets: [],
       output: { variants: { bluesky: { text: "  " } } },
     });
@@ -48,7 +83,7 @@ describe("checkGenerationOutput", () => {
 
   it("reports the provider's own over-limit message", async () => {
     const r = await checkGenerationOutput(scope, {
-      providerKeys: ["bluesky"],
+      groups: groupsOfPlatforms(["bluesky"]),
       assets: [],
       output: { variants: { bluesky: { text: "a".repeat(312) } } },
     });
@@ -57,7 +92,7 @@ describe("checkGenerationOutput", () => {
 
   it("passes a valid post with no problems", async () => {
     const r = await checkGenerationOutput(scope, {
-      providerKeys: ["bluesky"],
+      groups: groupsOfPlatforms(["bluesky"]),
       assets: [],
       output: { variants: { bluesky: { text: "hello" } } },
     });
@@ -66,7 +101,7 @@ describe("checkGenerationOutput", () => {
   const asset = { id: "a", mimeType: "image/jpeg", width: 800, height: 800, byteSize: 50_000, altText: "", storageKey: "k", publicUrl: "https://x.test/a.jpg" } as MediaRow;
   const withAlts = (imageAltTexts: string[]) =>
     checkGenerationOutput(scope, {
-      providerKeys: ["bluesky"],
+      groups: groupsOfPlatforms(["bluesky"]),
       assets: [asset],
       output: { variants: { bluesky: { text: "x" } }, imageAltTexts },
     });

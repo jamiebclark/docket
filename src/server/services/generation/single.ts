@@ -24,6 +24,8 @@ import type { TargetResult } from "../posts";
 import { runGeneration, type CoreOutcome } from "./core";
 import { recordFailure } from "./failures";
 import { saveGeneratedPost } from "./save";
+import { assertGroupLimit, groupsForAccounts, recordAccounts } from "./groups";
+import type { VariantGroup } from "@/lib/generation/groups";
 export { fillEmptyAltTexts } from "./save";
 import { applyApprovalPolicy, resolvePolicies, type PolicyDecision, type ResolvedPolicies } from "./policy";
 
@@ -55,7 +57,7 @@ export type GenerateResult =
       postId: string;
       decision: PolicyDecision;
       queued: TargetResult<PlannedTime & { changedFromPreview: boolean }>[];
-      remainingProblems: { providerKey: string; messages: string[] }[];
+      remainingProblems: { providerKey: string; groupKey?: string | null; label?: string | null; messages: string[] }[];
       existing: boolean;
     }
   | { ok: false; failureId: string; kind: LlmFailureKind; message: string };
@@ -154,6 +156,7 @@ export function buildRecord(args: {
   outcome: Extract<CoreOutcome, { ok: true }>;
   voice: VoiceSnapshot;
   inputs: GenerationRecord["inputs"];
+  groups: readonly VariantGroup[];
   requested: GenerationRecord["policies"]["requested"];
   resolved: ResolvedPolicies;
   at: Date;
@@ -172,6 +175,7 @@ export function buildRecord(args: {
     retried: outcome.retried,
     output: outcome.output,
     remainingProblems: outcome.remainingProblems,
+    accounts: recordAccounts(args.groups),
   };
 }
 
@@ -190,8 +194,9 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
   const voice = await takeVoice(scope, parsed.voiceProfileId);
   const accounts = await loadAccounts(scope, parsed.targetAccountIds);
   const assets = await loadAssets(scope, parsed.mediaIds);
-  const providerKeys = distinctProviderKeys(accounts);
-  assertMediaFits(providerKeys, assets.length);
+  const groups = groupsForAccounts(accounts);
+  assertGroupLimit(groups);
+  assertMediaFits(distinctProviderKeys(accounts), assets.length);
 
   const coreInputs = {
     brief: parsed.brief,
@@ -201,7 +206,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
   };
   const outcome = await runGeneration(
     scope,
-    { label: "generate.single", voice, providerKeys, assets, inputs: coreInputs },
+    { label: "generate.single", voice, groups, assets, inputs: coreInputs },
     llm,
   );
   const inputs: GenerationRecord["inputs"] = {
@@ -226,6 +231,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
     outcome,
     voice,
     inputs,
+    groups,
     requested: policies.requested,
     resolved: policies.resolved,
     at: await clock.now(),
@@ -236,6 +242,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
       need(tx, { generation: ["run"], post: ["edit"] });
       return saveGeneratedPost(tx, {
         accounts,
+        groups,
         variants: outcome.output.variants,
         assets,
         imageAltTexts: outcome.output.imageAltTexts,

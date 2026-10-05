@@ -21,6 +21,7 @@ export const membershipAction = pgEnum("membership_action", [
   "webhook_rotate_secret",
   "webhook_enable",
   "webhook_disable",
+  "account_posting_instructions_update",
 ]);
 
 /** Append-only: the DAL exposes insert and list only (FR-033). */

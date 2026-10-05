@@ -62,6 +62,7 @@ export const generationJobs = pgTable(
     sourceKind: text("source_kind").notNull(),
     sourceSummary: text("source_summary").notNull(),
     sourceMeta: jsonb("source_meta").default({}).notNull(),
+    postingInstructionsSnapshot: jsonb("posting_instructions_snapshot"),
     voiceProfileId: uuid("voice_profile_id").notNull(),
     voiceProfileVersionId: uuid("voice_profile_version_id").notNull(),
     template: text("template").notNull(),

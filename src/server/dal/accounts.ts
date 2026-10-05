@@ -45,6 +45,8 @@ export interface AccountsRepo {
   /** Stores already-encrypted credentials (the AAD needs the row id, so this follows the upsert). */
   setCredentials(id: string, ciphertext: string, expiresAt: Date | null): Promise<AccountRecord>;
   updateSettings(id: string, settings: unknown): Promise<void>;
+  /** Only while the account is not removed. */
+  setPostingInstructions(id: string, text: string | null): Promise<void>;
   setLimit(id: string, limit: { count: number; windowSeconds: number } | null): Promise<void>;
   markRemoved(id: string, at: Date): Promise<void>;
   /**
@@ -209,6 +211,12 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .update(socialAccounts)
         .set({ settings: settings ?? {} })
         .where(mine(id));
+    },
+    async setPostingInstructions(id, text) {
+      await db
+        .update(socialAccounts)
+        .set({ postingInstructions: text })
+        .where(and(mine(id), isNull(socialAccounts.removedAt)));
     },
     async setLimit(id, limit) {
       await db

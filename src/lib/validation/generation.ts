@@ -79,7 +79,21 @@ export const generationRecordSchema = z.object({
     })
     .nullable(),
   output: z.object({ variants: z.record(z.string(), z.string()), imageAltTexts: z.array(z.string()).nullable() }),
-  remainingProblems: z.array(z.object({ providerKey: z.string(), messages: z.array(z.string()) })),
+  remainingProblems: z.array(
+    z.object({ providerKey: z.string(), groupKey: z.string().nullish(), label: z.string().nullish(), messages: z.array(z.string()) }),
+  ),
+  /** The accounts and posting instructions this request used; absent on records written before posting instructions. */
+  accounts: z
+    .array(
+      z.object({
+        accountId: z.string(),
+        displayName: z.string(),
+        providerKey: z.string(),
+        instructions: z.string().nullable(),
+        groupKey: z.string(),
+      }),
+    )
+    .nullish(),
 });
 export type GenerationRecord = z.infer<typeof generationRecordSchema>;
 

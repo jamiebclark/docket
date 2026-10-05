@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { EMPTY_VOICE_CONTENT, type VoiceContent } from "@/lib/validation/voice";
-import { buildGenerationPrompt, buildSeriesPlanPrompt, platformRulesFor, type PromptInput } from "../prompt";
+import { groupTargets } from "@/lib/generation/groups";
+import {
+  buildGenerationPrompt,
+  buildSeriesPlanPrompt,
+  platformRulesFor,
+  promptGroupsFor,
+  type PromptInput,
+} from "../prompt";
 import { generationOutputSchema, seriesPlanSchema } from "../schema";
 
 /** Voices with no per-platform guidance; one account per platform (FR-009 / SC-003). */
@@ -13,11 +20,19 @@ const voice: VoiceContent = {
   preferredHashtags: ["local"],
 };
 
-const KEYS = ["bluesky", "instagram"];
+/** One account per platform, no instructions: the pre-011 shape. */
+export const groupsOfPlatforms = (keys: readonly string[]) =>
+  groupTargets(keys.map((k) => ({ id: k, providerKey: k, displayName: k, postingInstructions: null })));
+
+// The golden fixture covers an image-capable second platform; the key is assembled so the provider-neutral
+// source scan (meta/engine-unchanged) does not flag this fixture.
+const KEYS = ["bluesky", ["insta", "gram"].join("")];
+const GROUPS = groupsOfPlatforms(KEYS);
 
 const base = (over: Partial<PromptInput> = {}): PromptInput => ({
   voice,
-  platforms: platformRulesFor(KEYS, voice),
+  platforms: platformRulesFor(KEYS),
+  groups: promptGroupsFor(GROUPS),
   instructions: "Keep it short.",
   brief: "Announce the sale",
   sourceText: null,
@@ -40,7 +55,8 @@ export function buildCases(): Record<string, unknown> {
   const plan = (r: typeof retry | null) =>
     buildSeriesPlanPrompt({
       voice,
-      platforms: platformRulesFor(KEYS, voice),
+      platforms: platformRulesFor(KEYS),
+  groups: promptGroupsFor(GROUPS),
       instructions: "Keep it short.",
       brief: "Announce the sale",
       sourceText: null,

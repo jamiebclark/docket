@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_VOICE_CONTENT } from "@/lib/validation/voice";
 import type { ProjectScope } from "../../dal/scope";
 import { createFakeLlm } from "../../../../tests/helpers/fake-llm";
+import { groupsOfPlatforms } from "./__fixtures__/cases";
 import { runGenerationStep, type CoreRequest } from "./core";
 
 const prepare = vi.hoisted(() => vi.fn());
@@ -11,7 +12,7 @@ const scope = { media: {} } as unknown as ProjectScope;
 const req: CoreRequest = {
   label: "generate.job_item",
   voice: { content: EMPTY_VOICE_CONTENT },
-  providerKeys: ["bluesky"],
+  groups: groupsOfPlatforms(["bluesky"]),
   assets: [],
   inputs: { brief: "Sale day", sourceText: null, instructions: null, series: null },
 };

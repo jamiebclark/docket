@@ -88,7 +88,7 @@ export const generateOperations = [
               : { targetId: r.targetId, accountId: r.accountId, ok: false, code: r.code, message: r.message },
           ),
           problems: result.remainingProblems.flatMap((p) =>
-            p.messages.map((m) => ({ severity: "error", code: "provider_problem", message: `${p.providerKey}: ${m}` })),
+            p.messages.map((m) => ({ severity: "error", code: "provider_problem", message: `${p.label ?? p.groupKey ?? p.providerKey}: ${m}` })),
           ),
         },
       };

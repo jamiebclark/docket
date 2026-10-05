@@ -14,7 +14,8 @@ import { recordFailure } from "./failures";
 import { saveGeneratedPost } from "./save";
 import { runGeneration } from "./core";
 import { applyApprovalPolicy, resolvePolicies } from "./policy";
-import { buildSeriesPlanPrompt, platformRulesFor } from "./prompt";
+import { buildSeriesPlanPrompt, platformRulesFor, promptGroupsFor } from "./prompt";
+import { assertGroupLimit, groupsForAccounts } from "./groups";
 import { checkSeriesPlan, problemLine, seriesPlanSchema, ANGLE_DESCRIPTION_MAX, ANGLE_TITLE_MAX } from "./schema";
 import {
   assertMediaFits,
@@ -83,9 +84,12 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm: LlmPr
   const voice = await takeVoice(scope, parsed.voiceProfileId);
   const accounts = await loadAccounts(scope, parsed.targetAccountIds);
   const providerKeys = distinctProviderKeys(accounts);
+  const groups = groupsForAccounts(accounts);
+  assertGroupLimit(groups);
   const base = {
     voice: voice.content,
-    platforms: platformRulesFor(providerKeys, voice.content),
+    platforms: platformRulesFor(providerKeys),
+    groups: promptGroupsFor(groups),
     instructions: parsed.instructions?.trim() ? parsed.instructions : null,
     brief: parsed.brief,
     sourceText: parsed.sourceText?.trim() ? parsed.sourceText : null,
@@ -169,6 +173,7 @@ export async function startSeries(scope: ProjectScope, input: unknown): Promise<
   });
   await takeVoice(scope, parsed.voiceProfileId);
   const accounts = await loadAccounts(scope, parsed.targetAccountIds);
+  assertGroupLimit(groupsForAccounts(accounts));
   const assets = await loadAssets(scope, parsed.mediaIds);
   assertMediaFits(distinctProviderKeys(accounts), assets.length);
 
@@ -217,12 +222,13 @@ export async function writeSeriesPost(
   const voice = await takeVoice(scope, request.voiceProfileId);
   const accounts = await loadAccounts(scope, request.targetAccountIds);
   const assets = await loadAssets(scope, request.mediaIds);
-  const providerKeys = distinctProviderKeys(accounts);
-  assertMediaFits(providerKeys, assets.length);
+  const groups = groupsForAccounts(accounts);
+  assertGroupLimit(groups);
+  assertMediaFits(distinctProviderKeys(accounts), assets.length);
 
   const series = { id: seriesId, position, angle, otherAngles: angles.filter((_, i) => i !== position).map((a) => a.title) };
   const coreInputs = { brief: row.brief, sourceText: request.sourceText, instructions: request.instructions, series };
-  const outcome = await runGeneration(scope, { label: "generate.series_post", voice, providerKeys, assets, inputs: coreInputs }, llm);
+  const outcome = await runGeneration(scope, { label: "generate.series_post", voice, groups, assets, inputs: coreInputs }, llm);
   const inputs: GenerationRecord["inputs"] = {
     ...coreInputs,
     mediaAssetIds: assets.map((a) => a.id),
@@ -247,6 +253,7 @@ export async function writeSeriesPost(
     outcome,
     voice,
     inputs,
+    groups,
     requested: request.requested,
     resolved: request.resolved,
     at: await clock.now(),
@@ -257,6 +264,7 @@ export async function writeSeriesPost(
       need(tx, { generation: ["run"], post: ["edit"] });
       return saveGeneratedPost(tx, {
         accounts,
+        groups,
         variants: outcome.output.variants,
         assets,
         imageAltTexts: outcome.output.imageAltTexts,

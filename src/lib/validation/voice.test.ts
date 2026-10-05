@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { voiceContentSchema, voiceNameSchema } from "./voice";
+import { voiceContentInputSchema, voiceContentSchema, voiceNameSchema } from "./voice";
 
 const parse = (v: unknown) => voiceContentSchema.safeParse(v);
 
@@ -41,6 +41,15 @@ describe("voiceContentSchema", () => {
   it("limits platform guidance to registered provider keys and drops empty entries", () => {
     expect(parse({ platformGuidance: { bluesky: "short", threads: "  " } }).data?.platformGuidance).toEqual({ bluesky: "short" });
     expect(parse({ platformGuidance: { myspace: "hi" } }).success).toBe(false);
+  });
+});
+
+describe("voiceContentInputSchema", () => {
+  it("strips a stray platformGuidance key rather than refusing or keeping it", () => {
+    const r = voiceContentInputSchema.safeParse({ voiceAndTone: "Warm", platformGuidance: { bluesky: "short" } });
+    expect(r.success).toBe(true);
+    expect(r.data).not.toHaveProperty("platformGuidance");
+    expect(r.data?.voiceAndTone).toBe("Warm");
   });
 });
 

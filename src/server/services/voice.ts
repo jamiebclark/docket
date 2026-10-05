@@ -2,13 +2,17 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import { countText, countingRuleName } from "@/providers/text";
-import { BRIEF_MAX } from "@/lib/validation/generation";
-import { voiceContentSchema, voiceNameSchema, type VoiceContent } from "@/lib/validation/voice";
+import { BRIEF_MAX, TARGET_ACCOUNTS_MAX } from "@/lib/validation/generation";
+import { voiceContentInputSchema, voiceContentSchema, voiceNameSchema, type VoiceContent } from "@/lib/validation/voice";
 import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { ProjectScope } from "../dal/scope";
 import type { VoiceProfileRecord, VoiceVersionRecord } from "../dal/voice";
 import type { LlmProvider } from "../llm/types";
 import { runGeneration } from "./generation/core";
+import { GROUP_LIMIT, groupTargets } from "../../lib/generation/groups";
+import type { AccountRecord } from "../dal/accounts";
+import { assertGroupLimit, groupsForAccounts } from "./generation/groups";
+import { loadAccounts } from "./generation/single";
 
 export interface VoiceProfileSummary {
   id: string;
@@ -28,7 +32,11 @@ export interface VersionView {
 }
 
 export interface TryItVariant {
+  /** The variant group key: the platform, or `${platform}_${n}` when its accounts have different instructions. */
+  key: string;
   providerKey: string;
+  providerName: string;
+  accountNames: string[];
   text: string;
   count: number;
   limit: number;
@@ -54,7 +62,7 @@ const parseId = (id: unknown): string => {
   return parsed.data;
 };
 
-const createSchema = z.object({ name: voiceNameSchema, content: voiceContentSchema });
+const createSchema = z.object({ name: voiceNameSchema, content: voiceContentInputSchema });
 const saveSchema = createSchema.extend({ baseVersion: z.number().int().min(1) });
 
 async function authorNames(scope: ProjectScope): Promise<Map<string, string>> {
@@ -168,7 +176,7 @@ export async function saveVoiceProfile(
     if (!current) throw new NotFoundError();
     if (
       profile.name === parsed.name &&
-      JSON.stringify(voiceContentSchema.parse(current.content)) === JSON.stringify(parsed.content)
+      JSON.stringify(voiceContentInputSchema.parse(current.content)) === JSON.stringify(parsed.content)
     ) {
       return { version: profile.currentVersion };
     }
@@ -227,25 +235,24 @@ export async function restoreVoiceProfile(scope: ProjectScope, profileId: string
   );
 }
 
-export const TRY_IT_PLATFORMS_MAX = 4;
-
 export const tryVoiceSchema = z.object({
   brief: z
     .string()
     .trim()
     .min(1, { error: "Write a brief" })
     .max(BRIEF_MAX, { error: "The brief can be at most 2,000 characters" }),
-  providerKeys: z
-    .array(z.string())
-    .min(1, { error: "Choose at least one platform" })
-    .max(TRY_IT_PLATFORMS_MAX)
+  accountIds: z
+    .array(z.uuid())
+    .min(1, { error: "Choose at least one account" })
+    .max(TARGET_ACCOUNTS_MAX)
+    .refine((ids) => new Set(ids).size === ids.length, { error: "Each account can be chosen once" })
     .optional(),
-  draft: voiceContentSchema.optional(),
+  draft: voiceContentInputSchema.optional(),
   versionId: z.uuid().optional(),
 });
 
 /**
- * Generates sample posts to hear a voice; writes nothing (no post, no failure row, research D24).
+ * Generates sample posts to hear a voice on chosen accounts; writes nothing (no post, no failure row, research D24).
  * Owners and admins may pass unsaved `draft` content; everyone else tries a saved `versionId`.
  */
 export async function tryVoice(scope: ProjectScope, input: unknown, llm?: LlmProvider): Promise<TryItResult> {
@@ -255,7 +262,7 @@ export async function tryVoice(scope: ProjectScope, input: unknown, llm?: LlmPro
 
   let content: VoiceContent;
   if (parsed.draft && scope.can({ voice: ["manage"] })) {
-    content = parsed.draft;
+    content = voiceContentSchema.parse(parsed.draft);
   } else {
     if (!parsed.versionId) throw new ConflictError("Choose a saved version to try");
     const row = await scope.voiceVersions.get(parsed.versionId);
@@ -263,21 +270,27 @@ export async function tryVoice(scope: ProjectScope, input: unknown, llm?: LlmPro
     content = voiceContentSchema.parse(row.content);
   }
 
-  let providerKeys = parsed.providerKeys;
-  if (!providerKeys) {
-    const accounts = await scope.accounts.list();
-    providerKeys = [...new Set(accounts.map((a) => a.providerKey))].slice(0, TRY_IT_PLATFORMS_MAX);
-    if (providerKeys.length === 0) providerKeys = ["bluesky"];
+  let accounts: AccountRecord[];
+  if (parsed.accountIds) {
+    accounts = await loadAccounts(scope, parsed.accountIds);
+  } else {
+    const all = await scope.accounts.list();
+    accounts = [];
+    for (const account of all) {
+      if (groupTargets([...accounts, account]).length > GROUP_LIMIT) continue;
+      accounts.push(account);
+    }
   }
-  providerKeys = [...new Set(providerKeys)];
-  for (const key of providerKeys) if (!findProvider(key)) throw new ConflictError(`Unknown platform: ${key}`);
+  if (accounts.length === 0) throw new ConflictError("Connect an account to try the voice.");
+  const groups = groupsForAccounts(accounts);
+  assertGroupLimit(groups);
 
   const outcome = await runGeneration(
     scope,
     {
       label: "voice.try",
       voice: { content },
-      providerKeys,
+      groups,
       assets: [],
       inputs: { brief: parsed.brief, sourceText: null, instructions: null, series: null },
     },
@@ -285,16 +298,20 @@ export async function tryVoice(scope: ProjectScope, input: unknown, llm?: LlmPro
   );
   if (!outcome.ok) throw new ConflictError(outcome.message);
 
-  const variants = providerKeys.map((key): TryItVariant => {
-    const caps = findProvider(key)!.capabilities.text;
-    const text = outcome.output.variants[key] ?? "";
+  const variants = groups.map((group): TryItVariant => {
+    const provider = findProvider(group.providerKey)!;
+    const caps = provider.capabilities.text;
+    const text = outcome.output.variants[group.key] ?? "";
     return {
-      providerKey: key,
+      key: group.key,
+      providerKey: group.providerKey,
+      providerName: provider.displayName,
+      accountNames: group.accounts.map((a) => a.displayName),
       text,
       count: countText(text, caps.countingRule),
       limit: caps.maxLength,
       countingRule: countingRuleName(caps.countingRule),
-      issues: outcome.remainingProblems.find((p) => p.providerKey === key)?.messages ?? [],
+      issues: outcome.remainingProblems.find((p) => p.groupKey === group.key)?.messages ?? [],
     };
   });
   return { variants, latencyMs: outcome.attempts.reduce((sum, a) => sum + a.latencyMs, 0) };

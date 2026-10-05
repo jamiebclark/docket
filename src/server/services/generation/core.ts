@@ -7,13 +7,20 @@ import type { ProjectScope } from "../../dal/scope";
 import { getLlm } from "../../llm";
 import { imagesForModel } from "../../llm/images";
 import type { LlmFailureKind, LlmProvider, LlmProviderName, LlmResult } from "../../llm/types";
-import { PREVIOUS_OUTPUT_MAX, buildGenerationPrompt, platformRulesFor, type PromptInput } from "./prompt";
+import type { VariantGroup } from "../../../lib/generation/groups";
+import {
+  PREVIOUS_OUTPUT_MAX,
+  buildGenerationPrompt,
+  platformRulesFor,
+  promptGroupsFor,
+  type PromptInput,
+} from "./prompt";
 import { checkGenerationOutput, generationOutputSchema, problemLine, type OutputProblem } from "./schema";
 
 export interface CoreRequest {
   label: string;
   voice: { content: VoiceContent };
-  providerKeys: string[];
+  groups: VariantGroup[];
   assets: MediaRow[];
   inputs: Omit<GenerationInputs, "targetAccountIds" | "mediaAssetIds">;
   /** Passed to `llm.generate` for the first call of a step. Absent: the provider default. */
@@ -29,7 +36,7 @@ export type CoreOutcome =
   | {
       ok: true;
       output: { variants: Record<string, string>; imageAltTexts: string[] | null };
-      remainingProblems: { providerKey: string; messages: string[] }[];
+      remainingProblems: { providerKey: string; groupKey: string; label?: string; messages: string[] }[];
       /** Non-blocking notes (warnings, info), shown on the result. */
       warnings: OutputProblem[];
       prompt: { system: string; user: string; images: { mediaAssetId: string; mode: "url" | "bytes" }[] };
@@ -71,13 +78,15 @@ const attemptOf = (r: LlmResult<unknown>, kind: Attempts[number]["kind"]): Attem
   usage: r.usage,
 });
 
-const groupByKey = (problems: OutputProblem[]): { providerKey: string; messages: string[] }[] => {
-  const map = new Map<string, string[]>();
+const groupByKey = (problems: OutputProblem[]): { providerKey: string; groupKey: string; label?: string; messages: string[] }[] => {
+  const map = new Map<string, { providerKey: string; label?: string; messages: string[] }>();
   for (const p of problems) {
-    const key = p.providerKey ?? "post";
-    map.set(key, [...(map.get(key) ?? []), p.message]);
+    const key = p.groupKey ?? "post";
+    const entry = map.get(key) ?? { providerKey: p.providerKey ?? key, label: p.label, messages: [] };
+    entry.messages.push(p.message);
+    map.set(key, entry);
   }
-  return [...map].map(([providerKey, messages]) => ({ providerKey, messages }));
+  return [...map].map(([groupKey, e]) => ({ providerKey: e.providerKey, groupKey, label: e.label, messages: e.messages }));
 };
 
 export interface StepOptions {
@@ -100,10 +109,14 @@ export async function runGenerationStep(
   const prepared = await imagesForModel(scope, req.assets);
   if (!prepared.ok) throw new ConflictError(prepared.message);
 
-  const schema = generationOutputSchema(req.providerKeys, req.assets.length);
+  const schema = generationOutputSchema(
+    req.groups.map((g) => g.key),
+    req.assets.length,
+  );
   const base: Omit<PromptInput, "retry"> = {
     voice: req.voice.content,
-    platforms: platformRulesFor(req.providerKeys, req.voice.content),
+    platforms: platformRulesFor([...new Set(req.groups.map((g) => g.providerKey))]),
+    groups: promptGroupsFor(req.groups),
     instructions: req.inputs.instructions,
     brief: req.inputs.brief,
     sourceText: req.inputs.sourceText,
@@ -132,7 +145,7 @@ export async function runGenerationStep(
       .then((result) => ({ result, prompt }));
   };
   const check = (value: { variants: Record<string, { text: string }>; imageAltTexts?: string[] }) =>
-    checkGenerationOutput(scope, { providerKeys: req.providerKeys, assets: req.assets, output: value });
+    checkGenerationOutput(scope, { groups: req.groups, assets: req.assets, output: value });
   const identity = (r: LlmResult<unknown>) => ({ provider: r.provider, model: r.model });
 
   const runRetry = async (pending: PendingRetry, timeoutMs: number | undefined): Promise<CoreOutcome> => {
@@ -170,7 +183,7 @@ export async function runGenerationStep(
     if (!RETRYABLE.has(first.result.kind)) {
       return { ok: false, kind: first.result.kind, message: first.result.message, attempts, ...identity(first.result) };
     }
-    problems = [{ providerKey: null, message: FAILURE_PROBLEM[first.result.kind]! }];
+    problems = [{ groupKey: null, providerKey: null, message: FAILURE_PROBLEM[first.result.kind]! }];
     reason = first.result.kind as NonNullable<Retried>["reason"];
     previousOutput = first.result.rawText ?? "";
   }
