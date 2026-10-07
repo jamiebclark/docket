@@ -76,14 +76,20 @@ export function createVideoFixtures(): VideoFixtures {
 
   // Rotation 90: stored 320x180 displays as 180x320. `-display_rotation` first, the `rotate` tag as fallback.
   const rotated = f("rotated.mp4");
-  ffmpeg(["-display_rotation", "90", "-i", landscape, "-c", "copy", rotated]);
+  // ffmpeg before 6.1 (Debian 12 ships 5.1) has no `-display_rotation` and refuses the whole command.
+  let displayRotationOk = true;
+  try {
+    ffmpeg(["-display_rotation", "90", "-i", landscape, "-c", "copy", rotated]);
+  } catch {
+    displayRotationOk = false;
+  }
   const hasRotation = (p: string) => {
     const s = probeJson(p).streams.find((x) => x.codec_type === "video") as
       | { side_data_list?: { rotation?: number }[]; tags?: { rotate?: string } }
       | undefined;
     return Boolean(s?.side_data_list?.some((d) => d.rotation !== undefined) || s?.tags?.rotate);
   };
-  if (!hasRotation(rotated)) {
+  if (!displayRotationOk || !hasRotation(rotated)) {
     ffmpeg(["-i", landscape, "-c", "copy", "-metadata:s:v", "rotate=90", rotated]);
     if (!hasRotation(rotated)) throw new Error("fixture precondition: rotated clip carries no rotation");
   }

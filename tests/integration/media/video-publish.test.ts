@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../../helpers/actions")).sessionModule);
@@ -63,7 +63,10 @@ requireFfmpeg()("publishing a video through the mock provider", () => {
     const created = await createUploadAction(env.project.slug, { filename: "clip.mp4", kind: "video", declaredType: "video/mp4", bytes: body.length });
     if (!created.ok || !created.data.ok) throw new Error("create failed");
     const uploadId = created.data.upload.id;
-    const [row] = await getDb().select().from(mediaUploads).where(eq(mediaUploads.id, uploadId));
+    const [row] = await getDb()
+      .select()
+      .from(mediaUploads)
+      .where(and(eq(mediaUploads.projectId, env.project.id), eq(mediaUploads.id, uploadId)));
     const signed = await signUploadPartsAction(env.project.slug, { uploadId, partNumbers: [1] });
     if (!signed.ok || !signed.data.ok) throw new Error("sign failed");
     await storage.uploadPart(row!.storageKey, row!.storageUploadId!, 1, body);
@@ -96,8 +99,9 @@ requireFfmpeg()("publishing a video through the mock provider", () => {
     const detail = await posts.getPost(env.scope, draft.post.id);
     expect(detail.targets[0]).toMatchObject({ status: "published" });
     const attempts = await posts.listAttempts(env.scope, detail.targets[0]!.id);
-    expect(attempts.map((a) => a.step)).toEqual(["upload_video", "check_video", "publish"]);
-    expect(attempts.at(-1)).toMatchObject({ outcome: "done" });
+    // listAttempts is newest first.
+    expect(attempts.map((a) => a.step)).toEqual(["publish", "check_video", "upload_video"]);
+    expect(attempts[0]).toMatchObject({ outcome: "done" });
   });
 
   it("refuses an out-of-limits video at scheduling", async () => {

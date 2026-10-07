@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -7,7 +7,7 @@ import { markWorkerProcess } from "../../../src/server/video/guard";
 import { probeFile } from "../../../src/server/video/probe";
 import { processVideoFile, type VideoLimits } from "../../../src/server/video/process";
 import { requireFfmpeg } from "../../helpers/ffmpeg";
-import { createVideoFixtures, LOCATION_TAG, type VideoFixtures } from "../../helpers/video-fixtures";
+import { createVideoFixtures, LOCATION_TAG, probeJson, type VideoFixtures } from "../../helpers/video-fixtures";
 
 const suite = requireFfmpeg();
 const LIMITS: VideoLimits = { maxBytes: 50_000_000, maxSeconds: 900, maxSide: 4096 };
@@ -57,8 +57,9 @@ suite("processVideoFile (real ffmpeg)", () => {
 
   it("removes the location tag from the clean bytes", async () => {
     const r = await ok(fx.located);
-    expect(readFileSync(r.cleanPath).includes(Buffer.from("48.8584"))).toBe(false);
-    expect(readFileSync(fx.located).includes(Buffer.from("48.8584"))).toBe(true);
+    // Compare what ffprobe reads, not raw bytes: a plain .mp4 stores the location as a binary `loci` box.
+    expect(JSON.stringify(probeJson(fx.located))).toContain("48.8584");
+    expect(JSON.stringify(probeJson(r.cleanPath))).not.toContain("48.8584");
     expect(LOCATION_TAG).toContain("48.8584");
     expect(JSON.stringify(await probeFile(r.cleanPath, signal))).not.toContain("location");
   });
