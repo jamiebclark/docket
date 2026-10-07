@@ -37,6 +37,8 @@ describe("failures access", () => {
       await expect(render(env.project.slug)).rejects.toBeInstanceOf(NotFoundSignal);
       const results = [
         await postActions.retryTargetAction(env.project.slug, { targetId: t.targetId }),
+        await postActions.retryTargetAction(env.project.slug, { targetId: t.targetId, mode: "requeue" } as never),
+        await postActions.retryTargetAction(env.project.slug, { targetId: t.targetId, mode: "at", at: "2026-10-07T15:00:00.000Z" } as never),
         await postActions.resolveTargetAction(env.project.slug, { targetId: t.targetId, outcome: "published" }),
         await postActions.resolveTargetAction(env.project.slug, { targetId: t.targetId, outcome: "not_published", requeue: false }),
         await postActions.previewRequeueAction(env.project.slug, { targetId: t.targetId }),
@@ -54,7 +56,8 @@ describe("failures access", () => {
     const { scope } = await forApiKey(key.secret);
     await expect(listFailures(scope)).resolves.toBeTruthy();
     await expect(posts.resolveAmbiguous(scope, t.targetId, { outcome: "published" })).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(posts.retryTarget(scope, t.targetId)).rejects.toBeInstanceOf(ForbiddenError);
+    for (const input of [undefined, { mode: "now" }, { mode: "requeue" }, { mode: "at", at: "2026-10-07T15:00:00.000Z" }])
+      await expect(posts.retryTarget(scope, t.targetId, input)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(previewRequeue(scope, t.targetId)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -66,7 +69,8 @@ describe("failures access", () => {
         prop === "can" ? (req: { post?: string[] }) => !req.post?.includes("schedule") : Reflect.get(target, prop, receiver),
     });
     await expect(posts.resolveAmbiguous(stub, t.targetId, { outcome: "published" })).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(posts.retryTarget(stub, t.targetId)).rejects.toBeInstanceOf(ForbiddenError);
+    for (const input of [undefined, { mode: "now" }, { mode: "requeue" }, { mode: "at", at: "2026-10-07T15:00:00.000Z" }])
+      await expect(posts.retryTarget(stub, t.targetId, input)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(previewRequeue(stub, t.targetId)).rejects.toBeInstanceOf(ForbiddenError);
     const [row] = (await listFailures(stub)).rows;
     expect(row!.actions).toMatchObject({ canMarkPublished: false, canRequeue: false, canMarkNotPublished: false, canRetry: false });

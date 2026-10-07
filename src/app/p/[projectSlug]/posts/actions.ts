@@ -7,8 +7,15 @@ import { previewRequeue, type RequeuePreview } from "@/server/services/failures"
 import * as posts from "@/server/services/posts";
 import { runAction } from "../run-action";
 
-export async function retryTargetAction(slug: string, input: { targetId: string }): Promise<ActionResult<void>> {
-  const result = await runAction(slug, (scope) => posts.retryTarget(scope, input?.targetId));
+type RetryActionInput =
+  | { targetId: string; mode?: "now" }
+  | { targetId: string; mode: "requeue"; expected?: string }
+  | { targetId: string; mode: "at"; at: string };
+
+export async function retryTargetAction(slug: string, input: RetryActionInput): Promise<ActionResult<posts.RetryResult>> {
+  const { targetId, ...rest } = input ?? ({} as RetryActionInput);
+  const body = rest.mode === undefined ? undefined : rest;
+  const result = await runAction(slug, (scope) => posts.retryTarget(scope, targetId, body));
   if (result.ok) refresh();
   return result;
 }

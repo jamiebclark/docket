@@ -1,22 +1,34 @@
 import { z } from "zod";
-import { findProvider } from "@/providers/registry";
 import type { ValidationIssue } from "@/providers/types";
 import { atSchema, baseTextSchema, externalUrlSchema, POST_MEDIA_MAX, postInputSchema, postTargetInputSchema } from "@/lib/validation/scheduling";
-import type { AccountRecord } from "../../dal/accounts";
 import * as clock from "../../dal/clock";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
+import { ConflictError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
 import { actorColumns, type ProjectScope } from "../../dal/scope";
-import type { TargetRecord } from "../../dal/targets";
+import type { TargetPatch, TargetRecord } from "../../dal/targets";
+import { explicitSchedulePatch } from "./schedule-patch";
 import { allocateNextFree, nearQueuedWarnings, peekNextFree, plannedTime, type PlannedTime, type Warning } from "../queue";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./cancel";
 import { prepareVariants } from "../media-variants";
-import { loadTargetContent, validateTargetContent } from "./validate";
 import { applyDerivedStatus } from "./status";
+import { lockPost, need, withLockedTarget } from "./locked";
+import { errorsOf, gate, issuesFor } from "./gate";
 
 export { applyDerivedStatus, derivePostStatus } from "./status";
+export { lockPost, withLockedTarget } from "./locked";
+export { gate } from "./gate";
+export {
+  retryBlockedReason,
+  retryInputSchema,
+  retryLockedTarget,
+  retryTarget,
+  type RetryFailureReason,
+  type RetryInput,
+  type RetryResult,
+} from "./retry";
 export { excerptOf, listPosts, POSTS_PAGE_SIZE, type PostList, type PostListItem } from "./list";
 export { getPostView, type AttemptView, type PostView, type PostViewMedia, type PostViewTarget } from "./view";
+export { explicitSchedulePatch };
 export { checkComposition, previewExplicitTime, type CompositionCheck, type ExplicitTimePreview, type TargetCheck } from "./compose";
 
 export type TargetFailureCode =
@@ -83,18 +95,6 @@ const patchSchema = z.object({
 });
 const selectSchema = z.object({ targetIds: z.array(uuid).optional() });
 
-function need(scope: ProjectScope, request: Parameters<ProjectScope["can"]>[0]): void {
-  if (!scope.can(request)) throw new ForbiddenError();
-}
-
-export async function lockPost(tx: Tx, postId: string): Promise<PostRecord> {
-  const post = await tx.posts.lockForUpdate(postId);
-  if (!post) throw new NotFoundError();
-  // Post lock first, then the target rows: waits out a scheduler claim so later reads see its lease.
-  await tx.targets.lockForPost(postId);
-  return post;
-}
-
 async function targetView(tx: Tx, t: TargetRecord, now: Date): Promise<PostTargetView> {
   return {
     id: t.id,
@@ -125,37 +125,6 @@ async function detail(tx: Tx, postId: string): Promise<PostDetail> {
     targets: await Promise.all(targets.map((t) => targetView(tx, t, now))),
     mediaIds: await tx.posts.listMediaIds(postId),
   };
-}
-
-/** Validation of the effective content; `null` when the account's provider is unavailable. */
-async function issuesFor(tx: Tx, target: TargetRecord, account: AccountRecord): Promise<ValidationIssue[] | null> {
-  const content = await loadTargetContent(tx, target);
-  if (!content) return null;
-  return validateTargetContent(tx, account, content);
-}
-
-const errorsOf = (issues: ValidationIssue[]) => issues.filter((i) => i.severity === "error");
-
-type Gate =
-  | { ok: true; account: AccountRecord; issues: ValidationIssue[] }
-  | { ok: false; code: TargetFailureCode; message: string; issues?: ValidationIssue[] };
-
-/** Account usable, provider registered, validation clean (FR-024–FR-028). */
-export async function gate(tx: Tx, target: TargetRecord): Promise<Gate> {
-  const account = await tx.accounts.get(target.socialAccountId);
-  if (!account) return { ok: false, code: "account_unavailable", message: "That account has been removed." };
-  if (account.status !== "active") {
-    return { ok: false, code: "account_unavailable", message: `${account.displayName} needs to be reconnected.` };
-  }
-  const issues = await issuesFor(tx, target, account);
-  if (issues === null) {
-    return { ok: false, code: "account_unavailable", message: `The provider for ${account.displayName} is no longer available.` };
-  }
-  const errors = errorsOf(issues);
-  if (errors.length > 0) {
-    return { ok: false, code: "validation", message: errors[0]!.message, issues };
-  }
-  return { ok: true, account, issues };
 }
 
 /**
@@ -537,11 +506,7 @@ async function scheduleExplicit(
       t.id,
       {
         status: "scheduled",
-        scheduleKind: kind,
-        scheduledAt: when,
-        nextAttemptAt: when,
-        slotOccurrenceAt: null,
-        slotId: null,
+        ...explicitSchedulePatch(kind, when),
         attemptCount: 0,
         lastError: null,
         stepState: null,
@@ -598,28 +563,6 @@ export async function publishNow(
 
 // ---------------------------------------------------------------- single-target actions
 
-/** Reads the target to find its post, locks the post, then re-reads the target under the lock. */
-async function withLockedTarget<T>(
-  scope: ProjectScope,
-  targetId: string,
-  permission: Parameters<ProjectScope["can"]>[0],
-  fn: (tx: Tx, post: PostRecord, target: TargetRecord, now: Date) => Promise<T>,
-): Promise<T> {
-  const id = uuid.parse(targetId);
-  need(scope, permission);
-  return scope.transaction(async (tx) => {
-    need(tx, permission);
-    const first = await tx.targets.get(id);
-    if (!first) throw new NotFoundError();
-    const post = await lockPost(tx, first.postId);
-    const target = await tx.targets.get(id);
-    if (!target) throw new NotFoundError();
-    const result = await fn(tx, post, target, await clock.now());
-    await applyDerivedStatus(tx, post.id);
-    return result;
-  });
-}
-
 export async function cancelTarget(scope: ProjectScope, targetId: string): Promise<void> {
   await withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, post, target, now) => {
     if (target.status === "publishing" && hasLiveLease(target, now)) {
@@ -630,31 +573,6 @@ export async function cancelTarget(scope: ProjectScope, targetId: string): Promi
     }
     await cancelTargetRow(tx, target.id);
     await resetEmptyReview(tx, post.id);
-  });
-}
-
-/** Null when a failed target may be retried; otherwise the reason, in the words the user sees (D8). */
-export function retryBlockedReason(account: AccountRecord | null, providerRegistered: boolean): string | null {
-  if (!account) return "This account was removed, so the post can't be retried.";
-  if (account.status !== "active") return `${account.displayName} needs to be reconnected before this post can be retried.`;
-  if (!providerRegistered) return `The provider for ${account.displayName} is no longer available.`;
-  return null;
-}
-
-export async function retryTarget(scope: ProjectScope, targetId: string): Promise<void> {
-  await withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, _post, target, now) => {
-    if (target.status === "publishing") throw new ConflictError("Publishing in progress. Try again in a moment.");
-    if (target.status !== "failed") throw new ConflictError("This post is no longer failed.");
-    const account = await tx.accounts.get(target.socialAccountId);
-    const blocked = retryBlockedReason(account, !!account && !!findProvider(account.providerKey));
-    if (blocked) throw new ConflictError(blocked);
-    const updated = await tx.targets.update(
-      target.id,
-      { status: "scheduled", attemptCount: 0, stepState: null, firstStepAt: null, publishStartedAt: null, nextAttemptAt: now, lastError: null },
-      { statuses: ["failed"] },
-    );
-    if (!updated) throw new ConflictError("This post is no longer failed.");
-    await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "retry_requested", actorUserId: tx.membership.userId, at: now });
   });
 }
 

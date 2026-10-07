@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import * as clock from "../dal/clock";
-import { ForbiddenError, NotFoundError } from "../dal/errors";
+import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { AccountRecord } from "../dal/accounts";
 import type { AttemptRow } from "../dal/attempts";
 import type { ProjectScope } from "../dal/scope";
@@ -194,9 +194,13 @@ export async function previewRequeue(scope: ProjectScope, targetId: string): Pro
   need(scope, { post: ["schedule"] });
   const target = await scope.targets.get(z.uuid().parse(targetId));
   if (!target) throw new NotFoundError();
+  if (target.status !== "failed" && target.status !== "ambiguous") throw new ConflictError("This post is no longer failed.");
   const g = await gate(scope, target);
   if (!g.ok) return { ok: false, code: g.code === "validation" ? "validation" : "account_unavailable", message: g.message };
-  const peek = await peekNextFree(scope, target.socialAccountId, { after: await clock.now() });
+  const peek = await peekNextFree(scope, target.socialAccountId, {
+    after: await clock.now(),
+    ownOccurrence: target.status === "failed" ? target.slotOccurrenceAt : undefined,
+  });
   if (!peek.ok) return { ok: false, code: peek.code, message: peek.message };
   return { ok: true, scheduledAt: peek.planned.scheduledAt, localTime: peek.planned.localTime, slotId: peek.slotId };
 }

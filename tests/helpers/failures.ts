@@ -29,3 +29,11 @@ export async function setAccountStatus(projectId: string, id: string, status: "a
     .set({ status, lastError: status === "active" ? null : "expired" })
     .where(and(eq(socialAccounts.projectId, projectId), eq(socialAccounts.id, id)));
 }
+
+/** Soft-removes an account, or points it at a provider that is not registered. */
+export async function breakAccount(projectId: string, id: string, how: "removed" | "provider_missing") {
+  await testDb()
+    .update(socialAccounts)
+    .set(how === "removed" ? { removedAt: new Date() } : { providerKey: "no-such-provider" })
+    .where(and(eq(socialAccounts.projectId, projectId), eq(socialAccounts.id, id)));
+}

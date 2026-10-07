@@ -11,16 +11,25 @@ export function Dialog({
   open,
   onClose,
   title,
+  returnFocus = true,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Set false when the opener is going away; the caller then places focus itself. */
+  returnFocus?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  // The `close` event fires after the render that set `returnFocus`, so read it through a ref.
+  const returnFocusRef = useRef(returnFocus);
+
+  useEffect(() => {
+    returnFocusRef.current = returnFocus;
+  }, [returnFocus]);
 
   useEffect(() => {
     const el = ref.current;
@@ -38,7 +47,7 @@ export function Dialog({
       ref={ref}
       aria-labelledby={titleId}
       onClose={() => {
-        returnTo.current?.focus();
+        if (returnFocusRef.current) returnTo.current?.focus();
         onClose();
       }}
       className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-border bg-surface p-6 text-foreground shadow-overlay"

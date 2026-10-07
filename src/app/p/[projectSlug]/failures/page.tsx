@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TargetResolution } from "@/components/targets/TargetResolution";
+import { AnnounceProvider } from "@/components/ui/Announce";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterTabs } from "@/components/ui/FilterTabs";
@@ -168,8 +169,11 @@ export default async function FailuresPage({ params, searchParams }: Props) {
   const filtered = query.status !== "all" || !!query.account;
 
   return (
+    <AnnounceProvider focusFallbackId="page-title">
     <section>
-      <h1 className="text-2xl font-semibold">Failures</h1>
+      <h1 id="page-title" tabIndex={-1} className="text-2xl font-semibold">
+        Failures
+      </h1>
       {list ? (
         <p className="mt-1 text-sm">
           {list.totals.ambiguous} need your decision · {list.totals.failed} failed
@@ -266,6 +270,8 @@ export default async function FailuresPage({ params, searchParams }: Props) {
                           <TargetResolution
                             slug={projectSlug}
                             targetId={row.targetId}
+                            accountId={row.account.id}
+                            timeZone={tz}
                             accountName={row.account.name}
                             status={row.status}
                             actions={row.actions}
@@ -294,5 +300,6 @@ export default async function FailuresPage({ params, searchParams }: Props) {
         )}
       </div>
     </section>
+    </AnnounceProvider>
   );
 }
