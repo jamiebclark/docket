@@ -34,6 +34,7 @@ nav:
       - Platform limits: limits.md
       - Security findings: security.md
       - Adding a provider: adding-a-provider.md
+      - Feature map: feature-map.md
 
 theme:
   name: material

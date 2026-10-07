@@ -28,4 +28,5 @@ they always match `main`.
 |---|---|
 | Content and rate limits per platform | [Platform limits](limits.md) |
 | Security findings and hardening | [Security findings](security.md) |
+| Requested features not built yet (video, Reels, TikTok) | [Feature map](feature-map.md) |
 | Writing a new platform provider | [Adding a provider](adding-a-provider.md) |
