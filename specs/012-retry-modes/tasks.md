@@ -154,3 +154,11 @@ Findings are in `specs/012-retry-modes/review.md`. Do T040 first so the existing
 - [x] T042 Make `AnnounceProvider.announce` re-announce identical text (e.g. clear then set on the next frame, or key the message on a counter) so consecutive "Retry queued for the next tick." / "Marked published." outcomes are each announced; add a test for two identical announcements — review F3 (MAJOR), src/components/ui/Announce.tsx:16
 - [x] T043 Restore focus to "Retry…" when the retry dialog is dismissed with Back: keep `RetryDialog` mounted with `open={open === "retry"}` (resetting its state per open, e.g. a `key` bumped on open) or make `Dialog` close the element on unmount, so the native close/focus-return path runs; keep fresh state per open — review F4 (MAJOR), src/components/targets/TargetResolution.tsx:140
 - [x] T044 Make the race tests able to fail: race `retryTarget({ mode: "now" })` against `runTick()` and assert the retry fulfilled, the target is consistently scheduled or claimed once, and there is at most one publish; assert both targets are `scheduled` with distinct instants in the two-target requeue test; assert at most one held occurrence in the mixed-mode test — review F5 (MAJOR), tests/integration/failures/retry-concurrency.test.ts:29
+
+---
+
+## Phase 9: Review remediation
+
+Findings are in `specs/012-retry-modes/review.md` (round 2). Commit the fix as a Conventional Commit with explicit `git add <path>` paths.
+
+- [ ] T045 Make focus after a successful retry land on the page heading regardless of refresh timing, while keeping "Back"/Escape returning focus to "Retry…": either let the success path skip `Dialog`'s return-to-opener (e.g. a `returnFocus` option or clearing `returnTo` before `onClose()`) and focus `#page-title` directly, or make `restoreFocus` wait until the opener is disconnected before deciding; add the success case on the Failures page (several rows) and the post page to T039's manual check — review F14 (MAJOR), src/components/targets/RetryDialog.tsx:101
