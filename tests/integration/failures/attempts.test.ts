@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { listFailures } from "../../../src/server/services/failures";
+import { listFailures, toAttemptViews } from "../../../src/server/services/failures";
 import * as posts from "../../../src/server/services/posts";
 import { atTime } from "../../helpers/clock";
+import { createKey } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
 import { LATER, outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
@@ -44,5 +45,29 @@ describe("attempt logs in the failures list", () => {
     expect(row!.attempts.map((r) => [r.step, r.count])).toEqual([["poll", 6], ["publish", 1]]);
     expect(row!.attempts[0]!.entries).toHaveLength(6);
     expect(row!.attemptCount).toBe(0);
+  });
+
+  it("names an API key's entries, and gives a null name when the key cannot be found", async () => {
+    const env = await postsEnv();
+    const t = await outcomeTarget(env, "ambiguous");
+    const key = await createKey(env.scope, ["read", "write_posts"], { name: "Nightly bot" });
+    await env.scope.attempts.insert({ postTargetId: t.targetId, step: "publish", outcome: "resolved_failed", actorApiKeyId: key.id, actorUserId: env.owner.id, at: LATER });
+    const rows = await env.scope.attempts.listForTarget(t.targetId);
+
+    const named = await toAttemptViews(env.scope, rows);
+    expect(named.find((e) => e.outcome === "resolved_failed")?.actor).toEqual({ kind: "api_key", name: "Nightly bot" });
+    expect(named.filter((e) => e.outcome !== "resolved_failed").every((e) => e.actor.kind === "system")).toBe(true);
+
+    const stub = { ...env.scope, apiKeys: { ...env.scope.apiKeys, get: async () => null } } as typeof env.scope;
+    const unnamed = await toAttemptViews(stub, rows);
+    expect(unnamed.find((e) => e.outcome === "resolved_failed")?.actor).toEqual({ kind: "api_key", name: null });
+  });
+
+  it("keeps member entries as members", async () => {
+    const env = await postsEnv();
+    const t = await outcomeTarget(env, "ambiguous");
+    await atTime(LATER, () => posts.resolveAmbiguous(env.scope, t.targetId, { outcome: "not_published", requeue: false }));
+    const views = await toAttemptViews(env.scope, await env.scope.attempts.listForTarget(t.targetId));
+    expect(views.find((e) => e.outcome === "resolved_failed")?.actor).toEqual({ kind: "member", name: env.owner.name });
   });
 });

@@ -131,13 +131,13 @@ description: "Task list for 016 — public API to retry, bulk-retry and resolve 
 
 ### Tests for User Story 6
 
-- [ ] T025 [P] [US6] Create `tests/integration/api/endpoints/recovery-attribution.test.ts`: API retry/resolve writes `actor_api_key_id` / `resolved_by_api_key_id` plus the creator's user id; creator left the project → 200 with user id kept; creator's user row deleted → 200 with user id null (F12 regression: no 500, never `""`); the view reads "API key {name}" before and after revoke and after expiry; a member-scope (UI) action writes no key; side-by-side API vs member-service runs give equal target rows and attempt entries (ignoring ids, timestamps, attribution) and the same webhook event types (SC-005).
-- [ ] T026 [P] [US6] Extend `tests/integration/api/scope-enforcement.test.ts` with `FIXTURES` for `retryPostTarget`, `resolvePostTarget` and `retryFailedTargets`: `read` key → 403 `missing_permission` naming `write_posts`, nothing written; foreign `postId`/`targetId` → 404 identical to unknown.
-- [ ] T027 [P] [US6] Extend `tests/integration/failures/attempts.test.ts`: a key entry → `actor.kind === "api_key"` with its name; a stub `apiKeys.get` returning null → name null; member and system entries unchanged.
+- [x] T025 [P] [US6] Create `tests/integration/api/endpoints/recovery-attribution.test.ts`: API retry/resolve writes `actor_api_key_id` / `resolved_by_api_key_id` plus the creator's user id; creator left the project → 200 with user id kept; creator's user row deleted → 200 with user id null (F12 regression: no 500, never `""`); the view reads "API key {name}" before and after revoke and after expiry; a member-scope (UI) action writes no key; side-by-side API vs member-service runs give equal target rows and attempt entries (ignoring ids, timestamps, attribution) and the same webhook event types (SC-005).
+- [x] T026 [P] [US6] Extend `tests/integration/api/scope-enforcement.test.ts` with `FIXTURES` for `retryPostTarget`, `resolvePostTarget` and `retryFailedTargets`: `read` key → 403 `missing_permission` naming `write_posts`, nothing written; foreign `postId`/`targetId` → 404 identical to unknown.
+- [x] T027 [P] [US6] Extend `tests/integration/failures/attempts.test.ts`: a key entry → `actor.kind === "api_key"` with its name; a stub `apiKeys.get` returning null → name null; member and system entries unchanged.
 
 ### Implementation for User Story 6
 
-- [ ] T028 [US6] Fix whatever T025–T027 expose in `src/server/dal/scope.ts`, `src/server/services/failures.ts` and the operations (e.g. `resourceParams` declarations in `targets.ts`). Run `pnpm vitest run tests/integration/api tests/integration/failures < /dev/null` until green.
+- [x] T028 [US6] Fix whatever T025–T027 expose in `src/server/dal/scope.ts`, `src/server/services/failures.ts` and the operations (e.g. `resourceParams` declarations in `targets.ts`). Run `pnpm vitest run tests/integration/api tests/integration/failures < /dev/null` until green.
 
 ---
 

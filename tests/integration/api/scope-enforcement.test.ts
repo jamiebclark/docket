@@ -111,6 +111,26 @@ describe("authentication and permission, per operation", () => {
   });
 });
 
+describe("recovery operations", () => {
+  const RECOVERY = ["retryPostTarget", "resolvePostTarget", "retryFailedTargets"];
+
+  it("refuses a read key with 403 naming write_posts and writes nothing", async () => {
+    const ids = w.a.targets.map((t) => t.id);
+    const snapshot = async () => ({
+      attempts: (await w.a.scope.attempts.listForTargets(ids)).length,
+      status: (await w.a.scope.targets.listForPost(w.a.post.id)).map((t) => t.status),
+    });
+    const before = await snapshot();
+    for (const op of OPERATIONS.filter((o) => RECOVERY.includes(o.id))) {
+      const r = await call(op, w.a, w.a.keys.read.secret);
+      expect(r.status, op.id).toBe(403);
+      expect(r.json.error.code).toBe("missing_permission");
+      expect(r.json.error.details).toEqual({ permission: "write_posts" });
+    }
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
 describe("project isolation, per resource parameter", () => {
   it("answers another project's id exactly as it answers an unknown one", async () => {
     const key = w.a.keys.all.secret;
