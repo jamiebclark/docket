@@ -1,4 +1,4 @@
-// Spec US5 / SC-006: Docket's own rolling counter keeps Instagram at no more than 100 publishes per 24 h.
+// Spec US5 / SC-006: Docket's own rolling counter keeps Instagram at no more than 50 publishes (Meta's own quota of 100 is only read at run time) per 24 h.
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { createSchedulingRepos } from "../../../src/server/dal/scope";
@@ -65,12 +65,12 @@ async function drain(from: number, ticks: number) {
 }
 
 describe("Instagram default publish limit", () => {
-  it("never sends a 101st publish for 150 queued targets, and the rest wait with no provider call", async () => {
+  it("never sends a 51st publish for 150 queued targets, and the rest wait with no provider call", async () => {
     const { projectId, accountId } = await instagramSetup(storage, "first", 1);
     await addTargets(projectId, accountId, 149);
     await drain(0, 12);
-    expect(publishes()).toBe(100);
-    expect(creates()).toBe(100);
+    expect(publishes()).toBe(50);
+    expect(creates()).toBe(50);
     const before = graph.requests.length;
     await drain(200, 3);
     expect(graph.requests).toHaveLength(before);

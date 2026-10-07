@@ -1,3 +1,4 @@
+import { MIME_LABEL } from "@/lib/media/types";
 import type { ProviderCapabilities, ValidationIssue } from "./types";
 
 /** Bump when the variant generator's output changes, so cached variants are rebuilt. */
@@ -79,15 +80,13 @@ export function mediaConstraintsOf(caps: ProviderCapabilities): MediaConstraints
   };
 }
 
-const MIME_LABEL: Record<string, string> = { "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
-
 /** Decide whether an image can go as is, can be adapted, or must be refused. Never crops or upscales. */
 export function planImage(
   asset: PlannedAsset,
   c: MediaConstraints,
-  ctx: { index: number; platform: string },
+  ctx: { index: number; platform: string; label?: string },
 ): ImagePlan {
-  const label = `Image ${ctx.index + 1}`;
+  const label = ctx.label ?? `Image ${ctx.index + 1}`;
   const field = `media.${ctx.index}` as const;
   const refuse: ValidationIssue[] = [];
   const err = (code: string, message: string) => refuse.push({ severity: "error", code, message, field });

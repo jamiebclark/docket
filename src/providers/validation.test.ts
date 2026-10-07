@@ -36,6 +36,16 @@ describe("validateAgainstCapabilities", () => {
     expect(codes("a".repeat(10))).toEqual([]);
     expect(codes("é".repeat(6), [], { ...caps, text: { maxLength: 10, countingRule: "utf8_bytes" } })).toEqual(["text_too_long"]);
   });
+  it("caps hashtags and mentions per occurrence, only when declared", () => {
+    const capped = { ...caps, text: { maxLength: 1000, countingRule: "graphemes" as const, maxHashtags: 30, maxMentions: 20 } };
+    const tags = (n: number) => Array.from({ length: n }, (_, i) => `#t${i}`).join(" ");
+    const ats = (n: number) => Array.from({ length: n }, (_, i) => `@u${i}`).join(" ");
+    expect(validateAgainstCapabilities({ text: tags(31), media: [] }, capped)[0]).toMatchObject({ code: "too_many_hashtags", field: "text", count: 31, limit: 30 });
+    expect(validateAgainstCapabilities({ text: ats(21), media: [] }, capped)[0]).toMatchObject({ code: "too_many_mentions", field: "text", count: 21, limit: 20 });
+    expect(codes(tags(30), [], capped)).toEqual([]);
+    expect(codes(ats(20), [], capped)).toEqual([]);
+    expect(codes(`${tags(31)} ${ats(21)}`, [], { ...caps, text: { maxLength: 1000, countingRule: "graphemes" } })).toEqual([]);
+  });
   it("rejects text-only when not allowed, and requires media when required", () => {
     expect(codes("hi", [], { ...caps, textOnlyAllowed: false })).toEqual(["text_only_not_allowed"]);
     expect(codes("hi", [], { ...caps, media: { ...caps.media, required: true } })).toEqual(["media_required"]);

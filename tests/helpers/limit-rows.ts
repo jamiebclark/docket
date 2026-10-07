@@ -53,6 +53,12 @@ export function coreRows(provider: SocialProvider): ContentRow[] {
   const rows: ContentRow[] = [
     { title: `${key}: text length`, category: "text length", text: "a".repeat(text.maxLength + 1), media: withMedia, expect: { refuse: ["text_too_long"] } },
   ];
+  if (text.maxHashtags !== undefined) {
+    rows.push({ title: `${key}: hashtags`, category: "hashtags", text: Array.from({ length: text.maxHashtags + 1 }, (_, i) => `#tag${i}`).join(" "), media: withMedia, expect: { refuse: ["too_many_hashtags"] } });
+  }
+  if (text.maxMentions !== undefined) {
+    rows.push({ title: `${key}: mentions`, category: "mentions", text: Array.from({ length: text.maxMentions + 1 }, (_, i) => `@user${i}`).join(" "), media: withMedia, expect: { refuse: ["too_many_mentions"] } });
+  }
   if (media.maxImages > 0) {
     rows.push({ title: `${key}: images`, category: "images", text: "hi", media: Array.from({ length: media.maxImages + 1 }, () => ok), expect: { refuse: ["too_many_images"] } });
     if (!compressesOversize(provider)) {
@@ -70,7 +76,7 @@ export function coreRows(provider: SocialProvider): ContentRow[] {
 
 /** Rows driven end to end (refused by `addToQueue`, and again by the engine at publish time). Refusals only. */
 export function textRows(provider: SocialProvider): ContentRow[] {
-  return coreRows(provider).filter((r) => "refuse" in r.expect && (r.category === "text length" || r.media.length === 0));
+  return coreRows(provider).filter((r) => "refuse" in r.expect && (["text length", "hashtags", "mentions"].includes(r.category) || r.media.length === 0));
 }
 
 export interface PlannerRow {

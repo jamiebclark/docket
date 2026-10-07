@@ -14,7 +14,14 @@ export interface CustomCountingRule {
 export type TextCountingRule = BuiltInCountingRule | CustomCountingRule;
 
 export interface ProviderCapabilities {
-  text: { maxLength: number; countingRule: TextCountingRule };
+  text: {
+    maxLength: number;
+    countingRule: TextCountingRule;
+    /** Most hashtags a caption may carry, counted per occurrence (FR-012). Absent = no cap. */
+    maxHashtags?: number;
+    /** Most @mentions a caption may carry, counted per occurrence (FR-012). Absent = no cap. */
+    maxMentions?: number;
+  };
   media: {
     /** 0 = no images */
     maxImages: number;
@@ -168,6 +175,8 @@ export interface ValidationIssue {
   severity: "error" | "warning" | "info";
   code:
     | "text_too_long"
+    | "too_many_hashtags"
+    | "too_many_mentions"
     | "too_many_images"
     | "mime_not_allowed"
     | "file_too_large"
