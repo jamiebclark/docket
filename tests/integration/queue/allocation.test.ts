@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import * as posts from "../../../src/server/services/posts";
+import { peekNextFree } from "../../../src/server/services/queue";
 import * as slots from "../../../src/server/services/slots";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
@@ -75,4 +76,27 @@ describe("slot allocation", () => {
     expect((last[0] as { message: string }).message).toMatch(/no free posting slot in the next \d+ days/);
     expect((await posts.getPost(env.scope, p.post.id)).targets[0]!.status).toBe("draft");
   }, 120_000);
+});
+
+describe("ownOccurrence option", () => {
+  it("changes nothing when omitted, and frees only the given instant when set", async () => {
+    const env = await postsEnv();
+    const a = await env.account();
+    for (let i = 0; i < 2; i++) {
+      const p = await draft(env, a.id);
+      await atTime(NOW, () => posts.addToQueue(env.scope, p.post.id));
+    }
+    // Held: 10-05 and 10-12.
+    const plain = await atTime(NOW, () => peekNextFree(env.scope, a.id, { after: NOW }));
+    const omitted = await atTime(NOW, () => peekNextFree(env.scope, a.id, { after: NOW, ownOccurrence: undefined }));
+    const nul = await atTime(NOW, () => peekNextFree(env.scope, a.id, { after: NOW, ownOccurrence: null }));
+    expect(plain).toMatchObject({ ok: true, instant: new Date("2026-10-19T09:00:00Z") });
+    expect(omitted).toEqual(plain);
+    expect(nul).toEqual(plain);
+    const own = await atTime(NOW, () => peekNextFree(env.scope, a.id, { after: NOW, ownOccurrence: new Date("2026-10-12T09:00:00Z") }));
+    expect(own).toMatchObject({ ok: true, instant: new Date("2026-10-12T09:00:00Z") });
+    // The other held occurrence (10-05) stays held when a later one is freed.
+    const stillHeld = await atTime(NOW, () => peekNextFree(env.scope, a.id, { after: NOW, ownOccurrence: new Date("2026-10-19T09:00:00Z") }));
+    expect(stillHeld).toMatchObject({ ok: true, instant: new Date("2026-10-19T09:00:00Z") });
+  });
 });

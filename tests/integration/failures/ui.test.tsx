@@ -7,6 +7,8 @@ vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheM
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
 import FailuresPage from "../../../src/app/p/[projectSlug]/failures/page";
+import { RetryDialog } from "../../../src/components/targets/RetryDialog";
+import { AnnounceProvider } from "../../../src/components/ui/Announce";
 import { TargetResolution } from "../../../src/components/targets/TargetResolution";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
@@ -39,7 +41,8 @@ describe("failures page markup (FR-013)", () => {
     expect(html).toContain("1 need your decision · 1 failed");
     expect(html).toContain("Mark published");
     expect(html).toContain("Mark not published…");
-    expect(html).toContain("Retry");
+    expect(html).toContain("Retry…");
+    expect(html).not.toContain(">Retry<");
     // The account filter is labelled: a legend while it is a short button row, a label once it is an autocomplete.
     expect(html).toMatch(/<legend[^>]*>Account<\/legend>|<label[^>]*for="failures-account"/);
     expect(html).not.toMatch(/<button[^>]*>\s*<\/button>/);
@@ -59,7 +62,7 @@ describe("failures page markup (FR-013)", () => {
 
 describe("TargetResolution", () => {
   const actions = { canMarkPublished: false, canRequeue: false, canMarkNotPublished: false, canRetry: false, retryBlockedReason: null };
-  const base = { slug: "p", targetId: "t", accountName: "Acme", status: "ambiguous", actions };
+  const base = { slug: "p", targetId: "t", accountId: "a", timeZone: "America/Chicago", accountName: "Acme", status: "ambiguous", actions };
 
   it("says View only in a row and renders nothing in the detail when the viewer cannot schedule", () => {
     expect(renderToStaticMarkup(createElement(TargetResolution, { ...base, canSchedule: false, variant: "row" }))).toContain("View only");
@@ -80,5 +83,45 @@ describe("TargetResolution", () => {
     expect(html).toContain("needs to be reconnected");
     expect(html).toContain('href="/p/p/accounts"');
     expect(html).not.toContain(">Retry<");
+  });
+
+  it("renders a Retry… button for a retryable failed target and a live region with or without a provider", () => {
+    const props = { ...base, status: "failed", canSchedule: true, variant: "row" as const, actions: { ...actions, canRetry: true } };
+    const bare = renderToStaticMarkup(createElement(TargetResolution, props));
+    expect(bare).toContain("Retry…");
+    expect(bare).not.toContain(">Retry<");
+    expect(bare).toContain('role="status"');
+    const wrapped = renderToStaticMarkup(<AnnounceProvider focusFallbackId="page-title">{createElement(TargetResolution, props)}</AnnounceProvider>);
+    expect(wrapped).toContain("Retry…");
+    expect(wrapped).toContain('role="status"');
+  });
+});
+
+describe("RetryDialog", () => {
+  it("shows the account in the title and three mode radios with now checked and requeue disabled while loading", () => {
+    const html = renderToStaticMarkup(
+      createElement(RetryDialog, {
+        open: true,
+        onClose: () => undefined,
+        onDone: () => undefined,
+        slug: "p",
+        targetId: "t1",
+        accountId: "a",
+        accountName: "Acme",
+        timeZone: "America/Chicago",
+      }),
+    );
+    expect(html).toContain("Retry the post to Acme");
+    const radios = [...html.matchAll(/<input[^>]*type="radio"[^>]*>/g)].map((m) => m[0]);
+    expect(radios).toHaveLength(3);
+    for (const r of radios) expect(r).toContain('name="retry-mode-t1"');
+    expect(radios[0]).toMatch(/value="now"/);
+    expect(radios[0]).toContain("checked");
+    expect(radios[1]).toMatch(/value="requeue"/);
+    expect(radios[1]).toContain("disabled");
+    expect(radios[2]).toMatch(/value="at"/);
+    expect(html).toContain("Now");
+    expect(html).toContain("Next free slot");
+    expect(html).toContain("Pick a time");
   });
 });
