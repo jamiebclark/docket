@@ -21,14 +21,25 @@ export interface VariantFailure {
   message: string;
 }
 
-/** An asset registered without dimensions cannot be planned: it goes as is and the provider's own checks apply. */
-const planFor = (asset: MediaRow, c: MediaConstraints, index: number, platform: string): ImagePlan =>
+/**
+ * An asset registered without dimensions cannot be planned: it goes as is and the provider's own checks apply.
+ * `label` replaces "Image N" in the planner's sentences (the library names no position).
+ */
+export const planFor = (asset: MediaRow, c: MediaConstraints, index: number, platform: string, label?: string): ImagePlan =>
   asset.width && asset.height
     ? planImage({ mimeType: asset.mimeType, width: asset.width, height: asset.height, bytes: asset.byteSize }, c, {
         index,
         platform,
+        ...(label ? { label } : {}),
       })
     : { kind: "original" };
+
+/** The item the provider's checks see for a plan: the planned output for `derive`, the stored row otherwise. */
+export function plannedItem(asset: MediaRow, plan: Exclude<ImagePlan, { kind: "refuse" }>): MediaItem {
+  if (plan.kind === "original") return itemOf(asset);
+  const { mimeType, width, height, maxBytes } = plan.output;
+  return { ...itemOf(asset), mimeType, width, height, bytes: Math.min(asset.byteSize, maxBytes) };
+}
 
 const itemOf = (asset: MediaRow, v?: VariantRow): MediaItem => ({
   url: v?.publicUrl ?? asset.publicUrl,
@@ -206,8 +217,7 @@ export async function adaptedMediaFor(
         media.push(itemOf(asset, variant));
         issues.push(...plan.notes);
       } else if (opts.preview) {
-        const { mimeType, width, height, maxBytes } = plan.output;
-        media.push({ ...itemOf(asset), mimeType, width, height, bytes: Math.min(asset.byteSize, maxBytes) });
+        media.push(plannedItem(asset, plan));
         issues.push(...plan.notes);
       } else {
         issues.push({

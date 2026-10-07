@@ -1,5 +1,7 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
+import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
+import { requirementsOf, type RequirementsSummary } from "@/providers/requirements";
 import { findProvider } from "@/providers/registry";
 import { countText, countingRuleName } from "@/providers/text";
 import type { PostType, ValidationIssue } from "@/providers/types";
@@ -27,6 +29,8 @@ export interface TargetCheck {
   postType: PostType | null;
   issues: ValidationIssue[];
   canSchedule: boolean;
+  /** What the account accepts; `null` exactly when `limit` is `null` (provider not registered). Present with no text and no media. */
+  requirements: RequirementsSummary | null;
 }
 
 export interface CompositionCheck {
@@ -80,6 +84,7 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
       postType: provider ? inferPostType({ text: effectiveText, media }) : null,
       issues,
       canSchedule: !!provider && account.status === "active" && !issues.some((i) => i.severity === "error"),
+      requirements: provider ? requirementsOf(provider.capabilities, { uploadTypes: UPLOAD_MIME_TYPES }) : null,
     });
   }
   return { targets, editable, reviewBlocked };

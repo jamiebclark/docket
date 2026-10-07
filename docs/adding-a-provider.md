@@ -75,7 +75,8 @@ A custom rule is a `CustomCountingRule` with `kind`, `name`, `unit` and `count`.
 
 Use the rule the platform itself uses. `capabilities.media` sets `maxImages` (0 = none), `allowedMimeTypes`,
 `maxBytesPerFile` and `required`. `textOnlyAllowed` and `postTypes` finish the picture. `text.maxLength` is the limit in the
-chosen `countingRule`'s unit.
+chosen `countingRule`'s unit. `text.maxHashtags` and `text.maxMentions` are optional caps on hashtags and @mentions, counted per occurrence
+(repeats included, URLs and emails ignored); declare them only where the platform documents a cap.
 Everything is checked by `validateAgainstCapabilities` in `src/providers/validation.ts`.
 
 ### Declaring media constraints

@@ -27,6 +27,13 @@ describe("provider registry", () => {
       expect(rule.count(""), p.key).toBe(0);
     }
   });
+  it("declares hashtag and mention caps as integers of at least 1", () => {
+    for (const p of listProviders()) {
+      for (const v of [p.capabilities.text.maxHashtags, p.capabilities.text.maxMentions]) {
+        if (v !== undefined) expect(Number.isInteger(v) && v >= 1, p.key).toBe(true);
+      }
+    }
+  });
   it("declares consistent media constraints for every provider", () => {
     for (const p of listProviders()) expect(() => mediaConstraintsOf(p.capabilities), p.key).not.toThrow();
   });

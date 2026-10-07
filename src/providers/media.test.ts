@@ -40,6 +40,15 @@ describe("planImage", () => {
     expect(p).toMatchObject({ kind: "derive", steps: ["convert"], output: { mimeType: "image/jpeg", width: 1080 } });
     if (p.kind === "derive") expect(p.notes[0]).toMatchObject({ severity: "info", code: "media_will_convert", field: "media.1" });
   });
+  it("rewords messages with a custom label and leaves decisions identical", () => {
+    const base = planImage(img({ mimeType: "image/png" }), instagram, ctx);
+    const labelled = planImage(img({ mimeType: "image/png" }), instagram, { ...ctx, label: "This image" });
+    if (base.kind !== "derive" || labelled.kind !== "derive") throw new Error("expected derive");
+    expect(labelled.steps).toEqual(base.steps);
+    expect(labelled.output).toEqual(base.output);
+    expect(labelled.notes[0]?.message).toMatch(/^This image /);
+    expect(base.notes[0]?.message).toMatch(/^Image 2 /);
+  });
   it("keeps an accepted type when only resizing", () => {
     const p = planImage(img({ width: 3000, height: 3000 }), instagram, ctx);
     expect(p).toMatchObject({ kind: "derive", steps: ["downscale"], output: { mimeType: "image/jpeg", width: 1440, height: 1440 } });

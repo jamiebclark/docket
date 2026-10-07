@@ -5,9 +5,11 @@ import { tagsSchema } from "@/lib/validation/media";
 import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { MediaRepo, MediaRow } from "../dal/media";
 import { actorColumns, type ProjectScope } from "../dal/scope";
+import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { getEnv } from "../env";
 import { processUpload, type UploadRejection } from "../media/process";
 import { getStorage, mediaKeys, requireStorage } from "../storage";
+import { fitOf, fitPlatforms, type PlatformFit } from "./media-fit";
 /** Registration only; storage is entry 3. */
 export async function registerAsset(scope: ProjectScope, input: unknown): Promise<MediaRow> {
   const parsed = registerAssetSchema.parse(input);
@@ -40,7 +42,7 @@ export async function updateAltText(scope: ProjectScope, assetId: string, altTex
 
 export const MEDIA_PAGE_SIZE = 24;
 /** The image types an upload may have; anything a provider does not accept is converted by the media planner. */
-export const UPLOAD_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export { UPLOAD_MIME_TYPES };
 const PREVIEW_SECONDS = 3600;
 /** A target in one of these states means the post is, or was meant to be, live: its images stay. */
 type PostTargetStatus = Awaited<ReturnType<MediaRepo["postsUsing"]>>[number]["targetStatuses"][number];
@@ -63,6 +65,8 @@ export interface MediaView {
   reservedByJobId: string | null;
   originalFilename: string | null;
   createdAt: Date;
+  /** Set by `listMedia` when asked for a `fit`: one entry per platform of the result's `platforms`. */
+  fit?: PlatformFit[];
 }
 export interface PostRef {
   postId: string;
@@ -210,6 +214,7 @@ const listSchema = z.object({
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).max(101).optional(),
   offset: z.number().int().min(0).optional(),
+  fit: z.union([z.object({ accountIds: z.array(z.uuid()).max(50) }), z.object({ active: z.literal(true) })]).optional(),
 });
 
 export async function listMedia(scope: ProjectScope, filter: unknown = {}) {
@@ -227,8 +232,15 @@ export async function listMedia(scope: ProjectScope, filter: unknown = {}) {
     }),
     scope.media.listTags(),
   ]);
+  const providers = f.fit ? await fitPlatforms(scope, f.fit) : [];
   return {
-    items: await Promise.all(rows.map((r) => toView(r, r.inUse, r.reservedByJobId))),
+    items: await Promise.all(
+      rows.map(async (r) => {
+        const view = await toView(r, r.inUse, r.reservedByJobId);
+        return f.fit ? { ...view, fit: providers.map((p) => fitOf(r, p)) } : view;
+      }),
+    ),
+    platforms: providers.map((p) => ({ key: p.key, name: p.displayName })),
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / MEDIA_PAGE_SIZE)),

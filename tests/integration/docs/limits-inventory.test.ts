@@ -56,6 +56,8 @@ function declared(provider: SocialProvider): Map<string, string[]> {
   const { text, media, textOnlyAllowed } = provider.capabilities;
   const m = new Map<string, string[]>();
   m.set("text length", [String(text.maxLength)]);
+  if (text.maxHashtags !== undefined) m.set("hashtags", [String(text.maxHashtags)]);
+  if (text.maxMentions !== undefined) m.set("mentions", [String(text.maxMentions)]);
   m.set("images", [String(media.maxImages)]);
   m.set("bytes per file", [String(media.maxBytesPerFile)]);
   m.set("formats", [media.allowedMimeTypes.join(", ")]);
@@ -136,6 +138,11 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
             expect(literalTitles(resolve(root, file!)).some((t) => t.includes(fragment!)), `${file} has no test or describe titled "${fragment}"`).toBe(true);
           }
         }
+      });
+
+      it("marks only Facebook text length and images UNVERIFIED", () => {
+        const flagged = rows.filter((r) => r.source.includes("UNVERIFIED")).map((r) => r.category).sort();
+        expect(flagged).toEqual(provider.key === "facebook" ? ["images", "text length"] : []);
       });
 
       it("marks interim values UNVERIFIED", () => {

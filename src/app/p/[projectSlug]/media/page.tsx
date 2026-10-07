@@ -34,6 +34,8 @@ function hrefFor(slug: string, f: MediaSearchParams, page?: number): string {
   return `/p/${slug}/media${s ? `?${s}` : ""}`;
 }
 
+const GENERATE_ALL_CAP = 500; // limit-literal-ok: the batch cap for "generate for all", not a platform limit
+
 export default async function MediaPage({ params, searchParams }: Props) {
   const { projectSlug } = await params;
   const raw = await searchParams;
@@ -53,7 +55,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
   let list: Awaited<ReturnType<typeof media.listMedia>> | null = null;
   let failed = false;
   try {
-    list = await media.listMedia(scope, toMediaListInput(filter));
+    list = await media.listMedia(scope, { ...toMediaListInput(filter), fit: { active: true } });
   } catch {
     failed = true;
   }
@@ -95,7 +97,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
                 href={`/p/${projectSlug}/jobs/new?source=media&mode=unused`}
                 className={buttonStyles({ variant: "primary", className: "self-start" })}
               >
-                Generate for all unused images ({unusedCount > 500 ? "500+" : unusedCount})
+                Generate for all unused images ({unusedCount > GENERATE_ALL_CAP ? `${GENERATE_ALL_CAP}+` : unusedCount})
               </Link>
             ) : (
               <span aria-disabled="true" className="self-start rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground">
@@ -131,6 +133,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
                   <li key={item.id}>
                     <MediaCard
                       item={item}
+                      {...(item.fit ? { fit: item.fit } : {})}
                       actions={canEdit ? <MediaCardActions slug={projectSlug} item={item} /> : null}
                       select={canGenerate && !item.reservedByJobId ? <SelectBox id={item.id} label={item.originalFilename ?? "image"} /> : null}
                       jobHref={(jobId) => `/p/${projectSlug}/jobs/${jobId}`}

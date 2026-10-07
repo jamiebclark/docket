@@ -1,15 +1,16 @@
 import type { ProviderCapabilities } from "../types";
 
-// R1 interim: Meta publishes no hard Page post length; this is the long-standing 10,000 limit.
+// UNVERIFIED (not documented by Meta, checked 2026-10-07): the long-standing 10,000 Page post length.
 export const FACEBOOK_MAX_TEXT = 10_000;
-// R2 interim: photo count and size limits are not published as hard numbers.
+// Photo count is UNVERIFIED (not documented by Meta, checked 2026-10-07). Bytes per file: 10 MB, docs/research/meta.md, 2026-10-07.
 export const FACEBOOK_MAX_IMAGES = 10;
-export const FACEBOOK_MAX_BYTES_PER_FILE = 8_000_000;
+export const FACEBOOK_MAX_BYTES_PER_FILE = 10_000_000;
 
 export const facebookCapabilities: ProviderCapabilities = {
   text: { maxLength: FACEBOOK_MAX_TEXT, countingRule: "code_points" },
   media: {
     maxImages: FACEBOOK_MAX_IMAGES,
+    // Formats verified against docs/research/meta.md, 2026-10-07.
     allowedMimeTypes: ["image/jpeg", "image/png"],
     outputMimeType: "image/jpeg",
     maxBytesPerFile: FACEBOOK_MAX_BYTES_PER_FILE,

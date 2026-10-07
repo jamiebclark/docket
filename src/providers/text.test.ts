@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countCodePoints, countGraphemes, countText, countUtf8Bytes, countingRuleName, countingUnit } from "./text";
+import { countCodePoints, countHashtags, countMentions, countGraphemes, countText, countUtf8Bytes, countingRuleName, countingUnit } from "./text";
 import type { CustomCountingRule } from "./types";
 
 const cases: [string, string, number, number, number][] = [
@@ -36,5 +36,28 @@ describe("custom counting rules", () => {
     expect(countingUnit("code_points")).toBe("characters");
     expect(countingUnit("utf8_bytes")).toBe("bytes");
     expect(countingUnit(rule)).toBe("words");
+  });
+});
+
+describe("countHashtags and countMentions (FR-012)", () => {
+  it("counts every occurrence, repeats included", () => {
+    expect(countHashtags("#a #b #a")).toBe(3);
+    expect(countMentions("@a @b @a")).toBe(3);
+  });
+  it("counts at the start and after whitespace or punctuation", () => {
+    expect(countHashtags("(#tag) ##tag")).toBe(2);
+    expect(countMentions("hi @bob and (@ann) @cy.")).toBe(3);
+    expect(countHashtags("café #été")).toBe(1);
+  });
+  it("ignores URLs, lone and numeric hashes, and C#", () => {
+    for (const t of ["https://example.com/#top", "#", "#123", "C#"]) expect(countHashtags(t), t).toBe(0);
+    expect(countHashtags("#tag#two")).toBe(1);
+  });
+  it("ignores emails and URL handles for mentions", () => {
+    for (const t of ["a@b.com", "first.last@example.co.uk", "https://x.com/@user", "@."]) expect(countMentions(t), t).toBe(0);
+  });
+  it("is total on empty text", () => {
+    expect(countHashtags("")).toBe(0);
+    expect(countMentions("")).toBe(0);
   });
 });

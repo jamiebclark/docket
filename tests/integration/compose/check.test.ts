@@ -13,6 +13,12 @@ import { createMemoryStorage } from "../../helpers/storage";
 
 registerTestProvider(instagramLikeProvider);
 registerTestProvider(blueskyLikeProvider);
+registerTestProvider({
+  ...blueskyLikeProvider,
+  key: "capped-like",
+  displayName: "Capped (test)",
+  capabilities: { ...blueskyLikeProvider.capabilities, text: { ...blueskyLikeProvider.capabilities.text, maxLength: 5000, maxHashtags: 30, maxMentions: 20 } },
+});
 const NOW = new Date("2026-10-01T12:00:00Z");
 
 afterAll(async () => {
@@ -142,6 +148,22 @@ describe("checkComposition", () => {
     const res = await posts.checkComposition(t.env.scope, { baseText: "hi", mediaIds: [a.id], targets: [{ accountId: insta.id }] });
     expect(res.targets[0]!.issues).toEqual([expect.objectContaining({ code: "media_will_convert", severity: "info" })]);
     expect(res.targets[0]!.canSchedule).toBe(true);
+  });
+
+  it("blocks a caption over the hashtag or mention cap, and lets one at the cap through", async () => {
+    const t = await setup();
+    const capped = await t.account("capped-like");
+    const run = async (baseText: string) => (await posts.checkComposition(t.env.scope, { baseText, mediaIds: [], targets: [{ accountId: capped.id }] })).targets[0]!;
+    const tags = (n: number) => Array.from({ length: n }, (_, i) => `#tag${i}`).join(" ");
+    const mentions = (n: number) => Array.from({ length: n }, (_, i) => `@user${i}`).join(" ");
+    const over = await run(tags(31));
+    expect(over.canSchedule).toBe(false);
+    expect(over.issues).toContainEqual(expect.objectContaining({ code: "too_many_hashtags", count: 31, limit: 30 }));
+    const atCap = await run(`${tags(30)} ${mentions(20)}`);
+    expect(atCap.canSchedule).toBe(true);
+    expect(atCap.issues.map((i) => i.code)).not.toContain("too_many_hashtags");
+    expect(atCap.issues.map((i) => i.code)).not.toContain("too_many_mentions");
+    expect((await run(mentions(21))).issues).toContainEqual(expect.objectContaining({ code: "too_many_mentions", count: 21, limit: 20 }));
   });
 
   it("treats unknown accounts and media as not found", async () => {

@@ -1,4 +1,4 @@
-import { countText, countingUnit } from "./text";
+import { countHashtags, countMentions, countText, countingUnit } from "./text";
 import type { PostContent, PostType, ProviderCapabilities, ValidationIssue } from "./types";
 
 export function inferPostType(content: PostContent): "text" | "image" | "carousel" {
@@ -36,6 +36,34 @@ export function validateAgainstCapabilities(
       count,
       limit: maxLength,
     });
+  }
+
+  const { maxHashtags, maxMentions } = caps.text;
+  if (maxHashtags !== undefined) {
+    const hashtags = countHashtags(content.text);
+    if (hashtags > maxHashtags) {
+      issues.push({
+        severity: "error",
+        code: "too_many_hashtags",
+        message: `The caption has ${hashtags} hashtags; the limit is ${maxHashtags}.`,
+        field: "text",
+        count: hashtags,
+        limit: maxHashtags,
+      });
+    }
+  }
+  if (maxMentions !== undefined) {
+    const mentions = countMentions(content.text);
+    if (mentions > maxMentions) {
+      issues.push({
+        severity: "error",
+        code: "too_many_mentions",
+        message: `The caption has ${mentions} @mentions; the limit is ${maxMentions}.`,
+        field: "text",
+        count: mentions,
+        limit: maxMentions,
+      });
+    }
   }
 
   const postType: PostType = inferPostType(content);
