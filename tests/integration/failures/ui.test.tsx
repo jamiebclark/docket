@@ -7,8 +7,9 @@ vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheM
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
 import FailuresPage from "../../../src/app/p/[projectSlug]/failures/page";
+import { confirmLabel } from "../../../src/components/targets/retry-ui";
 import { RetryDialog } from "../../../src/components/targets/RetryDialog";
-import { AnnounceProvider } from "../../../src/components/ui/Announce";
+import { AnnounceProvider, announcedText } from "../../../src/components/ui/Announce";
 import { TargetResolution } from "../../../src/components/targets/TargetResolution";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
@@ -123,5 +124,31 @@ describe("RetryDialog", () => {
     expect(html).toContain("Now");
     expect(html).toContain("Next free slot");
     expect(html).toContain("Pick a time");
+  });
+
+  it("labels the confirm button for the mode, not Retrying…, while the preview is loading", () => {
+    const html = renderToStaticMarkup(
+      createElement(RetryDialog, {
+        open: true,
+        onClose: () => undefined,
+        onDone: () => undefined,
+        slug: "p",
+        targetId: "t1",
+        accountId: "a",
+        accountName: "Acme",
+        timeZone: "America/Chicago",
+      }),
+    );
+    expect(html).toContain(confirmLabel("now"));
+    expect(html).not.toContain("Retrying…");
+  });
+});
+
+describe("announcedText", () => {
+  it("changes the text between two identical consecutive announcements", () => {
+    const first = announcedText("Retry queued for the next tick.", 1);
+    const second = announcedText("Retry queued for the next tick.", 2);
+    expect(second).not.toBe(first);
+    expect(second.trim()).toBe(first);
   });
 });

@@ -50,6 +50,7 @@ export function TargetResolution({
   variant: "row" | "detail";
 }) {
   const [open, setOpen] = useState<Kind>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [error, setError] = useState("");
   const [urlError, setUrlError] = useState("");
   const [url, setUrl] = useState("");
@@ -114,7 +115,10 @@ export function TargetResolution({
     <div className="flex flex-wrap items-center gap-2">
       {ctx ? null : <LiveRegion message={localMessage} />}
       {status === "failed" && actions.canRetry ? (
-        <Button onClick={() => setOpen("retry")}>Retry…</Button>
+        <Button onClick={() => {
+            setRetryKey((k) => k + 1);
+            setOpen("retry");
+          }}>Retry…</Button>
       ) : null}
       {status === "failed" && actions.retryBlockedReason ? (
         <span className="text-sm">
@@ -137,9 +141,9 @@ export function TargetResolution({
       ) : null}
       {error && !open ? errorLine : null}
 
-      {open === "retry" ? (
-        <RetryDialog
-        open
+      <RetryDialog
+        key={retryKey}
+        open={open === "retry"}
         onClose={close}
         onDone={() => undefined}
         slug={slug}
@@ -148,7 +152,6 @@ export function TargetResolution({
         accountName={accountName}
         timeZone={timeZone}
       />
-      ) : null}
 
       <Dialog open={open === "cancel"} onClose={close} title={`Cancel the post to ${accountName}?`}>
         <p className="text-sm">It won&apos;t be published to this account. Other accounts are not affected.</p>

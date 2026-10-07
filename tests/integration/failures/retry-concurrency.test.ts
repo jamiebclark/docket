@@ -23,21 +23,27 @@ describe("retry requeue concurrency", () => {
       Promise.all([targetId, sid].map((id) => posts.retryTarget(env.scope, id, { mode: "requeue" }))),
     );
     const at = results.map((r) => (r.status === "scheduled" ? r.scheduledAt : r.status));
+    expect(results.map((r) => r.status)).toEqual(["scheduled", "scheduled"]);
     expect(new Set(at).size).toBe(2);
+    for (const id of [targetId, sid]) expect((await env.scope.targets.get(id))!.status).toBe("scheduled");
   });
 
-  it("a requeue racing the scheduler tick never leaves an inconsistent target", async () => {
+  it("a retry-now racing the scheduler tick is fulfilled and publishes at most once", async () => {
     const { env, targetId } = await failedTarget();
-    await atTime(LATER, () => Promise.allSettled([posts.retryTarget(env.scope, targetId, { mode: "requeue" }), runTick()]));
+    const [retry] = await atTime(LATER, () =>
+      Promise.allSettled([posts.retryTarget(env.scope, targetId, { mode: "now" }), runTick()]),
+    );
+    expect(retry.status).toBe("fulfilled");
     const row = (await env.scope.targets.get(targetId))!;
-    if (row.status === "failed") expect(row.slotOccurrenceAt?.toISOString()).not.toBe("2026-10-12T09:00:00.000Z");
-    if (row.status === "scheduled") expect(row.slotOccurrenceAt).not.toBeNull();
-    const published = (await posts.listAttempts(env.scope, targetId)).filter((a) => a.outcome === "done");
-    expect(published.length).toBeLessThanOrEqual(1);
+    expect(["scheduled", "publishing", "published", "failed"]).toContain(row.status);
+    if (row.status === "scheduled") expect(row.scheduledAt).not.toBeNull();
+    const attempts = await posts.listAttempts(env.scope, targetId);
+    expect(attempts.filter((a) => a.outcome === "retry_requested")).toHaveLength(1);
+    expect(attempts.filter((a) => a.outcome === "done").length).toBeLessThanOrEqual(1);
   });
 
   it("mixed-mode retries of one target: exactly one wins, the rest conflict, one entry, at most one hold", async () => {
-    const { env, targetId } = await failedTarget();
+    const { env, targetId, account } = await failedTarget();
     const inputs = [
       { mode: "now" },
       { mode: "requeue" },
@@ -56,5 +62,7 @@ describe("retry requeue concurrency", () => {
     expect(requested).toHaveLength(1);
     const row = (await env.scope.targets.get(targetId))!;
     expect(row.status).toBe("scheduled");
+    const held = await env.scope.targets.heldOccurrences(account.id, new Date("2026-01-01T00:00:00Z"), new Date("2027-12-31T00:00:00Z"));
+    expect(held.filter((h) => h.targetId === targetId).length).toBeLessThanOrEqual(1);
   });
 });

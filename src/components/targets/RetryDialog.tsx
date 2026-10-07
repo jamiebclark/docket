@@ -42,9 +42,11 @@ export function RetryDialog({
   const timePreview = date && time ? fetched : null;
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
+  // The preview load has its own transition so it never reads as the confirm button's `pending`.
+  const [, startPreview] = useTransition();
 
   function loadPreview() {
-    start(async () => {
+    startPreview(async () => {
       const res = await previewRequeueAction(slug, { targetId });
       setPreview(res.ok ? res.data : { ok: false, code: "account_unavailable", message: res.message });
     });
