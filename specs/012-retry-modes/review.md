@@ -1,122 +1,106 @@
 # Review: Retry a failed target now, into the next free slot, or at a picked time (012-retry-modes)
 
-**Round 2: re-review after the Phase 8 remediation (T040–T044).**
+**Round 3: re-review after the Phase 9 remediation (T045).**
 
-Reviewed 41 files changed across 8 commits, against `2c9a1d0...HEAD`. `2c9a1d0` is the merge-base with `origin/main`, and `HEAD` is `ee0f565`.
+Reviewed 42 files changed across 10 commits, against `2c9a1d0...HEAD`. `2c9a1d0` is the merge-base with `origin/main`, and `HEAD` is `9ba0054`.
 
-The constitution's rule for a re-review sets the scope of this round (`.specify/memory/constitution.md:125-128`). This round checks two things: whether each round-1 finding is fixed, and whether the files the remediation changed introduced a regression. Anything else I noticed is recorded as MINOR, not as a blocker.
+This round follows the constitution's re-review rule (`.specify/memory/constitution.md:125-128`). It checks two things: whether F14, the only blocking finding from round 2, is fixed, and whether the files the remediation changed introduced a regression. Anything else I noticed is recorded as MINOR, not as a blocker.
+
+The remediation is one commit, `9ba0054`. It changes 4 files: `src/components/targets/RetryDialog.tsx`, `src/components/ui/Dialog.tsx`, `src/components/ui/Announce.tsx` and `specs/012-retry-modes/tasks.md` (`git diff 81aa6a6 HEAD --stat`).
 
 **Read in full:**
 
-- The remediation commit `ee0f565`: `src/components/targets/RetryDialog.tsx`, `src/components/targets/TargetResolution.tsx`, `src/components/ui/Announce.tsx`, `tests/integration/failures/retry-concurrency.test.ts`, `tests/integration/failures/ui.test.tsx` and `specs/012-retry-modes/tasks.md`.
-- The current state of those files, plus the parts they depend on: `src/components/ui/Dialog.tsx`, `src/components/ui/LiveRegion.tsx`, `src/components/ui/Button.tsx:40-62` and `src/components/targets/retry-ui.ts`.
-- The service code again, to confirm the remediation did not touch it: `src/server/services/posts/{retry,gate,locked,schedule-patch}.ts`, the `queue/index.ts`, `failures.ts` and `posts/index.ts` diffs, `posts/actions.ts`, the two page diffs and `docs/failures.md`.
-- To check F2 and F14: React 19.2.8's async-transition entanglement in `node_modules/react-dom/cjs/react-dom-client.development.js:5841-5871` and `:8070-8076`.
-- To check F5: the scheduler claim in `src/server/dal/scheduler.ts:63-80`, plus `heldOccurrences` and `tryHoldOccurrence` in `src/server/dal/targets.ts:208-242`.
+- The `9ba0054` diff and the current state of all three changed source files.
+- `src/components/targets/TargetResolution.tsx`. It is unchanged, but it is the parent whose `close`, `retryKey` and `open` drive the new code.
+- The two fallback targets: `src/app/p/[projectSlug]/failures/page.tsx:172-176` and `src/app/p/[projectSlug]/posts/[postId]/page.tsx:53-64`.
+- `src/app/p/[projectSlug]/posts/actions.ts:15-25`, to see how `refresh()` reaches the client.
+- To check that the fix does not depend on timing, the framework source that orders the commits:
+  - Next 16.3.8: `node_modules/next/dist/client/components/app-router-instance.js:75-128` and `node_modules/next/dist/client/components/router-reducer/reducers/server-action-reducer.js:255-333`.
+  - React 19.2.8: `node_modules/react-dom/cjs/react-dom-client.development.js:1305-1312`, `:16334-16346` and `:18994-19005`.
 
-**Sampled:** `tests/helpers/{failures,retry}.ts`.
+**Searched for regressions in the changed APIs:**
 
-**Not re-reviewed this round:** these are unchanged since round 1 and outside the remediation, so the re-review rule leaves them out.
-
-- `retry-modes`, `retry-occurrences`, `retry-dst` and the `authz`/`allocation` tests.
-- `docs/decisions.md`, `README.md` and `docs/index.md`.
-- `compose/ScheduleDialogs.tsx` and `explicit-time-text.ts`.
-- The spec artifacts.
-- `.specify/roadmaps/failure-recovery-completeness-roadmap-th.json`, which is the runner's untracked state.
+- Every remaining reference to `restoreFocus`, `focusFallback` and `returnFocus` in `src`, `tests`, `docs` and the spec artifacts.
+- All 21 files under `src` that render `<Dialog`. Apart from `RetryDialog`, none passes `returnFocus`, so the other 20 keep the default `true`.
 
 **Run as targeted probes (allowed by `constitution.md:111-114`):**
 
-- `pnpm vitest run tests/integration/failures/retry-concurrency.test.ts tests/integration/failures/ui.test.tsx src/components/targets/` passed: 3 files, 18 tests.
-- `pnpm exec commitlint --from 2c9a1d0 --to HEAD` reported no problems.
+- `pnpm vitest run tests/integration/failures/ui.test.tsx src/components/targets/` passed: 2 files, 15 tests.
+- `pnpm exec eslint` on the three changed source files was clean.
+- `pnpm exec commitlint --from 81aa6a6 --to HEAD` reported no problems.
 
-**Not run:** the full suite, lint, typecheck and build. The constitution says review does not re-run them. The branch has no upstream, so CI has not run either.
+**Not re-reviewed this round:** everything outside `9ba0054`. It has not changed since round 2, so the re-review rule leaves it out. That covers the service layer, the queue, the tests, the docs and the spec artifacts (I grepped them only for the renamed API). It also covers `.specify/roadmaps/failure-recovery-completeness-roadmap-th.json`, which is the runner's untracked state.
+
+**Not run:** the full suite, typecheck and build. The constitution says review does not re-run them. The implement pass for T045 reports a clean typecheck, a clean eslint and passing targeted tests, and says it did not run the full suite (`.pipeline/implement.result.json`). The last full pass was T038, before rounds 2 and 3. The branch has no upstream, so CI has not run.
 
 ## Verdict
 
-Not ready to merge yet. There is one MAJOR left, and the remediation introduced it.
+**Ready for a human to merge once CI is green and T039's manual screen-reader check is done.** There are no blocking findings this round.
 
-Four round-1 findings are fixed:
+**F14 is fixed, and the fix no longer depends on refresh timing.** On success, `RetryDialog` now does three things:
 
-- **F1:** everything is committed in Conventional Commits that pass commitlint.
-- **F2:** the preview load no longer drives the confirm button when the dialog opens.
-- **F3:** identical announcements are now re-announced.
-- **F4:** "Back" returns focus to "Retry…".
+1. It sets `done` (`RetryDialog.tsx:105`). That passes `returnFocus={false}` to `Dialog` (`:129`).
+2. `Dialog` copies that into a ref (`Dialog.tsx:30-32`) before its open effect calls `el.close()` (`:40-41`), so the `close` event handler skips the return-to-opener (`:50`).
+3. `RetryDialog`'s own effect runs after `Dialog`'s effects in the same commit, because React runs child effects first. It moves focus straight to the page heading (`RetryDialog.tsx:64-67` → `Announce.tsx:24`).
 
-F5's core problem is also fixed: the race tests can now fail. The service layer is untouched and still holds up.
+All of this happens in the commit that closes the dialog. That commit always lands before the refreshed page, which is what removes "Retry…":
 
-**The new MAJOR (F14).** The F4 fix keeps the dialog mounted, so a *successful* retry now also runs the dialog's return-focus path:
+- `setDone` and `onClose` run after an `await`, so they get the default lane (`react-dom-client.development.js:16340-16345`, `:1305-1311`).
+- The router's refresh update was queued inside the confirm's async transition (`app-router-instance.js:125-128`). It therefore shares the confirm action's entangled transition lane (`react-dom-client.development.js:18994-19004`), and it cannot commit until the confirm callback has returned.
 
-1. Focus goes back to "Retry…".
-2. The page's `restoreFocus()` check runs one frame after confirming. If "Retry…" is still on screen at that point, the check sees that focus is fine and does nothing.
-3. The `refresh()` then removes "Retry…": the Failures row disappears, or the post page's target becomes `scheduled`.
-4. Focus falls to `<body>`.
+The frame-callback race from round 2 is gone. So is the late `close` event that could pull focus back.
 
-Whether this happens depends on whether the refreshed page commits within one frame. The plan (P11) says the fallback runs *after the refresh* for exactly this reason. Before the remediation this path was robust, because unmounting the dialog dropped focus to `<body>` before the check ran.
+"Back" and Escape still return focus to "Retry…" (F4): `done` is false on those paths, so `returnFocusRef` stays true. The heading exists on both pages (`failures/page.tsx:174`, `posts/[postId]/page.tsx:62`). It sits outside the region the refresh changes, so it keeps focus when the row disappears.
 
-The fix is small and stays inside `RetryDialog`, `Dialog` and `Announce`. After it, re-review only F14.
+**No regression.** The `Dialog` change is opt-in with a default of `true`, so the other 20 dialogs behave as before. `restoreFocus` had exactly one caller, which this commit replaced. Lint, commitlint and the targeted tests are clean.
 
-The rest is MINOR and safe to ship:
+**What is left is MINOR and safe to ship:**
 
-- **F15:** F2's residual on the requeue-refusal path, and an F2 test that cannot fail.
-- **F16:** F5's residual weak assertions.
-- **F6–F9:** the open round-1 MINORs.
+- The two new findings: F18 (the UI contract still documents the removed `restoreFocus`) and F19 (pre-existing: the ambiguous-resolution dialogs on the Failures page still drop focus when their row leaves).
+- The carried MINORs: F6–F9, F15 and F16.
+
+The fix itself is still unobserved in a browser. The success cases are in T039's manual check, which stays `🛑 BLOCKED` on a human with a screen reader.
 
 ## Findings
 
-- [ ] MAJOR F14 — After a successful retry, focus returns to "Retry…" and is then lost to `<body>` when the refresh removes that button; the page-heading fallback usually runs too early to catch it
-      where:  src/components/targets/TargetResolution.tsx:144-147, src/components/targets/RetryDialog.tsx:98, src/components/targets/RetryDialog.tsx:101, src/components/ui/Dialog.tsx:31-32, src/components/ui/Dialog.tsx:40-43, src/components/ui/Announce.tsx:23-29, specs/012-retry-modes/research.md:147
-      why:    What happens on success since the remediation:
-              - **The dialog now closes instead of unmounting.** `RetryDialog` stays mounted (`TargetResolution.tsx:144-147`). So `onClose()` (`RetryDialog.tsx:98`) turns `open` false and `Dialog`'s effect calls `el.close()` (`Dialog.tsx:31-32`).
-              - **Closing returns focus to the opener.** Both the native modal close and the `close` handler (`Dialog.tsx:40-43`) return focus to "Retry…".
-              - **The check runs on the next frame.** `restoreFocus()` is called right after (`RetryDialog.tsx:101`). It checks once, on the next animation frame, and only acts when focus is on `<body>` or a detached node (`Announce.tsx:24-27`).
-              - **The refresh lands later.** The `refresh()` tree commits only after the confirm callback returns. React 19 runs it as a transition entangled with the still-running confirm action (`react-dom-client.development.js:5841-5857`). That is after the frame callback was scheduled, and its render can take more than one frame.
-              - **The result.** Whenever the frame callback runs before that commit, focus is still on the connected "Retry…" button, so the check does nothing. The commit then removes the button: on the Failures page the row leaves the list, and on the post page `status` stops being `failed`. Focus ends on `<body>`.
-              Worse, if the frame callback lands before `el.close()`, the queued `close` event can move focus back onto "Retry…" *after* the heading was focused.
-              Before the remediation, unmounting the open dialog dropped focus to `<body>` before the check ran, so the heading fallback worked whatever the refresh timing. P11 (`research.md:147`) specifies the fallback runs "after the refresh" for this reason. FR-018 requires focus to return to a sensible place on success.
-              This is inferred from the code plus React and `<dialog>` semantics. I did not observe it in a browser.
-      owed:   Make success-path focus recovery independent of refresh timing, while keeping "Back" and Escape returning focus to "Retry…" (F4). Two options:
-              - Let the success path opt out of `Dialog`'s return-to-opener, for example a `returnFocus` flag or clearing `returnTo` before `onClose()`, and move focus to the page heading directly.
-              - Or have `restoreFocus` keep checking until the opener is disconnected, using a `MutationObserver` or a bounded frame loop, and then focus the heading if focus is on `<body>`, detached, or still on the removed opener.
-              Add the success case on both pages, including a Failures page with several rows, to T039's manual check.
-      traces: FR-018, SC-006, plan P11 (`research.md:147`), contracts/ui.md "Announcements and focus", Constitution — Engineering Constraints (Accessibility)
+- [ ] MINOR F18 — The UI contract still documents the removed `restoreFocus()`, with its "after the next paint" semantics
+      where:  specs/012-retry-modes/contracts/ui.md:118-120, specs/012-retry-modes/contracts/ui.md:126, src/components/ui/Announce.tsx:8-9, src/components/ui/Announce.tsx:24
+      why:    `9ba0054` replaced `restoreFocus()` (a one-frame check for `<body>` or a detached node) with `focusFallback()`. The new function focuses the heading immediately, and `RetryDialog` calls it from an effect once the dialog has closed. The contract still gives `useAnnounce()`'s return type as `{ announce; restoreFocus }` and says `TargetResolution` calls `ctx.restoreFocus()` after a successful retry. In fact `RetryDialog` calls `ctx.focusFallback()` (`RetryDialog.tsx:66`). The new `returnFocus` prop on `Dialog` (`Dialog.tsx:14`, `:20-21`) is not in the contract either. `research.md` P11 already says `focusFallback()`, so the two artifacts now disagree. The code is correct; only the document is stale. A later entry that reads the contract would look for an API that no longer exists.
+      owed:   Update `contracts/ui.md` "Announcements and focus": give `focusFallback()` its actual semantics (focus `#focusFallbackId` now), note `Dialog`'s `returnFocus` option, and say the success path skips the return-to-opener and focuses the heading after the dialog closes.
+      traces: plan P11, contracts/ui.md "Announcements and focus"
 
-- [ ] MINOR F15 — F2's residual: after a confirm fails while a preview load is in flight, the confirm button stays disabled and reads "Retrying…" until the preview arrives; and the new F2 test cannot fail
-      where:  src/components/targets/RetryDialog.tsx:44-46, src/components/targets/RetryDialog.tsx:107-110, src/components/targets/RetryDialog.tsx:155, tests/integration/failures/ui.test.tsx:129-144
-      why:    **The residual.** React 19 entangles overlapping async transitions. Each `isPending=false` update shares one lane, and rendering that lane suspends until every pending action has finished (`react-dom-client.development.js:5841-5871`, `:8070-8076`). A separate `useTransition` therefore fixes the open path: `pending` is no longer set by the preview. It does not fix two other paths:
-              - after a requeue refusal, `loadPreview()` starts inside the confirm transition (`:107-110`);
-              - "Retry now" can be confirmed before the first preview arrives and then come back as a failure.
-              On both paths the confirm's `pending` stays true until the preview resolves. During that time the button is disabled, `aria-busy` and labelled "Retrying…", right under the message "Retry now or pick a time." It recovers when the preview arrives, and the path needs a race to occur, so it is transient. F2 named the refusal path explicitly.
-              **The test.** The new test renders with `renderToStaticMarkup`, where effects never run and `pending` is always false. So it passes against the pre-fix code too and cannot catch a regression.
-      owed:   Don't start the preview reload from inside the confirm transition. Run the preview as a plain `async` call with `live`-flag cancellation, like the explicit-time preview at `:62-78`, so it never joins the confirm's action scope. Replace the static-markup assertion with a check that can fail, or name this explicitly in T039.
+- [ ] MINOR F19 — (pre-existing, outside 012's requirements) On the Failures page, a successful "Mark published" or "Mark not published…" returns focus to its opener, and the refresh then removes the row, so focus falls to `<body>`
+      where:  src/components/targets/TargetResolution.tsx:65-72, src/components/targets/TargetResolution.tsx:136-140, src/components/ui/Dialog.tsx:49-51
+      why:    The ambiguous dialogs close through `run` → `setOpen(null)` (`TargetResolution.tsx:71`). That uses `Dialog`'s default return-to-opener (`Dialog.tsx:50`), so focus goes back to "Mark published" or "Mark not published…". When the action's `refresh()` commits, the resolved row leaves the list and focus goes to `<body>`. This was never wired to the fallback: no commit on this branch ever called `restoreFocus` from these dialogs. `docs/decisions.md:543` records that the row-removal problem predates 012. It is not a regression from this remediation. I noted it because the new `returnFocus` option and `focusFallback()` make the fix a few lines.
+      owed:   For the hardening entry: on success in the ambiguous dialogs, pass `returnFocus={false}` and call `ctx?.focusFallback()` once the dialog has closed, as `RetryDialog` now does.
+      traces: FR-018 (by analogy; FR-018 is about retry outcomes), Constitution — Engineering Constraints (Accessibility)
+
+- [ ] MINOR F15 — (open from round 2) F2's residual: after a confirm fails while a preview load is in flight, the confirm button stays disabled and reads "Retrying…" until the preview arrives; and the F2 test cannot fail
+      where:  src/components/targets/RetryDialog.tsx:50-55, src/components/targets/RetryDialog.tsx:114-117, src/components/targets/RetryDialog.tsx:170, tests/integration/failures/ui.test.tsx:129-144
+      why:    Unchanged in substance. Only the line numbers moved. The requeue-refusal path still calls `loadPreview()` from inside the confirm transition (`:114-117`), so the confirm's `pending` waits on the preview. The static-markup test never runs effects, so it passes against the pre-fix code too.
+      owed:   As in round 2: load the preview as a plain `async` call with `live`-flag cancellation, and replace the static-markup assertion with one that can fail, or name the check in T039.
       traces: FR-016, Edge case "preview cannot be loaded"
 
-- [ ] MINOR F16 — F5's residual: the retry-vs-scheduler race now fails only if the retry is rejected; its "publishes at most once" and "consistent state" checks, and the mixed-mode hold check, cannot fail
-      where:  tests/integration/failures/retry-concurrency.test.ts:38-39, tests/integration/failures/retry-concurrency.test.ts:42, tests/integration/failures/retry-concurrency.test.ts:65-66, tests/helpers/failures.ts:16-17, src/server/db/schema/posts.ts:157
-      why:    The race test's new assertion that the retry was fulfilled is real. So is the two-target test now requiring two `scheduled` results. Three assertions still cannot fail:
-              - **"At most one `done` (`:42`)."** The target's account keeps the mock `fatal` behaviour (`helpers/failures.ts:16-17`), so a re-publish fails again and no `done` is ever written.
-              - **The state check (`:38-39`).** The allowed statuses include every reachable one. `scheduledAt` is never null after a `now` retry, because it keeps the old slot instant.
-              - **The mixed-mode hold check (`:65-66`).** A target row has one `slot_occurrence_at` column (`schema/posts.ts:157`), so `≤ 1` holds by construction.
-              T044's ticked text ("consistently scheduled or claimed once, and there is at most one publish") is therefore only partly honoured. The service code these tests guard is correct: the claim is `SKIP LOCKED` and requires `status in (scheduled, publishing)` (`scheduler.ts:63-80`).
-      owed:   For the hardening entry, make the scheduler race and the mixed-mode test assert things that can fail:
-              - In the scheduler race, count `publish`-step attempts made after the retry (at most 1).
-              - Assert either `status='scheduled'`, `nextAttemptAt = LATER` and `attemptCount = 0`, or exactly one new attempt.
-              - In the mixed-mode test, assert the winner's columns: `slot` ⇔ `slotOccurrenceAt = scheduledAt`, and `at` ⇒ `slotOccurrenceAt` null.
+- [ ] MINOR F16 — (open from round 2) F5's residual: the retry-vs-scheduler race test fails only if the retry is rejected; its "publishes at most once" and "consistent state" checks, and the mixed-mode hold check, cannot fail
+      where:  tests/integration/failures/retry-concurrency.test.ts:38-39, tests/integration/failures/retry-concurrency.test.ts:42, tests/integration/failures/retry-concurrency.test.ts:65-66, tests/helpers/failures.ts:16-17
+      why:    Unchanged; this round did not touch these files. Round 2 has the full reasoning.
+      owed:   As in round 2: count the `publish`-step attempts made after the retry, assert the exact post-race state, and assert the winner's `slotOccurrenceAt` against its mode.
       traces: FR-024, SC-002
 
 - [ ] MINOR F6 — (open from round 1) Without an `AnnounceProvider`, retry outcomes are never announced and focus is never restored
-      where:  src/components/targets/RetryDialog.tsx:99-101, src/components/targets/TargetResolution.tsx:148, src/components/targets/TargetResolution.tsx:116
-      why:    Unchanged. `RetryDialog` announces only through `ctx?.announce`, while `TargetResolution` passes `onDone={() => undefined}` and its fallback `LiveRegion` never receives a retry message. Both render sites have a provider today.
+      where:  src/components/targets/RetryDialog.tsx:66, src/components/targets/RetryDialog.tsx:107, src/components/targets/TargetResolution.tsx:116, src/components/targets/TargetResolution.tsx:148
+      why:    Unchanged. `RetryDialog` announces and places focus only through `ctx?.`, while `TargetResolution` passes `onDone={() => undefined}` and its fallback `LiveRegion` never receives a retry message. Both render sites have a provider today.
       owed:   As in round 1: route retry outcomes into the fallback region through `onDone`, or require the provider.
       traces: contracts/ui.md "No provider", FR-018
 
 - [ ] MINOR F7 — (open from round 1) A transport failure of the requeue preview rejects into the error boundary instead of showing "unavailable"
-      where:  src/components/targets/RetryDialog.tsx:48-53, src/components/targets/RetryDialog.tsx:65
+      where:  src/components/targets/RetryDialog.tsx:50-55, src/components/targets/RetryDialog.tsx:72
       why:    Unchanged. There is no `try/catch` around `previewRequeueAction` and no `.catch` on `previewExplicitTimeAction`.
       owed:   As in round 1: map a rejection to the "Couldn't load the next free slot." unavailable state.
       traces: Edge case "preview cannot be loaded"
 
 - [ ] MINOR F8 — (open from round 1) After the time field is edited, the previous time preview stays confirmable until the new one arrives
-      where:  src/components/targets/RetryDialog.tsx:41-42, src/components/targets/RetryDialog.tsx:95
+      where:  src/components/targets/RetryDialog.tsx:41-42, src/components/targets/RetryDialog.tsx:102
       why:    Unchanged. `timePreview` is not tied to the `local` value it was fetched for.
       owed:   As in round 1: treat `timePreview` as null when its `local` differs from `${date}T${time}`.
       traces: FR-017, SC-004
@@ -127,40 +111,38 @@ The rest is MINOR and safe to ship:
       owed:   As in round 1.
       traces: FR-023
 
-- NOTE F17 — Since the F4 fix, every `TargetResolution` mounts a closed `RetryDialog` (`TargetResolution.tsx:144-154`), including ambiguous, scheduled and retry-blocked targets. I checked whether this costs anything: no preview request fires while the dialog is closed (`RetryDialog.tsx:56`, `:63`), the date and time field ids exist only in "Pick a time" mode (`:133-136`), and a closed `<dialog>` is not in the accessibility tree. The only cost is extra hidden markup per row.
-- NOTE — Round-1 notes F10–F13 still stand unchanged (`retry-modes.test.ts:83` name; unused `PageHeader` `titleId`; the bulk-retry savepoint need; the FR-013/P8 reading).
+- NOTE F20 — `done` is cleared only by the dialog's `close` event (`RetryDialog.tsx:124-127`). If someone presses Escape while a confirm is still in flight and the retry then succeeds, the `close` event has already fired, so `done` stays `true` on that closed instance. I checked whether this matters. The effect sends focus to the heading once (`:64-67`), which is the right place, because the opener is about to leave. The next "Retry…" click remounts the dialog with fresh state (`TargetResolution.tsx:118-121`, `:145`). It has no visible effect.
+- NOTE — Round-2 note F17 and round-1 notes F10–F13 still stand unchanged.
 
-## Round-1 findings: status
+## Earlier findings: status
 
 | Finding | Severity | Status | Evidence |
 |---|---|---|---|
-| F1 implementation uncommitted | MAJOR | **Fixed** | Commits `5c5ae31`, `378a8eb`, `2505720`, `eb1d81f` and `ee0f565` are on the branch. `git status` shows only the runner's roadmap JSON untracked, and commitlint is clean. |
-| F2 preview load drives confirm `pending` | MAJOR | **Fixed on open; residual → F15 (MINOR)** | `RetryDialog.tsx:46-53` uses a separate `startPreview`. The refusal path is still entangled (`:107-110`). |
-| F3 identical announcements dropped | MAJOR | **Fixed** | `Announce.tsx:12-14` and `:21-22` add a trailing no-break space to every other call. It is tested at `ui.test.tsx:147-153`. |
-| F4 "Back" drops focus to `<body>` | MAJOR | **Fixed for Back/Escape; regression on success → F14 (MAJOR)** | `TargetResolution.tsx:144-147` keeps the dialog mounted, keyed per open (`:118-121`), so `Dialog.tsx:31-32` and `:40-43` run. |
-| F5 race tests cannot fail | MAJOR | **Fixed in core; residual → F16 (MINOR)** | The retry is asserted fulfilled (`retry-concurrency.test.ts:36`), and both targets must be `scheduled` (`:26`, `:28`). |
-| F6–F9 | MINOR | Open (not in remediation scope) | Carried above. |
-| F10–F13 | NOTE | Unchanged | — |
+| F14 focus lost to `<body>` after a successful retry | MAJOR | **Fixed** | `RetryDialog.tsx:105`, `:129`, `:64-67`; `Dialog.tsx:30-32`, `:50`; `Announce.tsx:24`. The order is set by the commit lanes (`react-dom-client.development.js:16340-16345`, `:18994-19004`; `app-router-instance.js:125-128`), not by frame timing. T039 now lists both success cases. |
+| F1–F4 | MAJOR | Fixed (round 2) | No regression: `Dialog`'s default `returnFocus=true` keeps F4's Back/Escape path. Announce's F3 counter (`Announce.tsx:12-15`, `:23`) is untouched. |
+| F5 | MAJOR | Fixed in core (round 2); residual F16 | Unchanged this round. |
+| F6–F9, F15, F16 | MINOR | Open | Carried above with updated line numbers. |
+| F10–F13, F17 | NOTE | Unchanged | — |
 
 ## Coverage
 
-Counts for obligations the remediation did not touch are carried from the round-1 sweep, which covered every category the constitution lists. The rows the remediation did touch were re-checked this round: FR-016, FR-018, FR-019 and FR-024; SC-002 and SC-006; P11; the accessibility constraint; and the commits and tests workflow items.
+Rows the remediation did not touch are carried from the round-1 sweep, which covered every category the constitution lists, as amended in round 2. This round re-checked the rows the remediation touched: FR-018, SC-006, P11, the accessibility constraint and the commits workflow item.
 
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-024) | 24 | 22 | 2 (FR-016 F15; FR-018 F14/F6) | 0 | 0 |
-| Success criteria (SC-001–SC-006) | 6 | 4 | 2 (SC-002 F16; SC-006 F14) | 0 | 0 |
+| Functional requirements (FR-001–FR-024) | 24 | 22 | 2 (FR-016 F15; FR-018 F6, no-provider path only) | 0 | 0 |
+| Success criteria (SC-001–SC-006) | 6 | 5 | 1 (SC-002 F16) | 0 | 0 |
 | User stories (US1–US4) | 4 | 4 | 0 | 0 | 0 |
 | Edge cases | 10 | 9 | 1 (preview unavailable F7/F15) | 0 | 0 |
-| Plan decisions (P1–P12) | 12 | 11 | 1 (P11 F14) | 0 | 0 |
+| Plan decisions (P1–P12) | 12 | 12 | 0 (P11 honoured; its contract text is stale, F18) | 0 | 0 |
 | Constitution core principles (I–VII) | 7 | 7 | 0 | 0 | 0 |
-| Constitution engineering constraints (Neon, scheduler, UTC/Temporal, accessibility) | 4 | 3 | 1 (accessibility F14) | 0 | 0 |
+| Constitution engineering constraints (Neon, scheduler, UTC/Temporal, accessibility) | 4 | 4 | 0 (accessibility subject to T039) | 0 | 0 |
 | Constitution development workflow (commits, gates, tests, docs) | 4 | 4 | 0 | 0 | 0 |
 
 ## What I could not check
 
-- **F14's timing in a real browser.** I could not observe whether the refreshed page commits before `restoreFocus`'s frame callback. The conclusion comes from the code, React 19.2.8's source and the `<dialog>` focus-return rules. A human must check it in T039: retry successfully on the Failures page (with several rows) and on the post page, and confirm focus lands on the heading.
-- **Screen-reader behaviour (T039, still owed).** I could not hear whether VoiceOver or NVDA re-read a live-region change that differs only by a trailing no-break space (the F3 fix). I also could not hear the announcements in general.
-- **Real-browser `<dialog>` focus return.** The F4 fix relies on browser behaviour I could not run: the focus return on `close()` and the timing of the `close` event. I also did not test arrow-key movement in the radio group or the visible focus ring.
-- **The full suite, lint, typecheck and build.** I did not re-run them, per the constitution. CI has not run, because the branch has no upstream. My only evidence is the targeted run of the three changed or affected test files (18 passed) and commitlint.
-- **Load behaviour.** I did not measure the preview or requeue occurrence walk with a full 366-day horizon on a busy account.
+- **The F14 fix in a real browser.** The project's Vitest runs in `environment: "node"` (`vitest.config.ts:10`), and there is no jsdom or happy-dom, so nothing automated exercises the focus move. My conclusion comes from the code, from React 19.2.8's lane assignment and from Next 16.3.8's action queue. A human must still run T039: retry successfully on the Failures page (with several rows) and on the post page, and confirm focus lands on the heading. Then press Back and Escape and confirm focus returns to "Retry…".
+- **Native `<dialog>` focus behaviour.** The fix assumes `close()` on a modal dialog moves focus to the previously focused element synchronously, with the `close` event fired later as a task, per the HTML spec. I did not observe this in Chrome, Firefox or Safari.
+- **Screen-reader behaviour (T039, still owed).** I could not check how VoiceOver or NVDA order the heading focus and the polite announcement on success. I also could not hear whether they re-read a live-region change that differs only by a trailing no-break space (F3).
+- **The full suite, typecheck and build after T045.** I did not run them, per the constitution, and neither did the T045 implement pass. CI has not run, because the branch has no upstream. My evidence is the targeted tests (15 passed), eslint on the changed files, and commitlint.
+- **Load behaviour.** I did not measure the preview or requeue occurrence walk with a full 366-day horizon on a busy account (carried from round 2).
