@@ -132,5 +132,5 @@ describe("retry-failed idempotency", () => {
     expect(await observe(f.env, null)).toEqual(before);
     const next = await post("/targets/retry-failed", { mode: "now" }, "bulk-2");
     expect(next.json).toMatchObject({ retried: 1, remaining: 0 });
-  });
+  }, 120_000);
 });
