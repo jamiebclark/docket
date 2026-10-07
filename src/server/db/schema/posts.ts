@@ -170,6 +170,7 @@ export const postTargets = pgTable(
     externalUrl: text("external_url"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     resolvedByUserId: uuid("resolved_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    resolvedByApiKeyId: uuid("resolved_by_api_key_id"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -195,6 +196,11 @@ export const postTargets = pgTable(
       "post_targets_published_has_id",
       sql`${t.status} <> 'published' OR ${t.externalId} IS NOT NULL OR ${t.resolvedAt} IS NOT NULL`,
     ),
+    foreignKey({
+      name: "post_targets_resolver_api_key_fk",
+      columns: [t.projectId, t.resolvedByApiKeyId],
+      foreignColumns: [apiKeys.projectId, apiKeys.id],
+    }),
     index("post_targets_due_idx")
       .on(t.nextAttemptAt)
       .where(sql`${t.status} IN ('scheduled','publishing')`),
