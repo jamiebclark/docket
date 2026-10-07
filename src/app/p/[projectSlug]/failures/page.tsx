@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { RetryAllFailed } from "@/components/targets/RetryAllFailed";
 import { TargetResolution } from "@/components/targets/TargetResolution";
 import { AnnounceProvider } from "@/components/ui/Announce";
 import { Badge } from "@/components/ui/Badge";
@@ -199,6 +200,15 @@ export default async function FailuresPage({ params, searchParams }: Props) {
               </button>
             </noscript>
           </form>
+        ) : null}
+        {canSchedule && query.status !== "ambiguous" && list ? (
+          <RetryAllFailed
+            key={`${query.status}:${query.account ?? ""}`}
+            slug={projectSlug}
+            accountId={query.account ?? null}
+            accountName={query.account ? (list.accounts.find((a) => a.id === query.account)?.name ?? null) : null}
+            failedCount={list.failedInFilter}
+          />
         ) : null}
       </div>
 

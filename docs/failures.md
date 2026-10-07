@@ -14,6 +14,17 @@ A post fails on one account at a time. The **Failures** page (and the post's own
 
 "Next free slot" and "Pick a time" check the post's content and the account first, and refuse a post that cannot go out. A slot the failed target already holds counts as free for it, so it is not pushed past its own slot. After a requeue it holds only the new slot.
 
+## Retrying every failed post
+
+**Retry all failed** on the Failures page retries every failed target in one go, or only those on the account you have filtered to. It asks you to choose **Retry now** (preselected) or **Next free slot**, then confirm. It works only on failed targets, whichever tab you are on; ambiguous ones are never touched.
+
+- Targets are taken in the order they were meant to go out. With **Next free slot**, earlier failures within an account get earlier slots.
+- Each target is retried on its own, the same way a single retry works, with one `retry_requested` entry per retried target. If the run stops part way, finished targets stay retried and the rest are untouched.
+- Targets that cannot be retried are skipped, not treated as errors: removed accounts, accounts that need reconnecting, unavailable providers, posts that are no longer failed, content that cannot go out, and accounts with no free slot. The result says how many were skipped and why.
+- At most 100 targets are attempted per press. If more remain, the result says so; press **Retry all failed** again to continue.
+- Pressing it twice is safe: every target is re-checked as failed before it is retried.
+- You need permission to schedule posts in the project.
+
 ## When there is no free slot
 
 If the account has no free posting slot (or no active slots), nothing is rescheduled. The target stays failed and its message becomes, for example:

@@ -5,16 +5,18 @@ vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheM
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
 import FailuresPage from "../../../src/app/p/[projectSlug]/failures/page";
+import * as failureActions from "../../../src/app/p/[projectSlug]/failures/actions";
 import * as postActions from "../../../src/app/p/[projectSlug]/posts/actions";
 import { forApiKey } from "../../../src/server/dal/scope";
 import { ForbiddenError } from "../../../src/server/dal/errors";
 import { listFailures, previewRequeue } from "../../../src/server/services/failures";
 import * as posts from "../../../src/server/services/posts";
+import { atTime } from "../../helpers/clock";
 import { actAs, NotFoundSignal } from "../../helpers/actions";
 import { createKey } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
 import { createUser } from "../../helpers/factories";
-import { outcomeTarget } from "../../helpers/failures";
+import { LATER, outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 
@@ -74,5 +76,53 @@ describe("failures access", () => {
     await expect(previewRequeue(stub, t.targetId)).rejects.toBeInstanceOf(ForbiddenError);
     const [row] = (await listFailures(stub)).rows;
     expect(row!.actions).toMatchObject({ canMarkPublished: false, canRequeue: false, canMarkNotPublished: false, canRetry: false });
+  });
+});
+
+describe("retry all failed — authorization and isolation", () => {
+  it("non-members and another project's slug get not_found from both actions", async () => {
+    const env = await postsEnv();
+    const other = await postsEnv();
+    const t = await outcomeTarget(env, "fatal");
+    for (const user of [await createUser(), other.owner]) {
+      actAs(user);
+      expect(await failureActions.retryAllFailedAction(env.project.slug, { mode: "now" })).toMatchObject({ ok: false, error: "not_found" });
+      expect(await failureActions.previewRetryAllAction(env.project.slug, {})).toMatchObject({ ok: false, error: "not_found" });
+    }
+    actAs(null);
+    expect((await posts.getPost(env.scope, t.postId)).targets[0]!.status).toBe("failed");
+  });
+
+  it("a scope without post:schedule or a read-only key is refused and nothing changes", async () => {
+    const env = await postsEnv();
+    const t = await outcomeTarget(env, "fatal");
+    const stub = new Proxy(env.scope, {
+      get: (target, prop, receiver) =>
+        prop === "can" ? (req: { post?: string[] }) => !req.post?.includes("schedule") : Reflect.get(target, prop, receiver),
+    });
+    const key = await createKey(env.scope, ["read"]);
+    const { scope: readOnly } = await forApiKey(key.secret);
+    for (const s of [stub, readOnly]) {
+      await expect(posts.retryAllFailed(s, { mode: "now" })).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(posts.previewRetryAll(s, {})).rejects.toBeInstanceOf(ForbiddenError);
+    }
+    expect((await posts.getPost(env.scope, t.postId)).targets[0]!.status).toBe("failed");
+  });
+
+  it("a run in project 1 leaves project 2 untouched, with or without a foreign account filter", async () => {
+    const one = await postsEnv();
+    const two = await postsEnv();
+    await outcomeTarget(one, "fatal");
+    const foreign = await outcomeTarget(two, "fatal");
+    const before = (await two.scope.targets.get(foreign.targetId))!;
+    const attemptsBefore = await posts.listAttempts(two.scope, foreign.targetId);
+
+    const plain = await atTime(LATER, () => posts.retryAllFailed(one.scope, { mode: "now" }));
+    expect(plain).toMatchObject({ count: 1, inScope: 1 });
+    const filtered = await atTime(LATER, () => posts.retryAllFailed(one.scope, { mode: "now", account: foreign.account.id }));
+    expect(filtered.count).toBe(0);
+
+    expect(await two.scope.targets.get(foreign.targetId)).toEqual(before);
+    expect(await posts.listAttempts(two.scope, foreign.targetId)).toEqual(attemptsBefore);
   });
 });

@@ -37,6 +37,14 @@ export interface AttentionOptions {
   offset: number;
 }
 
+export interface FailedForRetry {
+  id: string;
+  postId: string;
+  socialAccountId: string;
+  scheduledAt: Date | null;
+  updatedAt: Date;
+}
+
 export interface TargetsRepo {
   /**
    * Targets needing a person (`ambiguous` first, then newest-entered), with the base text of their
@@ -44,7 +52,12 @@ export interface TargetsRepo {
    */
   listAttention(opts: AttentionOptions): Promise<{ rows: (TargetRecord & { baseText: string })[]; total: number }>;
   /** Counts of `ambiguous` and `failed` targets of live posts in the project. */
-  countAttention(): Promise<{ ambiguous: number; failed: number }>;
+  countAttention(accountId?: string): Promise<{ ambiguous: number; failed: number }>;
+  /**
+   * Every `failed` target of a live post (optionally of one account), oldest intended time first
+   * (`scheduled_at`, nulls last, then `updated_at`, then id). No limit and no lock.
+   */
+  listFailedForRetry(opts: { accountId?: string }): Promise<FailedForRetry[]>;
   /**
    * Non-cancelled targets whose `scheduled_at` (or `published_at` once published) falls in
    * `[from, to)`, with the base text of their non-deleted post. Ordered by that instant, then id.
@@ -118,15 +131,29 @@ export function createTargetsRepo(db: Database, projectId: string): TargetsRepo 
         .where(where);
       return { rows: found.map((r) => ({ ...r.target, baseText: r.baseText })), total: totalRow?.n ?? 0 };
     },
-    async countAttention() {
+    async countAttention(accountId) {
       const rows = await db
         .select({ status: postTargets.status, n: count() })
         .from(postTargets)
         .innerJoin(posts, livePost)
-        .where(attentionWhere(["ambiguous", "failed"]))
+        .where(attentionWhere(["ambiguous", "failed"], accountId))
         .groupBy(postTargets.status);
       const n = (status: string) => rows.find((r) => r.status === status)?.n ?? 0;
       return { ambiguous: n("ambiguous"), failed: n("failed") };
+    },
+    async listFailedForRetry(opts) {
+      return db
+        .select({
+          id: postTargets.id,
+          postId: postTargets.postId,
+          socialAccountId: postTargets.socialAccountId,
+          scheduledAt: postTargets.scheduledAt,
+          updatedAt: postTargets.updatedAt,
+        })
+        .from(postTargets)
+        .innerJoin(posts, livePost)
+        .where(attentionWhere(["failed"], opts.accountId))
+        .orderBy(sql`${postTargets.scheduledAt} ASC NULLS LAST`, asc(postTargets.updatedAt), asc(postTargets.id));
     },
     async listInRange(from, to, accountId) {
       const at = sql`CASE WHEN ${postTargets.status} = 'published' THEN ${postTargets.publishedAt} ELSE ${postTargets.scheduledAt} END`;

@@ -66,6 +66,8 @@ export interface FailureRow {
 export interface FailureList {
   rows: FailureRow[];
   totals: { ambiguous: number; failed: number };
+  /** Failed targets in the current account filter (project-wide with none) — the "Retry all failed" count. */
+  failedInFilter: number;
   filtered: number;
   page: number;
   pageSize: number;
@@ -130,7 +132,7 @@ export async function listFailures(scope: ProjectScope, input?: unknown): Promis
   need(scope, { post: ["view"] });
   const query = failuresQuerySchema.parse(input ?? {});
   const statuses = query.status === "all" ? (["ambiguous", "failed"] as const) : ([query.status] as const);
-  const [found, totals, accounts] = await Promise.all([
+  const [found, totals, accounts, inFilter] = await Promise.all([
     scope.targets.listAttention({
       statuses,
       accountId: query.account,
@@ -139,6 +141,7 @@ export async function listFailures(scope: ProjectScope, input?: unknown): Promis
     }),
     scope.targets.countAttention(),
     scope.accounts.list(),
+    query.account ? scope.targets.countAttention(query.account) : null,
   ]);
   const byId = new Map(accounts.map((a) => [a.id, a]));
   const stored = await scope.attempts.listForTargets(found.rows.map((r) => r.id));
@@ -176,6 +179,7 @@ export async function listFailures(scope: ProjectScope, input?: unknown): Promis
   return {
     rows,
     totals,
+    failedInFilter: (inFilter ?? totals).failed,
     filtered: found.total,
     page: query.page,
     pageSize: FAILURES_PAGE_SIZE,

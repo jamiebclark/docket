@@ -22,7 +22,7 @@ they always match `main`.
 | Members, roles and connecting accounts (including other people's) | [Members and accounts](accounts.md) |
 | Voice profiles, the generator, review and batch jobs | [Generator and jobs](generator.md) |
 | The public API, webhooks and rebuilding an n8n flow | [n8n and the public API](n8n.md) |
-| Retrying failed posts: now, next free slot or a chosen time | [Failures and retrying](failures.md) |
+| Retrying failed posts: now, next free slot or a chosen time, one at a time or all at once | [Failures and retrying](failures.md) |
 
 ## Reference
 
