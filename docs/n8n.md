@@ -131,6 +131,8 @@ Idempotency-Key: retry-{{event.id}}-{{targetId}}
 
 `mode` is `now` (publish on the next tick), `requeue` (next free slot; send `expected` to learn whether the time moved) or `at` (an RFC 3339 instant with an offset). A refusal such as `no_active_slots` comes back as `200` with `status: "failed"` and a `reason`.
 
+   **Cap the retries.** Keep your own counter per `targetId` (for example in n8n workflow static data), stop after N tries (say 3) and alert a person. Docket's attempt count cannot serve as the limit: it resets on every retry, and each `post.failed` event has a new event id, so every retry gets a new `Idempotency-Key`.
+
 4. **Never retry an `ambiguous` target.** Docket does not know whether it was published. Alert a person, or resolve it with `POST …/targets/{{targetId}}/resolve` and `{"outcome":"published","url":"…"}` or `{"outcome":"not_published","requeue":true}` once someone has checked the platform.
 5. To retry everything at once, call `POST {{base}}/api/v1/targets/retry-failed` with `{"mode":"now"}` (add `accountId` to limit it to one account). Each call handles a capped batch. While the answer shows `remaining > 0`, call again with a **new** `Idempotency-Key`, because the same key replays the first answer.
 

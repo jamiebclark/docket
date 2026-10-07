@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { hashBody } from "../../../../src/server/api/idempotency";
 import { webhookEvents } from "../../../../src/server/db/schema";
 import * as posts from "../../../../src/server/services/posts";
+import { createEndpoint } from "../../../../src/server/services/webhooks";
 import { api, createKey } from "../../../helpers/api";
 import { atTime } from "../../../helpers/clock";
 import { closeDb, testDb } from "../../../helpers/db";
@@ -25,6 +26,7 @@ async function observe(env: Env, targetId: string | null) {
 }
 
 async function common(env: Env) {
+  await createEndpoint(env.scope, { url: "http://127.0.0.1:9/x", description: "", events: ["post.published", "post.failed"] });
   const key = await createKey(env.scope, ["read", "write_posts"], { rateLimitPerMinute: 1000 });
   return { key, post: (path: string, body: unknown, idem: string) => atTime(LATER, () => api("POST", path, { key: key.secret, body, idem })) };
 }
@@ -33,7 +35,7 @@ async function retryCase() {
   const f = await failedTarget();
   const c = await common(f.env);
   const path = `/posts/${f.postId}/targets/${f.targetId}/retry`;
-  return { ...f, ...c, path, body: { mode: "now" }, targetId: f.targetId as string | null, conflict: "not_failed" };
+  return { ...f, ...c, path, body: { mode: "now" }, targetId: f.targetId as string | null, conflict: "not_failed", emits: 0 };
 }
 
 async function resolveCase() {
@@ -41,7 +43,7 @@ async function resolveCase() {
   const t = await outcomeTarget(env, "ambiguous", "Resolve");
   const c = await common(env);
   const path = `/posts/${t.postId}/targets/${t.targetId}/resolve`;
-  return { env, ...t, ...c, path, body: { outcome: "published" }, targetId: t.targetId as string | null, conflict: "already_resolved" };
+  return { env, ...t, ...c, path, body: { outcome: "published" }, targetId: t.targetId as string | null, conflict: "already_resolved", emits: 1 };
 }
 
 describe.each([
@@ -50,10 +52,12 @@ describe.each([
 ])("%s idempotency", (_name, make) => {
   it("replays a 200 with the same body and no new effect", async () => {
     const f = await make();
+    const start = await observe(f.env, f.targetId);
     const first = await f.post(f.path, f.body, "k1");
     expect(first.status).toBe(200);
     expect(first.headers.get("idempotent-replayed")).toBeNull();
     const before = await observe(f.env, f.targetId);
+    expect(before.events - start.events).toBe(f.emits);
     const again = await f.post(f.path, f.body, "k1");
     expect(again.status).toBe(200);
     expect(again.headers.get("idempotent-replayed")).toBe("true");

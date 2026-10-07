@@ -5,6 +5,7 @@ import { apiKeys, member, postTargets, publishAttempts, user, webhookEvents } fr
 import { toAttemptViews } from "../../../../src/server/services/failures";
 import { revokeApiKey } from "../../../../src/server/services/api-keys";
 import * as posts from "../../../../src/server/services/posts";
+import { createEndpoint } from "../../../../src/server/services/webhooks";
 import { api, createKey } from "../../../helpers/api";
 import { atTime } from "../../../helpers/clock";
 import { closeDb, testDb } from "../../../helpers/db";
@@ -127,39 +128,67 @@ describe("API attribution", () => {
 });
 
 describe("API and member service parity (SC-005)", () => {
-  const scrub = (o: Record<string, unknown>) => {
+  const scrub = (o: Record<string, unknown>): Record<string, unknown> => {
     const drop = new Set([
       "id", "postId", "postTargetId", "accountId", "socialAccountId", "createdAt", "updatedAt", "at", "resolvedAt", "scheduledAt", "slotId",
       "resolvedByUserId", "resolvedByApiKeyId", "actorUserId", "actorApiKeyId", "projectId", "nextPollAt", "lastAttemptAt", "durationMs", "tickId",
     ]);
-    return Object.fromEntries(Object.entries(o).filter(([k, v]) => !drop.has(k) && !(v instanceof Date)));
+    const deep = (v: unknown): unknown =>
+      v && typeof v === "object" && !(v instanceof Date) && !Array.isArray(v) ? scrub(v as Record<string, unknown>) : v;
+    return Object.fromEntries(Object.entries(o).filter(([k, v]) => !drop.has(k) && !(v instanceof Date)).map(([k, v]) => [k, deep(v)]));
   };
   const eventTypes = async (projectId: string) =>
     (await testDb().select().from(webhookEvents).where(eq(webhookEvents.projectId, projectId))).map((e) => e.type).sort();
 
-  it("retry gives the same rows, attempts and events either way", async () => {
+  const subscribe = (env: Failed["env"]) =>
+    createEndpoint(env.scope, { url: "http://127.0.0.1:9/x", description: "", events: ["post.published", "post.failed"] });
+  const entries = async (pid: string, id: string) =>
+    (await attemptRows(pid, id)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(scrub);
+  const same = async (a: { pid: string; id: string }, m: { pid: string; id: string }) => {
+    expect(scrub(await targetRow(a.pid, a.id))).toEqual(scrub(await targetRow(m.pid, m.id)));
+    expect(await entries(a.pid, a.id)).toEqual(await entries(m.pid, m.id));
+    expect(await eventTypes(a.pid)).toEqual(await eventTypes(m.pid));
+  };
+
+  const retryBodies: Record<string, unknown>[] = [
+    { mode: "now" },
+    { mode: "requeue" },
+    { mode: "at", at: "2026-10-06T09:00:00+00:00" },
+  ];
+  it.each(retryBodies)("retry %j gives the same rows, attempts and events either way", async (body) => {
     const viaApi = await setup();
     const viaMember = await failedTarget();
-    expect((await viaApi.retry()).status).toBe(200);
-    await atTime(LATER, () => posts.retryTarget(viaMember.env.scope, viaMember.targetId, { mode: "now" }));
-
-    expect(scrub(await targetRow(viaApi.env.project.id, viaApi.targetId))).toEqual(scrub(await targetRow(viaMember.env.project.id, viaMember.targetId)));
-    const entries = async (pid: string, id: string) => (await attemptRows(pid, id)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(scrub);
-    expect(await entries(viaApi.env.project.id, viaApi.targetId)).toEqual(await entries(viaMember.env.project.id, viaMember.targetId));
-    expect(await eventTypes(viaApi.env.project.id)).toEqual(await eventTypes(viaMember.env.project.id));
+    await subscribe(viaApi.env);
+    await subscribe(viaMember.env);
+    const r = await atTime(LATER, () =>
+      api("POST", `/posts/${viaApi.postId}/targets/${viaApi.targetId}/retry`, { key: viaApi.key.secret, body, idem: crypto.randomUUID() }),
+    );
+    expect(r.status).toBe(200);
+    await atTime(LATER, () => posts.retryTarget(viaMember.env.scope, viaMember.targetId, body as Parameters<typeof posts.retryTarget>[2]));
+    await same({ pid: viaApi.env.project.id, id: viaApi.targetId }, { pid: viaMember.env.project.id, id: viaMember.targetId });
   });
 
-  it("resolve gives the same rows, attempts and events either way", async () => {
+  const resolveBodies: [string, Record<string, unknown>, string][] = [
+    ["published", { outcome: "published", url: "https://example.com/p/1" }, "post.published"],
+    ["not_published, requeue false", { outcome: "not_published", requeue: false }, ""],
+    ["not_published, requeue true", { outcome: "not_published", requeue: true }, ""],
+  ];
+  it.each(resolveBodies)("resolve %s gives the same rows, attempts and events either way", async (_n, body, event) => {
     const viaApi = await setup();
     const viaMember = await failedTarget();
-    const a = await resolveVia(viaApi, viaApi.key.secret);
-    expect(a.r.status).toBe(200);
+    await subscribe(viaApi.env);
+    await subscribe(viaMember.env);
+    const amb = await outcomeTarget(viaApi.env, "ambiguous");
+    const before = (await eventTypes(viaApi.env.project.id)).length;
+    const r = await atTime(LATER, () =>
+      api("POST", `/posts/${amb.postId}/targets/${amb.targetId}/resolve`, { key: viaApi.key.secret, body, idem: crypto.randomUUID() }),
+    );
+    expect(r.status).toBe(200);
     const m = await outcomeTarget(viaMember.env, "ambiguous");
-    await atTime(LATER, () => posts.resolveAmbiguous(viaMember.env.scope, m.targetId, { outcome: "not_published", requeue: false }));
-
-    expect(scrub(await targetRow(viaApi.env.project.id, a.amb.targetId))).toEqual(scrub(await targetRow(viaMember.env.project.id, m.targetId)));
-    const entries = async (pid: string, id: string) => (await attemptRows(pid, id)).sort((x, y) => x.createdAt.getTime() - y.createdAt.getTime()).map(scrub);
-    expect(await entries(viaApi.env.project.id, a.amb.targetId)).toEqual(await entries(viaMember.env.project.id, m.targetId));
-    expect(await eventTypes(viaApi.env.project.id)).toEqual(await eventTypes(viaMember.env.project.id));
+    await atTime(LATER, () => posts.resolveAmbiguous(viaMember.env.scope, m.targetId, body as Parameters<typeof posts.resolveAmbiguous>[2]));
+    const after = await eventTypes(viaApi.env.project.id);
+    expect(after.length - before).toBe(event ? 1 : 0);
+    if (event) expect(after).toContain(event);
+    await same({ pid: viaApi.env.project.id, id: amb.targetId }, { pid: viaMember.env.project.id, id: m.targetId });
   });
 });
