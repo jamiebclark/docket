@@ -83,11 +83,11 @@ description: "Task list for 016 — public API to retry, bulk-retry and resolve 
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Create `tests/integration/api/endpoints/resolve-target.test.ts` covering: `published` with and without `url` (+ `post.published` event when the post becomes published); `not_published` `requeue: false` → `status: "failed"` `reason: "not_requeued"`; `requeue: true` → scheduled with `resolved_not_published` then `requeued` entries, and `changedFromPreview` against an offset `expected` (normalised to UTC); no slot → `no_free_slot` (200, target `failed`); gate refused → 409 `cannot_publish`, target still `ambiguous`; failed target → 409 `already_resolved`; bad `url` → 400 at `path: "url"`; `{outcome:"failed"}` → 400; pairing mismatch → 404.
+- [X] T019 [P] [US3] Create `tests/integration/api/endpoints/resolve-target.test.ts` covering: `published` with and without `url` (+ `post.published` event when the post becomes published); `not_published` `requeue: false` → `status: "failed"` `reason: "not_requeued"`; `requeue: true` → scheduled with `resolved_not_published` then `requeued` entries, and `changedFromPreview` against an offset `expected` (normalised to UTC); no slot → `no_free_slot` (200, target `failed`); gate refused → 409 `cannot_publish`, target still `ambiguous`; failed target → 409 `already_resolved`; bad `url` → 400 at `path: "url"`; `{outcome:"failed"}` → 400; pairing mismatch → 404.
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Add `resolvePostTarget` (`POST /posts/{postId}/targets/{targetId}/resolve`, tag `Recovery`, `write_posts`, `idempotent: true`, `resourceParams`) to `src/server/api/operations/targets.ts`: one call `resolveAmbiguous(scope, params.targetId, normalised(body), { postId: params.postId })`, with resolve `expected` normalised to UTC before the call (research P9) and the result mapped to `ResolveTargetResult`. Add the same examples set (200 alternatives/400/401/403/404/409/422/429) as T018. Make T019 pass.
+- [X] T020 [US3] Add `resolvePostTarget` (`POST /posts/{postId}/targets/{targetId}/resolve`, tag `Recovery`, `write_posts`, `idempotent: true`, `resourceParams`) to `src/server/api/operations/targets.ts`: one call `resolveAmbiguous(scope, params.targetId, normalised(body), { postId: params.postId })`, with resolve `expected` normalised to UTC before the call (research P9) and the result mapped to `ResolveTargetResult`. Add the same examples set (200 alternatives/400/401/403/404/409/422/429) as T018. Make T019 pass.
 
 ---
 

@@ -35,6 +35,7 @@ const FIXTURES: Record<string, Fixture> = {
   queuePost: { params: (p) => ({ postId: p.post.id }), body: () => ({}) },
   schedulePost: { params: (p) => ({ postId: p.post.id }), body: () => ({ at: "2030-01-01T10:00:00Z" }) },
   retryPostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }), body: () => ({ mode: "now" }) },
+  resolvePostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }), body: () => ({ outcome: "not_published", requeue: false }) },
   generatePost: { body: (p) => ({ brief: "x", accountIds: [p.account.id] }) },
   listUpcomingSlots: {},
   listJobs: {},
