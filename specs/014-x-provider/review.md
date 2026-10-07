@@ -83,7 +83,7 @@ toward refusing, not toward letting a too-long post through.
               - Add `src/providers/x/tlds.ts` to decisions.md:511.
       traces: plan D12, FR-039
 
-- [ ] MINOR F5 (rounds 1 and 2, unchanged): FR-009's "X could not be reached and nothing changed" never reaches the user
+- [x] MINOR F5 (rounds 1 and 2, unchanged; resolved 2026-10-07 by G18, owner chose the provider's own message): FR-009's "X could not be reached and nothing changed" never reaches the user
       where:  src/providers/x/connect-group.ts:10-11, src/server/services/connect.ts:329
       why:    `handleOAuthCallback` maps every `!result.ok` to the generic `exchange_failed` banner and drops the group's
               `message`. The same happens to the "did not grant offline access" refusal (connect-group.ts:57).

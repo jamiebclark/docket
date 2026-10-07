@@ -54,6 +54,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G13 | `accountNotes?` | 4 |
 | G14 | `defaultPublishLimit` as an array | 8 |
 | G17 | exchangeCode receives state | 4 |
+| G18 | the group's own message in the accounts banner | 4 |
 
 ## 3. Capabilities and counting rules
 
@@ -129,6 +130,12 @@ A group may declare `redirectRequirement: { https, publicHost, reason, doc? }` w
 and a link to `doc`, and starting is refused on the server (the paste form, if any, stays available). Point `doc` at a real file
 and anchor. A group may also set a static `callbackHint`, shown after a failed callback (Threads: the tester-invite reminder); the
 callback carries only the registered group key, so nothing from the platform is reflected.
+
+After a failed callback the banner shows the group's own message, when it gave one (G18): the `message` of a refused
+`exchangeCode`, or that of `describeCallbackError`. It travels sealed (`encryptSecret`, bound to project, group and code,
+10 minutes), so it never appears in the clear in a URL and a crafted link cannot change the banner. Write these messages for
+the user: plain text, secrets scrubbed, at most 500 characters (longer falls back to the generic text). Never echo the
+callback query in them.
 
 ### Account notes (G13)
 
