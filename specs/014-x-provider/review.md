@@ -1,319 +1,255 @@
-# Review: X (formerly Twitter) provider (round 2, after Phase 10 remediation)
+# Review: X (formerly Twitter) provider (round 3, after Phase 11 remediation)
 
-Reviewed 71 file(s) that differ from `main` (merge-base `2c9a1d0`): 31 tracked files changed, plus 40 untracked files.
-HEAD is 4 commits past the base, and all 4 are planning (research, spec, plan, a speckit script fix). **The whole
-implementation, including the Phase 10 remediation, is uncommitted in the working tree.** So this review covers the
-working tree against `2c9a1d0` (`git diff 2c9a1d0` plus the untracked files), not a commit range.
+Reviewed 71 file(s) changed across 9 commit(s), against `2c9a1d0...HEAD` (merge-base with `origin/main`). Unlike round 2,
+the implementation is now committed, in five commits: 802cec4, 95531f5, 8a20fa5, 2afe77a and 7d7dd97. The working tree
+is clean.
 
-This is a **re-review**. The constitution (Engineering constraints, "Review is exhaustive once, then scoped") limits it
-to two questions:
+This is a **scoped re-review**. The constitution says "Review is exhaustive once, then scoped", so this round checks only
+two things:
 
-- Is each round-1 finding fixed?
-- Did the files that remediation changed (T040–T042) introduce a regression?
+- Is each round-2 blocking finding (F1, F2) fixed?
+- Did the files that the Phase 11 remediation (T043, T044) changed introduce a regression?
 
-Anything else I noticed is recorded as MINOR, not BLOCKER/MAJOR.
+Anything else I noticed is recorded as MINOR or NOTE, never as BLOCKER or MAJOR. Rounds 1 and 2 did the exhaustive sweep;
+their full text is in git history (`git show 7d7dd97:specs/014-x-provider/review.md`).
 
-Read in full:
+**Read in full:**
 
-- the remediated files: `src/providers/x/text.ts`, `src/providers/x/text.test.ts`, `docs/x-setup.md`,
-  `tests/integration/docs/x-docs.test.ts`, and the diffs of `README.md`, `docs/accounts.md` and `docs/adding-a-provider.md`;
-- for context, every other source file in `src/providers/x/`:
-  - `config`, `pkce`, `http`, `oauth`, `credentials`, `connect-group`, `refresh`;
-  - `settings`, `tlds`, `capabilities`, `validate`, `state`, `steps`, `publish`, `index`;
-- the diffs of `src/providers/types.ts`, `src/server/services/connect.ts`, `src/providers/registry.ts` (+ test),
-  `scripts/generate-icons.mjs`, `icons.generated.ts`, `prompt.test.ts`, `accounts-ui.test.ts`, `provider-guide.test.ts`,
-  `.env.example`, `unraid/docket.xml`, `docs/decisions.md`, `docs/limits.md`, `docs/index.md`, `mkdocs.yml` and `src/lib/docs.ts`;
-- `tests/helpers/fake-x.ts` and `tests/integration/x/publish-e2e.test.ts`.
+- the files remediation changed: `src/providers/x/text.ts`, `src/providers/x/text.test.ts`,
+  `docs/adding-a-provider.md` §16 (lines 309-334, plus §4 at :100-120 for consistency), and
+  `tests/integration/docs/provider-guide.test.ts`;
+- the code §16 describes: `src/providers/x/pkce.ts`, `src/providers/x/connect-group.ts:35-95`,
+  `src/providers/x/publish.ts:1-120` and `src/providers/x/refresh.ts`;
+- the diff of `.specify/roadmaps/docket.json`, which is new in 7d7dd97.
 
-Read for context:
+**Re-located, not re-reviewed:** the lines cited by the carried MINOR findings F3 to F8. I checked each citation against
+HEAD and updated any that had moved.
 
-- the callers of the counting rule: `src/server/services/posts/{validate,compose}.ts`, `src/server/services/review.ts`
-  and `src/app/p/[projectSlug]/compose/check/route.ts`;
-- `src/lib/validation/scheduling.ts`, `src/components/targets/TargetResolution.tsx` and `src/server/dal/clock.ts`.
+**Not reviewed:** every other file. Round 2 covered them, and remediation did not touch them.
 
-Sampled: `tests/integration/x/connect.test.ts` (the failing assertion and its setup).
+**Executed:**
 
-Not re-read: the round-1 test files that remediation did not touch. They are unchanged, and round 1 covered them.
+- `pnpm vitest run src/providers/x/text.test.ts tests/integration/docs/provider-guide.test.ts tests/integration/docs/x-docs.test.ts`:
+  3 files, 67 tests, all pass.
+- `pnpm vitest run src/providers/x tests/integration/limits tests/integration/docs`: 22 files, 316 tests, all pass.
+- **A timing and differential probe of `text.ts`.** I bundled the current file with esbuild into `$TMPDIR`, and also a copy
+  with the T043 lookahead removed. Then I ran both under node:
+  - 8 adversarial families at 20,000 and 40,000 characters;
+  - a 200,000-string fuzz of short URL-like text.
 
-Executed:
-
-- **Targeted suites:** `pnpm vitest run` on `src/providers/x`, `tests/integration/{x,connect,docs,limits}`, the
-  registry, prompt and accounts-ui tests. Result: 42 files, 448 tests, all pass.
-- **Timing probes of `text.ts`**, esbuild-bundled to `$TMPDIR` and run with node:
-  - the current file;
-  - a one-line prototype fix, with a 200,000-string differential fuzz against the current file.
-- **Full checks**, which the constitution says review should not run:
-  - `pnpm test`: 1 failed, 2,953 passed, 2 skipped;
-  - `npx tsc --noEmit`: clean;
-  - `pnpm lint`: 0 errors, 6 warnings.
-
-  I ran them because the remediation pass said it had not run the full suite on the changed code. I am saying so here
-  so the deviation is visible. The one failure is MINOR F8.
+Per the constitution, I did not run the full suite, lint, typecheck or build. CI could not be read: the sandbox could not
+reach the remote (the `git ls-remote` SSH connection failed, and `gh` failed TLS verification).
 
 ## Verdict
 
-**Not ready to merge. Two blocking items remain, both small to fix. The code otherwise holds up.**
+**Ready to merge. Both round-2 blocking findings are fixed, and the remediation introduced no regression.**
 
-Round-1 F1 (the setup guide) is fixed. Round-1 F2 (provider listings) is fixed except for one paragraph, and that
-paragraph is a problem:
+- **F1 (quadratic scheme-less URL matching) is fixed.** The 253-character hostname lookahead is in place at
+  src/providers/x/text.ts:15. The two inputs round 2 measured at 373 ms and 219 ms now take 19.7 ms and 8.7 ms at 20,000
+  characters. Every family I tried doubles in time when the length doubles (20k → 40k: 19.7 → 30.8 ms, 15.5 → 31.1 ms),
+  so counting is linear. The plan's "Counting is O(length)" (plan.md:77) and the docstring at text.ts:88 are now true.
+- **F2 (§16 PKCE text and 429 rows) is fixed.** The text now matches pkce.ts, §4 of the guide and the G17 decision. A test
+  stops it from regressing.
 
-- **F2 below.** The new X worked example in `docs/adding-a-provider.md` §16 says the PKCE verifier is "kept in the
-  connect attempt's state" and "read from it". That is wrong, and following it would be insecure:
-  - The verifier is an HMAC of the state under the client secret.
-  - The state travels through the browser, so a verifier stored in it would be exposed.
-  - §16 contradicts §4 of the same guide and the G17 decision.
-
-Round-1 F3 (quadratic counting) is only partly fixed:
-
-- **F1 below.** The two inputs the round-1 review named are now fast. But the scheme-less URL regex still restarts after
-  every hyphen inside a chain of dotted labels:
-  - at the 20,000-character cap, crafted text costs about 0.37 s per count and about 1.1 s per `validateX`;
-  - about 1.5 s per X target per `compose/check` request, which needs only `post:view`;
-  - time still quadruples when the length doubles.
-
-  Round 1 prescribed the label-length bound, and that bound does not cover this case, so the gap is in the
-  prescription rather than the implement pass. I measured a one-line bound (253-character hostname lookahead): it is
-  linear and gives identical counts.
-
-Fix those two and this is mergeable. The rest of what is listed is MINOR and can ship.
+What remains is six carried MINORs (F3 to F8) and one new MINOR (F11), a one-cell wording slip in §16. All are safe to
+ship. The only behaviour change from T043 is the overcount on hostnames over 253 characters (NOTE F12), and it errs
+toward refusing, not toward letting a too-long post through.
 
 ## Findings
 
-- [x] MAJOR F1: scheme-less URL matching is still quadratic; T042 is ticked but counting is not O(length)
-      where:  src/providers/x/text.ts:13-16, src/providers/x/text.ts:87, src/providers/x/text.test.ts:72-86, src/providers/x/validate.ts:39-40, src/server/services/posts/compose.ts:69-77, specs/014-x-provider/plan.md:77, specs/014-x-provider/tasks.md:169, docs/adding-a-provider.md:320
-      why:    Round-1 F3 is only partly fixed. `trimUrl` is now linear. The two named inputs now take 2.7 ms and
-              4.3 ms at 20,000 characters, down from 2.8 s and 0.37 s.
-              The new `SCHEMELESS_URL` still matches starting after every `-`, because `-` is not in the lookbehind
-              set. From each such start, `(?:label\.)+` walks the rest of a dotted chain before failing for want of a
-              TLD.
-              Measured on node (bundled `text.ts`) at POST_TEXT_MAX = 20,000 (src/lib/validation/scheduling.ts:35):
-              - 63-character hyphenated labels joined by dots (`(Array(32).fill("a").join("-") + ".").repeat(313)`):
-                countXText 373 ms, hasLinkOrEmoji 371 ms, validateX 1,119 ms.
-              - `"a-a.".repeat(5000)`: countXText 219 ms, validateX 649 ms.
-              - Scaling is quadratic: 10k → 100 ms, 20k → 373 ms, 40k → 1,674 ms.
-              Who pays:
-              - `checkComposition` counts each X target four times (three in validateX, plus compose.ts:77). It needs
-                only `post:view` and accepts a 256 KB body.
-              - So one request with this base text blocks the web process for about 1.5 s per X account in the
-                project. The review page (src/server/services/review.ts:76-86) pays the same on every load of such a
-                draft.
-              What is false as a result:
-              - The plan's "Counting is O(length)" (plan.md:77).
-              - The `text.ts:87` docstring ("Pure, total, linear").
-              - The new guide sentence "The count is linear in the text length" (adding-a-provider.md:320).
-              Why nothing caught it: the regression tests (text.test.ts:72-86) cover only the two inputs round 1
-              named, not the property.
-      owed:   - Bound the work per start position. Measured fix: insert `(?=[a-z0-9.-]{1,253}(?![a-z0-9.-]))` (253 =
-                the DNS maximum hostname length) right after the `(?<![\\p{L}\\p{N}@./_])` lookbehind on text.ts:14.
-                Results with it:
-                - worst case at 20,000 characters drops from 377 ms to 20 ms;
-                - 80,000 characters takes 61 ms, which is linear;
-                - counts and link detection are identical to the current file on 200,000 fuzzed URL-like strings, and
-                  on every input above.
-                An equivalent bound is fine.
-              - Add regression tests at 20,000 characters for the two chain inputs above. Assert the exact count
-                (20,000 each) and that each `countXText` and `hasLinkOrEmoji` call finishes under 250 ms.
-      traces: plan Performance Goals ("Counting is O(length)"), FR-018 (pure, total), round-1 F3 / T042
-
-- [x] MAJOR F2: the new X worked example in the provider guide gets the PKCE design wrong and mislabels the 429 rows
-      where:  docs/adding-a-provider.md:313-315, docs/adding-a-provider.md:328-329, docs/adding-a-provider.md:111-113, src/providers/x/pkce.ts:3-9, src/providers/x/connect-group.ts:46, src/providers/x/publish.ts:45-55, docs/decisions.md:509
-      why:    T041 added §16 to satisfy FR-038's "short X worked example". Round-1 F2 asked it to cover "PKCE via G17".
-              Two parts are wrong:
-              - **PKCE (:313-315).** It says "the verifier is kept in the connect attempt's state. `exchangeCode`
-                receives that `state` (G17), reads the verifier from it".
-                - The code derives it instead: `pkceVerifier(state, clientSecret)` = base64url(HMAC-SHA256(secret,
-                  "docket:x:pkce:v1:" + state)) (pkce.ts:3-9, connect-group.ts:46/52). It is never stored or carried.
-                - §4 of the same guide (:111-113) and the G17 decision (decisions.md:509) both say that.
-                - Why it matters: the state goes through the browser on the authorize redirect and the callback. A
-                  provider author who copies §16 and puts the verifier in the state hands it to anyone who sees the
-                  code, which removes PKCE's protection.
-                - This is the only PKCE example in the guide.
-              - **429 rows (:328-329).** They read "429 within the rate window → notBefore" and "429 with no window
-                left (credits or spending limit) → at least an hour". publish.ts:45-55 does the opposite of what the
-                second label suggests:
-                - `x-rate-limit-remaining: 0` with a readable reset (the window is used up) → wait for the reset;
-                - any other 429 (remaining not 0, or no readable reset) → at least an hour, with the credits message.
-      owed:   - Rewrite the PKCE bullet. The verifier is derived from the state with an HMAC keyed by
-                `X_CLIENT_SECRET`, the same way in `authorizationUrl` and `exchangeCode`. Only its S256 challenge
-                reaches the browser. Nothing is stored.
-              - Relabel the two 429 rows to match publish.ts:45-55.
-              - Extend `tests/integration/docs/provider-guide.test.ts` so §16 must mention the HMAC derivation and must
-                not say the verifier is kept in, or read from, the state.
-      traces: FR-038, round-1 F2, constitution VII (the guide must not teach a verifier leak)
-
-- [ ] MINOR F3: small inaccuracies in the remediated setup and accounts docs
+- [ ] MINOR F3 (round 2, unchanged): small inaccuracies in the setup and accounts docs
       where:  docs/x-setup.md:84, docs/x-setup.md:107-109, docs/x-setup.md:111-114, docs/accounts.md:116-117, docs/accounts.md:119-120
-      why:    - x-setup.md:84 gives `tweet.read` as "to read back the account's posts". Docket reads no posts
-                (FR-032). The research says `tweet.read` is required by `POST /2/tweets` and `GET /2/users/me`
-                (docs/research/x.md:44-50). The implement pass flagged this wording as its own.
-              - The "Not supported" list (:111-114) leaves out Premium long posts. That item is on the spec's
-                out-of-scope list (FR-036 and the Assumptions).
+      why:    - x-setup.md:84 gives `tweet.read` as "to read back the account's posts". Docket reads no posts (FR-032).
+                It is needed for `POST /2/tweets` and `GET /2/users/me` (docs/research/x.md:44-50).
+              - "Not supported" (:111-114) leaves out Premium long posts (FR-036, Assumptions).
               - The ambiguous-post section (:107-109) says "post it again from Docket". It does not name the actual
-                actions, **Mark published** and **Mark not published…** (src/components/targets/TargetResolution.tsx:130-134).
-              - accounts.md:116-117 lists what is stored and ends "Nothing else". The X display name (`name`) is stored
-                too (connect-group.ts:83; connect.test.ts:118 asserts it).
-              - accounts.md:119-120 gives an X Settings menu path that is not in docs/research/x.md.
-      owed:   - Correct the `tweet.read` reason.
+                actions, **Mark published** and **Mark not published…**.
+              - accounts.md:116-117 ends "Nothing else", but the X display name (`name`) is stored too
+                (src/providers/x/connect-group.ts:83).
+              - accounts.md:119-120 gives an X Settings menu path that is not in docs/research/x.md (constitution I).
+      owed:   - Correct the scope reason.
               - Add Premium long posts to "Not supported".
               - Name the two resolve actions.
               - Add the display name to "What is stored".
-              - Either source the X Settings path or reword it generically ("X's connected-apps settings").
+              - Source the menu path or reword it generically.
       traces: FR-036, FR-038, constitution I
 
-- [ ] MINOR F4 (round-1 F4, unchanged): the X folder imports Meta's config; decisions.md claims it does not, and leaves out the TLD list
+- [ ] MINOR F4 (rounds 1 and 2, unchanged): the X folder imports Meta's config, and decisions.md claims it does not
       where:  src/providers/x/config.ts:2, docs/decisions.md:513, docs/decisions.md:511
       why:    - `config.ts` imports `readEnv` from `../meta/config`. That breaks D12 and makes decisions.md:513 false.
               - The interim-choices bullet (:511) still leaves out the TLD list that FR-039 names.
-              - Typecheck would catch a rename, so nothing misbehaves.
-      owed:   - Inline the three-line `readEnv` in the X config.
-              - Add the TLD list (src/providers/x/tlds.ts) to :511.
+              - A rename would be caught by typecheck, so nothing misbehaves.
+      owed:   - Inline the three-line `readEnv` in `src/providers/x/config.ts`.
+              - Add `src/providers/x/tlds.ts` to decisions.md:511.
       traces: plan D12, FR-039
 
-- [ ] MINOR F5 (round-1 F5, unchanged): FR-009's "X could not be reached and nothing changed" never reaches the user
-      where:  src/providers/x/connect-group.ts:10, src/server/services/connect.ts:329
-      why:    `handleOAuthCallback` maps every `!result.ok` to the generic `exchange_failed` banner and drops the
-              group's `message`. The same happens to the "did not grant offline access" refusal (connect-group.ts:57).
+- [ ] MINOR F5 (rounds 1 and 2, unchanged): FR-009's "X could not be reached and nothing changed" never reaches the user
+      where:  src/providers/x/connect-group.ts:10-11, src/server/services/connect.ts:329
+      why:    `handleOAuthCallback` maps every `!result.ok` to the generic `exchange_failed` banner and drops the group's
+              `message`. The same happens to the "did not grant offline access" refusal (connect-group.ts:57).
       owed:   Either a numbered generic change (G18) that lets the banner show a provider's safe message, or a spec
-              amendment that accepts the generic banner. This needs a human decision; it is not urgent.
+              amendment that accepts the generic banner. This needs an owner decision.
       traces: FR-009, US1 AS4
 
-- [ ] MINOR F6 (round-1 F6, unchanged): several ticked test tasks claim more than their tests check
-      where:  tests/integration/x/availability.test.ts:9-23, tests/integration/x/no-secrets.test.ts:91-93, tests/integration/x/publish-e2e.test.ts:94, tests/helpers/fake-x.ts:120
-      why:    - Nothing checks that a start is refused for an unconfigured X group.
-              - The no-secrets test drives only one advance path through the engine.
+- [ ] MINOR F6 (rounds 1 and 2, unchanged): several ticked test tasks claim more than their tests check
+      where:  tests/integration/x/availability.test.ts:9-23, tests/integration/x/no-secrets.test.ts:89-93, tests/integration/x/publish-e2e.test.ts:94, tests/helpers/fake-x.ts:120
+      why:    - Nothing checks that a start is refused for an unconfigured X group (T028).
+              - The no-secrets test drives only one advance path (a 503, then a 201) through the engine (T037).
               - The e2e "ambiguous" test asserts only `not.toBe("published")`.
-              - The fake records only the auth kind, so "publishes with the new token" is not actually checked.
-      owed:   As round 1 listed: a start-refusal test, more advance paths in no-secrets, assert `ambiguous`, and have the
-              fake record which token was presented.
+              - The fake records only the auth kind, not the token presented, so "publishes with the new token" (T027) is
+                not actually checked.
+      owed:   - Add a start-refusal test.
+              - Drive more advance paths in no-secrets.
+              - Assert `ambiguous` exactly.
+              - Have the fake record which token was presented.
       traces: FR-003, FR-033, FR-040, SC-005, SC-008
 
-- [ ] MINOR F7: the docs tests check headings and keywords, not the facts that F2 and F3 got wrong
-      where:  tests/integration/docs/x-docs.test.ts:45-63, tests/integration/docs/provider-guide.test.ts:80-87
-      why:    `x-docs.test.ts` asserts that sections and keywords exist. It does not check the out-of-scope items.
-              `provider-guide.test.ts` checks only the G17 row and the `exchangeCode` signature, so §16 can describe
-              PKCE wrongly and still pass. The F2 remediation task covers the PKCE part.
-      owed:   - Assert the full out-of-scope list in x-docs.test.ts.
-              - Assert the §16 PKCE wording (part of T044).
-      traces: FR-036, FR-038
+- [ ] MINOR F7 (round 2, narrowed): x-docs.test.ts checks that the out-of-scope section exists, not what it lists
+      where:  tests/integration/docs/x-docs.test.ts:45-63
+      why:    The PKCE half of round-2 F7 is resolved: tests/integration/docs/provider-guide.test.ts:99-104 now asserts
+              the HMAC derivation. `x-docs.test.ts` still asserts only the `## Not supported` heading, which is why
+              F3's missing Premium item went unnoticed.
+      owed:   Assert each FR-036 out-of-scope item in x-docs.test.ts.
+      traces: FR-036
 
-- [ ] MINOR F8: the X connect test compares the process clock with the database clock, and failed once under the full suite
+- [ ] MINOR F8 (round 2, unchanged): the X connect test compares the process clock with the database clock
       where:  tests/integration/x/connect.test.ts:92, tests/integration/x/connect.test.ts:124
-      why:    - `before = Date.now()` (process clock) is compared with an expiry derived from `refreshIssuedAt`, which
-                comes from `clock.now()` (Postgres `clock_timestamp()`, src/server/dal/clock.ts:14-15).
-              - In my full run the DB clock was 2 ms behind: "expected 1806906707239 to be greater than or equal to
-                1806906707241".
-              - The file passes 5 of 5 runs alone. It is the same flake class as the Threads paste test noted in
-                round 1, and it can turn CI red at random.
-      owed:   Take `before` from `clock.now()`, or allow a small skew, for example `before - 1000`.
+      why:    - `before = Date.now()` is the process clock. It is compared with an expiry derived from `refreshIssuedAt`,
+                which comes from the DB clock (src/server/dal/clock.ts:14-15).
+              - In a round-2 full run, the DB clock was 2 ms behind and the assertion failed.
+              - It passes on its own, and it passed in my targeted runs, but it can turn CI red at random.
+      owed:   Take `before` from `clock.now()`, or allow a small skew (`before - 1000`).
       traces: FR-040, SC-006
 
-- NOTE F9: Per the owner's standing note on deployment-file changes, `unraid/docket.xml:249-269` gains two optional,
-  empty `<Config>` entries after the Threads fields:
-  - "X Client ID" (`X_CLIENT_ID`, `Mask="false"`);
-  - "X Client Secret" (`X_CLIENT_SECRET`, `Mask="true"`).
+- [ ] MINOR F11 (new, outside remediation scope): §16 says a duplicate 403 shows X's message
+      where:  docs/adding-a-provider.md:332, src/providers/x/publish.ts:100
+      why:    The row "403 duplicate, other 403, other 4xx | `fatal_error` with X's message" is wrong for the duplicate
+              case. publish.ts:100 replaces X's detail with Docket's own "X refused this as a duplicate of a recent
+              post." Only the other 403 and 4xx rows carry X's detail. T044 did not touch this row; I noticed it while
+              checking the rows it did change.
+      owed:   Split the row: "403 duplicate → `fatal_error`, 'X refused this as a duplicate of a recent post.'" and
+              "other 403, other 4xx → `fatal_error` with X's detail".
+      traces: FR-038
 
-  Both are `Display="advanced"` and `Required="false"`. `docker-compose.yml` is unchanged.
+- NOTE F9 (carried): per the owner's standing note on deployment files, `unraid/docket.xml` gains two optional, empty
+  `<Config>` entries after the Threads fields: "X Client ID" (`X_CLIENT_ID`, `Mask="false"`) and "X Client Secret"
+  (`X_CLIENT_SECRET`, `Mask="true"`). Both are `Display="advanced"` and `Required="false"`. `docker-compose.yml` is
+  unchanged, so the owner's copied compose file needs no edit.
 
-- NOTE F10: `refresh.ts` still classifies a refusal by parsing `oauth.ts`'s human-readable `reason`:
-  - the code regex at refresh.ts:26;
-  - the `"HTTP 429"` check at refresh.ts:28.
+- NOTE F10 (carried): src/providers/x/refresh.ts:26 and :28 classify a refusal by parsing `oauth.ts`'s human-readable
+  `reason`. It works, and refresh.test.ts would catch a wording change. A typed `code` and `status` on `XOAuthFailure`
+  would be sturdier.
 
-  It works, and `refresh.test.ts` would catch a wording change. A typed `code`/`status` on `XOAuthFailure` would be
-  sturdier.
+- NOTE F12 (new, from checking T043): the hostname bound changes the count for one class of input, and errs toward
+  refusing. The class is a run of `[a-z0-9.-]` longer than 253 characters with no permitted start in its last 253
+  characters (src/providers/x/text.ts:15). Such text is now counted as plain text instead of as one link:
+  - `"a.".repeat(130) + "com"` counts 263, where the pre-T043 regex gave 23;
+  - `"com.".repeat(5000)` counts 20,000, where it gave 24.
 
-## Round-1 findings, re-checked
+  Such a hostname is not valid DNS. The change can only make Docket refuse a post X might accept, never the reverse.
+  Every realistic case agrees with the pre-T043 regex: the 200,000-string fuzz (0 differences) and a 251-character
+  hostname inside a sentence. No action is needed unless twitter-text is later found to link such strings.
 
-| Round 1 | Status | Evidence |
+- NOTE F13: the implementation landed as one 40-file `feat(providers): add the X provider` commit (95531f5, 3,181
+  insertions). The constitution's workflow asks for a commit per task, or per small group of related tasks. Nothing
+  misbehaves, and semantic-release still sees one correct `feat`. I am recording it because a 40-file commit is harder to
+  bisect or revert piecemeal. Rewriting history is not worth it at this point.
+
+## Round-2 blocking findings, re-checked
+
+| Round 2 | Status | Evidence |
 |---|---|---|
-| F1 MAJOR: x-setup.md missing FR-036 content | **Fixed** | Present now: cost and credits with the 2026-10-06 figures and promo credits (x-setup.md:17-32); credits running out (:34-37); scope reasons (:82-88); alt text 1,000 and drift (:97-100); the ambiguous check (:105-109); out of scope (:111-114); the duplicate sentence (:103). x-docs.test.ts:45-63 asserts them. Small leftovers are MINOR F3. |
-| F2 MAJOR: X missing from provider listings | **Partly fixed** | README docs table (README.md:111), Connecting accounts (:119-120), Going live (:45-46) and the guide line (:129) now list X. accounts.md has "what is stored" and the mocks-only line (:116-118). The §16 worked example exists, but its PKCE text is wrong (**F2**). |
-| F3 MAJOR: quadratic counting | **Partly fixed** | `trimUrl` is linear, and both named inputs are fast. Hyphenated label chains are still quadratic (**F1**). |
-| F4–F6 MINOR | Unchanged, as expected | Not given remediation tasks. Carried as F4–F6. |
-| F7–F9 NOTE | Unchanged | The Unraid and refresh-parsing notes are carried. The Threads flake did not recur in this run. |
+| F1 MAJOR: scheme-less URL matching quadratic | **Fixed** | See the details below this table. |
+| F2 MAJOR: §16 PKCE text and 429 rows | **Fixed** | See the details below this table. |
 
-Remediation regressions checked:
+**F1, the lookahead.** `(?=[a-z0-9.-]{1,253}(?![a-z0-9.-]))` sits immediately after the lookbehind (src/providers/x/text.ts:15),
+as T043 prescribed, so each start position does at most 253 characters of work. Timings at 20,000 and 40,000 characters,
+for `countXText` and `hasLinkOrEmoji` alike:
 
-- **`text.ts`.** The label rule `[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?` now refuses labels that end in `-` or run longer
-  than 63 characters. That is real DNS behaviour, and any drift is covered by the 270 warning. Every corpus count is
-  unchanged.
-- **`x-docs.test.ts`, README, `accounts.md`.** No regression beyond F3. `pnpm vitest run tests/integration/docs` passes.
+| Family | 20,000 chars | 40,000 chars |
+|---|---|---|
+| hyphen-dot chain | 19.7 ms | 30.8 ms |
+| `a-a.` | 8.7 ms | 17.3 ms |
+| `a-` | 15.5 ms | 31.1 ms |
+| upper-case chain | 15.3 ms | 29.9 ms |
+| `-a.a` | 8.6 ms | 16.5 ms |
+| the other three families | ≤ 2.3 ms | ≤ 4.5 ms |
+
+**F1, the tests.** text.test.ts:88-99 adds both inputs that T043 named. Each asserts length 20,000, a count of 20,000,
+`hasLinkOrEmoji` false, and under 250 ms per call. The 250 ms ceiling is about 12× the measured time, so it is unlikely to
+flake. All 37 corpus counts are unchanged.
+
+**F2, the PKCE text.** §16 (docs/adding-a-provider.md:313-316) says the verifier is never stored and is derived in both
+calls as base64url(HMAC-SHA256(`X_CLIENT_SECRET`, "docket:x:pkce:v1:" + state)). Only its S256 challenge reaches the
+browser, and it is sent with Basic client auth. That matches:
+
+- src/providers/x/pkce.ts:7-9;
+- connect-group.ts:46 and :52;
+- the guide's §4 (:111-113);
+- docs/decisions.md:509.
+
+**F2, the 429 rows.** docs/adding-a-provider.md:329-330 match `rateLimitedResult` (src/providers/x/publish.ts:45-55):
+
+- `remaining === 0` with a reset → `notBefore` at the reset;
+- otherwise → `max(reset, now + 1 h)`.
+
+**F2, the test.** provider-guide.test.ts:99-104 asserts the HMAC text and rejects "verifier is kept in" and "reads the
+verifier from". It cannot pass vacuously: if the §16 heading moved, `indexOf` would return -1 and the HMAC match would
+fail.
+
+Regression check of the remediated files:
+
+- **`text.ts`.** The only behaviour change is NOTE F12, and it errs toward refusing. The callers, `validate.ts:39-40`,
+  `publish.ts:74` and `capabilities.ts:10`, use the same signatures. `src/providers/x` and `tests/integration/limits` pass.
+- **`docs/adding-a-provider.md`.** §4 and §16 now agree. The other §16 bullets are consistent with the code:
+  - the refresh hold is `X_REFRESH_RETRY_MS` = 5 minutes (src/providers/x/config.ts:18);
+  - `invalid_grant` is permanent, and 429 and network errors are transient (src/providers/x/refresh.ts:24-40).
+
+  The one exception is the duplicate cell, MINOR F11.
+- **`provider-guide.test.ts`.** The new test is additive, and all earlier assertions are unchanged.
 
 ## Coverage
 
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements | 40 | 37 | 3 | 0 | 0 |
+| Functional requirements | 40 | 38 | 2 | 0 | 0 |
 | Success criteria | 9 | 9 | 0 | 0 | 0 |
 | Acceptance scenarios (US1–US6) | 29 | 29 | 0 | 0 | 0 |
 | Constitution principles (I–VII) | 7 | 7 | 0 | 0 | 0 |
-| Plan constraints | 10 | 8 | 0 | 0 | 2 |
-| Round-1 blocking findings | 3 | 1 | 2 | 0 | 0 |
+| Plan constraints | 10 | 9 | 0 | 0 | 1 |
+| Round-2 blocking findings | 2 | 2 | 0 | 0 | 0 |
 
 How to read the rows:
 
-- **Partial FRs:**
-  - FR-009 (F5, generic banner);
-  - FR-038 (F2: the worked example is wrong on PKCE);
-  - FR-039 (F4: TLD list missing, D12 claim false).
-- **FR-036 counts as satisfied.** Every listed topic is now covered. F3's leftovers (a wrong scope reason, one missing
-  out-of-scope item) are wording defects that are safe to ship.
-- **US5 AS4 counts as satisfied** for the same reason.
-- **Plan constraints:**
-  - Satisfied:
-    - no new dependency;
-    - no schema change;
-    - one registry line;
-    - G17 limited to `types.ts` and `connect.ts`, and passed only after `consumeState` (connect.ts:296, 319-325);
-    - `create_post` is the only `mayPublish` step;
-    - no provider I/O in a transaction;
-    - no sleeps or loops in `advance`;
-    - secrets kept out of state and summaries.
-  - Contradicted:
-    - D12, which allows no other-provider imports (F4);
-    - "Counting is O(length)" (F1).
-- **Constitution I** holds for endpoints, scopes and limits, which all trace to docs/research/x.md. The one unsourced X
-  UI path is MINOR F3.
-- **Constitution VII:** the code holds. F2 is a doc that would mislead a future provider author; it is not a leak in
-  this code.
-- **Engineering constraint "runTick bounded"** holds. Over-280 text is refused at scheduling, so F1's cost lands on the
-  web process, not the worker.
+- **These rows are round 2's assessment, updated only for what this round re-checked.** In this scoped round I did not
+  re-verify each FR, SC or scenario independently.
+- **FR-038 moves from Partial to Satisfied.** §16 is now correct on PKCE and 429. F11 is a one-cell wording slip.
+- **The two Partial FRs:**
+  - FR-009, the generic banner (F5);
+  - FR-039, the TLD list missing from decisions.md (F4).
+- **Plan constraints:** "Counting is O(length)" moves to Satisfied (F1 fixed). D12 ("no other-provider imports") is still
+  contradicted, by F4. That is MINOR because nothing misbehaves and typecheck guards it.
+- **Constitution I:** the one unsourced X UI path (F3) does not affect any endpoint, scope or limit. **Constitution VII:**
+  the guide no longer teaches a verifier leak.
 
 ## What I could not check
 
-- **The live X API**, by design: the owner owes no live check. Everything below is verified only against the fake:
+- **CI on the PR.** The sandbox could not reach the remote (the SSH connection failed, and `gh` failed TLS verification),
+  so I could not read CI results for these commits. Round 2's full run (`pnpm test`: 1 flaky failure, F8; tsc clean; lint
+  0 errors) was against the uncommitted tree, before T043 and T044. The scoped re-check recorded in 7d7dd97 reports
+  typecheck and lint clean after them. A human should confirm CI is green before merging.
+- **The live X API**, by design: the owner does not use X, and no live check is owed. Verified against the fake only:
   - endpoint shapes;
   - the duplicate, 429 and 401 bodies;
-  - refresh-token rotation and lifetime;
+  - refresh rotation and lifetime;
   - media processing states;
   - the post URL (U1–U9).
-- **`pnpm build`**, which writes `.next/` outside this phase's write scope. That means two things are unverified:
-  - that the `node:crypto` import in `authorizationUrl` works in the Next proxy runtime (research F3);
-  - that the worker bundle builds with the new folder.
-
-  The round-1 T039 claimed a passing build. The remediation pass ran only targeted tests and tsc, but it changed no
-  import or boundary.
-- **`pnpm db:check`**, which was not run. No schema file is in the diff.
-- **Real undici error shapes** for the `not_sent` / `lost` split (src/providers/x/http.ts:36-46). The fake throws
-  synthetic errors of that shape.
-- **Browser flows:**
-  - the Accounts screen's **Connect X**, the "not configured" notice and the G10 reason;
-  - the chooser;
-  - the X mark in the composer and account picker.
-
-  Only server-rendered `ProviderIcon` and service outcomes are tested.
-- **Counting accuracy against twitter-text or X itself.** No reference implementation was available. The F1 prototype
-  was compared with the current file, not with X.
-- **How a 1.5 s `compose/check` stall feels in production.** The numbers above come from node on this machine, not
-  from the deployed image or the Unraid host.
-- **The rendered mkdocs site** and the Unraid template UI.
-
-## Round 2 findings, re-checked (scoped, front end, 2026-10-07)
-
-Owner policy: one exhaustive review, then a scoped check of the fixes only. This checks F1 and F2 above and nothing else.
-
-| Finding | Status | Evidence |
-|---|---|---|
-| F1 MAJOR: scheme-less URL matching quadratic | **Fixed** | The 253-character hostname lookahead prescribed above is now at the start of `SCHEMELESS_URL` (src/providers/x/text.ts). On `(Array(32).fill("a").join("-") + ".").repeat(313).slice(0, 20000)`, the same text with the lookahead removed counts 20000 in 412 ms; with it, 20000 in 16 ms. Regression tests for that input and `"a-a.".repeat(5000)` assert count 20000, `hasLinkOrEmoji` false, and under 250 ms each (text.test.ts). Every earlier count is unchanged. |
-| F2 MAJOR: §16 PKCE text and 429 rows | **Fixed** | §16 now says the verifier is derived as base64url(HMAC-SHA256(`X_CLIENT_SECRET`, "docket:x:pkce:v1:" + state)) in both calls and never stored, which matches §4, decisions.md G17 and pkce.ts. The two 429 rows match `rateLimitedResult` in publish.ts. provider-guide.test.ts asserts the HMAC text and that §16 does not say the verifier is kept in or read from the state. |
-
-Checks: `pnpm vitest run src/providers/x tests/integration/docs` passed 255 of 255 tests in 21 files. `pnpm typecheck` was clean. `pnpm lint` reported 0 errors.
+- **`pnpm build`**, which writes `.next/` outside this phase's write scope. That leaves two things unverified here: the
+  `node:crypto` import in `authorizationUrl` under the Next runtime, and the worker bundle with the new folder.
+  Remediation changed no import or boundary.
+- **Counting accuracy against twitter-text or X itself.** No reference implementation is available. My probe compared
+  the current file with its own pre-T043 version, not with X. That matters most for NOTE F12.
+- **Browser flows:** the Accounts screen's **Connect X**, the "not configured" notice and the G10 reason, the chooser,
+  and the X mark in the composer and account picker.
+- **Real undici error shapes** for the not-sent / lost split (src/providers/x/http.ts:36-46).
+- **Timing on the deployed image or the Unraid host.** All the numbers above are node on this machine.
