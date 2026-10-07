@@ -185,3 +185,10 @@ description: "Task list for 016 — public API to retry, bulk-retry and resolve 
 - **MVP**: Phases 1–3 (US1): single retry through the API with attribution plumbing in place.
 - Then US2 (refusals), US3 (resolve), US4 (bulk), then the cross-cutting verification stories US5–US7, then Polish.
 - Tick tasks as they finish; commit after each logical group.
+
+---
+
+## Phase 11: Review remediation
+
+- [ ] T036 Add a per-target retry limit to the "7. Recover failed posts" recipe: the automation keeps its own counter per `targetId` (for example n8n workflow static data), stops after N tries (say 3) and alerts a person, with one sentence on why Docket's attempt count cannot be used (it resets on every retry and each `post.failed` has a new event id, so a new `Idempotency-Key`) — review F1 (MAJOR), docs/n8n.md:115-137 (makes docs/decisions.md:613 P14 accurate)
+- [ ] T037 Make the webhook assertions able to fail and widen the side-by-side parity: in `recovery-idempotency.test.ts` and `recovery-attribution.test.ts` subscribe a webhook endpoint to `post.published` and `post.failed` (API env and member env), assert a non-zero expected event count where status changes (resolve `published` → `post.published`, resolve `not_published`/`requeue:false` → `post.failed`) so the replay leg checks "no second event", and add parity cases for retry `requeue` and `at` and resolve `published` and `not_published`/`requeue:true` — review F2 (MAJOR), tests/integration/api/endpoints/recovery-idempotency.test.ts:18-25, tests/integration/api/endpoints/recovery-attribution.test.ts:137-163
