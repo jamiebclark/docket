@@ -36,9 +36,10 @@ interface Block {
   body: string;
 }
 
-/** The fenced ```http blocks of docs/n8n.md, parsed into requests (template variables left in place). */
+/** The fenced ```http blocks of the generate-and-queue flow in docs/n8n.md (everything before the recovery section), parsed into requests (template variables left in place). */
 function readBlocks(): Block[] {
-  const md = readFileSync(resolve(__dirname, "../../../docs/n8n.md"), "utf8");
+  const full = readFileSync(resolve(__dirname, "../../../docs/n8n.md"), "utf8");
+  const md = full.slice(0, full.indexOf("## 7. Recover failed posts"));
   return [...md.matchAll(/```http\n([\s\S]*?)```/g)].map((m) => {
     const [head = "", ...rest] = (m[1] ?? "").trimEnd().split(/\n\n/);
     const [requestLine = "", ...headerLines] = head.split("\n");

@@ -162,8 +162,8 @@ description: "Task list for 016 — public API to retry, bulk-retry and resolve 
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T034 Run the final pass once, synchronously: `pnpm lint < /dev/null && pnpm typecheck < /dev/null && pnpm test < /dev/null && pnpm db:check < /dev/null && pnpm build < /dev/null`. Fix any failure (including the 012/015 suites, which prove FR-003).
-- [ ] T035 Confirm no operation imports a DAL or raw DB module (`tests/lint/api-imports.test.ts` green) and that `git status` shows only intended files; commit with explicit paths.
+- [X] T034 Run the final pass once, synchronously: `pnpm lint < /dev/null && pnpm typecheck < /dev/null && pnpm test < /dev/null && pnpm db:check < /dev/null && pnpm build < /dev/null`. Fix any failure (including the 012/015 suites, which prove FR-003).
+- [X] T035 Confirm no operation imports a DAL or raw DB module (`tests/lint/api-imports.test.ts` green) and that `git status` shows only intended files; commit with explicit paths.
 
 ---
 
