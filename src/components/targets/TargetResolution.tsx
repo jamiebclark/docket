@@ -5,13 +5,15 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { controlStyles, hintStyles, labelStyles } from "@/components/ui/controls";
+import { useAnnounce } from "@/components/ui/Announce";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { ActionResult } from "@/lib/action-result";
 import type { FailureActions, RequeuePreview } from "@/server/services/failures";
 import type { ResolveResult } from "@/server/services/posts";
-import { cancelTargetAction, previewRequeueAction, resolveTargetAction, retryTargetAction } from "@/app/p/[projectSlug]/posts/actions";
+import { RetryDialog } from "./RetryDialog";
+import { cancelTargetAction, previewRequeueAction, resolveTargetAction } from "@/app/p/[projectSlug]/posts/actions";
 
-type Kind = "cancel" | "published" | "not-published" | null;
+type Kind = "cancel" | "published" | "not-published" | "retry" | null;
 
 function announce(result: ResolveResult): string {
   if (result.status === "published") return "Marked published.";
@@ -29,7 +31,9 @@ function announce(result: ResolveResult): string {
 export function TargetResolution({
   slug,
   targetId,
+  accountId,
   accountName,
+  timeZone,
   status,
   actions,
   canSchedule,
@@ -37,7 +41,9 @@ export function TargetResolution({
 }: {
   slug: string;
   targetId: string;
+  accountId: string;
   accountName: string;
+  timeZone: string;
   status: string;
   actions: FailureActions;
   canSchedule: boolean;
@@ -48,7 +54,9 @@ export function TargetResolution({
   const [urlError, setUrlError] = useState("");
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<RequeuePreview | "loading" | null>(null);
-  const [message, setMessage] = useState("");
+  const [localMessage, setLocalMessage] = useState("");
+  const ctx = useAnnounce();
+  const setMessage = (text: string) => (ctx ? ctx.announce(text) : setLocalMessage(text));
   const [pending, start] = useTransition();
 
   if (!canSchedule) return variant === "row" ? <span className="text-sm">View only</span> : null;
@@ -104,15 +112,9 @@ export function TargetResolution({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <LiveRegion message={message} />
+      {ctx ? null : <LiveRegion message={localMessage} />}
       {status === "failed" && actions.canRetry ? (
-        <Button
-          pending={pending}
-          pendingLabel="Retrying…"
-          onClick={() => run(() => retryTargetAction(slug, { targetId }), () => setMessage("Retry queued for the next tick."))}
-        >
-          Retry
-        </Button>
+        <Button onClick={() => setOpen("retry")}>Retry…</Button>
       ) : null}
       {status === "failed" && actions.retryBlockedReason ? (
         <span className="text-sm">
@@ -134,6 +136,19 @@ export function TargetResolution({
         </Button>
       ) : null}
       {error && !open ? errorLine : null}
+
+      {open === "retry" ? (
+        <RetryDialog
+        open
+        onClose={close}
+        onDone={() => undefined}
+        slug={slug}
+        targetId={targetId}
+        accountId={accountId}
+        accountName={accountName}
+        timeZone={timeZone}
+      />
+      ) : null}
 
       <Dialog open={open === "cancel"} onClose={close} title={`Cancel the post to ${accountName}?`}>
         <p className="text-sm">It won&apos;t be published to this account. Other accounts are not affected.</p>

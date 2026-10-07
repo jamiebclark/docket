@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as posts from "@/server/services/posts";
+import { AnnounceProvider } from "@/components/ui/Announce";
 import { TargetResolution } from "@/components/targets/TargetResolution";
 import { safeExternalHref } from "@/lib/safe-redirect";
 import { DeletePostButton } from "./DeletePostButton";
@@ -49,6 +50,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
   const started = view.targets.some((t) => ["publishing", "published", "ambiguous"].includes(t.status));
 
   return (
+    <AnnounceProvider focusFallbackId="page-title">
     <article className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -57,7 +59,9 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
               Posts
             </Link>
           </p>
-          <h1 className="mt-1 text-2xl font-semibold">Post</h1>
+          <h1 id="page-title" tabIndex={-1} className="mt-1 text-2xl font-semibold">
+            Post
+          </h1>
           <p className="mt-1">
             <StatusBadge status={view.post.status} />
           </p>
@@ -161,7 +165,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
           ) : null}
 
           <div className="mt-3">
-            <TargetResolution slug={projectSlug} targetId={t.id} accountName={t.accountName} status={t.status} actions={t.actions} canSchedule={canSchedule} variant="detail" />
+            <TargetResolution slug={projectSlug} targetId={t.id} accountId={t.accountId} timeZone={tz} accountName={t.accountName} status={t.status} actions={t.actions} canSchedule={canSchedule} variant="detail" />
           </div>
 
           <h3 className="mt-4 text-sm font-semibold">Attempts</h3>
@@ -205,5 +209,6 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
         </section>
       ))}
     </article>
+    </AnnounceProvider>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { explicitTimeText } from "@/components/schedule/explicit-time-text";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { formatLocal } from "@/components/ui/LocalTime";
@@ -155,13 +156,6 @@ function Outcomes({ rows, names, timeZone, verb }: { rows: Outcome[]; names: Rec
   );
 }
 
-function previewText(p: ExplicitPreview, timeZone: string): string {
-  const at = formatLocal(p.instant, timeZone);
-  if (p.kind === "gap") return `That time does not exist on that day (clocks skip forward); it will post at ${p.resolvedLocal.slice(11)} instead. ${at}`;
-  if (p.kind === "overlap") return `That time happens twice on that day (clocks go back); the earlier one is used. ${at}`;
-  return at;
-}
-
 /** "Schedule…": a local date and time in the project zone, resolved and previewed on the server before anything is saved. */
 export function ScheduleAtDialog({
   open,
@@ -237,7 +231,7 @@ export function ScheduleAtDialog({
             <Field id="schedule-time" label={`Time (${timeZone})`} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             {error ? <p role="alert">{error}</p> : null}
             {preview?.inPast ? <p role="alert">That time has passed. Pick a later time, or use Publish now.</p> : null}
-            {preview && !preview.inPast ? <p>{previewText(preview, timeZone)}</p> : null}
+            {preview && !preview.inPast ? <p>{explicitTimeText(preview, timeZone)}</p> : null}
             {preview?.warnings.map((w, n) => (
               <p key={n} className="text-warning">
                 {w.message}
