@@ -27,6 +27,7 @@ export async function withLockedTarget<T>(
   targetId: string,
   permission: Parameters<ProjectScope["can"]>[0],
   fn: (tx: Tx, post: PostRecord, target: TargetRecord, now: Date) => Promise<T>,
+  opts?: { postId?: string },
 ): Promise<T> {
   const id = uuid.parse(targetId);
   need(scope, permission);
@@ -34,6 +35,8 @@ export async function withLockedTarget<T>(
     need(tx, permission);
     const first = await tx.targets.get(id);
     if (!first) throw new NotFoundError();
+    // A target addressed through a post path must belong to that post: refuse before any lock or write.
+    if (opts?.postId !== undefined && first.postId !== opts.postId) throw new NotFoundError();
     const post = await lockPost(tx, first.postId);
     const target = await tx.targets.get(id);
     if (!target) throw new NotFoundError();

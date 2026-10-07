@@ -1,0 +1,4 @@
+ALTER TABLE "publish_attempts" ADD COLUMN "actor_api_key_id" uuid;--> statement-breakpoint
+ALTER TABLE "post_targets" ADD COLUMN "resolved_by_api_key_id" uuid;--> statement-breakpoint
+ALTER TABLE "publish_attempts" ADD CONSTRAINT "publish_attempts_api_key_fk" FOREIGN KEY ("project_id","actor_api_key_id") REFERENCES "public"."api_keys"("project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "post_targets" ADD CONSTRAINT "post_targets_resolver_api_key_fk" FOREIGN KEY ("project_id","resolved_by_api_key_id") REFERENCES "public"."api_keys"("project_id","id") ON DELETE no action ON UPDATE no action;

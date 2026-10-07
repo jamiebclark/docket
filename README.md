@@ -8,7 +8,7 @@ belongs to exactly one project.
 
 - **Compose, calendar and posts.** Write a post, pick accounts and images, see live per-account checks, then save a draft, queue,
   schedule or publish now. Month and week calendar views with drag and drop and keyboard alternatives. Retry, cancel and resolve
-  ambiguous targets from the posts screen. Retrying a failed post can go now, to the next free slot, or at a chosen time, and Retry all failed does it for every failed post at once; see [docs/failures.md](docs/failures.md).
+  ambiguous targets from the posts screen. Retrying a failed post can go now, to the next free slot, or at a chosen time, and Retry all failed does it for every failed post at once; see [docs/failures.md](docs/failures.md). The same actions are available over the API.
 - **Media.** Upload, tag and add alt text. Images are converted, downscaled or compressed to each platform's rules.
 - **Generator.** Draft posts with OpenAI or Anthropic from a voice profile and a brief, then review and approve them. Batch jobs
   from images or a CSV. See [docs/generator.md](docs/generator.md).

@@ -69,6 +69,7 @@ Set the HTTP Request node to retry on failure (3 tries, 2–5 seconds apart) and
 | Status | Code | What to do |
 |---|---|---|
 | 409 | `idempotency_in_progress` | The first attempt is still running. Wait for `Retry-After` seconds and retry with the same key |
+| 409 | `conflict` with `details.reason` | A recovery call was refused and nothing was written. `publishing`: wait and retry. `not_failed` or `already_resolved`: nothing to do. `account_removed`, `needs_reconnecting`, `provider_unavailable`, `cannot_publish`: alert a person |
 | 422 | `idempotency_key_reused` | The same key was sent with a different body. Fix the key derivation. Do not retry as is |
 | 422 | `generation_failed` | The model's output was unusable. Retry with a **new** key (for example `generate-{{row.id}}-2`) |
 | 429 | `rate_limited` | Wait for `Retry-After` seconds, then retry the same request |
@@ -110,3 +111,29 @@ module.exports = verify;
 ```
 
 In an n8n **Code** node, enable raw body on the Webhook node, then call the same function with `$json.headers["docket-signature"]`, `$json.headers["docket-timestamp"]` and the raw body string.
+
+## 7. Recover failed posts
+
+Retry and resolve are available over the API with a key holding `write_posts`. Build the flow like this:
+
+1. Subscribe a webhook endpoint to `post.failed` and verify the signature (section 6).
+2. `GET {{base}}/api/v1/posts/{{postId}}` and look at each target's `status`.
+3. For each target that is `failed`, call retry with an `Idempotency-Key` derived from the event id and the target id, so a redelivered event replays instead of retrying twice:
+
+```http
+POST {{base}}/api/v1/posts/{{postId}}/targets/{{targetId}}/retry
+Authorization: Bearer {{key}}
+Content-Type: application/json
+Idempotency-Key: retry-{{event.id}}-{{targetId}}
+
+{"mode":"now"}
+```
+
+`mode` is `now` (publish on the next tick), `requeue` (next free slot; send `expected` to learn whether the time moved) or `at` (an RFC 3339 instant with an offset). A refusal such as `no_active_slots` comes back as `200` with `status: "failed"` and a `reason`.
+
+   **Cap the retries.** Keep your own counter per `targetId` (for example in n8n workflow static data), stop after N tries (say 3) and alert a person. Docket's attempt count cannot serve as the limit: it resets on every retry, and each `post.failed` event has a new event id, so every retry gets a new `Idempotency-Key`.
+
+4. **Never retry an `ambiguous` target.** Docket does not know whether it was published. Alert a person, or resolve it with `POST …/targets/{{targetId}}/resolve` and `{"outcome":"published","url":"…"}` or `{"outcome":"not_published","requeue":true}` once someone has checked the platform.
+5. To retry everything at once, call `POST {{base}}/api/v1/targets/retry-failed` with `{"mode":"now"}` (add `accountId` to limit it to one account). Each call handles a capped batch. While the answer shows `remaining > 0`, call again with a **new** `Idempotency-Key`, because the same key replays the first answer.
+
+The action is recorded in the attempt log as "API key {name}". Branch on the 409 `details.reason` values listed in section 4.

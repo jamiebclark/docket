@@ -47,3 +47,7 @@ Retry is disabled, with the reason shown, when:
 - you do not have permission to schedule posts in the project.
 
 If someone else retries or resolves the target while your dialog is open, confirming reports "This post is no longer failed." instead of scheduling a second attempt.
+
+## Through the API
+
+Retry, resolve and Retry all failed are also available over the public API with a key holding `write_posts`; the rules are the same as above. The attempt log shows those actions as "API key {name}". See the recipe in [n8n.md](n8n.md#7-recover-failed-posts).

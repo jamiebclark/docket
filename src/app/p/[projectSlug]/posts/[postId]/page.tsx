@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { attemptActorLabel } from "@/lib/failures/attempt-actor";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
@@ -194,7 +195,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
                       {a.outcome.replaceAll("_", " ")}
                       {a.error ? <div className="text-danger">{a.error}</div> : null}
                     </td>
-                    <td className="px-2 py-1">{a.actor.kind === "member" ? a.actor.name : "System"}</td>
+                    <td className="px-2 py-1">{attemptActorLabel(a.actor)}</td>
                     <td className="px-2 py-1">
                       <Pairs value={a.request} />
                     </td>

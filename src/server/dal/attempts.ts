@@ -15,6 +15,7 @@ export interface AttemptEntry {
   durationMs?: number | null;
   tickId?: string | null;
   actorUserId?: string | null;
+  actorApiKeyId?: string | null;
   /** The clock's `now`, so tests and the engine agree on time. */
   at: Date;
 }
@@ -41,6 +42,7 @@ export function createAttemptsRepo(db: Database, projectId: string): AttemptsRep
         durationMs: entry.durationMs ?? null,
         tickId: entry.tickId ?? null,
         actorUserId: entry.actorUserId ?? null,
+        actorApiKeyId: entry.actorApiKeyId ?? null,
         createdAt: entry.at,
       });
     },

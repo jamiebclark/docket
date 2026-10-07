@@ -4,7 +4,7 @@ import type { ValidationIssue } from "@/providers/types";
 import { atSchema } from "@/lib/validation/scheduling";
 import type { AccountRecord } from "../../dal/accounts";
 import { ConflictError } from "../../dal/errors";
-import type { ProjectScope } from "../../dal/scope";
+import { attemptActor, type ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
 import { allocateNextFree, nearQueuedWarnings, plannedTime, type Warning } from "../queue";
 import { gate } from "./gate";
@@ -69,11 +69,12 @@ export function retryBlockedReason(account: AccountRecord | null, providerRegist
  * The caller does the permission check, the locking and `applyDerivedStatus`.
  */
 export async function retryLockedTarget(tx: Tx, target: TargetRecord, now: Date, input: RetryInput): Promise<RetryResult> {
-  if (target.status === "publishing") throw new ConflictError("Publishing in progress. Try again in a moment.");
-  if (target.status !== "failed") throw new ConflictError("This post is no longer failed.");
+  if (target.status === "publishing") throw new ConflictError("Publishing in progress. Try again in a moment.", { reason: "publishing" });
+  if (target.status !== "failed") throw new ConflictError("This post is no longer failed.", { reason: "not_failed" });
   const account = await tx.accounts.get(target.socialAccountId);
-  const blocked = retryBlockedReason(account, !!account && !!findProvider(account.providerKey));
-  if (blocked) throw new ConflictError(blocked);
+  const providerRegistered = !!account && !!findProvider(account.providerKey);
+  const blocked = retryBlockedReason(account, providerRegistered);
+  if (blocked) throw new ConflictError(blocked, { reason: retryBlockedKey(account, providerRegistered)! });
   if (input.mode === "requeue") return requeueTarget(tx, target, account!.displayName, now, input.expected);
   if (input.mode === "at") return retryAtTime(tx, target, now, new Date(input.at));
   const updated = await tx.targets.update(
@@ -89,8 +90,8 @@ export async function retryLockedTarget(tx: Tx, target: TargetRecord, now: Date,
     },
     { statuses: ["failed"] },
   );
-  if (!updated) throw new ConflictError("This post is no longer failed.");
-  await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "retry_requested", actorUserId: tx.membership.userId, at: now });
+  if (!updated) throw new ConflictError("This post is no longer failed.", { reason: "not_failed" });
+  await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "retry_requested", ...attemptActor(tx), at: now });
   return {
     status: "scheduled",
     mode: "now",
@@ -102,7 +103,7 @@ export async function retryLockedTarget(tx: Tx, target: TargetRecord, now: Date,
   };
 }
 
-const lost = () => new ConflictError("This post is no longer failed.");
+const lost = () => new ConflictError("This post is no longer failed.", { reason: "not_failed" });
 
 const RESETS = { attemptCount: 0, stepState: null, firstStepAt: null, publishStartedAt: null, lastError: null } as const;
 
@@ -123,7 +124,7 @@ async function requeueTarget(tx: Tx, target: TargetRecord, accountName: string, 
       outcome: "retry_requested",
       requestSummary: { mode: "requeue", reason },
       error: "no_free_slot",
-      actorUserId: tx.membership.userId,
+      ...attemptActor(tx),
       at: now,
     });
     return { status: "failed", reason, message };
@@ -136,7 +137,7 @@ async function requeueTarget(tx: Tx, target: TargetRecord, accountName: string, 
     step: "user",
     outcome: "retry_requested",
     requestSummary: { mode: "requeue", scheduledAt, slotId: slot.slotId, ...(expected !== undefined ? { expected } : {}) },
-    actorUserId: tx.membership.userId,
+    ...attemptActor(tx),
     at: now,
   });
   return {
@@ -163,7 +164,7 @@ async function retryAtTime(tx: Tx, target: TargetRecord, now: Date, when: Date):
     step: "user",
     outcome: "retry_requested",
     requestSummary: { mode: "at", scheduledAt },
-    actorUserId: tx.membership.userId,
+    ...attemptActor(tx),
     at: now,
   });
   return {
@@ -181,8 +182,19 @@ function plannedLocal(tx: Tx, when: Date): string {
   return plannedTime(when, null, tx.project.timezone).localTime;
 }
 
-export async function retryTarget(scope: ProjectScope, targetId: string, input?: unknown): Promise<RetryResult> {
+export async function retryTarget(
+  scope: ProjectScope,
+  targetId: string,
+  input?: unknown,
+  opts?: { postId?: string },
+): Promise<RetryResult> {
   const id = uuid.parse(targetId);
   const parsed = retryInputSchema.parse(input ?? { mode: "now" });
-  return withLockedTarget(scope, id, { post: ["schedule"] }, (tx, _post, target, now) => retryLockedTarget(tx, target, now, parsed));
+  return withLockedTarget(
+    scope,
+    id,
+    { post: ["schedule"] },
+    (tx, _post, target, now) => retryLockedTarget(tx, target, now, parsed),
+    opts,
+  );
 }

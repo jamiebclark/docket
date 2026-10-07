@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { attemptActorLabel } from "@/lib/failures/attempt-actor";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RetryAllFailed } from "@/components/targets/RetryAllFailed";
@@ -91,7 +92,7 @@ function AttemptLog({ row, tz }: { row: FailureRow; tz: string }) {
             run.count === 1 ? (
               <tr key={run.entries[0]!.id} className="border-b border-border align-top">
                 <RunSummary run={run} tz={tz} />
-                <td className="px-2 py-1">{run.entries[0]!.actor.kind === "member" ? run.entries[0]!.actor.name : "System"}</td>
+                <td className="px-2 py-1">{attemptActorLabel(run.entries[0]!.actor)}</td>
                 <td className="px-2 py-1">
                   <Pairs value={run.entries[0]!.request} />
                 </td>

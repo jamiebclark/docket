@@ -19,10 +19,14 @@ export class ForbiddenError extends Error {
 /** `message` is shown to the user verbatim; `field` attaches it to a form field. */
 export class ConflictError extends Error {
   readonly field?: string;
-  constructor(message: string, field?: string) {
+  /** A stable machine-readable code (the public API surfaces it); the message stays human text. */
+  readonly reason?: string;
+  constructor(message: string, opts?: string | { field?: string; reason?: string }) {
     super(message);
     this.name = "ConflictError";
-    if (field !== undefined) this.field = field;
+    const o = typeof opts === "string" ? { field: opts } : opts;
+    if (o?.field !== undefined) this.field = o.field;
+    if (o?.reason !== undefined) this.reason = o.reason;
   }
 }
 

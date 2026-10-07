@@ -292,15 +292,38 @@ export async function forApiKey(
   return { scope, rate };
 }
 
+type ActorScope = Pick<ProjectScope, "actor" | "membership">;
+
+/** Who acted, as a user id (never `""`) and an API key id; each may be null. */
+export function actorRefs(scope: ActorScope): { userId: string | null; apiKeyId: string | null } {
+  return {
+    userId: scope.membership.userId || null,
+    apiKeyId: scope.actor.kind === "api_key" ? scope.actor.apiKeyId : null,
+  };
+}
+
 /** Columns that record who made a row: the member, or the key (with the key's creator as the user). */
-export function actorColumns(scope: Pick<ProjectScope, "actor" | "membership">): {
+export function actorColumns(scope: ActorScope): {
   createdByUserId: string | null;
   createdByApiKeyId: string | null;
 } {
-  return {
-    createdByUserId: scope.membership.userId || null,
-    createdByApiKeyId: scope.actor.kind === "api_key" ? scope.actor.apiKeyId : null,
-  };
+  const { userId, apiKeyId } = actorRefs(scope);
+  return { createdByUserId: userId, createdByApiKeyId: apiKeyId };
+}
+
+/** The attribution columns of a `publish_attempts` row written on behalf of the actor. */
+export function attemptActor(scope: ActorScope): { actorUserId: string | null; actorApiKeyId: string | null } {
+  const { userId, apiKeyId } = actorRefs(scope);
+  return { actorUserId: userId, actorApiKeyId: apiKeyId };
+}
+
+/** The columns that record who resolved a target. */
+export function resolverColumns(scope: ActorScope): {
+  resolvedByUserId: string | null;
+  resolvedByApiKeyId: string | null;
+} {
+  const { userId, apiKeyId } = actorRefs(scope);
+  return { resolvedByUserId: userId, resolvedByApiKeyId: apiKeyId };
 }
 
 export function requireRole(scope: ProjectScope, ...allowed: Role[]): void {

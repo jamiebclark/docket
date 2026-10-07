@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { atSchema, externalUrlSchema } from "@/lib/validation/scheduling";
 
 // Output shapes of the public API (contracts/http-api.md). Each carries `.meta({ id })` so the OpenAPI
 // document registers it as a component. The presenters in `src/server/services/views/` build these.
@@ -198,3 +199,108 @@ export type ApiPost = z.infer<typeof PostSchema>;
 export type ApiJobSummary = z.infer<typeof JobSummarySchema>;
 export type ApiJob = z.infer<typeof JobSchema>;
 export type ApiJobItem = z.infer<typeof JobItemSchema>;
+
+// ---------------------------------------------------------------- retry, resolve, bulk retry (016)
+
+const rfc3339 = z.iso.datetime({ offset: true, error: "Enter a valid RFC 3339 date and time with an offset" });
+
+export const RetryTargetRequestSchema = z
+  .discriminatedUnion("mode", [
+    z.strictObject({ mode: z.literal("now") }),
+    z.strictObject({ mode: z.literal("requeue"), expected: rfc3339.optional() }),
+    z.strictObject({ mode: z.literal("at"), at: atSchema }),
+  ])
+  .meta({ id: "RetryTargetRequest" });
+
+const retryFailureReason = z.enum(["no_active_slots", "no_free_occurrence", "in_past", "validation", "account_unavailable"]);
+
+export const RetryTargetResultSchema = z
+  .union([
+    z.object({
+      postId: z.uuid(),
+      targetId: z.uuid(),
+      status: z.literal("scheduled"),
+      mode: z.enum(["now", "requeue", "at"]),
+      scheduledAt: iso,
+      scheduledAtLocal: z.string(),
+      slotId: z.uuid().nullable(),
+      changedFromPreview: z.boolean(),
+      warnings: z.array(IssueSchema),
+    }),
+    z.object({
+      postId: z.uuid(),
+      targetId: z.uuid(),
+      status: z.literal("failed"),
+      reason: retryFailureReason,
+      message: z.string(),
+      issues: z.array(IssueSchema).optional(),
+    }),
+  ])
+  .meta({ id: "RetryTargetResult" });
+
+export const ResolveTargetRequestSchema = z
+  .union([
+    z.strictObject({ outcome: z.literal("published"), url: externalUrlSchema.optional() }),
+    z.strictObject({ outcome: z.literal("not_published"), requeue: z.literal(true), expected: rfc3339.optional() }),
+    z.strictObject({ outcome: z.literal("not_published"), requeue: z.literal(false) }),
+  ])
+  .meta({ id: "ResolveTargetRequest" });
+
+export const ResolveTargetResultSchema = z
+  .union([
+    z.object({ postId: z.uuid(), targetId: z.uuid(), status: z.literal("published") }),
+    z.object({
+      postId: z.uuid(),
+      targetId: z.uuid(),
+      status: z.literal("scheduled"),
+      scheduledAt: iso,
+      scheduledAtLocal: z.string(),
+      slotId: z.uuid(),
+      changedFromPreview: z.boolean(),
+    }),
+    z.object({
+      postId: z.uuid(),
+      targetId: z.uuid(),
+      status: z.literal("failed"),
+      reason: z.enum(["not_requeued", "no_free_slot"]),
+      message: z.string(),
+    }),
+  ])
+  .meta({ id: "ResolveTargetResult" });
+
+export const RetryFailedTargetsRequestSchema = z
+  .strictObject({ accountId: z.uuid().optional(), mode: z.enum(["now", "requeue"]) })
+  .meta({ id: "RetryFailedTargetsRequest" });
+
+const skippedCounts = z.object({
+  account_removed: z.number().int(),
+  needs_reconnecting: z.number().int(),
+  provider_unavailable: z.number().int(),
+  no_longer_failed: z.number().int(),
+  cannot_publish: z.number().int(),
+  no_free_slot: z.number().int(),
+});
+
+export const RetryFailedTargetsResultSchema = z
+  .object({
+    mode: z.enum(["now", "requeue"]),
+    retried: z.number().int(),
+    inScope: z.number().int(),
+    skipped: skippedCounts,
+    remaining: z.number().int(),
+    accounts: z.array(
+      z.object({
+        accountId: z.uuid(),
+        name: z.string(),
+        retried: z.number().int(),
+        skipped: skippedCounts,
+        remaining: z.number().int(),
+      }),
+    ),
+    message: z.string(),
+  })
+  .meta({ id: "RetryFailedTargetsResult" });
+
+export type ApiRetryTargetResult = z.infer<typeof RetryTargetResultSchema>;
+export type ApiResolveTargetResult = z.infer<typeof ResolveTargetResultSchema>;
+export type ApiRetryFailedTargetsResult = z.infer<typeof RetryFailedTargetsResultSchema>;

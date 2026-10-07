@@ -34,6 +34,9 @@ const FIXTURES: Record<string, Fixture> = {
   getPostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }) },
   queuePost: { params: (p) => ({ postId: p.post.id }), body: () => ({}) },
   schedulePost: { params: (p) => ({ postId: p.post.id }), body: () => ({ at: "2030-01-01T10:00:00Z" }) },
+  retryPostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }), body: () => ({ mode: "now" }) },
+  resolvePostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }), body: () => ({ outcome: "not_published", requeue: false }) },
+  retryFailedTargets: { body: () => ({ mode: "now" }) },
   generatePost: { body: (p) => ({ brief: "x", accountIds: [p.account.id] }) },
   listUpcomingSlots: {},
   listJobs: {},
@@ -105,6 +108,26 @@ describe("authentication and permission, per operation", () => {
       const allowed = await call(op, w.a, holder);
       expect([401, 403], `${op.id} with ${op.permission}`).not.toContain(allowed.status);
     }
+  });
+});
+
+describe("recovery operations", () => {
+  const RECOVERY = ["retryPostTarget", "resolvePostTarget", "retryFailedTargets"];
+
+  it("refuses a read key with 403 naming write_posts and writes nothing", async () => {
+    const ids = w.a.targets.map((t) => t.id);
+    const snapshot = async () => ({
+      attempts: (await w.a.scope.attempts.listForTargets(ids)).length,
+      status: (await w.a.scope.targets.listForPost(w.a.post.id)).map((t) => t.status),
+    });
+    const before = await snapshot();
+    for (const op of OPERATIONS.filter((o) => RECOVERY.includes(o.id))) {
+      const r = await call(op, w.a, w.a.keys.read.secret);
+      expect(r.status, op.id).toBe(403);
+      expect(r.json.error.code).toBe("missing_permission");
+      expect(r.json.error.details).toEqual({ permission: "write_posts" });
+    }
+    expect(await snapshot()).toEqual(before);
   });
 });
 

@@ -57,6 +57,7 @@ import * as posts from "../../../src/server/services/posts";
 import * as setup from "../../../src/server/services/setup";
 import * as slots from "../../../src/server/services/slots";
 import * as invitations from "../../../src/server/services/invitations";
+import { hashApiKey } from "../../../src/server/dal/api-keys";
 import { createApiKey } from "../../../src/server/services/api-keys";
 import { setStorageForTests } from "../../../src/server/storage";
 import { api } from "../../helpers/api";
@@ -284,8 +285,13 @@ describe("secret scan (FR-020, SC-005)", () => {
     const apiKey = await createApiKey(scope, { name: "scan", permissions: ["read"], rateLimitPerMinute: 60, expiry: "never" });
     expect(apiKey.secret.length).toBeGreaterThan(20);
     expect(env.secret.startsWith("whsec_")).toBe(true);
+    const writeKey = await createApiKey(scope, { name: "scan-write", permissions: ["write_posts"], rateLimitPerMinute: 60, expiry: "never" });
+    const IDEM_PREFIX = "scan-idempotency-key-5d9e1f3a7c20b846";
     const oneTime: Secret[] = [
       { name: "api key", value: apiKey.secret },
+      { name: "write api key", value: writeKey.secret },
+      { name: "write api key hash", value: hashApiKey(writeKey.secret) },
+      { name: "idempotency key", value: IDEM_PREFIX },
       { name: "webhook secret", value: env.secret },
     ];
     let inviteToken = "";
@@ -309,6 +315,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     // Route handlers. Pages and session routes see the real signed-in user and session.
     session.current = { user: { id: created.userId }, session: { id: sessionRow!.id } };
     const slug = env.project.slug;
+    const [failedPostId] = (await db.select({ postId: postTargets.postId }).from(postTargets).where(and(eq(postTargets.projectId, env.project.id), eq(postTargets.id, targetIds[1]!)))).map((r) => r.postId);
     const routeCalls: [string, () => Promise<Response>][] = [
       ["GET /api/v1/posts", async () => rebuilt(await api("GET", "/posts", { key: apiKey.secret }))],
       ["GET /api/v1/posts (bad key)", async () => rebuilt(await api("GET", "/posts", { key: `${apiKey.secret}x` }))],
@@ -344,6 +351,9 @@ describe("secret scan (FR-020, SC-005)", () => {
             }),
           ),
       ],
+      ["POST retry (API)", async () => rebuilt(await api("POST", `/posts/${failedPostId}/targets/${targetIds[1]}/retry`, { key: writeKey.secret, idem: `${IDEM_PREFIX}-retry`, body: { mode: "now" } }))],
+      ["POST resolve (API, refused)", async () => rebuilt(await api("POST", `/posts/${failedPostId}/targets/${targetIds[1]}/resolve`, { key: writeKey.secret, idem: `${IDEM_PREFIX}-resolve`, body: { outcome: "not_published" } }))],
+      ["POST retry-failed (API)", async () => rebuilt(await api("POST", "/targets/retry-failed", { key: writeKey.secret, idem: `${IDEM_PREFIX}-bulk`, body: { mode: "now" } }))],
     ];
     for (const [place, call] of routeCalls) pieces.push(await responsePiece(place, await call()));
     // The signed-in session route returns the caller's own token as `session.token`.

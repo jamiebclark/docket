@@ -4,7 +4,7 @@ import { atSchema, baseTextSchema, externalUrlSchema, POST_MEDIA_MAX, postInputS
 import * as clock from "../../dal/clock";
 import { ConflictError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
-import { actorColumns, type ProjectScope } from "../../dal/scope";
+import { actorColumns, attemptActor, resolverColumns, type ProjectScope } from "../../dal/scope";
 import type { TargetPatch, TargetRecord } from "../../dal/targets";
 import { explicitSchedulePatch } from "./schedule-patch";
 import { allocateNextFree, nearQueuedWarnings, peekNextFree, plannedTime, type PlannedTime, type Warning } from "../queue";
@@ -605,14 +605,18 @@ const NOT_REQUEUED = "Marked not published by a team member. Retry or schedule i
 const NO_FREE_SLOT = "Not published — no free posting slot. Retry or schedule it.";
 
 /** FR-007, FR-008, FR-010: confirms what happened to an ambiguous target and, if wanted, requeues it. */
-export async function resolveAmbiguous(scope: ProjectScope, targetId: string, input: unknown): Promise<ResolveResult> {
+export async function resolveAmbiguous(
+  scope: ProjectScope,
+  targetId: string,
+  input: unknown,
+  opts?: { postId?: string },
+): Promise<ResolveResult> {
   // A union reports a bad link as one opaque issue; parse the "published" shape alone so the error names `url`.
   const resolution = (input as { outcome?: unknown } | null)?.outcome === "published" ? publishedResolution.parse(input) : resolveSchema.parse(input);
   return withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, _post, target, now): Promise<ResolveResult> => {
-    if (target.status !== "ambiguous") throw new ConflictError("This post was already resolved.");
-    const actor = tx.membership.userId;
-    const common = { resolvedByUserId: actor, resolvedAt: now };
-    const lost = () => new ConflictError("This post was already resolved.");
+    if (target.status !== "ambiguous") throw new ConflictError("This post was already resolved.", { reason: "already_resolved" });
+    const common = { ...resolverColumns(tx), resolvedAt: now };
+    const lost = () => new ConflictError("This post was already resolved.", { reason: "already_resolved" });
     if (resolution.outcome === "published") {
       const done = await tx.targets.update(
         target.id,
@@ -620,7 +624,7 @@ export async function resolveAmbiguous(scope: ProjectScope, targetId: string, in
         { statuses: ["ambiguous"] },
       );
       if (!done) throw lost();
-      await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_published", actorUserId: actor, at: now });
+      await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_published", ...attemptActor(tx), at: now });
       return { status: "published" };
     }
     if (!resolution.requeue) {
@@ -630,11 +634,11 @@ export async function resolveAmbiguous(scope: ProjectScope, targetId: string, in
         { statuses: ["ambiguous"] },
       );
       if (!done) throw lost();
-      await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_failed", actorUserId: actor, at: now });
+      await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_failed", ...attemptActor(tx), at: now });
       return { status: "failed", reason: "not_requeued", message: NOT_REQUEUED };
     }
     const g = await gate(tx, target);
-    if (!g.ok) throw new ConflictError(g.message);
+    if (!g.ok) throw new ConflictError(g.message, { reason: "cannot_publish" });
     const slot = await allocateNextFree(tx, { id: target.id, accountId: target.socialAccountId }, { after: now });
     if (!slot.ok) {
       const done = await tx.targets.update(
@@ -648,7 +652,7 @@ export async function resolveAmbiguous(scope: ProjectScope, targetId: string, in
         step: "user",
         outcome: "resolved_not_published",
         error: "no_free_slot",
-        actorUserId: actor,
+        ...attemptActor(tx),
         at: now,
       });
       return { status: "failed", reason: "no_free_slot", message: NO_FREE_SLOT };
@@ -671,13 +675,13 @@ export async function resolveAmbiguous(scope: ProjectScope, targetId: string, in
       { statuses: ["ambiguous"] },
     );
     if (!done) throw lost();
-    await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_not_published", actorUserId: actor, at: now });
+    await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_not_published", ...attemptActor(tx), at: now });
     await tx.attempts.insert({
       postTargetId: target.id,
       step: "user",
       outcome: "requeued",
       requestSummary: { scheduledAt: slot.planned.scheduledAt, slotId: slot.slotId },
-      actorUserId: actor,
+      ...attemptActor(tx),
       at: new Date(now.getTime() + 1),
     });
     return {
@@ -688,7 +692,7 @@ export async function resolveAmbiguous(scope: ProjectScope, targetId: string, in
       changedFromPreview:
         resolution.expected !== undefined && new Date(resolution.expected).getTime() !== slot.instant.getTime(),
     };
-  });
+  }, opts);
 }
 
 export async function listAttempts(scope: ProjectScope, targetId: string) {

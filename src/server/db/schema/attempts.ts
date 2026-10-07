@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { apiKeys } from "./api";
 import { user } from "./auth";
 import { postTargets } from "./posts";
 import { projects } from "./projects";
@@ -46,9 +47,17 @@ export const publishAttempts = pgTable(
     durationMs: integer("duration_ms"),
     tickId: uuid("tick_id"),
     actorUserId: uuid("actor_user_id").references(() => user.id, { onDelete: "set null" }),
+    actorApiKeyId: uuid("actor_api_key_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
-  (t) => [index("publish_attempts_target_created_idx").on(t.projectId, t.postTargetId, t.createdAt)],
+  (t) => [
+    index("publish_attempts_target_created_idx").on(t.projectId, t.postTargetId, t.createdAt),
+    foreignKey({
+      name: "publish_attempts_api_key_fk",
+      columns: [t.projectId, t.actorApiKeyId],
+      foreignColumns: [apiKeys.projectId, apiKeys.id],
+    }),
+  ],
 );
 
 export type PublishAttemptRow = typeof publishAttempts.$inferSelect;

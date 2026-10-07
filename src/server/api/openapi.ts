@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createDocument, type ZodOpenApiObject, type ZodOpenApiOperationObject, type ZodOpenApiPathsObject } from "zod-openapi";
 import { API_ERROR_CODES, statusFor } from "./errors";
 import { OPERATIONS, type AnyApiOperation } from "./operations";
+import type { ApiExamples } from "./operations/types";
 
 const ErrorSchema = z
   .object({
@@ -46,13 +47,18 @@ function codesFor(status: number): string {
  * The shared error response for `status`: the Error schema, the codes that map to it, and its headers.
  * `own` is the operation's own description of the status, which replaces the generic one.
  */
-function errorResponse(status: number, own?: string, extraHeaders: Record<string, { description: string; schema: z.ZodType }> = {}) {
+function errorResponse(
+  status: number,
+  own?: string,
+  extraHeaders: Record<string, { description: string; schema: z.ZodType }> = {},
+  examples?: ApiExamples,
+) {
   const headers: Record<string, { description: string; schema: z.ZodType }> = { "X-Request-Id": REQUEST_ID_HEADER, ...extraHeaders };
   if (status === 429 || status === 503) headers["Retry-After"] = RETRY_AFTER_HEADER;
   const lead = (own ?? ERROR_DESCRIPTIONS[status] ?? "Error").replace(/\.$/, "");
   return {
     description: `${lead}. Codes: ${codesFor(status)}.`,
-    content: { "application/json": { schema: ErrorSchema } },
+    content: { "application/json": { schema: ErrorSchema, ...(examples ? { examples } : {}) } },
     headers,
   };
 }
@@ -74,12 +80,12 @@ function buildOperation(op: AnyApiOperation): ZodOpenApiOperationObject {
     const headers: Record<string, { description: string; schema: z.ZodType }> = { "X-Request-Id": REQUEST_ID_HEADER };
     if (op.idempotent) headers["Idempotent-Replayed"] = REPLAYED_HEADER;
     if (Number(status) >= 400) {
-      responses[status] = errorResponse(Number(status), r.description, headers);
+      responses[status] = errorResponse(Number(status), r.description, headers, r.examples);
       continue;
     }
     responses[status] = {
       description: r.description,
-      ...(r.schema ? { content: { "application/json": { schema: r.schema } } } : {}),
+      ...(r.schema ? { content: { "application/json": { schema: r.schema, ...(r.examples ? { examples: r.examples } : {}) } } } : {}),
       headers,
     };
   }
@@ -119,7 +125,10 @@ function buildOperation(op: AnyApiOperation): ZodOpenApiOperationObject {
           requestBody: {
             required: true,
             content: {
-              [op.body.kind === "multipart" ? "multipart/form-data" : "application/json"]: { schema: op.body.schema },
+              [op.body.kind === "multipart" ? "multipart/form-data" : "application/json"]: {
+                schema: op.body.schema,
+                ...(op.body.examples ? { examples: op.body.examples } : {}),
+              },
             },
           },
         }
