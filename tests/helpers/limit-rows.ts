@@ -1,6 +1,7 @@
 import { providerPublishLimits } from "../../src/providers/limits";
 import { mediaConstraintsOf, planImage, type ImagePlan, type MediaConstraints, type PlannedAsset } from "../../src/providers/media";
 import type { MediaItem, PublishLimit, SocialProvider } from "../../src/providers/types";
+import type { VideoAssetOptions } from "./factories";
 import { UPLOAD_MIME_TYPES } from "../../src/server/services/media";
 import { validateResolvedContent } from "../../src/server/services/posts/validate";
 
@@ -11,7 +12,7 @@ import { validateResolvedContent } from "../../src/server/services/posts/validat
  * Every title is `<providerKey>: <category>` (publish limits add the value: `<providerKey>: publish limit <value>`).
  */
 
-export type Suite = "core" | "text" | "planner" | "limits";
+export type Suite = "core" | "text" | "planner" | "limits" | "video";
 
 export const image = (over: Partial<MediaItem> = {}): MediaItem => ({
   url: "http://localhost:3000/media/x.jpg",
@@ -181,6 +182,57 @@ export function plannerRows(provider: SocialProvider, assert: Assert): PlannerRo
   return rows;
 }
 
+export interface VideoRow {
+  title: string;
+  category: string;
+  /** Ready video rows to attach, built from facts that break exactly this limit by one unit. */
+  videos: VideoAssetOptions[];
+  /** Attach one stored image as well. */
+  withImage?: boolean;
+  /** The error the gate must refuse with. */
+  code: string;
+}
+
+const CONTAINERS = ["mp4", "mov"] as const;
+
+/**
+ * One row per declared video category that can be broken. A list that already allows every value Docket accepts
+ * (the mock's containers) or a bound that cannot be crossed (`silentAllowed: true`) has no refusing fact; those
+ * rows are proved by `src/providers/validation.test.ts` instead, and docs/limits.md names that test.
+ */
+export function videoRows(provider: SocialProvider): VideoRow[] {
+  const v = provider.capabilities.video;
+  const key = provider.key;
+  const row = (category: string, code: string, videos: VideoAssetOptions[], withImage = false): VideoRow => ({
+    title: `${key}: ${category}`,
+    category,
+    videos,
+    withImage,
+    code,
+  });
+  if (v.maxVideos === 0) return [row("videos", "video_not_accepted", [{}])];
+  const rows: VideoRow[] = [
+    row("videos", "too_many_videos", Array.from({ length: v.maxVideos + 1 }, () => ({}))),
+  ];
+  if (v.withImages === false && provider.capabilities.media.maxImages > 0) rows.push(row("video with images", "video_with_images", [{}], true));
+  const otherContainer = CONTAINERS.find((c) => v.containers && !v.containers.includes(c));
+  if (otherContainer) rows.push(row("video containers", "video_container_not_allowed", [{ container: otherContainer }]));
+  if (v.videoCodecs && !v.videoCodecs.includes("hevc")) rows.push(row("video codecs", "video_codec_not_allowed", [{ videoCodec: "hevc" }]));
+  if (v.audioCodecs && !v.audioCodecs.includes("opus")) rows.push(row("audio codecs", "audio_codec_not_allowed", [{ audioCodec: "opus" }]));
+  if (v.silentAllowed === false) rows.push(row("silent video", "audio_required", [{ audioCodec: null }]));
+  if (v.maxBytes !== undefined) rows.push(row("video bytes", "video_too_large", [{ byteSize: v.maxBytes + 1 }]));
+  if (v.minDurationSeconds !== undefined) rows.push(row("min duration", "video_too_short", [{ durationSeconds: Math.max(0, v.minDurationSeconds - 0.5) }]));
+  if (v.maxDurationSeconds !== undefined) rows.push(row("max duration", "video_too_long", [{ durationSeconds: v.maxDurationSeconds + 1 }]));
+  if (v.minWidth !== undefined) rows.push(row("video min width", "video_too_small", [{ width: v.minWidth - 1 }]));
+  if (v.maxWidth !== undefined) rows.push(row("video max width", "video_too_big", [{ width: v.maxWidth + 1 }]));
+  if (v.minHeight !== undefined) rows.push(row("video min height", "video_too_small", [{ height: v.minHeight - 1 }]));
+  if (v.maxHeight !== undefined) rows.push(row("video max height", "video_too_big", [{ height: v.maxHeight + 1 }]));
+  if (v.minAspectRatio !== undefined) rows.push(row("video min aspect", "video_aspect_out_of_range", [{ width: Math.floor(v.minAspectRatio * 1000) - 1, height: 1000 }]));
+  if (v.maxAspectRatio !== undefined) rows.push(row("video max aspect", "video_aspect_out_of_range", [{ width: Math.ceil(v.maxAspectRatio * 1000) + 1, height: 1000 }]));
+  if (v.maxFrameRate !== undefined) rows.push(row("max frame rate", "video_frame_rate_too_high", [{ frameRate: v.maxFrameRate + 1 }]));
+  return rows;
+}
+
 export const planWith = (provider: SocialProvider, asset: PlannedAsset): ImagePlan =>
   planImage(asset, mediaConstraintsOf(provider.capabilities), { index: 0, platform: provider.displayName });
 
@@ -210,5 +262,6 @@ export function generatedTitles(provider: SocialProvider): { suite: Suite; title
     ...textRows(provider).map((r) => ({ suite: "text" as const, title: r.title })),
     ...plannerRows(provider, noop).map((r) => ({ suite: "planner" as const, title: r.title })),
     ...limitRows(provider).map((r) => ({ suite: "limits" as const, title: r.title })),
+    ...videoRows(provider).map((r) => ({ suite: "video" as const, title: r.title })),
   ];
 }

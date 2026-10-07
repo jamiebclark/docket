@@ -1,0 +1,21 @@
+Docket's own code is MIT licensed (see LICENSE). This file covers third-party software in the Docker image.
+
+FFmpeg
+------
+The Docker image includes FFmpeg (the `ffmpeg` and `ffprobe` programs), installed from Debian bookworm's `ffmpeg`
+package. Debian builds it with `--enable-gpl` and `--enable-libx264`, so those binaries are licensed under the GNU
+General Public License.
+
+Docket runs `ffmpeg` and `ffprobe` only as separate programs to read, clean and take posters from uploaded videos.
+It does not link to them, and Docket's own code stays MIT licensed. This notice states what Docket does; it is not a
+legal conclusion.
+
+Corresponding source
+--------------------
+The corresponding source is Debian's `ffmpeg` source package for the shipped version (for example
+`7:5.1.9-0+deb12u1`):
+
+  https://sources.debian.org/src/ffmpeg/
+  `apt-get source ffmpeg` on Debian bookworm
+
+The exact version in an image is shown by `dpkg -s ffmpeg` inside it.

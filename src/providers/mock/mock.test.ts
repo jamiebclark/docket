@@ -100,4 +100,29 @@ describe("mock provider", () => {
   it("settings defaults", () => {
     expect(parse({})).toMatchObject({ behaviour: "succeed", steps: 1, retryAfterSeconds: 300, delayMs: 0, refresh: "succeed" });
   });
+
+  describe("video", () => {
+    const vid = { id: "m1", url: "u", mimeType: "video/mp4", width: 1080, height: 1920, bytes: 10, altText: "", kind: "video" as const };
+    const vcontent = { text: "hello", mediaCount: 1, videoCount: 1 };
+    const withVideo = (state: unknown) => ctx({}, { content: { text: "hello", media: [vid] }, postType: "video", state });
+
+    it("steps upload_video → check_video → publish", async () => {
+      const s = parse({});
+      expect(mockProvider.stepFor(null, s, vcontent)).toEqual({ name: "upload_video", mayPublish: false });
+      const r1 = await mockProvider.advance(withVideo(null));
+      expect(r1).toMatchObject({ kind: "continue", state: { video: "uploaded" } });
+      expect(mockProvider.stepFor({ done: 0, video: "uploaded" }, s, vcontent)).toEqual({ name: "check_video", mayPublish: false });
+      const r2 = await mockProvider.advance(withVideo({ done: 0, video: "uploaded" }));
+      expect(r2).toMatchObject({ kind: "continue", state: { video: "polled" } });
+      if (r2.kind === "continue") expect(r2.notBefore!.getTime()).toBe(now.getTime() + 1000);
+      expect(mockProvider.stepFor({ done: 0, video: "polled" }, s, vcontent)).toEqual({ name: "publish", mayPublish: true });
+      const r3 = await mockProvider.advance(withVideo({ done: 0, video: "polled" }));
+      expect(r3.kind).toBe("done");
+      expect(r1.summary).toMatchObject({ request: { step: "upload_video", mediaKinds: ["video"] } });
+    });
+
+    it("images and old states keep their steps", () => {
+      expect(mockProvider.stepFor({ done: 0 }, parse({}), content)).toEqual({ name: "publish", mayPublish: true });
+    });
+  });
 });

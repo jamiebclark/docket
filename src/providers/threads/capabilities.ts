@@ -20,6 +20,8 @@ export const threadsCapabilities: ProviderCapabilities = {
     maxAltTextLength: 1000,
     required: false,
   },
+  // Video is not accepted yet (018 D4).
+  video: { maxVideos: 0 },
   textOnlyAllowed: true,
   postTypes: ["text", "image", "carousel"],
 };

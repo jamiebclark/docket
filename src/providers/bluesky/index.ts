@@ -17,6 +17,7 @@ export const blueskyProvider: SocialProvider<BlueskySettings, BlueskyState> = {
       maxBytesPerFile: 2_000_000,
       required: false,
     },
+    video: { maxVideos: 0 },
     textOnlyAllowed: true,
     postTypes: ["text", "image", "carousel"],
   },

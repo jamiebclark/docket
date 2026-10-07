@@ -50,7 +50,7 @@ export const mediaSource: ItemSource<MediaSourceInput> = {
     const kept: MediaRow[] = [];
     for (const id of ids) {
       const row = rows.get(id);
-      if (!row) deleted++;
+      if (!row || row.kind !== "image") deleted++; // a video is never a generator item (FR-045)
       else if (row.firstUsedAt !== null && !(includeUsed && selection.mode !== "unused")) used++;
       else kept.push(row);
     }

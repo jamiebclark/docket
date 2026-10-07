@@ -14,6 +14,18 @@ export function toApiMedia(m: MediaView): ApiMedia {
     tags: m.tags,
     used: m.inUse,
     reservedByJobId: m.reservedByJobId,
+    kind: m.kind,
+    processingState: m.status,
+    processingError: m.processingError,
+    video: m.video
+      ? {
+          durationSeconds: m.video.durationSeconds,
+          frameRate: m.video.frameRate,
+          videoCodec: m.video.videoCodec,
+          audioCodec: m.video.audioCodec,
+          container: m.video.container,
+        }
+      : null,
     createdAt: m.createdAt.toISOString(),
   };
 }

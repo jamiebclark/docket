@@ -28,6 +28,7 @@ const ALT_CODES = new Set(["missing_alt_text", "alt_text_too_long"]);
 /** Pure: the planner's own decision for one image and one provider, so a badge can never disagree with publishing. */
 export function fitOf(asset: MediaRow, provider: SocialProvider): PlatformFit {
   const base = { providerKey: provider.key, providerName: provider.displayName };
+  if (asset.kind === "video") return videoFitOf(asset, provider);
   const plan = planFor(asset, mediaConstraintsOf(provider.capabilities), 0, provider.displayName, LABEL);
   if (plan.kind === "refuse") {
     return { ...base, state: "refused", steps: [], details: plan.issues.map((i) => i.message), convertedTo: null };
@@ -47,6 +48,18 @@ export function fitOf(asset: MediaRow, provider: SocialProvider): PlatformFit {
     details: plan.notes.map((n) => n.message),
     convertedTo: plan.steps.includes("convert") ? (MIME_LABEL[plan.output.mimeType] ?? plan.output.mimeType) : null,
   };
+}
+
+/** A video is never converted: it fits, or it is refused with the validator's own sentences. */
+function videoFitOf(asset: MediaRow, provider: SocialProvider): PlatformFit {
+  const base = { providerKey: provider.key, providerName: provider.displayName, steps: [], convertedTo: null };
+  const details = validateAgainstCapabilities(
+    { text: "x", media: [plannedItem(asset, { kind: "original" })] },
+    provider.capabilities,
+  )
+    .filter((i) => i.severity === "error" && i.field?.startsWith("media") && !ALT_CODES.has(i.code))
+    .map((i) => i.message.replace(/^Video 1\b/, "This video"));
+  return { ...base, state: details.length > 0 ? "refused" : "fits", details };
 }
 
 export type FitSelection = { accountIds: string[] } | { active: true };

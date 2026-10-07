@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { listMediaAction, updateMediaAction, uploadMediaAction } from "@/app/p/[projectSlug]/media/actions";
-import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
+import { useEffect, useState, useTransition } from "react";
+import { listMediaAction, updateMediaAction } from "@/app/p/[projectSlug]/media/actions";
+import { uploadLimitsAction } from "@/app/p/[projectSlug]/media/upload-actions";
+import type { LibraryLimits } from "@/server/media/limits";
 import { POST_MEDIA_MAX } from "@/lib/validation/scheduling";
 import type { MediaView } from "@/server/services/media";
 import { Button } from "../ui/Button";
@@ -11,6 +12,7 @@ import { LiveRegion } from "../ui/LiveRegion";
 import { checkStyles, controlStyles, labelStyles } from "@/components/ui/controls";
 import { ChoiceField } from "@/components/ui/ChoiceField";
 import { FitBadges } from "./FitBadges";
+import { UploadPanel } from "./upload/UploadPanel";
 
 /** Returns a copy with the item at `from` moved to `to`; out-of-range moves return the list unchanged. */
 export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
@@ -171,15 +173,25 @@ function PickerDialog({
   const [unused, setUnused] = useState(false);
   const [lib, setLib] = useState<Library | null>(null);
   const [picked, setPicked] = useState<MediaView[]>([]);
-  const [uploadMsg, setUploadMsg] = useState("");
   const [reload, setReload] = useState(0);
-  const file = useRef<HTMLInputElement>(null);
+  const [limits, setLimits] = useState<LibraryLimits | null>(null);
+
+  useEffect(() => {
+    if (!open || limits) return;
+    let live = true;
+    void uploadLimitsAction(slug).then((r) => {
+      if (live && r.ok) setLimits(r.data);
+    });
+    return () => {
+      live = false;
+    };
+  }, [open, limits, slug]);
 
   useEffect(() => {
     if (!open) return;
     let live = true;
     const timer = setTimeout(() => {
-      void listMediaAction(slug, { ...(q ? { q } : {}), ...(tag ? { tag } : {}), ...(unused ? { unused: true } : {}), fit: { accountIds } }).then((r) => {
+      void listMediaAction(slug, { ...(q ? { q } : {}), ...(tag ? { tag } : {}), ...(unused ? { unused: true } : {}), states: ["processing", "ready"], fit: { accountIds } }).then((r) => {
         if (live) setLib(r);
       });
     }, 150);
@@ -192,21 +204,6 @@ function PickerDialog({
   const room = POST_MEDIA_MAX - chosen.length;
   const toggle = (m: MediaView) =>
     setPicked((p) => (p.some((x) => x.id === m.id) ? p.filter((x) => x.id !== m.id) : p.length < room ? [...p, m] : p));
-
-  async function upload(files: File[]) {
-    for (const f of files) {
-      setUploadMsg(`Uploading ${f.name}…`);
-      const body = new FormData();
-      body.set("file", f);
-      const res = await uploadMediaAction(slug, body);
-      if (res.ok && res.data.ok) {
-        const asset = res.data.asset;
-        setPicked((p) => (p.length < room ? [...p, asset] : p));
-        setUploadMsg(`${f.name} uploaded and selected`);
-        setReload((n) => n + 1);
-      } else setUploadMsg(`${f.name} rejected: ${res.ok ? (res.data.ok ? "" : res.data.message) : res.message}`);
-    }
-  }
 
   const items = (lib?.ok ? lib.data.items : []).filter((m) => !chosen.some((c) => c.id === m.id));
   return (
@@ -232,15 +229,17 @@ function PickerDialog({
             <input type="checkbox" checked={unused} onChange={(e) => setUnused(e.target.checked)} className={checkStyles} /> Unused only
           </label>
         </div>
-        <div className="flex items-center gap-2">
-          <input ref={file} type="file" multiple accept={UPLOAD_MIME_TYPES.join(",")} className="sr-only" aria-label="Image files" tabIndex={-1} onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ""; }} />
-          <Button variant="secondary" onClick={() => file.current?.click()}>
-            Upload new
-          </Button>
-          <span aria-live="polite" className="text-xs">
-            {uploadMsg}
-          </span>
-        </div>
+        {limits ? (
+          <UploadPanel
+            slug={slug}
+            limits={limits}
+            refreshWhenDone={false}
+            onUploaded={(asset) => {
+              setPicked((p) => (p.length < room ? [...p, asset] : p));
+              setReload((n) => n + 1);
+            }}
+          />
+        ) : null}
         {!lib ? <p className="text-sm">Loading…</p> : !lib.ok ? <p role="alert" className="text-sm">{lib.message}</p> : items.length === 0 ? <p className="text-sm">No images found.</p> : null}
         <ul className="grid grid-cols-3 gap-2">
           {items.map((m) => (

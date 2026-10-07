@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import sharp, { type Sharp } from "sharp";
 
 export type UploadRejection =
   | { code: "too_large"; message: string }
@@ -30,6 +30,17 @@ export type ProcessedUpload =
       thumbnail: { body: Buffer; width: number; height: number };
     }
   | ({ ok: false } & UploadRejection);
+
+/** The library thumbnail: at most 480 px on a side, WebP. Shared by images and video posters. */
+export async function makeThumbnail(input: Buffer | Sharp): Promise<{ body: Buffer; width: number; height: number }> {
+  const base = Buffer.isBuffer(input) ? sharp(input, { failOn: "error" }).rotate() : input;
+  const thumb = await base
+    .clone()
+    .resize({ width: THUMBNAIL_EDGE, height: THUMBNAIL_EDGE, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toBuffer({ resolveWithObject: true });
+  return { body: thumb.data, width: thumb.info.width, height: thumb.info.height };
+}
 
 const reject = (code: UploadRejection["code"], message: string): { ok: false } & UploadRejection =>
   ({ ok: false, code, message }) as { ok: false } & UploadRejection;
@@ -66,11 +77,7 @@ export async function processUpload(
           ? base.clone().png()
           : base.clone().webp({ quality: 92 });
     const out = await encoded.toBuffer({ resolveWithObject: true });
-    const thumb = await base
-      .clone()
-      .resize({ width: THUMBNAIL_EDGE, height: THUMBNAIL_EDGE, fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 80 })
-      .toBuffer({ resolveWithObject: true });
+    const thumb = await makeThumbnail(base);
     return {
       ok: true,
       original: {
@@ -81,7 +88,7 @@ export async function processUpload(
         height: out.info.height,
         bytes: out.data.length,
       },
-      thumbnail: { body: thumb.data, width: thumb.info.width, height: thumb.info.height },
+      thumbnail: thumb,
     };
   } catch {
     return reject("unreadable", "That file could not be read as an image.");

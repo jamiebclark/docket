@@ -5,8 +5,6 @@ vi.mock("@/server/auth/session", async () => (await import("../../helpers/action
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
-import { uploadMediaAction } from "../../../src/app/p/[projectSlug]/media/actions";
-import { actAs } from "../../helpers/actions";
 import * as media from "../../../src/server/services/media";
 import { StorageUnavailableError, setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
@@ -100,27 +98,5 @@ describe("uploadMedia", () => {
     }) as typeof scope;
     await expect(media.uploadMedia(failing, { file: { name: "a.png", bytes: await png() } })).rejects.toThrow("db down");
     expect(storage.objects.size).toBe(0);
-  });
-});
-
-describe("uploadMediaAction", () => {
-  it("checks the size before reading the body into memory", async () => {
-    const { project, editor } = await setup();
-    actAs(editor);
-    const big = new File([new Uint8Array(1)], "big.png", { type: "image/png" });
-    Object.defineProperty(big, "size", { value: 21 * 1024 * 1024 });
-    const read = vi.spyOn(big, "arrayBuffer");
-    const res = await uploadMediaAction(project.slug, Object.assign(new FormData(), { get: () => big }) as FormData);
-    expect(res).toMatchObject({ ok: true, data: { ok: false, code: "too_large" } });
-    expect(read).not.toHaveBeenCalled();
-  });
-
-  it("stores a valid file and fails validation when no file is sent", async () => {
-    const { project, editor } = await setup();
-    actAs(editor);
-    const body = new FormData();
-    body.set("file", new File([new Uint8Array(await png())], "ok.png", { type: "image/png" }));
-    expect(await uploadMediaAction(project.slug, body)).toMatchObject({ ok: true, data: { ok: true } });
-    expect(await uploadMediaAction(project.slug, new FormData())).toMatchObject({ ok: false, error: "validation" });
   });
 });

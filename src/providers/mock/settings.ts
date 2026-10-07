@@ -24,4 +24,4 @@ export const mockSettingsSchema = z.object({
 });
 
 export type MockSettings = z.infer<typeof mockSettingsSchema>;
-export type MockState = { done: number };
+export type MockState = { done: number; video?: "uploaded" | "polled" };

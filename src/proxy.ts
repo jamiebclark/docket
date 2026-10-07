@@ -4,6 +4,7 @@ import { getSessionCookie } from "better-auth/cookies";
 import { lastProjectSlugFor, loginRedirectFor } from "@/lib/auth-gate";
 import { checkSameOrigin } from "@/lib/http/same-origin";
 import { buildCsp, newNonce, securityHeaders } from "@/lib/http/security-headers";
+import { uploadOriginFromEnv } from "@/lib/storage/upload-origin";
 import { listConnectGroups } from "@/providers/registry";
 
 const appUrl = () => process.env.BETTER_AUTH_URL?.trim() || "http://localhost:3000";
@@ -37,6 +38,14 @@ function publicMediaOrigin(): string | null {
   return base ? originOf(base) : null;
 }
 
+let uploadOriginCache: { value: string | null } | undefined;
+
+/** Where browsers send upload parts; null with no storage or the via_app transport. Memoised. */
+function uploadOrigin(): string | null {
+  uploadOriginCache ??= { value: uploadOriginFromEnv(process.env) };
+  return uploadOriginCache.value;
+}
+
 function applySecurity(response: NextResponse, headers: Record<string, string>): NextResponse {
   for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
   return response;
@@ -64,6 +73,7 @@ export function proxy(request: NextRequest) {
     dev: process.env.NODE_ENV !== "production",
     publicMediaOrigin: publicMediaOrigin(),
     oauthOrigins: oauthOrigins(),
+    uploadOrigin: uploadOrigin(),
   });
   const headers = securityHeaders({ appUrl: appUrl(), csp });
 

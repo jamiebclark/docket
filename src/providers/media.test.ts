@@ -5,6 +5,7 @@ import type { ProviderCapabilities } from "./types";
 const baseCaps = (media: Partial<ProviderCapabilities["media"]>): ProviderCapabilities => ({
   text: { maxLength: 100, countingRule: "graphemes" },
   media: { maxImages: 4, allowedMimeTypes: ["image/jpeg"], maxBytesPerFile: 1000, required: false, ...media },
+  video: { maxVideos: 0 },
   textOnlyAllowed: true,
   postTypes: ["text", "image"],
 });

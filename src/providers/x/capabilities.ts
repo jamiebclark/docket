@@ -16,6 +16,7 @@ export const xCapabilities: ProviderCapabilities = {
     maxAltTextLength: 1000,
     required: false,
   },
+  video: { maxVideos: 0 },
   textOnlyAllowed: true,
   postTypes: ["text", "image", "carousel"],
 };

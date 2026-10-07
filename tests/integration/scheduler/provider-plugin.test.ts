@@ -29,6 +29,7 @@ const throwaway: SocialProvider = {
   capabilities: {
     text: { maxLength: 100, countingRule: "code_points" },
     media: { maxImages: 0, allowedMimeTypes: [], maxBytesPerFile: 0, required: false },
+    video: { maxVideos: 0 },
     textOnlyAllowed: true,
     postTypes: ["text"],
   },

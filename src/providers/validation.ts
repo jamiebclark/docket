@@ -1,9 +1,107 @@
 import { countHashtags, countMentions, countText, countingUnit } from "./text";
-import type { PostContent, PostType, ProviderCapabilities, ValidationIssue } from "./types";
+import type { MediaItem, PostContent, PostType, ProviderCapabilities, ValidationIssue } from "./types";
+import {
+  CONTAINER_LABEL,
+  audioCodecLabel,
+  durationLabel,
+  fpsLabel,
+  ratioLabel,
+  videoBytesLabel,
+  videoCodecLabel,
+} from "./video-labels";
 
-export function inferPostType(content: PostContent): "text" | "image" | "carousel" {
+const isVideo = (item: MediaItem) => item.kind === "video";
+
+export function inferPostType(content: PostContent): "text" | "image" | "carousel" | "video" {
   if (content.media.length === 0) return "text";
+  if (content.media.some(isVideo)) return "video";
   return content.media.length === 1 ? "image" : "carousel";
+}
+
+const EPS = 1e-9;
+
+/** Each declared bound of one ready video, in the contract's order. */
+function videoIssues(item: MediaItem, i: number, caps: ProviderCapabilities["video"]): ValidationIssue[] {
+  const out: ValidationIssue[] = [];
+  const field = `media.${i}` as const;
+  const label = `Video ${i + 1}`;
+  const err = (code: ValidationIssue["code"], message: string, count?: number, limit?: number) =>
+    out.push({ severity: "error", code, message, field, ...(count !== undefined && limit !== undefined ? { count, limit } : {}) });
+  const f = item.video;
+  if (!f) return out;
+
+  if (caps.containers && !caps.containers.includes(f.container)) {
+    err(
+      "video_container_not_allowed",
+      `${label} is ${CONTAINER_LABEL[f.container]}; allowed containers are ${caps.containers.map((c) => CONTAINER_LABEL[c]).join(", ")}.`,
+    );
+  }
+  if (caps.videoCodecs && !caps.videoCodecs.includes(f.videoCodec)) {
+    err(
+      "video_codec_not_allowed",
+      `${label} is ${videoCodecLabel(f.videoCodec)}; allowed video codecs are ${caps.videoCodecs.map(videoCodecLabel).join(", ")}.`,
+    );
+  }
+  if (f.audioCodec === null) {
+    if (caps.silentAllowed === false) err("audio_required", `${label} has no audio; this account needs audio.`);
+  } else if (caps.audioCodecs && !caps.audioCodecs.includes(f.audioCodec)) {
+    err(
+      "audio_codec_not_allowed",
+      `${label} has ${audioCodecLabel(f.audioCodec)} audio; allowed audio codecs are ${caps.audioCodecs.map(audioCodecLabel).join(", ")}.`,
+    );
+  }
+  if (caps.maxBytes !== undefined && item.bytes > caps.maxBytes) {
+    err("video_too_large", `${label} is ${videoBytesLabel(item.bytes)}; the limit is ${videoBytesLabel(caps.maxBytes)}.`, item.bytes, caps.maxBytes);
+  }
+  const seconds = f.durationSeconds;
+  if (caps.minDurationSeconds !== undefined && seconds < caps.minDurationSeconds) {
+    err(
+      "video_too_short",
+      `${label} is ${durationLabel(seconds)} long; the minimum is ${durationLabel(caps.minDurationSeconds)}.`,
+      seconds,
+      caps.minDurationSeconds,
+    );
+  }
+  if (caps.maxDurationSeconds !== undefined && seconds > caps.maxDurationSeconds) {
+    err(
+      "video_too_long",
+      `${label} is ${durationLabel(seconds)} long; the limit is ${durationLabel(caps.maxDurationSeconds)}.`,
+      seconds,
+      caps.maxDurationSeconds,
+    );
+  }
+  const { width, height } = item;
+  if (width !== null && caps.minWidth !== undefined && width < caps.minWidth) {
+    err("video_too_small", `${label} is ${width} px wide; the minimum is ${caps.minWidth} px.`, width, caps.minWidth);
+  }
+  if (height !== null && caps.minHeight !== undefined && height < caps.minHeight) {
+    err("video_too_small", `${label} is ${height} px tall; the minimum is ${caps.minHeight} px.`, height, caps.minHeight);
+  }
+  if (width !== null && caps.maxWidth !== undefined && width > caps.maxWidth) {
+    err("video_too_big", `${label} is ${width} px wide; the limit is ${caps.maxWidth} px.`, width, caps.maxWidth);
+  }
+  if (height !== null && caps.maxHeight !== undefined && height > caps.maxHeight) {
+    err("video_too_big", `${label} is ${height} px tall; the limit is ${caps.maxHeight} px.`, height, caps.maxHeight);
+  }
+  if (width !== null && height !== null && height > 0) {
+    const ratio = width / height;
+    const low = caps.minAspectRatio !== undefined && ratio < caps.minAspectRatio - EPS;
+    const high = caps.maxAspectRatio !== undefined && ratio > caps.maxAspectRatio + EPS;
+    if (low || high) {
+      const min = caps.minAspectRatio !== undefined ? ratioLabel(caps.minAspectRatio) : "any";
+      const max = caps.maxAspectRatio !== undefined ? ratioLabel(caps.maxAspectRatio) : "any";
+      err("video_aspect_out_of_range", `${label} is ${ratioLabel(ratio)}; allowed is ${min} to ${max}.`);
+    }
+  }
+  if (caps.maxFrameRate !== undefined && f.frameRate !== null && f.frameRate > caps.maxFrameRate + EPS) {
+    err(
+      "video_frame_rate_too_high",
+      `${label} is ${fpsLabel(f.frameRate)}; the limit is ${fpsLabel(caps.maxFrameRate)}.`,
+      f.frameRate,
+      caps.maxFrameRate,
+    );
+  }
+  return out;
 }
 
 /** Issues in a stable order: text, then postType, then media. */
@@ -14,6 +112,8 @@ export function validateAgainstCapabilities(
   const issues: ValidationIssue[] = [];
   const hasText = content.text.trim().length > 0;
   const mediaCount = content.media.length;
+  const videos = content.media.filter(isVideo);
+  const imageCount = mediaCount - videos.length;
 
   if (!hasText && mediaCount === 0) {
     issues.push({
@@ -83,7 +183,8 @@ export function validateAgainstCapabilities(
       field: "media",
     });
   }
-  if (mediaCount > 0 && !caps.postTypes.includes(postType)) {
+  const videosRefused = videos.length > 0 && caps.video.maxVideos === 0;
+  if (mediaCount > 0 && !caps.postTypes.includes(postType) && !(postType === "video" && videosRefused)) {
     issues.push({
       severity: "error",
       code: "unsupported_post_type",
@@ -92,21 +193,71 @@ export function validateAgainstCapabilities(
     });
   }
 
-  if (mediaCount > caps.media.maxImages) {
+  if (imageCount > caps.media.maxImages) {
     issues.push({
       severity: "error",
       code: "too_many_images",
       message:
         caps.media.maxImages === 0
           ? "This account does not accept images."
-          : `The post has ${mediaCount} images; the limit is ${caps.media.maxImages}.`,
+          : `The post has ${imageCount} images; the limit is ${caps.media.maxImages}.`,
       field: "media",
-      count: mediaCount,
+      count: imageCount,
       limit: caps.media.maxImages,
     });
   }
+
+  if (videos.length > 0 && caps.video.maxVideos > 0) {
+    if (videos.length > caps.video.maxVideos) {
+      issues.push({
+        severity: "error",
+        code: "too_many_videos",
+        message: `The post has ${videos.length} videos; the limit is ${caps.video.maxVideos}.`,
+        field: "media",
+        count: videos.length,
+        limit: caps.video.maxVideos,
+      });
+    }
+    if (imageCount > 0 && !caps.video.withImages) {
+      issues.push({
+        severity: "error",
+        code: "video_with_images",
+        message: "This account does not accept a video together with images.",
+        field: "media",
+      });
+    }
+  }
+
   content.media.forEach((item, i) => {
     const field = `media.${i}` as const;
+    const video = isVideo(item);
+    const label = video ? `Video ${i + 1}` : `Image ${i + 1}`;
+    if (item.status === "processing") {
+      issues.push({ severity: "error", code: "media_processing", message: `${label} is still processing.`, field });
+      return;
+    }
+    if (item.status === "failed") {
+      issues.push({
+        severity: "error",
+        code: "media_failed",
+        message: `${label} failed${item.failureReason ? `: ${item.failureReason.replace(/[.\s]+$/, "")}` : ""}. Remove it to continue.`,
+        field,
+      });
+      return;
+    }
+    if (video) {
+      if (videosRefused) {
+        issues.push({
+          severity: "error",
+          code: "video_not_accepted",
+          message: "This account does not accept video yet.",
+          field,
+        });
+      } else {
+        issues.push(...videoIssues(item, i, caps.video));
+      }
+      return;
+    }
     if (!caps.media.allowedMimeTypes.includes(item.mimeType)) {
       issues.push({
         severity: "error",

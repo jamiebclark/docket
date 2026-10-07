@@ -5,6 +5,7 @@ import * as posts from "../../../src/server/services/posts";
 import * as slots from "../../../src/server/services/slots";
 import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
+import { createVideoAsset } from "../../helpers/factories";
 import { closeDb } from "../../helpers/db";
 import { png } from "../../helpers/images";
 import { blueskyLikeProvider, instagramLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
@@ -18,6 +19,12 @@ registerTestProvider({
   key: "capped-like",
   displayName: "Capped (test)",
   capabilities: { ...blueskyLikeProvider.capabilities, text: { ...blueskyLikeProvider.capabilities.text, maxLength: 5000, maxHashtags: 30, maxMentions: 20 } },
+});
+registerTestProvider({
+  ...blueskyLikeProvider,
+  key: "no-video-like",
+  displayName: "No video (test)",
+  capabilities: { ...blueskyLikeProvider.capabilities, video: { maxVideos: 0 }, postTypes: ["text", "image", "carousel"] },
 });
 const NOW = new Date("2026-10-01T12:00:00Z");
 
@@ -189,5 +196,51 @@ describe("checkComposition", () => {
     const target = (await t.env.scope.targets.listForPost(draft.post.id))[0]!;
     await t.env.scope.targets.update(target.id, { status: "publishing" });
     expect(await posts.checkComposition(t.env.scope, input)).toMatchObject({ editable: false });
+  });
+});
+
+describe("checkComposition with video", () => {
+  const check = (t: Awaited<ReturnType<typeof setup>>, accountId: string, mediaIds: string[]) =>
+    posts.checkComposition(t.env.scope, { baseText: "hi", mediaIds, targets: [{ accountId }] }).then((r) => r.targets[0]!);
+
+  it("blocks while a video processes and clears when the row turns ready (US3 AS5)", async () => {
+    const t = await setup();
+    const mock = await t.account("mock");
+    const v = await createVideoAsset(t.env.project.id, { state: "processing" });
+    const blocked = await check(t, mock.id, [v.id]);
+    expect(blocked.canSchedule).toBe(false);
+    expect(blocked.issues).toContainEqual(expect.objectContaining({ code: "media_processing", field: "media.0" }));
+
+    const ready = await createVideoAsset(t.env.project.id, { state: "ready" });
+    const cleared = await check(t, mock.id, [ready.id]);
+    expect(cleared.canSchedule).toBe(true);
+    expect(cleared.issues.map((i) => i.code)).not.toContain("media_processing");
+  });
+
+  it("blocks a long video on the mock and on an account that takes no video (US3 AS4)", async () => {
+    const t = await setup();
+    const mock = await t.account("mock");
+    const none = await t.account("no-video-like");
+    const long = await createVideoAsset(t.env.project.id, { durationSeconds: 222 });
+    const onMock = await check(t, mock.id, [long.id]);
+    expect(onMock.canSchedule).toBe(false);
+    expect(onMock.issues).toContainEqual(
+      expect.objectContaining({ code: "video_too_long", message: "Video 1 is 3:42 long; the limit is 1 minute." }),
+    );
+    const onNone = await check(t, none.id, [long.id]);
+    expect(onNone.canSchedule).toBe(false);
+    expect(onNone.issues.map((i) => i.code)).toContain("video_not_accepted");
+    expect(onNone.issues.map((i) => i.code)).not.toContain("unsupported_post_type");
+  });
+
+  it("shows a failed video's reason and accepts a clip inside the limits", async () => {
+    const t = await setup();
+    const mock = await t.account("mock");
+    const failed = await createVideoAsset(t.env.project.id, { state: "failed", error: "Docket could not read this video." });
+    expect((await check(t, mock.id, [failed.id])).issues).toContainEqual(
+      expect.objectContaining({ code: "media_failed", message: "Video 1 failed: Docket could not read this video. Remove it to continue." }),
+    );
+    const ok = await createVideoAsset(t.env.project.id);
+    expect(await check(t, mock.id, [ok.id])).toMatchObject({ canSchedule: true, postType: "video" });
   });
 });

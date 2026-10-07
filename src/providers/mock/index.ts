@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { validateAgainstCapabilities } from "../validation";
-import type { PublishContext, SocialProvider, StepResult } from "../types";
+import type { PublishContext, StepContent, SocialProvider, StepResult } from "../types";
 import { mockSettingsSchema, type MockSettings, type MockState } from "./settings";
 
 const SIXTY_DAYS_MS = 60 * 86_400_000;
@@ -36,8 +36,22 @@ export const mockProvider: SocialProvider<MockSettings, MockState> = {
       required: false,
       outputMimeType: "image/jpeg",
     },
+    video: {
+      maxVideos: 1,
+      withImages: false,
+      containers: ["mp4", "mov"],
+      videoCodecs: ["h264"],
+      audioCodecs: ["aac"],
+      silentAllowed: true,
+      maxBytes: 50_000_000,
+      minDurationSeconds: 1,
+      maxDurationSeconds: 60,
+      minAspectRatio: 9 / 16,
+      maxAspectRatio: 16 / 9,
+      maxFrameRate: 60,
+    },
     textOnlyAllowed: true,
-    postTypes: ["text", "image", "carousel"],
+    postTypes: ["text", "image", "carousel", "video"],
   },
   connect: { strategy: "credentials", fields: [] },
   settingsSchema: mockSettingsSchema,
@@ -55,24 +69,40 @@ export const mockProvider: SocialProvider<MockSettings, MockState> = {
 
   validate: (content, capabilities) => validateAgainstCapabilities(content, capabilities),
 
-  stepFor: (state, settings) => stepForSettings(settings, state),
+  stepFor: (state, settings, content) => stepForSettings(settings, state, content),
 
   async advance(ctx) {
     const s = settingsOf(ctx);
     if (s.delayMs > 0) await sleep(s.delayMs, ctx.signal);
     const state = (ctx.state as MockState | null) ?? null;
-    const step = stepForSettings(s, state);
+    const hasVideo = ctx.content.media.some((m) => m.kind === "video");
+    const step = stepForSettings(s, state, { text: ctx.content.text, mediaCount: ctx.content.media.length, videoCount: hasVideo ? 1 : 0 });
     const summary = {
-      request: { step: step.name, attempt: ctx.target.attempt, textLength: ctx.content.text.length },
+      request: {
+        step: step.name,
+        attempt: ctx.target.attempt,
+        textLength: ctx.content.text.length,
+        ...(hasVideo ? { mediaKinds: ctx.content.media.map((m) => m.kind ?? "image") } : {}),
+      },
       response: { behaviour: s.behaviour },
     };
+    if (step.name === "upload_video") return { kind: "continue", state: { done: state?.done ?? 0, video: "uploaded" }, summary };
+    if (step.name === "check_video") {
+      // The first look reports "still processing"; the next tick moves on to the publish part.
+      return {
+        kind: "continue",
+        state: { done: state?.done ?? 0, video: "polled" },
+        notBefore: new Date(ctx.now.getTime() + 1000),
+        summary,
+      };
+    }
     const result = ((): StepResult => {
       switch (s.behaviour) {
         case "succeed":
           return done();
         case "multi_step": {
           const n = state?.done ?? 0;
-          return n < s.steps ? { kind: "continue", state: { done: n + 1 } } : done();
+          return n < s.steps ? { kind: "continue", state: { ...state, done: n + 1 } } : done();
         }
         case "retryable":
           return s.failTimes === undefined || ctx.target.attempt <= s.failTimes
@@ -102,7 +132,11 @@ function done(): StepResult {
 }
 
 /** `stepFor` as the contract defines it, given the account's settings. */
-export function stepForSettings(settings: MockSettings, state: MockState | null) {
+export function stepForSettings(settings: MockSettings, state: MockState | null, content?: StepContent) {
+  if ((content?.videoCount ?? 0) > 0) {
+    if (!state?.video) return { name: "upload_video", mayPublish: false };
+    if (state.video === "uploaded") return { name: "check_video", mayPublish: false };
+  }
   if (settings.behaviour !== "multi_step") return { name: "publish", mayPublish: true };
   const n = state?.done ?? 0;
   return n < settings.steps

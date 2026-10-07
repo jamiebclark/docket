@@ -25,6 +25,8 @@ export const instagramCapabilities: ProviderCapabilities = {
     maxAltTextLength: 1000,
     required: true,
   },
+  // Video is not accepted yet (018 D4).
+  video: { maxVideos: 0 },
   textOnlyAllowed: false,
   postTypes: ["image", "carousel"],
 };

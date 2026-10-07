@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { findProvider } from "@/providers/registry";
 import { requirementsOf, type RequirementsSummary } from "@/providers/requirements";
-import { conversionText, detailRows, rangeText, summaryLine } from "./requirements-ui";
+import { conversionText, detailRows, rangeText, summaryLine, videoLine } from "./requirements-ui";
 
 const of = (key: string): RequirementsSummary => requirementsOf(findProvider(key)!.capabilities, { uploadTypes: UPLOAD_MIME_TYPES });
 const row = (r: RequirementsSummary, term: string) => detailRows(r).find((d) => d.term === term)?.detail;
@@ -67,5 +67,22 @@ describe("conversionText / rangeText", () => {
   it("words one-sided ranges", () => {
     expect(rangeText({ min: { value: 5, label: "5 px" }, max: null })).toBe("at least 5 px");
     expect(rangeText({ min: null, max: { value: 9, label: "9 px" } })).toBe("at most 9 px");
+  });
+});
+
+describe("videoLine and the video rows", () => {
+  it("says video is not accepted yet", () => {
+    expect(videoLine(of("instagram"))).toBe("Video: not accepted yet");
+    expect(row(of("instagram"), "Video")).toBe("not accepted yet");
+    expect(row(of("instagram"), "Video width")).toBeUndefined();
+  });
+  it("describes the mock's limits and marks undeclared ones", () => {
+    const r = of("mock");
+    expect(videoLine(r)).toBe(
+      "Video: 1 video per post, MP4, MOV, H.264, up to 50 MB, 1 second – 1 minute, aspect 9:16 – 16:9, up to 60 fps, not with images",
+    );
+    expect(row(r, "Video containers")).toBe("MP4, MOV");
+    expect(row(r, "Video width")).toBe("no limit Docket checks");
+    expect(row(r, "Video frame rate")).toBe("up to 60 fps");
   });
 });

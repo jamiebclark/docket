@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildCsp, newNonce, securityHeaders } from "./security-headers";
 
-const base = { nonce: "abc", dev: false, publicMediaOrigin: null, oauthOrigins: [] as string[] };
+const base = { nonce: "abc", dev: false, publicMediaOrigin: null, oauthOrigins: [] as string[], uploadOrigin: null };
 
 describe("buildCsp", () => {
   it("orders the directives and puts the nonce on scripts", () => {
     const names = buildCsp(base).split("; ").map((d) => d.split(" ")[0]);
-    expect(names).toEqual(["default-src", "script-src", "style-src", "img-src", "font-src", "connect-src", "object-src", "base-uri", "frame-ancestors", "form-action"]);
+    expect(names).toEqual(["default-src", "script-src", "style-src", "img-src", "media-src", "font-src", "connect-src", "object-src", "base-uri", "frame-ancestors", "form-action"]);
     expect(buildCsp(base)).toContain("script-src 'self' 'nonce-abc' 'strict-dynamic'");
     expect(buildCsp(base)).not.toContain("unsafe-eval");
   });
@@ -14,6 +14,19 @@ describe("buildCsp", () => {
   it("adds an http media origin to img-src but not an https one", () => {
     expect(buildCsp({ ...base, publicMediaOrigin: "http://localhost:9000" })).toContain("https: http://localhost:9000;");
     expect(buildCsp({ ...base, publicMediaOrigin: "https://cdn.test" })).not.toContain("cdn.test");
+  });
+  it("always sends media-src, and adds an http media origin like img-src", () => {
+    expect(buildCsp(base)).toContain("media-src 'self' blob: https:;");
+    expect(buildCsp({ ...base, publicMediaOrigin: "http://localhost:9000" })).toContain(
+      "media-src 'self' blob: https: http://localhost:9000;",
+    );
+    expect(buildCsp({ ...base, publicMediaOrigin: "https://cdn.test" })).not.toContain("media-src 'self' blob: https: https");
+  });
+  it("adds the upload origin to connect-src only when there is one", () => {
+    expect(buildCsp(base)).toContain("connect-src 'self';");
+    expect(buildCsp({ ...base, uploadOrigin: "https://bucket.s3.example.com" })).toContain(
+      "connect-src 'self' https://bucket.s3.example.com;",
+    );
   });
   it("lists OAuth origins in form-action", () => {
     expect(buildCsp({ ...base, oauthOrigins: ["https://www.facebook.com"] })).toContain("form-action 'self' https://www.facebook.com");

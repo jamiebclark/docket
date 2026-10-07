@@ -26,11 +26,37 @@ export type NewMedia = Pick<typeof mediaAssets.$inferInsert, "storageKey" | "pub
       | "originalFilename"
       | "tags"
       | "id"
+      | "kind"
+      | "processingState"
+      | "processingStep"
+      | "processingError"
+      | "sourceStorageKey"
+      | "durationMs"
+      | "frameRate"
+      | "videoCodec"
+      | "audioCodec"
+      | "container"
     >
   >;
 export type VariantRow = MediaVariantRow;
 export type NewVariant = Omit<typeof mediaVariants.$inferInsert, "id" | "projectId" | "createdAt">;
+export type MediaKind = "image" | "video";
+export type MediaProcessingState = "processing" | "ready" | "failed";
+
+export interface MediaProcessingStatus {
+  id: string;
+  kind: MediaKind;
+  state: MediaProcessingState;
+  step: "queued" | "probing" | "poster" | null;
+  error: string | null;
+  createdAt: Date;
+}
+
 export interface MediaListFilter {
+  /** Restrict to these kinds; absent means all. */
+  kinds?: readonly MediaKind[];
+  /** Restrict to these processing states; absent means all. */
+  states?: readonly MediaProcessingState[];
   tag?: string;
   unused?: boolean;
   missingAlt?: boolean;
@@ -39,6 +65,7 @@ export interface MediaListFilter {
   offset: number;
 }
 
+/** `kind = 'image'` and `state = 'ready'` are always applied: a video is never picked by a bulk selection. */
 export interface MediaSelectionFilter {
   tag?: string;
   missingAlt?: boolean;
@@ -61,6 +88,8 @@ export interface MediaRepo {
   list(
     filter: MediaListFilter,
   ): Promise<{ rows: (MediaRow & { inUse: boolean; reservedByJobId: string | null })[]; total: number }>;
+  /** `{ id, kind, state, step, error, createdAt }` for the live rows among `ids`. */
+  processingStatus(ids: readonly string[]): Promise<MediaProcessingStatus[]>;
   /** Live asset ids matching the library filters, newest first. `unusedOnly` also drops reserved assets. */
   listIdsForSelection(filter: MediaSelectionFilter): Promise<string[]>;
   /**
@@ -107,8 +136,16 @@ export function createMediaRepo(db: Database, projectId: string): MediaRepo {
   // Counts, not NOT EXISTS: the scope checker rejects any negation in a predicate.
   const reservations = sql`(SELECT count(*) FROM "generation_job_items" i WHERE i."project_id" = ${projectId} AND i."media_asset_id" = ${assetId} AND i."status" IN ('queued','running','failed'))`;
   const notReserved = sql`${reservations} = 0`;
-  const searchCond = (f: { tag?: string; missingAlt?: boolean; q?: string }) => {
+  const searchCond = (f: {
+    tag?: string;
+    missingAlt?: boolean;
+    q?: string;
+    kinds?: readonly MediaKind[];
+    states?: readonly MediaProcessingState[];
+  }) => {
     const conds: (SQL | undefined)[] = [];
+    if (f.kinds) conds.push(inArray(mediaAssets.kind, [...f.kinds]));
+    if (f.states) conds.push(inArray(mediaAssets.processingState, [...f.states]));
     if (f.tag) conds.push(sql`${f.tag} = ANY(${mediaAssets.tags})`);
     if (f.missingAlt) conds.push(sql`btrim(${mediaAssets.altText}) = ''`);
     if (f.q) {
@@ -183,7 +220,10 @@ export function createMediaRepo(db: Database, projectId: string): MediaRepo {
       };
     },
     async listIdsForSelection(f) {
-      const conds: (SQL | undefined)[] = [live, ...searchCond(f)];
+      const conds: (SQL | undefined)[] = [
+        live,
+        ...searchCond({ ...f, kinds: ["image"], states: ["ready"] }),
+      ];
       if (f.unusedOnly) conds.push(isNull(mediaAssets.firstUsedAt), notReserved);
       else if (f.includeUsed === false) conds.push(isNull(mediaAssets.firstUsedAt));
       const rows = await db
@@ -193,6 +233,21 @@ export function createMediaRepo(db: Database, projectId: string): MediaRepo {
         .orderBy(desc(mediaAssets.createdAt), desc(mediaAssets.id))
         .limit(f.limit);
       return rows.map((r) => r.id);
+    },
+    async processingStatus(ids) {
+      if (ids.length === 0) return [];
+      const rows = await db
+        .select({
+          id: mediaAssets.id,
+          kind: mediaAssets.kind,
+          state: mediaAssets.processingState,
+          step: mediaAssets.processingStep,
+          error: mediaAssets.processingError,
+          createdAt: mediaAssets.createdAt,
+        })
+        .from(mediaAssets)
+        .where(and(live, inArray(mediaAssets.id, [...ids])));
+      return rows as MediaProcessingStatus[];
     },
     async lockForReservation(ids) {
       if (ids.length === 0) return [];

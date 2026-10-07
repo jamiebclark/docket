@@ -4,7 +4,7 @@ Every limit Docket knows about, where it is enforced, and the test that proves a
 
 How to read a row:
 
-- **Category** is a fixed vocabulary (see the test): `text length`, `images`, `bytes per file`, `formats`, `hashtags`, `mentions`, `min width`, `max width`, `min aspect`, `max aspect`, `alt text length`, `media required`, `text only`, `publish limit`, plus free-text `note:` rows.
+- **Category** is a fixed vocabulary (see the test): `text length`, `images`, `bytes per file`, `formats`, `hashtags`, `mentions`, `min width`, `max width`, `min aspect`, `max aspect`, `alt text length`, `media required`, `text only`, `publish limit`, the video categories `videos`, `video with images`, `video containers`, `video codecs`, `audio codecs`, `silent video`, `video bytes`, `min duration`, `max duration`, `video min width`, `video max width`, `video min height`, `video max height`, `video min aspect`, `video max aspect` and `max frame rate` (every one except `videos` appears only when the provider declares it), plus free-text `note:` rows.
 - **Value** is what the provider declares. `hashtags` and `mentions` are counted per occurrence, repeats included (FR-012); URLs and email addresses are ignored. For `publish limit` it is `<count> / <window seconds> s`, or `none`.
 - **Source** is a research file under `docs/research/`, or `interim, UNVERIFIED` with the decision that introduced it (`docs/decisions.md`). An approximate figure says so.
 - **Enforced in** is the one place that refuses or defers: `validateResolvedContent` (shared by the scheduling gate and the publish engine, which re-checks on a target's first step and fails it on step `engine-validate`), the media planner (adapts or refuses before validation), or the engine's rate deferral (`deferralTime` in `src/server/scheduler/limits.ts`).
@@ -22,6 +22,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | formats | image/jpeg, image/png |  | docs/research/meta.md (documented `.jpeg, .bmp, .png, .gif, .tiff`; WebP not listed, so an uploaded WebP is converted to JPEG; BMP, GIF and TIFF cannot be uploaded to Docket) | media planner | `tests/integration/limits/enforcement.test.ts` "facebook: formats" |
 | media required | no |  | docs/research/meta.md (text-only Page posts documented) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: media required" |
 | text only | yes |  | docs/research/meta.md (text-only Page posts documented) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: text only" |
+| videos | 0 |  | not accepted in Docket yet (018 D4); researched limits arrive with entries 3, 4, 5 and 7 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: videos" |
 | publish limit | none |  | docs/research/meta.md ("Rate limits, 2026-10-04"): no documented posts-per-day cap for Pages; Graph calls are limited per Page (4800 × engaged users / 24 h). The account-level limit still applies | account limit (engine deferral) | `tests/integration/limits/enforcement.test.ts` "facebook: publish limit none" |
 
 ## Instagram
@@ -41,6 +42,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | alt text length | 1000 |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: alt text length" |
 | media required | yes |  | docs/research/meta.md (no text-only posts) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: media required" |
 | text only | no |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: text only" |
+| videos | 0 |  | not accepted in Docket yet (018 D4); researched limits arrive with entries 3, 4, 5 and 7 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: videos" |
 | publish limit | 50 / 86400 s |  | docs/research/meta.md (CONTRADICTORY 50 vs 100; 50 is the `content_publishing_limit` value; the run-time quota is also read) | engine deferral | `tests/integration/limits/enforcement.test.ts` "instagram: publish limit 50 / 86400 s" |
 
 ## Threads
@@ -58,6 +60,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | alt text length | 1000 |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: alt text length" |
 | media required | no |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: media required" |
 | text only | yes |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: text only" |
+| videos | 0 |  | not accepted in Docket yet (018 D4); researched limits arrive with entries 3, 4, 5 and 7 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: videos" |
 | publish limit | 250 / 86400 s |  | docs/research/meta.md (250 posts / 24 h) | engine deferral | `tests/integration/limits/enforcement.test.ts` "threads: publish limit 250 / 86400 s" |
 | note: carousel minimum | 2 |  | docs/research/meta.md; one image publishes as an image post (D15) | post type inference | `tests/integration/threads/publish-e2e.test.ts` "publishes one image through IN_PROGRESS then FINISHED" |
 
@@ -71,6 +74,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | formats | image/jpeg, image/png |  | docs/research/bluesky.md (`image/*`); an uploaded WebP (or an oversize PNG) is converted to JPEG | media planner | `tests/integration/limits/enforcement.test.ts` "bluesky: formats" |
 | media required | no |  | docs/research/bluesky.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "bluesky: media required" |
 | text only | yes |  | docs/research/bluesky.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "bluesky: text only" |
+| videos | 0 |  | not accepted in Docket yet (018 D4); researched limits arrive with entries 3, 4, 5 and 7 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "bluesky: videos" |
 | publish limit | 1666 / 3600 s |  | approximate (research U3; docs/research/bluesky.md: 5,000 points/hour, a create costs 3, so `floor(points ÷ 3)`); points are shared with any other app writing to the account (decisions.md G16) | engine deferral | `tests/integration/limits/enforcement.test.ts` "bluesky: publish limit 1666 / 3600 s" |
 | publish limit | 11666 / 86400 s |  | approximate (research U3; 35,000 points/day, `floor(points ÷ 3)`); decisions.md G16 | engine deferral | `tests/integration/limits/enforcement.test.ts` "bluesky: publish limit 11666 / 86400 s" |
 | note: login rate | createSession 30 / 5 min and 300 / day |  | docs/research/bluesky.md | publishing never creates a session; it reuses and refreshes the stored one | `tests/integration/limits/enforcement.test.ts` "Bluesky publishing does not create a session" |
@@ -86,6 +90,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | alt text length | 1000 |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: alt text length" |
 | media required | no |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: media required" |
 | text only | yes |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: text only" |
+| videos | 0 |  | X video is not on the roadmap | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: videos" |
 | publish limit | 100 / 900 s |  | docs/research/x.md (confirmed 2026-10-07, per user) | engine deferral | `tests/integration/limits/enforcement.test.ts` "x: publish limit 100 / 900 s" |
 
 X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce that cap (it is shared by every account on the app, not per account), so it has no row; a 429 from it defers the post instead.
@@ -100,6 +105,18 @@ X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce 
 | formats | image/jpeg, image/png |  | test double | media planner | `tests/integration/limits/enforcement.test.ts` "mock: formats" |
 | media required | no |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: media required" |
 | text only | yes |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: text only" |
+| videos | 1 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: videos" |
+| video with images | no |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video with images" |
+| video containers | mp4, mov |  | test double (both containers Docket accepts, so none can be refused) | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
+| video codecs | h264 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video codecs" |
+| audio codecs | aac |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: audio codecs" |
+| silent video | yes |  | test double (a silent video is accepted, so none can be refused) | validateResolvedContent | `src/providers/validation.test.ts` "accepts a silent video unless the provider forbids it" |
+| video bytes | 50000000 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video bytes" |
+| min duration | 1 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: min duration" |
+| max duration | 60 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: max duration" |
+| video min aspect | 0.5625 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video min aspect" |
+| video max aspect | 1.7777777777777777 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video max aspect" |
+| max frame rate | 60 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: max frame rate" |
 | publish limit | none |  | test double; the account-level limit still applies | account limit (engine deferral) | `tests/integration/limits/enforcement.test.ts` "mock: publish limit none" |
 
 ## Audit notes (T032)

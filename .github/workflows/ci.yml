@@ -72,6 +72,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install ffmpeg (the video suites skip without it)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Test
         run: pnpm test
 
@@ -102,8 +104,17 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: docket:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: ffmpeg works in the image, as the runtime user
+        run: |
+          docker image inspect docket:ci --format 'image size: {{.Size}} bytes'
+          docker run --rm --user 1001 --entrypoint ffmpeg docket:ci -version
+          docker run --rm --user 1001 --entrypoint ffprobe docket:ci -version
+          docker run --rm --user 1001 --entrypoint sh docket:ci -c 'ffmpeg -hide_banner -encoders | grep -q libx264'
+          docker run --rm --user 1001 --entrypoint node docket:ci scripts/video-smoke.mjs
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

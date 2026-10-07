@@ -647,3 +647,106 @@ Judgement calls from `specs/017-requirements-up-front/spec.md` (D1–D11) and it
 - **P13 — `tests/lint/ui-limit-literals.test.ts`** fails on a MIME literal, a counting-rule name, or a declared limit of 100 or more written as a literal in composer, picker or library UI code.
 - **P14 — Docs.** `docs/limits.md` gains the sources and rows above, its audit notes record the 400-containers limit (not modelled), the existing Meta codes 80001 and 80002, and Bluesky's undocumented alt text maximum, and the inventory test pins the remaining UNVERIFIED rows to Facebook's text length and images. `docs/adding-a-provider.md` documents the new fields.
 - **P15 — No migration, dependency, env var or `docker-compose.yml` change.**
+
+## 018 — Video groundwork (2026-10-07)
+
+Judgement calls from `specs/018-video-groundwork/spec.md` (D1–D12) and its plan (`research.md`, P1–P30). External facts come from `docs/research/upload-transport.md` and `docs/research/ffmpeg.md`. ffmpeg details those files mark UNVERIFIED are asserted by tests that run real ffmpeg in CI and inside the built image (P22, P23).
+
+### Operator decisions (fixed before the entry)
+
+- **Upload transport: presigned S3 multipart, straight from the browser to the bucket.** XHR is used per part for progress, and the server calls `ListParts` to collect the ETags, so browsers never read the `ETag` header. A chunked route through the app is the documented fallback only for buckets that browsers cannot reach. The browser-facing endpoint is a new optional setting (`S3_BROWSER_ENDPOINT`), documented with the CORS, IAM and lifecycle notes. *Rejected:* tus, which needs three dependencies and sends every byte through the app; a chunked route as the default, which costs server bandwidth and runs into body limits.
+- **ffmpeg: Debian's apt package in the runner image.** It is a GPL build that includes libx264, run only as a separate process through `child_process.spawn`, with no wrapper library (fluent-ffmpeg is deprecated). `NOTICE` states that the image includes GPL ffmpeg and that its corresponding source is Debian's `ffmpeg` source package. CI installs ffmpeg for the fixture tests. This is a new runtime dependency (constitution VI), justified in plan.md Complexity Tracking. *Rejected:* static builds (per-arch downloads and checksums, no distro security updates); LGPL builds (no CPU H.264).
+
+### Spec decisions
+
+- **D1 — One upload path for every file.** Images and videos, in the library and in the composer's picker, share one component and one flow: browser checks, then bytes sent with progress, then processing. Images keep today's checks and results.
+- **D2 — Library limits are separate from platform limits.** A video within the library limits is stored even when a platform would refuse it, and the fit badges and validation say so.
+- **D3 — Library video limits.** `MEDIA_MAX_VIDEO_MB` (default 1,024, range 1–4,096) and `MEDIA_MAX_VIDEO_SECONDS` (default 900, range 1–3,600), plus a fixed 4,096 px ceiling on either side. Accepted containers are MP4 and MOV, judged by contents. Image limits are unchanged.
+- **D4 — Real providers declare that they do not accept video yet.** Instagram, Facebook, Threads, Bluesky and X declare `video: { maxVideos: 0 }`. Their researched video limits arrive with entries 3, 4, 5 and 7. X video is not on the roadmap.
+- **D5 — A post carries images or one video, not both, unless a provider says otherwise** (`video.withImages`). The mock declares one video, not mixed with images.
+- **D6 — Transport selection.** Direct is the default. `S3_BROWSER_ENDPOINT` names the endpoint browsers use when it differs from the server's, and `MEDIA_UPLOAD_TRANSPORT=via_app` picks the fallback. The choice is never automatic, because a CORS refusal looks exactly like a network drop.
+- **D7 — Resume lasts as long as the page.** Retry resumes from the parts the bucket confirmed. A reload abandons the upload, and expiry cleans it up. Leaving the page during an upload asks for confirmation.
+- **D8 — Processing items can be attached but not published.** `media_processing` and `media_failed` are blocking issues from the shared validator, and they clear by themselves.
+- **D9 — Location and descriptive metadata are removed from videos** by a remux without re-encoding. The result is verified, and a video that still carries such metadata is never stored. The worker needs temporary disk of about twice the file size.
+- **D10 — The public API reads videos but does not upload them.** Upload and import by URL refuse video with 415 and a message pointing to the app. Recorded in `docs/feature-map.md` as unowned.
+- **D11 — The generator never uses videos.** Posters as model input are recorded as unowned.
+- **D12 — At most three files upload at once per page.**
+
+### Plan decisions
+
+- **P1 — Every upload, images included, is presigned multipart, driven by small JSON server actions.** The part size is fixed per upload at `max(8 MiB, ceil(size / 10000))`, so every part but the last is the same size, as R2 requires.
+- **P2 — Sessions live in `media_uploads`, which is project-owned and belongs to one member.**
+  - Only the member who started a session may sign, list, complete or cancel it.
+  - A member may have 10 open sessions per project (`MEDIA_MAX_OPEN_UPLOADS`). The cap is made exact by locking the member's own Better Auth `member` row; no advisory locks are used.
+  - Housekeeping expires open sessions after 24 h (`MEDIA_UPLOAD_EXPIRY_HOURS`, range 1–168). It runs wherever the scheduler runs, and the bucket lifecycle rule is the backstop.
+- **P3 — Presigning uses a second S3 client.** It is set to `S3_BROWSER_ENDPOINT` (or `S3_ENDPOINT`), always with `WHEN_REQUIRED` checksums, and its URLs live 1 h. A `403` from storage is re-signed once automatically.
+- **P4 — Completion is built from `ListParts`, and is idempotent.**
+  - Every part's size and the declared total are checked.
+  - A missing part sends the session back to Retry.
+  - A size mismatch refuses the upload and removes its bytes.
+  - `NoSuchUpload` during `completing` means an earlier attempt already completed it.
+- **P5 — The fallback is a chunk route,** `PUT /p/<slug>/media/uploads/<id>/parts/<n>`. It checks `Content-Length` and the received length against the part's expected length, which guards against the proxy's silent truncation, and forwards the chunk as the same multipart part. The app requires `PART_SIZE + 1 MiB ≤ UPLOAD_BODY_LIMIT`.
+- **P6 — The CSP gains the upload origin in `connect-src` and a `media-src`.** The origin helper is tested against the SDK's own presigned URLs.
+- **P7 — Images are processed in the web process when their upload completes,** by today's `processUpload`. The results are unchanged, and no worker is needed for images.
+- **P8 — Videos are processed by a worker-only media loop, outside `runTick`,** because `runTick` can run in the web process.
+  - Claims use `FOR UPDATE SKIP LOCKED`, with a 120 s lease renewed every 30 s and a lease token.
+  - An item gets at most 3 attempts, and a graceful shutdown refunds the attempt.
+  - The loop polls every 2 s when idle.
+- **P9 — The pipeline:** disk check, download, sniff, ffprobe, library limits, clean and verify, then the poster at `min(1 s, duration / 2)` with a sharp thumbnail, and a streamed multipart upload back. Commands use argument arrays, time limits, `-nostdin`, bounded output and `.tmp` outputs, and the shutdown signal reaches them.
+- **P10 — The clean step:** `-map 0:v:0 -map 0:a:0? -c copy -map_metadata -1 -map_chapters -1`, in the same container family, without `+faststart` so that temporary disk stays about 2×. The output is verified on four counts:
+  - the same facts and displayed size as the source;
+  - format and stream tags limited to the container's own;
+  - rotation re-applied if it was lost;
+  - otherwise the item fails, and the source is never stored instead.
+- **P11 — Video facts.**
+  - The frame rate is ffprobe's `avg_frame_rate`, not `r_frame_rate`, which can far exceed a variable-rate clip's real rate.
+  - Dimensions are displayed, with rotation applied. Sample aspect ratio is ignored, a recorded approximation.
+  - The container comes from Docket's own sniff.
+- **P12 — One magic-byte sniffer (`src/lib/media/sniff.ts`) serves both the browser and the worker.** It is tested against ffmpeg- and sharp-generated files.
+- **P13 — Browser checks run in order: type, size, then for video duration and largest side, against limits served by the server.** A video the browser cannot read is uploaded with "Checks happen after upload".
+- **P14 — The client engine is pure and tested in Node.**
+  - It runs three files at a time and one part at a time per file.
+  - A network failure is retried twice automatically, and then the row is interrupted.
+  - Retry re-sends only parts that are not confirmed.
+  - Progress is announced at 0, 25, 50, 75 and 100 %.
+- **P15 — Processing state is shown by polling a status action every 2 s.** "Waiting for the worker" appears after 30 s queued.
+- **P16 — `ProviderCapabilities.video` is required.**
+  - `MediaItem` gains `kind`, `status`, `failureReason` and video facts, all optional so existing code is unaffected.
+  - The shared validator checks image rules on images only, and adds the video limit codes plus `media_processing` and `media_failed`.
+  - `video_not_accepted` replaces `unsupported_post_type`.
+  - Videos are never planned as images.
+- **P17 — The requirements summary gains a `video` part, and fit badges cover ready videos** (fits or refused, never converted). The text and image parts are unchanged.
+- **P18 — The mock publishes a video through `upload_video` → `check_video` → `publish`.** `check_video` reports the video as still processing once. `StepContent` gains `videoCount`, and the account's behaviour applies at the publish step.
+- **P19 — `libraryLimits()` is the single source for the services, the worker and the browser.** New settings: `S3_BROWSER_ENDPOINT`, `MEDIA_UPLOAD_TRANSPORT`, `MEDIA_MAX_VIDEO_MB`, `MEDIA_MAX_VIDEO_SECONDS`, `MEDIA_UPLOAD_EXPIRY_HOURS` and `MEDIA_MAX_OPEN_UPLOADS`. An http browser endpoint is refused when Docket runs on https.
+- **P20 — Migration 0011.**
+  - `media_assets.byte_size` becomes `bigint`, because 4,096 MB overflows `integer`.
+  - `media_assets` gains processing and video columns.
+  - A new `media_uploads` table.
+  - Staging keys are `projects/<p>/uploads/<u>/source`.
+- **P21 — No ffmpeg in the web process.** An import-graph test from `src/app`, the proxy, instrumentation and `runTick` enforces it, together with a `child_process` allow-list and a runtime guard set by `worker.ts`.
+- **P22 — Packaging.**
+  - Every Docker stage is pinned to `node:24-bookworm-slim`, and the runner gets ffmpeg from apt.
+  - `NOTICE` is in the repository and in the image.
+  - CI installs ffmpeg, and ffmpeg suites cannot skip in CI.
+  - The `docker` job runs `ffmpeg -version`, the `libx264` encoder check and `scripts/video-smoke.mjs` in the image as uid 1001.
+- **P23 — Fixtures are generated at test time with `lavfi`:** landscape, portrait, silent, MOV, rotated, located, audio-only and corrupt. Each UNVERIFIED ffmpeg detail is an assertion. Not committed.
+- **P24 — API `MediaSchema` gains `kind`, `processingState`, `processingError` and `video`, an additive change.** Video upload and import give 415 with a pointer to the app.
+- **P25 — The generator's library source returns ready images only, and `ensureVariant` refuses videos.**
+- **P26 — A video that is not ready gets a placeholder thumbnail (`/media/video-processing.svg`),** so no thumbnail consumer changes.
+  - The library shows each item's state, and a failed item offers only Delete.
+  - The picker hides failed items.
+  - A ready video's dialog shows its facts and plays it.
+- **P27 — Deleting a video also removes its staging object.** If the worker finishes on a deleted row, it deletes what it wrote.
+- **P28 — No `docker-compose.yml` edit is required.**
+  - The offline profile needs `S3_BROWSER_ENDPOINT=http://localhost:9000` in `.env`.
+  - An optional worker `/tmp` volume is documented with its exact edit.
+  - Video processing needs the `worker` service: in-process mode processes images only.
+- **P29 — `UploadPanel` replaces both upload loops,** and `uploadMediaAction` is removed. The public API keeps its buffered image path.
+- **P30 — Out of scope, kept by construction.** No real provider gets video limits. Nothing re-encodes, crops or trims. Nothing handles `story` or `reel`.
+
+### Implementation outcome
+
+- All of Phases 1–8 landed as planned. The full gate (`lint`, `typecheck`, `test`, `db:check`, `build`) is green; lint reports only warnings.
+- **Deviation:** `tests/integration/scheduler/step-content.test.ts` asserted the exact `StepContent` shape. `stepFor` now also receives `videoCount`, so the expectations were updated to include `videoCount: 0`.
+- **Known flake, unrelated:** `tests/integration/x/connect.test.ts` compares an expiry against `Date.now()` and can miss by a few milliseconds under load. It passes on re-run.
+- **Owed to the operator (not runnable in the pipeline):** a ~200 MB offline upload with Retry, a 1 GB direct upload to a real R2 or S3 bucket, a `via_app` upload behind a 9 MB proxy limit, and `ffmpeg -version` in the worker on Unraid (T053–T056).

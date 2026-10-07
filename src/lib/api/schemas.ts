@@ -44,6 +44,18 @@ export const MediaSchema = z
     tags: z.array(z.string()),
     used: z.boolean(),
     reservedByJobId: z.uuid().nullable(),
+    kind: z.enum(["image", "video"]),
+    processingState: z.enum(["processing", "ready", "failed"]),
+    processingError: z.string().nullable(),
+    video: z
+      .object({
+        durationSeconds: z.number(),
+        frameRate: z.number().nullable(),
+        videoCodec: z.string(),
+        audioCodec: z.string().nullable(),
+        container: z.enum(["mp4", "mov"]),
+      })
+      .nullable(),
     createdAt: iso,
   })
   .meta({ id: "Media" });

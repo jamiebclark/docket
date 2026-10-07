@@ -1,5 +1,5 @@
 import { MIME_LABEL } from "@/lib/media/types";
-import type { ProviderCapabilities, ValidationIssue } from "./types";
+import type { ProviderCapabilities, ValidationIssue, VideoCapabilities } from "./types";
 
 /** Bump when the variant generator's output changes, so cached variants are rebuilt. */
 export const VARIANT_PIPELINE_VERSION = 1;
@@ -45,8 +45,27 @@ function assertRange(name: string, min: number | undefined, max: number | undefi
   }
 }
 
+/** Pure; throws on an inconsistent video declaration so a bad provider fails at registry load. */
+export function assertVideoCapabilities(caps: ProviderCapabilities): void {
+  const v: VideoCapabilities = caps.video;
+  if (!Number.isInteger(v.maxVideos) || v.maxVideos < 0) {
+    throw new Error(`Inconsistent video constraints: maxVideos (${v.maxVideos}) must be a non-negative integer.`);
+  }
+  assertRange("DurationSeconds", v.minDurationSeconds, v.maxDurationSeconds);
+  assertRange("Width", v.minWidth, v.maxWidth);
+  assertRange("Height", v.minHeight, v.maxHeight);
+  assertRange("AspectRatio", v.minAspectRatio, v.maxAspectRatio);
+  if (v.withImages && caps.media.maxImages === 0) {
+    throw new Error("Inconsistent video constraints: withImages is set but the provider accepts no images.");
+  }
+  if (v.maxVideos > 0 && !caps.postTypes.includes("video")) {
+    throw new Error('Inconsistent video constraints: maxVideos is above 0 but postTypes lacks "video".');
+  }
+}
+
 /** Pure; throws on an inconsistent declaration so a bad provider fails at registry load. */
 export function mediaConstraintsOf(caps: ProviderCapabilities): MediaConstraints {
+  assertVideoCapabilities(caps);
   const m = caps.media;
   const output = m.outputMimeType ?? m.allowedMimeTypes[0];
   if (m.maxImages > 0) {

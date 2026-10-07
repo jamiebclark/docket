@@ -1,4 +1,8 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { crossProject } from "../../../src/server/dal/scope";
+import { getDb } from "../../../src/server/db/client";
+import { mediaAssets } from "../../../src/server/db/schema";
+import { eq } from "drizzle-orm";
 import { ForbiddenError, NotFoundError } from "../../../src/server/dal/errors";
 import * as media from "../../../src/server/services/media";
 import { closeDb } from "../../helpers/db";
@@ -23,6 +27,18 @@ describe("media library", () => {
     expect(await ids({ q: "BARN" })).toEqual([a.id]);
     expect(await ids({ q: "%" })).toEqual([]);
     expect((await media.listMedia(scope)).tags).toEqual(["farm", "red"]);
+  });
+
+  it("hides failed items from a states-filtered list (the picker) and keeps them in the library", async () => {
+    const { scope, project } = await postsEnv();
+    const ok = await createMediaAsset(project.id);
+    const bad = await createMediaAsset(project.id);
+    await crossProject("test: fail an item", async () =>
+      await getDb().update(mediaAssets).set({ processingState: "failed", processingError: "Could not process." }).where(eq(mediaAssets.id, bad.id)),
+    );
+    const ids = async (f: object) => (await media.listMedia(scope, f)).items.map((i) => i.id).sort();
+    expect(await ids({ states: ["processing", "ready"] })).toEqual([ok.id]);
+    expect(await ids({})).toEqual([ok.id, bad.id].sort());
   });
 
   it("paginates 24 per page", async () => {

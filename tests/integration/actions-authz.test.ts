@@ -11,6 +11,7 @@ import * as reviewActions from "../../src/app/p/[projectSlug]/review/actions";
 import * as generateActions from "../../src/app/p/[projectSlug]/generate/actions";
 import * as composeActions from "../../src/app/p/[projectSlug]/compose/actions";
 import * as mediaActions from "../../src/app/p/[projectSlug]/media/actions";
+import * as uploadActions from "../../src/app/p/[projectSlug]/media/upload-actions";
 import * as voiceActions from "../../src/app/p/[projectSlug]/voice/actions";
 import * as postActions from "../../src/app/p/[projectSlug]/posts/actions";
 import * as jobActions from "../../src/app/p/[projectSlug]/jobs/actions";
@@ -139,7 +140,10 @@ const CASES: Case[] = [
     },
   },
   { name: "revokeApiKeyAction", manage: true, run: (s, f) => apiKeyActions.revokeApiKeyAction(s, f.apiKeyId) },
-  { name: "uploadMediaAction", run: (s, f) => mediaActions.uploadMediaAction(s, f.form) },
+  {
+    name: "createUploadAction",
+    run: (s) => uploadActions.createUploadAction(s, { filename: "a.png", kind: "image", declaredType: "image/png", bytes: 100 }),
+  },
   { name: "updateMediaAction", run: (s, f) => mediaActions.updateMediaAction(s, { id: f.mediaId, altText: "x" }) },
   { name: "deleteMediaImpactAction", run: (s, f) => mediaActions.deleteMediaImpactAction(s, { id: f.mediaId }) },
   { name: "deleteMediaAction", run: (s, f) => mediaActions.deleteMediaAction(s, { id: f.mediaId }) },
@@ -295,7 +299,7 @@ describe("every server action × role (SC-009, SC-011)", () => {
     setStorageForTests(createMemoryStorage());
     const env = await postsEnv();
     actAs(null);
-    const r = await call(CASES.find((c) => c.name === "uploadMediaAction")!, env.project.slug, await fixtures(env));
+    const r = await call(CASES.find((c) => c.name === "createUploadAction")!, env.project.slug, await fixtures(env));
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/^(not_found|unauthenticated)$/);
   });

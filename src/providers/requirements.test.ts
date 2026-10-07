@@ -30,8 +30,14 @@ describe("requirementsOf", () => {
       expect(r.image.aspectRatio.max?.value ?? null, p.key).toBe(c.media.maxAspectRatio ?? null);
       expect(r.image.maxAltTextLength, p.key).toBe(c.media.maxAltTextLength ?? null);
       expect(r.post).toEqual({ mediaRequired: c.media.required || !c.textOnlyAllowed, textOnlyAllowed: c.textOnlyAllowed, postTypes: [...c.postTypes] });
-      expect(r, p.key).not.toHaveProperty("video");
-      expect(r.image, p.key).not.toHaveProperty("video");
+      const v = c.video;
+      expect(r.video.maxVideos, p.key).toBe(v.maxVideos);
+      expect(r.video.containers.map((x) => x.value), p.key).toEqual([...(v.containers ?? [])]);
+      expect(r.video.maxBytes?.value ?? null, p.key).toBe(v.maxBytes ?? null);
+      expect(r.video.duration.min?.value ?? null, p.key).toBe(v.minDurationSeconds ?? null);
+      expect(r.video.duration.max?.value ?? null, p.key).toBe(v.maxDurationSeconds ?? null);
+      expect(r.video.maxFrameRate?.value ?? null, p.key).toBe(v.maxFrameRate ?? null);
+      expect(r.video.silentAllowed, p.key).toBe(v.silentAllowed ?? true);
     }
   });
 
@@ -83,6 +89,28 @@ describe("requirementsOf", () => {
     expect(x.image.convertedFrom).toEqual([]);
     expect(x.image.maxBytesPerFile.label).toBe("5 MB");
     expect(x.image.maxAltTextLength).toBe(1000);
+  });
+
+  it("says video is not accepted for every provider that declares maxVideos 0", () => {
+    for (const p of listProviders().filter((x) => x.capabilities.video.maxVideos === 0)) {
+      const r = requirementsOf(p.capabilities, { uploadTypes });
+      expect(r.video, p.key).toMatchObject({ maxVideos: 0, containers: [], maxBytes: null, maxFrameRate: null });
+    }
+  });
+
+  it("describes the mock's video limits with labels", () => {
+    const r = requirementsOf(findProvider("mock")!.capabilities, { uploadTypes }).video;
+    expect(r.maxVideos).toBe(1);
+    expect(r.containers.map((c) => c.label)).toEqual(["MP4", "MOV"]);
+    expect(r.videoCodecs.map((c) => c.label)).toEqual(["H.264"]);
+    expect(r.audioCodecs.map((c) => c.label)).toEqual(["AAC"]);
+    expect(r.maxBytes?.label).toBe("50 MB");
+    expect(r.duration.min?.label).toBe("1 second");
+    expect(r.duration.max?.label).toBe("1 minute");
+    expect(r.aspectRatio.min?.label).toBe("9:16");
+    expect(r.aspectRatio.max?.label).toBe("16:9");
+    expect(r.maxFrameRate?.label).toBe("60 fps");
+    expect(r.withImages).toBe(false);
   });
 
   it("follows the capabilities: changing a value changes the summary (FR-003)", () => {
