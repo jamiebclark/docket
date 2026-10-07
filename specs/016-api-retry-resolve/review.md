@@ -1,112 +1,95 @@
 # Review: Public API to retry, bulk-retry and resolve failed and ambiguous targets (016)
 
-Reviewed 50 files changed across 13 commits, against `5223ee3` (merge-base with `origin/main`)...`HEAD` (`bf30aba`).
+**Re-review after remediation.** The constitution sets the scope ("Review is exhaustive once, then scoped"). This pass checks only two things: that each earlier blocking finding is fixed, and that the files the remediation changed introduced no regression. Anything new is recorded as MINOR at most.
 
-**Read in full (diff and surrounding code):**
-- `src/server/api/operations/targets.ts`, `issues.ts`, `types.ts`, `posts.ts`, `index.ts`
-- `src/server/api/errors.ts`, `idempotency.ts`, `openapi.ts`, and the request pipeline in `src/server/api/handle.ts` (unchanged, read for the no-key path)
-- `src/server/dal/errors.ts`, `scope.ts`, `attempts.ts`
-- `src/server/services/posts/locked.ts`, `retry.ts`, `index.ts` (`resolveAmbiguous`), `retry-all.ts` (unchanged, read as the bulk callee)
-- `src/server/services/failures.ts` and `webhooks/emit.ts` (unchanged, read for emission)
-- `src/server/db/schema/attempts.ts`, `posts.ts`, and `drizzle/0010_api_key_attribution.sql`
-- `src/lib/api/schemas.ts`, `src/lib/failures/attempt-actor.ts` (+ test), `retry-all-text.ts` (+ test)
-- both page edits
-- all five new `tests/integration/api/endpoints/*` files, plus the diffs to `scope-enforcement`, `openapi`, `secret-scan`, `failures/attempts` and `docs/n8n-flow`
-- the `docs/n8n.md`, `docs/failures.md`, `docs/decisions.md` and `README.md` diffs
-- `spec.md`, `plan.md`, `tasks.md`, `contracts/http-api.md`, `contracts/services.md`, `data-model.md`, most of `research.md`, and the constitution
+The feature as a whole is 51 files changed across 15 commits, against `5223ee3` (merge-base with `origin/main`)...`HEAD` (`b06628e`). The first review covered `5223ee3...bf30aba` in full; see that review's coverage in git (`d16681b`). The remediation is one commit, `b06628e`, which touches 4 files.
 
-**Sampled:** `drizzle/meta/0010_snapshot.json` and `_journal.json`. These are generated; `pnpm db:check` reports "Migrations are current."
+**Read in full (remediation diff and the code it depends on):**
+- `docs/n8n.md` §7 (lines 115–139), and `docs/decisions.md:613` (P14), to check it is now accurate
+- `tests/integration/api/endpoints/recovery-idempotency.test.ts` (whole file)
+- `tests/integration/api/endpoints/recovery-attribution.test.ts` (setup, plus the whole parity `describe` at :130–194)
+- `specs/016-api-retry-resolve/tasks.md` Phase 11 (T036–T037)
+- the code that decides whether the new assertions can fail: `src/server/services/webhooks/emit.ts:43-49` (the subscriber gate), `src/server/services/posts/status.ts:9-37` (derived status and when it emits), the attempt summary shapes at `src/server/services/posts/retry.ts:125,139,166`, `tests/helpers/failures.ts` and `tests/helpers/retry.ts` (fixtures and `LATER`), `src/server/services/webhooks/endpoints.ts:76-91` (`createEndpoint`)
+- the matching spec text: FR-028, FR-030, SC-003, SC-005, US7, and the Edge Case "Retry loop"
 
-**Not reviewed:** `checklists/requirements.md` (a specify-phase artifact, no obligations) and `quickstart.md` (the test map; I checked the tests themselves instead).
+**Not re-read:** the 47 files the remediation did not touch. `git diff b06628e~1 b06628e --stat -- src` is empty, so no source changed after the first review, and its judgement of those files stands.
 
-**Executed in this phase:**
-- **New and extended suites:** `pnpm vitest run` on the 5 new endpoint files, `scope-enforcement`, `openapi`, `failures/attempts` and `src/lib/failures`. 107 tests passed.
-- **Cross-cutting suites:** `security/secret-scan`, `tests/lint` (including `api-imports`), `tests/integration/failures`, `tests/integration/docs` and `scope-check`. 291 passed.
-- **012/015 suites (FR-003):** `posts/retry-resolve`, `posts/actions`, `posts/isolation`, `posts/lifecycle` and `scheduler/limits-retry`. 32 passed.
-- **Checks:** `pnpm typecheck` and `pnpm db:check`, both green. The constitution asks review not to re-run typecheck, and I did, once.
-- **Schema probe:** a throwaway Vitest probe in `$TMPDIR` (outside the repo) of `RetryTargetRequestSchema` and `ResolveTargetRequestSchema` through `zodDetails`.
+**Executed in this phase:** `pnpm vitest run` on the two remediated test files. 2 files and 23 tests passed in 7.4 s. Under the constitution's review rule I did not re-run lint, typecheck, build or the full suite.
 
 ## Verdict
 
-The code holds together and meets the API contract. Every operation makes exactly one service call. The additive service changes (pairing `opts.postId`, `ConflictError.reason`, `actorRefs`/`attemptActor`/`resolverColumns`, and `self_commit`) are used the same way by every pass, with no duplicated helper and no drift between producer and consumer. The creator-deleted 500 (research F12) is fixed and has a regression test. Pairing returns 404 before any lock or write. Bulk runs outside a wrapper transaction. Every 409 carries the documented `details.reason`. Two obligations are only partly met, and both block the merge:
-
-1. The n8n recovery recipe that FR-028 requires has no per-target retry limit. Followed as written, it retries a permanently failing post forever, because every new `post.failed` brings a new event id and therefore a new `Idempotency-Key`.
-2. The tests that SC-003 and SC-005 rely on for webhooks cannot fail: no webhook endpoint is subscribed, and `emitEvent` writes nothing without one. The side-by-side parity checks also cover only one retry mode and one resolve outcome.
-
-Both fixes are small: one docs edit and test-setup changes. I would fix them and merge. The MINOR items can go to a hardening entry.
+Both blocking findings are fixed, and the remediation introduced no regression. The feature meets its spec and is ready for a human to merge. F1: the n8n recipe now tells the automation to keep a per-target counter, stop after N tries and alert a person. It also explains why Docket's attempt count cannot do that job. This satisfies FR-028 and US7-1, and P14 is now accurate. F2: both suites now subscribe a webhook endpoint, so `emitEvent` actually writes events. The idempotency suite proves this with a passing non-zero assertion (`emits: 1` for resolve `published`). The parity suite now covers all three retry modes and all three resolve outcomes. The earlier review expected `post.failed` from resolve `not_published`/`requeue:false`, and that expectation was wrong (NOTE F12). The implementer asserted zero events there, which is correct. The earlier MINOR items F3–F7 are unchanged and still open; they suit a hardening entry. This pass adds one MINOR (F10) on the recipe's bulk step.
 
 ## Findings
 
-- [ ] MAJOR F1 — The n8n recovery recipe has no per-target retry limit, so it loops forever on a permanently failing post
-      where:  docs/n8n.md:115-137 (steps 1–5; the key at docs/n8n.md:127), docs/decisions.md:613
-      why:    FR-028 says the recipe "MUST include a per-target retry limit kept by the automation". US7 acceptance 1 says it "limits how many times the automation retries the same target". The Edge Case "Retry loop" says the recipe must make the automation keep its own limit, because Docket resets the attempt count on every retry. The recipe tells the automation to retry every `failed` target on every `post.failed`, with key `retry-{{event.id}}-{{targetId}}`. Take a post whose content the platform always rejects. It fails, the automation retries `now`, it fails again, and a new event id produces a new key. The retry is never deduplicated and never stops. `docs/decisions.md:613` (P14) says the recipe contains this limit, which is not true. T031's task text dropped the requirement, so T031 being ticked hides the gap.
-      owed:   Add a step to `## 7. Recover failed posts` that keeps a per-target counter in the automation, for example n8n workflow static data keyed by `targetId`. It should stop retrying and alert a person after N tries (say 3), and say why Docket's own attempt count cannot be used. P14 then becomes accurate.
-      traces: FR-028, US7-1, Edge Cases "Retry loop", SC-001
+- [x] MAJOR F1 — **Resolved.** The n8n recovery recipe had no per-target retry limit, so it looped forever on a permanently failing post
+      where:  docs/n8n.md:134 (new "Cap the retries" paragraph under step 3), docs/decisions.md:613
+      why:    (original) FR-028 requires "a per-target retry limit kept by the automation", and the recipe had none.
+      check:  docs/n8n.md:134 now says to "Keep your own counter per `targetId` (for example in n8n workflow static data), stop after N tries (say 3) and alert a person". It explains that Docket's attempt count "resets on every retry, and each `post.failed` event has a new event id, so every retry gets a new `Idempotency-Key`". This matches the Edge Case "Retry loop" (spec.md:176) and US7-1 (spec.md:169). P14's claim at docs/decisions.md:613 is now true. The paragraph is indented 3 spaces, so it renders as a plain paragraph between steps 3 and 4, not as a code block. Its scope is a separate question, recorded as MINOR F10.
+      traces: FR-028, US7-1, Edge Cases "Retry loop", P14
 
-- [ ] MAJOR F2 — The webhook assertions for SC-003 and SC-005 can never fail, and the parity checks cover only one retry mode and one resolve outcome
-      where:  tests/integration/api/endpoints/recovery-idempotency.test.ts:18-25 (and :61, :75, :103), tests/integration/api/endpoints/recovery-attribution.test.ts:137-138, :149, :163, src/server/services/webhooks/emit.ts:48-49
-      why:    `emitEvent` returns early when no endpoint is subscribed (emit.ts:48-49). None of `postsEnv`, `failedTarget` or `outcomeTarget` subscribes one. So `observe().events` in the idempotency suite is always 0, and "no second webhook on replay" holds even if a replay emitted again. The parity test's `eventTypes` compares `[]` with `[]` in both cases. SC-003 says the at-most-one-webhook rule is checked "for every operation". SC-005 and FR-030 ask for "webhook emission parity", and SC-005 also asks for side-by-side checks "for each retry mode and resolve outcome". The only real emission test is `resolve-target.test.ts:34-43` (`post.published`). No test sees `post.failed` from an API action. Parity runs only for retry `now` (recovery-attribution.test.ts:143-144) and resolve `not_published`/`requeue:false` (:155-158). T023 and T025 are ticked as if all of this were covered.
-      owed:   In both suites, subscribe a webhook endpoint to `post.published` and `post.failed` in the setup, for both the API env and the member env. Assert a non-zero expected event count where the status changes, for example resolve `published` → `post.published` and resolve `not_published`/`requeue:false` → `post.failed`, so the replay leg can fail. Extend the parity cases to retry `requeue` and `at` and to resolve `published` and `not_published`/`requeue:true`.
+- [x] MAJOR F2 — **Resolved.** The webhook assertions for SC-003 and SC-005 could never fail, and the parity checks covered only one retry mode and one resolve outcome
+      where:  tests/integration/api/endpoints/recovery-idempotency.test.ts:29, :38, :46, :55-65; tests/integration/api/endpoints/recovery-attribution.test.ts:143-194
+      why:    (original) No endpoint was subscribed, so `emitEvent` returned early (src/server/services/webhooks/emit.ts:48-49) and every event count was 0.
+      check:  `common()` now subscribes an endpoint to `post.published` and `post.failed` (recovery-idempotency.test.ts:29). Bulk uses `common()` too (:122), so the bulk replay's `observe` is no longer vacuous. The resolve case asserts that the first call writes exactly one event (`emits: 1`, :46, :60). That assertion passes, so events are now recorded, and a second emission on replay would fail `toEqual(before)` at :65. The parity suite subscribes both the API env and the member env (:143-144, :160-161, :178-179). It runs `it.each` over retry `now`, `requeue` and `at` (:153-158), and over resolve `published`, `not_published`/`requeue:false` and `not_published`/`requeue:true` (:171-176). Resolve asserts its own event delta (`event ? 1 : 0`, :190) and checks that `post.published` is present. `at` is `2026-10-06T09:00Z`, after `LATER` (`2026-10-05T09:30Z`, tests/helpers/failures.ts:11), so the scheduled path is exercised rather than `in_past`. Both files pass (23 tests). The scrub now recurses into nested objects (:131-139). It therefore ignores `scheduledAt`/`slotId` inside attempt summaries as well as at the top level, which is necessary because slot ids differ between projects. The instants themselves are asserted per operation (retry-target.test.ts:34, :54), so parity loses nothing it needs.
       traces: SC-003, SC-005, FR-025, FR-030
 
-- [ ] MINOR F3 — A retry's `expected` is stored in the attempt summary in the caller's offset form, unlike the UI (UTC) and the API resolve path (normalised)
+- [ ] MINOR F3 — (open, unchanged) A retry's `expected` is stored in the attempt summary in the caller's offset form, unlike the UI (UTC) and the API resolve path (normalised)
       where:  src/server/api/operations/targets.ts:169, src/server/services/posts/retry.ts:139, contrast src/server/api/operations/targets.ts:256
-      why:    `retryPostTarget` passes `body` through unchanged, and `requeueTarget` writes `requestSummary.expected` verbatim. With `expected: "2026-10-05T11:00:00+02:00"`, the attempt log stores and shows the offset string. The UI passes `preview.scheduledAt` (`…Z`, RetryDialog.tsx:101). FR-018 says the request summary must be identical to the UI's. The resolve pass normalised its `expected` (targets.ts:256) but the retry pass did not, so the two operations follow different conventions. `changedFromPreview` is unaffected, because it compares instants.
-      owed:   Normalise retry `expected` to UTC in the operation, the same way as resolve.
+      why:    Unchanged from the first review. `requeueTarget` writes `requestSummary.expected` verbatim. FR-018 asks for a request summary identical to the UI's.
+      owed:   Normalise retry `expected` to UTC in the operation, as resolve already does.
       traces: FR-018
 
-- [ ] MINOR F4 — No test exercises the recovery operations without an `Idempotency-Key` (US5-4)
+- [ ] MINOR F4 — (open, unchanged) No test exercises the recovery operations without an `Idempotency-Key` (US5-4)
       where:  tests/integration/api/endpoints/retry-target.test.ts:18, src/server/api/handle.ts:159-162
-      why:    Every recovery test sends `idem`. The no-key path (`execute`) runs only in `scope-enforcement.test.ts`, which asserts "not 401/403" and never 200. Nothing checks US5-4: a second keyless retry gets `409 not_failed`. The code path is simple, but it is the default for a caller that omits the header.
       owed:   Add a keyless double-retry test: first `200`, second `409` with `details.reason: "not_failed"`.
       traces: US5-4, FR-030
 
-- [ ] MINOR F5 — The secret scan does not look for the key's `last4` in the attempt-log page, although T030 says it does
+- [ ] MINOR F5 — (open, unchanged) The secret scan does not look for the key's `last4` in the attempt-log page, although T030 says it does
       where:  tests/integration/security/secret-scan.test.ts:290-296
-      why:    FR-026 says the key's last four characters MUST NOT appear in the attempt log view. The scan's `oneTime` list has the write key, its hash and the idempotency key, but not `last4`. The code is safe: `toAttemptViews` reads only `.name` (src/server/services/failures.ts:104). But the ticked T030 claims coverage the test does not have.
-      owed:   Assert that the rendered Failures-page piece does not contain the write key's `last4`. Scope it to that page to avoid four-character false positives elsewhere.
+      owed:   Assert that the rendered Failures-page piece does not contain the write key's `last4`.
       traces: FR-026, SC-007
 
-- [ ] MINOR F6 — No test checks the recovery recipe's requests against the OpenAPI document
+- [ ] MINOR F6 — (open, unchanged) No test checks the recovery recipe's requests against the OpenAPI document
       where:  tests/integration/docs/n8n-flow.test.ts:42
-      why:    The doc-flow test was cut off before `## 7. Recover failed posts` so that the generate-and-queue run still passes. No test replaced that coverage. US7's Independent Test asks that every request, header and field the recipe names exists in the OpenAPI document. I checked by hand that the path, the `Idempotency-Key` header and `mode` all exist (targets.ts:80, :89, :167).
-      owed:   Add a small test that parses the section-7 `http` blocks and matches their method, path template and body keys against `buildOpenApiDocument()`.
+      owed:   Parse the §7 `http` blocks and match method, path template and body keys against `buildOpenApiDocument()`.
       traces: US7 Independent Test, FR-028
 
-- [ ] MINOR F7 — Docs and comments say things the code does not do
+- [ ] MINOR F7 — (open, unchanged) Docs and comments say things the code does not do
       where:  src/server/api/operations/targets.ts:85, docs/n8n.md:132, docs/decisions.md:601, src/lib/api/schemas.ts:241, src/server/api/operations/types.ts:20-21
-      why:    (a) The `retryPostTarget` description says "A refusal is reported in a 200 response with `status: failed`". Under D3, refusals are `409`, and the `200` cases are typed outcomes. docs/n8n.md:132 also calls `no_active_slots` "a refusal". An automation builder may then expect blocked-account refusals in a 200. (b) decisions.md:601 (P2) says resolve is "a discriminated union nested on `outcome` then `requeue`", but schemas.ts:241 is a plain `z.union`. The behaviour still holds: the probe reports a bad `url` at path `url`. (c) In types.ts:20-21 the comment "The single list the router, OpenAPI document and tests use" now sits above `ApiExamples`, with nothing it describes.
-      owed:   Reword (a) as "a typed outcome such as `in_past` …". Make (b) say `z.union`. Move or delete (c).
+      why:    (a) The `retryPostTarget` description and docs/n8n.md:132 call `no_active_slots` "a refusal" returned in a `200`. Under D3, refusals are `409`, and the `200` cases are typed outcomes. Line 132 now sits directly above the new cap paragraph, so a reader meets it on the way in. (b) P2 says "discriminated union", but the code is a plain `z.union`. (c) A stray comment sits above `ApiExamples`.
+      owed:   Reword (a) as "a typed outcome such as `no_active_slots` …". Make (b) say `z.union`. Move or delete (c).
       traces: FR-027, FR-029, D3
 
-- NOTE F8 — A resolve body with `outcome: "not_published"` and no `requeue` is rejected with one detail at `path: ""` and "Invalid input" (probe output). This is because `ResolveTargetRequestSchema` is a plain union (src/lib/api/schemas.ts:241). It satisfies FR-009, which asks only for a 400 and `url`-specific reporting, but an automation builder gets no hint that `requeue` is missing. Nested discriminated unions, as P2 planned, would name the field.
+- [ ] MINOR F10 — (new, noticed in re-review) The recipe's bulk step has no cap, so the per-target counter does not protect a flow built on it
+      where:  docs/n8n.md:137 (step 5), contrast docs/n8n.md:134
+      why:    Step 5 of the same flow offers `POST /targets/retry-failed` as the way "to retry everything at once". The new counter is kept per `targetId` and sits under step 3, so a builder who wires step 5 to `post.failed` keeps no counter. Take a project with one target that always fails. Each bulk call retries it, it fails, a new `post.failed` arrives, and the loop has no limit. This is the same loop F1 described, reached through the other branch of the recipe. FR-028 attaches the limit to the per-target retry, so this is MINOR, not a reopened F1.
+      owed:   Say in step 5 that bulk retry is for a person or a schedule, not a reaction to every `post.failed`. Alternatively, say that a webhook-driven flow must use step 3 with its counter.
+      traces: FR-028, Edge Cases "Retry loop"
 
-- NOTE F9 — On the Failures page, grouped runs (`run.count > 1`) show no "Who" at all (src/app/p/[projectSlug]/failures/page.tsx:103-118). This predates 016 and shows no wrong actor, so SC-004 holds. But consecutive identical entries from an automation, for example repeated `retry_requested`/`no_free_slot` from a looping recipe (F1), collapse into one row without the key's name.
+- NOTE F8 — (unchanged) A resolve body with `outcome: "not_published"` and no `requeue` is rejected with one detail at `path: ""` and the message "Invalid input". The cause is the plain `z.union` at src/lib/api/schemas.ts:241. This meets FR-009, but it gives the caller no hint about which field is missing.
+
+- NOTE F9 — (unchanged) On the Failures page, grouped runs show no "Who" (src/app/p/[projectSlug]/failures/page.tsx:103-118). This predates 016.
+
+- NOTE F12 — The first review and T037's text said that resolve `not_published`/`requeue:false` should emit `post.failed`. That was wrong, and the implementer was right to assert zero events instead (recovery-attribution.test.ts:173, :190). `derivePostStatus` counts `ambiguous` as not published (src/server/services/posts/status.ts:9-17). So a post whose only live target is ambiguous already has status `failed`, and resolving that target to `failed` does not change the post status. `applyDerivedStatus` emits only on a change (status.ts:31-34). None of the three operations can move a post *into* `failed`/`partially_failed`, so `post.failed` is never directly reachable from them. That leaves resolve `published` → `post.published` as the only emission to test, plus "no event" for everything else, and the remediated suites cover both.
 
 ## Coverage
 
+Counts reflect the whole feature after remediation. Rows that this pass did not re-derive carry the first review's result, and say so.
+
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-030) | 30 | 27 | 3 (FR-018 F3, FR-028 F1, FR-030 F2/F4/F6) | 0 | 0 |
-| Success criteria (SC-001–SC-008) | 8 | 6 | 2 (SC-003, SC-005: F2) | 0 | 0 |
-| User stories (US1–US7) | 7 | 6 | 1 (US7: F1) | 0 | 0 |
-| Spec decisions (D1–D10) | 10 | 10 | 0 | 0 | 0 |
-| Plan decisions (P1–P15) | 15 | 14 | 1 (P14: F1) | 0 | 0 |
-| Constitution principles (I–VII) | 7 | 7 | 0 | 0 | 0 |
-
-Notes on the satisfied counts, by review category the constitution asks for:
-
-- **Concurrency and locking:** the API path takes the UI's lock order (`withLockedTarget` locks the post, then its targets). Pairing is checked on an id that never changes, before `lockPost` (locked.ts:38-39). In default mode the stored-answer `UPDATE` comes after the post lock, the same order as the other idempotent operations. The two-key race test passes (retry-target.test.ts:174-180). Bulk keeps per-target transactions (`self_commit`, idempotency.ts:152; handle.ts:99 for the no-key path).
-- **Idempotency:** replay of 200 and 409, key reuse 422, in-progress 409 with `Retry-After`, and bulk replay then continuing with a new key are all tested and pass. Only the webhook leg is vacuous (F2).
-- **Authorization and project scoping:** `write_posts` gives 403 naming the permission. Foreign ids give the same 404 as unknown ones for both path params (generic scope test). A foreign `accountId` gives an identical "nothing to retry" 200. Composite FKs pin key references to the project. `api-imports` lint is green.
-- **Time zones and DST:** `at` and `expected` require an offset, `scheduledAtLocal` comes from `plannedTime`, and resolve `expected` is normalised. See F3 for retry.
-- **Error and ambiguous paths:** no documented outcome gives a 5xx. Creator-deleted is fixed (recovery-attribution.test.ts:84-98). Ambiguous targets are refused by retry (`409 not_failed`) and never retried by the recipe.
-- **Secrets:** the view reads only the key name. The secret scan covers responses, `publish_attempts` rows and the Failures page (F5 is the one gap).
+| Functional requirements (FR-001–FR-030) | 30 | 28 | 2 (FR-018 F3; FR-030 F4/F6, MINOR) | 0 | 0 |
+| Success criteria (SC-001–SC-008) | 8 | 8 | 0 | 0 | 0 |
+| User stories (US1–US7) | 7 | 7 | 0 | 0 | 0 |
+| Spec decisions (D1–D10), carried | 10 | 10 | 0 | 0 | 0 |
+| Plan decisions (P1–P15) | 15 | 15 | 0 | 0 | 0 |
+| Constitution principles (I–VII), carried | 7 | 7 | 0 | 0 | 0 |
+| Earlier blocking findings (F1, F2) | 2 | 2 fixed | 0 | 0 | 0 |
 
 ## What I could not check
 
-- **SC-008 timing.** The bulk API was not timed. The 101-target cap tests ran in `now` mode only. 015's 2.0–2.7 s figure for 100 requeues is inherited, not re-measured through the API.
-- **The real n8n flow, a running `pnpm dev`, and curl.** The quickstart's manual walk-through was not run, and no webhook was delivered over HTTP to a real receiver.
-- **Browser rendering.** I did not see the "API key {name}" label in a browser. It was checked through the server-rendered Failures page in the secret scan and through `toAttemptViews` / `attemptActorLabel` unit and integration tests.
-- **CI on a pull request.** No PR exists from this phase. The full `pnpm lint`, `pnpm test` and `pnpm build` were not re-run here (constitution review rule). I rely on implement's ticked final pass, T034, whose output I did not see.
-- **Neon / pooled transaction mode.** The FK additions and savepoint nesting were exercised only against the local test Postgres.
+- **A real n8n run of the capped recipe.** Workflow static data and the alert step were not exercised in n8n. I checked the text against the spec, not its behaviour in a live workflow.
+- **Delivery over HTTP.** The tests subscribe `http://127.0.0.1:9/x` and count `webhook_events` rows. No event was delivered to a receiver.
+- **The full suite, lint, typecheck and build after `b06628e`.** These were not re-run (constitution review rule). The remediation changed only two test files and one doc, and both test files pass. CI on a PR has not been seen, because this phase cannot open one.
+- Everything in the first review's list is still unchecked: SC-008 timing through the API, browser rendering of "API key {name}", the quickstart walk-through with curl and `pnpm dev`, and Neon pooled mode.
