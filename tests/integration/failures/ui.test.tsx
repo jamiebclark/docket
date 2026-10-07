@@ -8,6 +8,8 @@ vi.mock("next/navigation", async () => (await import("../../helpers/actions")).n
 
 import FailuresPage from "../../../src/app/p/[projectSlug]/failures/page";
 import { confirmLabel } from "../../../src/components/targets/retry-ui";
+import { RetryAllDialog } from "../../../src/components/targets/RetryAllDialog";
+import { RetryAllFailed } from "../../../src/components/targets/RetryAllFailed";
 import { RetryDialog } from "../../../src/components/targets/RetryDialog";
 import { AnnounceProvider, announcedText } from "../../../src/components/ui/Announce";
 import { TargetResolution } from "../../../src/components/targets/TargetResolution";
@@ -150,5 +152,52 @@ describe("announcedText", () => {
     const second = announcedText("Retry queued for the next tick.", 2);
     expect(second).not.toBe(first);
     expect(second.trim()).toBe(first);
+  });
+});
+
+describe("retry all failed (static markup)", () => {
+  const props = { slug: "p", accountId: null, accountName: null };
+
+  it("labels the button with and without an account name, and renders nothing at zero", () => {
+    const label = (accountName: string | null, failedCount: number) =>
+      renderToStaticMarkup(createElement(RetryAllFailed, { ...props, accountName, failedCount }));
+    expect(label(null, 12)).toContain("Retry all 12 failed posts");
+    expect(label("Acme Bluesky", 4)).toContain("Retry all 4 failed posts for Acme Bluesky");
+    expect(label("Acme Bluesky", 1)).toContain("Retry 1 failed post for Acme Bluesky");
+    expect(label(null, 0)).toBe("");
+  });
+
+  it("opens with the scope title, two labelled radios with Retry now checked, and confirm disabled while loading", () => {
+    const html = renderToStaticMarkup(
+      createElement(RetryAllDialog, { ...props, accountName: "Acme Bluesky", open: true, onClose: () => undefined, onDone: () => undefined }),
+    );
+    expect(html).toContain("Retry all failed posts for Acme Bluesky");
+    expect(html).toContain("Counting failed posts…");
+    const radios = [...html.matchAll(/<input[^>]*type="radio"[^>]*>/g)].map((m) => m[0]);
+    expect(radios).toHaveLength(2);
+    for (const r of radios) expect(r).toContain('name="retry-all-mode"');
+    expect(radios[0]).toMatch(/value="now"/);
+    expect(radios[0]).toContain("checked");
+    expect(radios[1]).toMatch(/value="requeue"/);
+    expect(radios[1]).not.toContain("disabled");
+    expect(html).toContain("Retry now");
+    expect(html).toContain("Requeue into next free slots");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>\s*Retry now\s*<\/button>/);
+  });
+
+  it("shows the control on the failed and all tabs with failures, but not on the ambiguous tab", async () => {
+    const env = await postsEnv();
+    await outcomeTarget(env, "fatal");
+    actAs(env.owner);
+    expect(await render(env.project.slug)).toContain("Retry 1 failed post");
+    expect(await render(env.project.slug, { status: "failed" })).toContain("Retry 1 failed post");
+    expect(await render(env.project.slug, { status: "ambiguous" })).not.toContain("failed post");
+  });
+
+  it("renders no control when nothing has failed", async () => {
+    const env = await postsEnv();
+    await outcomeTarget(env, "ambiguous");
+    actAs(env.owner);
+    expect(await render(env.project.slug)).not.toMatch(/Retry (all )?\d+ failed post/);
   });
 });

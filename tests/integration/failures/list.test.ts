@@ -36,6 +36,19 @@ describe("listFailures", () => {
     expect(none.accounts).toHaveLength(2);
   });
 
+  it("counts failed targets in the account filter, regardless of tab or page", async () => {
+    const env = await postsEnv();
+    const a = await outcomeTarget(env, "fatal");
+    await outcomeTarget(env, "fatal");
+    await outcomeTarget(env, "ambiguous");
+    expect((await listFailures(env.scope)).failedInFilter).toBe(2);
+    for (const status of ["all", "failed", "ambiguous"]) {
+      expect((await listFailures(env.scope, { status })).failedInFilter).toBe(2);
+      expect((await listFailures(env.scope, { status, account: a.account.id })).failedInFilter).toBe(1);
+    }
+    expect((await listFailures(env.scope, { page: 2, account: a.account.id })).failedInFilter).toBe(1);
+  });
+
   it("falls back to the first page for malformed query values", async () => {
     const env = await postsEnv();
     await outcomeTarget(env, "fatal");
