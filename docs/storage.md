@@ -75,7 +75,10 @@ S3_ENDPOINT=http://minio:9000
 S3_REGION=us-east-1
 S3_FORCE_PATH_STYLE=true
 S3_PUBLIC_BASE_URL=http://localhost:9000/docket-media
+S3_BROWSER_ENDPOINT=http://localhost:9000
 ```
+
+`S3_BROWSER_ENDPOINT` is the address your browser uploads to; `S3_ENDPOINT` (`http://minio:9000`) only works inside the containers.
 
 2. Start (or restart) the stack with the profile, so `web` and `worker` pick up the new variables:
 
@@ -93,3 +96,58 @@ which is why this setup works with the mock provider only.
 startup refuses an `http://` `S3_PUBLIC_BASE_URL` unless its host is `localhost` or `127.0.0.1`.
 So MinIO on a LAN address (for example `http://192.168.1.10:9000`) stops startup; use `localhost`
 as above, or put the bucket behind HTTPS.
+
+## Large uploads (video)
+
+By default (`MEDIA_UPLOAD_TRANSPORT=direct`) the browser sends every file, images and videos alike, straight to the bucket in
+8 MiB parts. The bytes never pass through Docket, which only signs each part. So the bucket must accept cross-origin `PUT` requests
+from Docket's address, and Docket's own IAM user needs two more permissions.
+
+### Per backend
+
+**AWS S3 and Cloudflare R2.** Add a CORS rule to the bucket. `AllowedOrigins` is the origin of `BETTER_AUTH_URL` (scheme and host, no path):
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://docket.example.com"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]
+```
+
+`AllowedHeaders` may instead be just `["content-type"]`. `ExposeHeaders` is optional: Docket reads each part's `ETag` from the bucket
+itself, not from the browser. On R2 the browser must upload to the S3 API domain (`<account>.r2.cloudflarestorage.com`), never the custom
+domain; keep `S3_ENDPOINT` on the S3 API address and `S3_PUBLIC_BASE_URL` on the custom domain.
+
+**AWS IAM.** Add `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` to the `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject`
+already granted on `arn:aws:s3:::docket-media/*`. Confirm the two names against AWS's "Multipart upload and permissions" page before relying on them.
+
+**MinIO.** It answers CORS itself, so there is nothing to configure. Set `MINIO_API_CORS_ALLOW_ORIGIN` on the MinIO service to tighten it to
+Docket's origin.
+
+### Unfinished uploads
+
+An upload the person abandons leaves parts in the bucket that you are billed for. Docket discards its own unfinished uploads after
+`MEDIA_UPLOAD_EXPIRY_HOURS` (24 by default) and aborts them in the bucket. As a backstop, also set the bucket's own clean-up:
+
+- **AWS S3:** a lifecycle rule with `AbortIncompleteMultipartUpload`, `DaysAfterInitiation` 1 to 7.
+- **R2:** abandons incomplete uploads after 7 days by default.
+- **MinIO:** `stale_uploads_expiry`, 24 hours by default.
+
+### When to set `S3_BROWSER_ENDPOINT`
+
+Leave it unset for AWS S3 and R2. Set it when `S3_ENDPOINT` is an address only the containers can reach, such as `http://minio:9000`
+in the offline profile (use `http://localhost:9000`). It must be https when Docket is served over https, or the browser blocks the upload.
+Docket also adds this origin to the page's `connect-src`.
+
+If a reverse proxy sits in front of the bucket, it must preserve the `Host` header, allow request bodies above 8 MiB, not buffer them or
+time out early, pass `OPTIONS` through, and not add its own CORS headers (duplicates make browsers refuse the response).
+
+### When the browser cannot reach the bucket
+
+Set `MEDIA_UPLOAD_TRANSPORT=via_app`. Files then go through Docket in 8 MiB chunks. Your reverse proxy in front of Docket must allow
+request bodies of 9 MB, and no CORS rule is needed. It is slower and loads the web process, so prefer `direct` when you can.

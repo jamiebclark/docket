@@ -743,3 +743,10 @@ Judgement calls from `specs/018-video-groundwork/spec.md` (D1–D12) and its pla
   - Video processing needs the `worker` service: in-process mode processes images only.
 - **P29 — `UploadPanel` replaces both upload loops,** and `uploadMediaAction` is removed. The public API keeps its buffered image path.
 - **P30 — Out of scope, kept by construction.** No real provider gets video limits. Nothing re-encodes, crops or trims. Nothing handles `story` or `reel`.
+
+### Implementation outcome
+
+- All of Phases 1–8 landed as planned. The full gate (`lint`, `typecheck`, `test`, `db:check`, `build`) is green; lint reports only warnings.
+- **Deviation:** `tests/integration/scheduler/step-content.test.ts` asserted the exact `StepContent` shape. `stepFor` now also receives `videoCount`, so the expectations were updated to include `videoCount: 0`.
+- **Known flake, unrelated:** `tests/integration/x/connect.test.ts` compares an expiry against `Date.now()` and can miss by a few milliseconds under load. It passes on re-run.
+- **Owed to the operator (not runnable in the pipeline):** a ~200 MB offline upload with Retry, a 1 GB direct upload to a real R2 or S3 bucket, a `via_app` upload behind a 9 MB proxy limit, and `ffmpeg -version` in the worker on Unraid (T053–T056).

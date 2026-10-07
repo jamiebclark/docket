@@ -97,6 +97,23 @@ The walkthrough above uses the mock provider. To post to real accounts, do these
 6. **Restart:** `docker compose up -d`.
 7. **Invite members and connect accounts** from each project's Accounts screen. Bluesky needs only an app password. Who can connect what, and how to post for accounts other people own: [accounts.md](./accounts.md).
 
+### What changed for video (018)
+
+- **The image is larger** because it now includes ffmpeg (from Debian bookworm). CI logs the exact size of every build.
+- **The worker does the video work.** It uses CPU and temporary disk, about twice the largest video, while it processes one video at a time.
+  Video processing needs the `worker` service: in-process mode (no worker) processes images only, and uploaded videos wait.
+- **No `docker-compose.yml` edit is required.** If your container's writable layer is small, you can give the worker a roomier
+  temporary directory by adding to the `worker` service:
+
+  ```yaml
+      volumes:
+        - /path/with/space:/tmp
+  ```
+
+- **Offline profile only:** add `S3_BROWSER_ENDPOINT=http://localhost:9000` to `.env` (see [docs/storage.md](storage.md#large-uploads-video)).
+  With a real bucket, add the CORS rule described there instead.
+- ffmpeg is GPL-licensed software run as a separate program; see `NOTICE` in the image and the repository.
+
 ## 4. Backups and restore
 
 The `db-backup` service in `docker-compose.yml` writes `docket-YYYYMMDD-HHMMSS.dump` (the `pg_dump -Fc` format below)

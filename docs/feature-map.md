@@ -11,14 +11,18 @@ spec is written.
   composer warns about it (`carousel_crop`). On Facebook this is a multi-photo post, not Facebook's link-ad "carousel".
 - **Per-platform image fitting.** The media planner (`src/server/media/variants.ts`) converts, resizes and compresses
   each image for each target before publishing. A video formatter would follow the same pattern.
+- **Video groundwork (018).** MP4 and MOV upload to the media library (and the picker) by resumable multipart upload
+  straight to the bucket, ffprobe facts, metadata stripping and a poster frame in the worker, per-provider `video`
+  capabilities with composer warnings, and ffmpeg in the image. No provider publishes video yet, and generation ignores videos.
+  Not yet owned by any spec: API video upload, a generator that uses posters, and resuming an upload after a page reload.
 
-## Video (not built)
+## Video (publishing not built)
 
 The build prompt left video out of scope but kept room for it. `PostType` already includes `video`, `story` and
 `reel`. The publish step machine supports the multi-minute container polling that video needs. Each provider's
 `state.ts` has a place for new media kinds.
 
-### Groundwork every video feature needs
+### Groundwork every video feature needs (built in 018, kept for reference)
 
 1. **Video in the media library.** Uploads accept images only, and every file goes through `sharp`. Video needs
    accepted MIME types (MP4/MOV), larger size limits, chunked or resumable uploads, and duration, resolution and codec

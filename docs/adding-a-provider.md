@@ -94,6 +94,22 @@ send the original, derive a variant (convert, downscale, compress) or refuse it 
 Derived variants are generated at compose time and cached by constraint hash. Fixable mismatches surface as `info` notes, not errors.
 `validate` therefore judges the content as it will be sent; do not re-implement image adaptation in a provider.
 
+### Declaring video constraints
+
+`capabilities.video` is required. A provider that does not take video yet declares `video: { maxVideos: 0 }`, and nothing else about it changes;
+Docket then refuses a video for that account with "This account does not accept video yet." A provider that takes video declares
+`maxVideos` (how many per post), `withImages` (a video may share a post with images; default false) and any of these bounds, each checked
+only when declared:
+
+- `containers` (`"mp4"`, `"mov"`), `videoCodecs` and `audioCodecs` (ffprobe codec names such as `h264` and `aac`), `silentAllowed` (default true);
+- `maxBytes`, `minDurationSeconds`, `maxDurationSeconds`;
+- `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, measured on the displayed frame;
+- `minAspectRatio`, `maxAspectRatio` (width ÷ height), `maxFrameRate`.
+
+`maxVideos` above 0 needs `"video"` in `postTypes`, and `withImages` needs `maxImages` above 0; `assertVideoCapabilities` in `src/providers/media.ts`
+rejects an inconsistent declaration when the registry loads. `StepContent.videoCount` carries the number of videos in a post to `validate`. Videos are never adapted: they are sent as stored or refused, so the badges say
+"fits" or "will be refused", never "converted". Add a row for every declared video category to `docs/limits.md`.
+
 ## 4. Connect strategies and where credentials live
 
 `connect` is one of `oauth` (a group, below), `credentials` (named fields, e.g. a handle and app password) or `manual-token` (a pasted token, with fields).

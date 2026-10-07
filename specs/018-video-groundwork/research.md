@@ -468,3 +468,8 @@ Phase 0 for [plan.md](./plan.md). External facts come only from `docs/research/u
   - No ffmpeg command re-encodes or resizes video. The clean step uses `-c copy`, and the poster is one decoded frame (FR-043).
   - Nothing adds `story` or `reel` handling.
   - The ffmpeg modules expose only probe, clean and poster. The formatter (entry 6) adds its own.
+
+## Implement notes
+
+- Read `route.md`, `proxyClientMaxBodySize.md` (experimental; string or byte-number; default 10MB; excess bodies are **truncated with a warning, not rejected**) and the route-handler guide. Nothing differs from the contracts: `params` is a `Promise` (`await ctx.params`), `RouteContext<'/route'>` is a global helper, and `next.config.ts` already sets `experimental.proxyClientMaxBodySize` to `UPLOAD_BODY_LIMIT`.
+- The truncation behaviour is why the chunk route must verify the received byte count against the expected part size (P5), not trust the body.
