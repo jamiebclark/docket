@@ -246,6 +246,28 @@
     Required="false"
     Mask="true"></Config>
 
+  <Config
+    Name="X Client ID"
+    Target="X_CLIENT_ID"
+    Default=""
+    Mode=""
+    Description="Optional. X. Set with X Client Secret. Needs an https:// App URL on a public host."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="X Client Secret"
+    Target="X_CLIENT_SECRET"
+    Default=""
+    Mode=""
+    Description="Optional. Set with X Client ID."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
   <!-- ── Reverse proxy ──────────────────────────────────────── -->
   <Config
     Name="Trusted IP Headers"
