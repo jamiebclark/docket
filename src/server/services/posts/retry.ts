@@ -39,12 +39,29 @@ export type RetryResult =
     }
   | { status: "failed"; reason: RetryFailureReason; message: string; issues?: ValidationIssue[] };
 
+/** Why a failed target's account blocks a retry, or null when it does not (D8). Shared with bulk retry. */
+export function retryBlockedKey(
+  account: AccountRecord | null,
+  providerRegistered: boolean,
+): "account_removed" | "needs_reconnecting" | "provider_unavailable" | null {
+  if (!account) return "account_removed";
+  if (account.status !== "active") return "needs_reconnecting";
+  if (!providerRegistered) return "provider_unavailable";
+  return null;
+}
+
 /** Null when a failed target may be retried; otherwise the reason, in the words the user sees (D8). */
 export function retryBlockedReason(account: AccountRecord | null, providerRegistered: boolean): string | null {
-  if (!account) return "This account was removed, so the post can't be retried.";
-  if (account.status !== "active") return `${account.displayName} needs to be reconnected before this post can be retried.`;
-  if (!providerRegistered) return `The provider for ${account.displayName} is no longer available.`;
-  return null;
+  switch (retryBlockedKey(account, providerRegistered)) {
+    case "account_removed":
+      return "This account was removed, so the post can't be retried.";
+    case "needs_reconnecting":
+      return `${account!.displayName} needs to be reconnected before this post can be retried.`;
+    case "provider_unavailable":
+      return `The provider for ${account!.displayName} is no longer available.`;
+    case null:
+      return null;
+  }
 }
 
 /**
