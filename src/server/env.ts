@@ -70,7 +70,7 @@ function crossFieldIssues(source: Record<string, string | undefined>): EnvIssue[
 }
 
 const STORAGE_GROUP = ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_PUBLIC_BASE_URL"] as const;
-const STORAGE_OPTIONAL = ["S3_ENDPOINT", "S3_REGION", "S3_FORCE_PATH_STYLE", "S3_CHECKSUMS", "S3_PREVIEW_URLS"] as const;
+const STORAGE_OPTIONAL = ["S3_ENDPOINT", "S3_REGION", "S3_FORCE_PATH_STYLE", "S3_CHECKSUMS", "S3_PREVIEW_URLS", "S3_BROWSER_ENDPOINT"] as const;
 const HTTP_URL = /^https?:\/\/[^/\s?#][^\s?#]*$/;
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
@@ -115,6 +115,20 @@ function storageIssues(source: Record<string, string | undefined>): EnvIssue[] {
   if (endpoint && !HTTP_URL.test(endpoint)) {
     out.push({ name: "S3_ENDPOINT", reason: "must be an absolute http(s) URL" });
   }
+  const browser = source.S3_BROWSER_ENDPOINT;
+  if (browser) {
+    if (!HTTP_URL.test(browser)) {
+      out.push({ name: "S3_BROWSER_ENDPOINT", reason: "must be an absolute http(s) URL" });
+    } else if (browser.startsWith("http:") && source.BETTER_AUTH_URL?.startsWith("https:")) {
+      out.push({ name: "S3_BROWSER_ENDPOINT", reason: "must be https when BETTER_AUTH_URL is https" });
+    }
+    if (source.MEDIA_UPLOAD_TRANSPORT === "via_app") {
+      out.push({
+        name: "S3_BROWSER_ENDPOINT",
+        reason: "is not used by the via_app transport; remove it",
+      });
+    }
+  }
   return out;
 }
 
@@ -126,6 +140,8 @@ export type S3StorageConfig = {
   secretAccessKey: string;
   publicBaseUrl: string;
   endpoint?: string;
+  /** Where browsers send upload parts, when it differs from `endpoint`. */
+  browserEndpoint?: string;
   region: string;
   forcePathStyle: boolean;
   checksums: "when_required" | "when_supported";
@@ -196,6 +212,7 @@ function toStorage(e: {
   S3_SECRET_ACCESS_KEY?: string;
   S3_PUBLIC_BASE_URL?: string;
   S3_ENDPOINT?: string;
+  S3_BROWSER_ENDPOINT?: string;
   S3_REGION?: string;
   S3_FORCE_PATH_STYLE: boolean;
   S3_CHECKSUMS: S3StorageConfig["checksums"];
@@ -208,6 +225,7 @@ function toStorage(e: {
     secretAccessKey: e.S3_SECRET_ACCESS_KEY,
     publicBaseUrl: e.S3_PUBLIC_BASE_URL.replace(/\/+$/, ""),
     endpoint: e.S3_ENDPOINT || undefined,
+    browserEndpoint: e.S3_BROWSER_ENDPOINT || undefined,
     region: e.S3_REGION || "auto",
     forcePathStyle: e.S3_FORCE_PATH_STYLE,
     checksums: e.S3_CHECKSUMS,
@@ -260,12 +278,18 @@ const base = z.object({
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     S3_PUBLIC_BASE_URL: z.string().optional(),
     S3_ENDPOINT: z.string().optional(),
+    S3_BROWSER_ENDPOINT: z.string().optional(),
     S3_REGION: z.string().optional(),
     S3_FORCE_PATH_STYLE: bool(false),
     S3_CHECKSUMS: oneOf(["when_required", "when_supported"], "when_required"),
     S3_PREVIEW_URLS: oneOf(["public", "signed"], "public"),
     MEDIA_MAX_UPLOAD_MB: int(1, 25, 20),
     MEDIA_MAX_MEGAPIXELS: int(1, 100, 50),
+    MEDIA_MAX_VIDEO_MB: int(1, 4096, 1024),
+    MEDIA_MAX_VIDEO_SECONDS: int(1, 3600, 900),
+    MEDIA_UPLOAD_TRANSPORT: oneOf(["direct", "via_app"], "direct"),
+    MEDIA_UPLOAD_EXPIRY_HOURS: int(1, 168, 24),
+    MEDIA_MAX_OPEN_UPLOADS: int(1, 50, 10),
     MOCK_PROVIDER_ENABLED: bool(() => process.env.NODE_ENV !== "production"),
     MIGRATE_ON_START: z
       .string()
@@ -306,7 +330,15 @@ export function directUrlOf(source: Record<string, string | undefined>): string 
 const schema = base.transform((e) => ({
     ...e,
     storage: toStorage(e),
-    media: { maxUploadBytes: e.MEDIA_MAX_UPLOAD_MB * 1024 * 1024, maxPixels: e.MEDIA_MAX_MEGAPIXELS * 1_000_000 },
+    media: {
+      maxUploadBytes: e.MEDIA_MAX_UPLOAD_MB * 1024 * 1024,
+      maxPixels: e.MEDIA_MAX_MEGAPIXELS * 1_000_000,
+      maxVideoBytes: e.MEDIA_MAX_VIDEO_MB * 1024 * 1024,
+      maxVideoSeconds: e.MEDIA_MAX_VIDEO_SECONDS,
+      uploadTransport: e.MEDIA_UPLOAD_TRANSPORT,
+      uploadExpiryHours: e.MEDIA_UPLOAD_EXPIRY_HOURS,
+      maxOpenUploads: e.MEDIA_MAX_OPEN_UPLOADS,
+    },
     DATABASE_URL_DIRECT: e.DATABASE_URL_DIRECT || e.DATABASE_URL,
     BOOTSTRAP_ADMIN_NAME: e.BOOTSTRAP_ADMIN_NAME || "Admin",
     TICK_SECRET: e.TICK_SECRET || undefined,

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import type { S3StorageConfig, Storage } from "../../src/server/storage/types";
 
@@ -16,15 +18,48 @@ export interface MemoryStorage extends Storage {
   readonly objects: Map<string, { body: Buffer; contentType: string }>;
   /** Keys whose next `put` should fail (for failure-isolation tests). */
   failPutFor: Set<string>;
+  /** Multipart uploads in flight, by upload id. */
+  readonly multiparts: Map<string, MemoryMultipart>;
+  /** Part numbers whose next `uploadPart` should fail, as `"<key>#<n>"` (for resume tests). */
+  failPartFor: Set<string>;
+  /** Number of `head` calls, so tests can assert idempotent completion resolved through it. */
+  headCalls: number;
+  /** Multipart methods (contracts/uploads.md "Storage interface additions"). */
+  createMultipart(key: string, contentType: string): Promise<{ uploadId: string }>;
+  signPart(key: string, uploadId: string, partNumber: number, expiresInSeconds: number): Promise<string>;
+  uploadPart(key: string, uploadId: string, partNumber: number, body: Buffer): Promise<void>;
+  listParts(key: string, uploadId: string): Promise<{ partNumber: number; etag: string; bytes: number }[] | null>;
+  completeMultipart(
+    key: string,
+    uploadId: string,
+    parts: readonly { partNumber: number; etag: string }[],
+  ): Promise<void>;
+  abortMultipart(key: string, uploadId: string): Promise<void>;
+  head(key: string): Promise<{ bytes: number } | null>;
+  getToFile(key: string, path: string, signal: AbortSignal): Promise<{ bytes: number } | null>;
+  putFile(key: string, path: string, contentType: string, signal: AbortSignal): Promise<{ bytes: number }>;
+}
+
+export interface MemoryMultipart {
+  key: string;
+  contentType: string;
+  parts: Map<number, Buffer>;
 }
 
 /** An in-memory `Storage` double. `publicUrl` matches the S3 implementation's shape. */
 export function createMemoryStorage(publicBaseUrl = "https://media.example.test"): MemoryStorage {
   const objects = new Map<string, { body: Buffer; contentType: string }>();
   const failPutFor = new Set<string>();
-  return {
+  const failPartFor = new Set<string>();
+  const multiparts = new Map<string, MemoryMultipart>();
+  let nextUpload = 0;
+  const etagOf = (b: Buffer) => `"${createHash("md5").update(b).digest("hex")}"`;
+  const store: MemoryStorage = {
     objects,
     failPutFor,
+    failPartFor,
+    multiparts,
+    headCalls: 0,
     async put(key, body, contentType) {
       if (failPutFor.has(key)) throw new Error(`injected put failure for ${key}`);
       objects.set(key, { body: Buffer.from(body), contentType });
@@ -45,7 +80,66 @@ export function createMemoryStorage(publicBaseUrl = "https://media.example.test"
     async exists(key) {
       return objects.has(key);
     },
+    async createMultipart(key, contentType) {
+      const uploadId = `mem-upload-${++nextUpload}`;
+      multiparts.set(uploadId, { key, contentType, parts: new Map() });
+      return { uploadId };
+    },
+    async signPart(key, _uploadId, partNumber, seconds) {
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > 604800) throw new RangeError("expiry out of range");
+      return `memory://${key}?part=${partNumber}`;
+    },
+    async uploadPart(key, uploadId, partNumber, body) {
+      const up = multiparts.get(uploadId);
+      if (!up || up.key !== key) throw new Error("NoSuchUpload");
+      if (failPartFor.has(`${key}#${partNumber}`)) throw new Error(`injected part failure for ${key}#${partNumber}`);
+      up.parts.set(partNumber, Buffer.from(body));
+    },
+    async listParts(key, uploadId) {
+      const up = multiparts.get(uploadId);
+      if (!up || up.key !== key) return null;
+      return [...up.parts.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([partNumber, b]) => ({ partNumber, etag: etagOf(b), bytes: b.length }));
+    },
+    async completeMultipart(key, uploadId, parts) {
+      const up = multiparts.get(uploadId);
+      if (!up || up.key !== key) throw new Error("NoSuchUpload");
+      const chunks: Buffer[] = [];
+      let last = 0;
+      for (const p of parts) {
+        const b = up.parts.get(p.partNumber);
+        if (p.partNumber <= last || !b || etagOf(b) !== p.etag) throw new Error("InvalidPart");
+        last = p.partNumber;
+        chunks.push(b);
+      }
+      objects.set(key, { body: Buffer.concat(chunks), contentType: up.contentType });
+      multiparts.delete(uploadId);
+    },
+    async abortMultipart(_key, uploadId) {
+      multiparts.delete(uploadId);
+    },
+    async head(key) {
+      store.headCalls++;
+      const o = objects.get(key);
+      return o ? { bytes: o.body.length } : null;
+    },
+    async getToFile(key, path, signal) {
+      signal.throwIfAborted();
+      const o = objects.get(key);
+      if (!o) return null;
+      await writeFile(path, o.body);
+      return { bytes: o.body.length };
+    },
+    async putFile(key, path, contentType, signal) {
+      signal.throwIfAborted();
+      if (failPutFor.has(key)) throw new Error(`injected put failure for ${key}`);
+      const body = await readFile(path);
+      objects.set(key, { body, contentType });
+      return { bytes: body.length };
+    },
   };
+  return store;
 }
 
 export interface RecordedRequest {

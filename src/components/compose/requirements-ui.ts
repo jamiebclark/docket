@@ -30,6 +30,21 @@ export function summaryLine(r: RequirementsSummary): string {
   return `${text} · up to ${plural(r.image.maxImages, "image", "images")} · ${list(r.image.formats)}`;
 }
 
+/** The video gist: "Video: not accepted yet" or "Video: 1 per post, MP4, MOV, H.264, up to 50 MB, 1 second – 1 minute, aspect 9:16 – 16:9, up to 60 fps". */
+export function videoLine(r: RequirementsSummary): string {
+  const v = r.video;
+  if (v.maxVideos === 0) return "Video: not accepted yet";
+  const parts = [`${plural(v.maxVideos, "video", "videos")} per post`];
+  if (v.containers.length > 0) parts.push(list(v.containers));
+  if (v.videoCodecs.length > 0) parts.push(list(v.videoCodecs));
+  if (v.maxBytes) parts.push(`up to ${v.maxBytes.label}`);
+  if (v.duration.min || v.duration.max) parts.push(rangeText(v.duration));
+  if (v.aspectRatio.min || v.aspectRatio.max) parts.push(`aspect ${rangeText(v.aspectRatio)}`);
+  if (v.maxFrameRate) parts.push(`up to ${v.maxFrameRate.label}`);
+  if (!v.withImages) parts.push("not with images");
+  return `Video: ${parts.join(", ")}`;
+}
+
 /** "PNG and WebP uploads are converted to JPEG", or null when nothing is converted. */
 export function conversionText(r: RequirementsSummary): string | null {
   const { convertedFrom, convertedTo } = r.image;
@@ -62,6 +77,24 @@ export function detailRows(r: RequirementsSummary): DetailRow[] {
       term: "Alt text",
       detail: image.maxAltTextLength === null ? NO_LIMIT_DOCUMENTED : `up to ${number(image.maxAltTextLength)} characters`,
     });
+  }
+  const { video } = r;
+  rows.push({ term: "Video", detail: video.maxVideos === 0 ? "not accepted yet" : `up to ${number(video.maxVideos)} per post` });
+  if (video.maxVideos > 0) {
+    const NONE = "no limit Docket checks";
+    const listOr = (xs: Labelled<string>[]) => (xs.length > 0 ? list(xs) : NONE);
+    const rangeOr = (x: Range) => (x.min || x.max ? rangeText(x) : NONE);
+    rows.push({ term: "Video with images", detail: video.withImages ? "allowed" : "not allowed" });
+    rows.push({ term: "Video containers", detail: listOr(video.containers) });
+    rows.push({ term: "Video codecs", detail: listOr(video.videoCodecs) });
+    rows.push({ term: "Audio codecs", detail: listOr(video.audioCodecs) });
+    rows.push({ term: "Silent video", detail: video.silentAllowed ? "allowed" : "not allowed" });
+    rows.push({ term: "Video file size", detail: video.maxBytes ? video.maxBytes.label : NONE });
+    rows.push({ term: "Video duration", detail: rangeOr(video.duration) });
+    rows.push({ term: "Video width", detail: rangeOr(video.width) });
+    rows.push({ term: "Video height", detail: rangeOr(video.height) });
+    rows.push({ term: "Video aspect ratio", detail: rangeOr(video.aspectRatio) });
+    rows.push({ term: "Video frame rate", detail: video.maxFrameRate ? `up to ${video.maxFrameRate.label}` : NONE });
   }
   rows.push({ term: "Image required", detail: post.mediaRequired ? "yes" : "no" });
   rows.push({ term: "Text-only posts", detail: post.textOnlyAllowed ? "allowed" : "not allowed" });

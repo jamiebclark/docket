@@ -21,6 +21,7 @@ import { ForbiddenError, InvalidApiKeyError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
 import { createJobItemsRepo, createJobsRepo, type JobItemsRepo, type JobsRepo } from "./jobs";
 import { createMediaRepo, type MediaRepo } from "./media";
+import { createUploadsRepo, type UploadsRepo } from "./uploads";
 import { createPostsRepo, type PostsRepo } from "./posts";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
 import { createTargetsRepo, type TargetsRepo } from "./targets";
@@ -108,6 +109,7 @@ export interface ProjectScope {
   readonly accounts: AccountsRepo;
   readonly slots: SlotsRepo;
   readonly media: MediaRepo;
+  readonly uploads: UploadsRepo;
   readonly posts: PostsRepo;
   readonly targets: TargetsRepo;
   readonly attempts: AttemptsRepo;
@@ -189,6 +191,7 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
         : (request) => roles[data.membership.role].authorize(request as never).success,
     audit: createAuditRepo(exec, data.project.id),
     members: createMembersRepo(exec, data.project.id),
+    uploads: createUploadsRepo(exec, data.project.id),
     invitations: createInvitationsRepo(exec, data.project.id),
     invitationTokens: createTokensRepo(exec, data.project.id),
     connectAttempts: createConnectAttemptsRepo(exec, data.project.id),

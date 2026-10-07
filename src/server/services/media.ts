@@ -5,8 +5,10 @@ import { tagsSchema } from "@/lib/validation/media";
 import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { MediaRepo, MediaRow } from "../dal/media";
 import { actorColumns, type ProjectScope } from "../dal/scope";
+import { durationLabel } from "@/components/media/upload/upload-ui";
 import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { getEnv } from "../env";
+import { libraryLimits, type LibraryLimits } from "../media/limits";
 import { processUpload, type UploadRejection } from "../media/process";
 import { getStorage, mediaKeys, requireStorage } from "../storage";
 import { fitOf, fitPlatforms, type PlatformFit } from "./media-fit";
@@ -65,6 +67,19 @@ export interface MediaView {
   reservedByJobId: string | null;
   originalFilename: string | null;
   createdAt: Date;
+  kind: "image" | "video";
+  status: "processing" | "ready" | "failed";
+  processingStep: "queued" | "probing" | "poster" | null;
+  processingError: string | null;
+  /** Set once a video is ready. `labels` are person-facing, so no component formats a fact itself. */
+  video: null | {
+    durationSeconds: number;
+    frameRate: number | null;
+    videoCodec: string;
+    audioCodec: string | null;
+    container: "mp4" | "mov";
+    labels: { duration: string; frameRate: string | null; videoCodec: string; audioCodec: string; container: string };
+  };
   /** Set by `listMedia` when asked for a `fit`: one entry per platform of the result's `platforms`. */
   fit?: PlatformFit[];
 }
@@ -78,6 +93,8 @@ export interface MediaStatus {
   maxUploadBytes: number;
   maxMegapixels: number;
   acceptedTypes: readonly string[];
+  limits: LibraryLimits;
+  transport: "direct" | "via_app";
 }
 
 function need(scope: Pick<ProjectScope, "can">, permission: "view" | "edit") {
@@ -86,8 +103,16 @@ function need(scope: Pick<ProjectScope, "can">, permission: "view" | "edit") {
 
 export async function mediaStatus(scope: ProjectScope): Promise<MediaStatus> {
   need(scope, "view");
-  const { maxUploadBytes, maxPixels } = getEnv().media;
-  return { enabled: getStorage() !== null, maxUploadBytes, maxMegapixels: maxPixels / 1_000_000, acceptedTypes: UPLOAD_MIME_TYPES };
+  const env = getEnv();
+  const limits = libraryLimits(env);
+  return {
+    enabled: getStorage() !== null,
+    maxUploadBytes: limits.image.maxBytes,
+    maxMegapixels: limits.image.maxMegapixels,
+    acceptedTypes: [...limits.image.types, ...limits.video.types],
+    limits,
+    transport: env.media.uploadTransport,
+  };
 }
 
 export async function toView(
@@ -101,9 +126,10 @@ export async function toView(
   const publicUrl = await sign(row.storageKey, row.publicUrl);
   const thumbnailUrl =
     row.thumbnailStorageKey && row.thumbnailUrl ? await sign(row.thumbnailStorageKey, row.thumbnailUrl) : publicUrl;
+  const ready = row.kind === "video" && row.processingState === "ready";
   return {
     id: row.id,
-    thumbnailUrl,
+    thumbnailUrl: row.kind === "video" && !ready ? VIDEO_PLACEHOLDER : thumbnailUrl,
     publicUrl,
     mimeType: row.mimeType,
     width: row.width,
@@ -116,6 +142,37 @@ export async function toView(
     reservedByJobId,
     originalFilename: row.originalFilename,
     createdAt: row.createdAt,
+    kind: row.kind as MediaView["kind"],
+    status: row.processingState as MediaView["status"],
+    processingStep: row.processingStep as MediaView["processingStep"],
+    processingError: row.processingError,
+    video: ready ? videoFacts(row) : null,
+  };
+}
+
+/** Shown in place of a poster until a video is ready, and for a video that failed (P26). */
+export const VIDEO_PLACEHOLDER = "/media/video-processing.svg";
+
+const VIDEO_CODEC_LABEL: Record<string, string> = { h264: "H.264", hevc: "HEVC", vp9: "VP9", av1: "AV1", mpeg4: "MPEG-4" };
+const AUDIO_CODEC_LABEL: Record<string, string> = { aac: "AAC", mp3: "MP3", opus: "Opus", ac3: "AC-3", vorbis: "Vorbis" };
+
+function videoFacts(row: MediaRow): NonNullable<MediaView["video"]> {
+  const container = row.container === "mov" ? "mov" : "mp4";
+  const seconds = (row.durationMs ?? 0) / 1000;
+  const codec = row.videoCodec ?? "";
+  return {
+    durationSeconds: seconds,
+    frameRate: row.frameRate,
+    videoCodec: codec,
+    audioCodec: row.audioCodec,
+    container,
+    labels: {
+      duration: durationLabel(Math.round(seconds)),
+      frameRate: row.frameRate === null ? null : `${Number(row.frameRate.toFixed(2))} fps`,
+      videoCodec: VIDEO_CODEC_LABEL[codec] ?? codec.toUpperCase(),
+      audioCodec: row.audioCodec ? (AUDIO_CODEC_LABEL[row.audioCodec] ?? row.audioCodec.toUpperCase()) : "No audio",
+      container: container === "mov" ? "MOV" : "MP4",
+    },
   };
 }
 
@@ -129,6 +186,14 @@ export interface PreparedUpload {
   filename: string | null;
 }
 
+export const VIDEO_UPLOAD_REFUSAL = "Video upload is available in the Docket app.";
+
+/** ISO base media (MP4/MOV) and WebM/Matroska signatures. */
+function looksLikeVideo(b: Buffer): boolean {
+  if (b.length >= 12 && b.toString("latin1", 4, 8) === "ftyp") return true;
+  return b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3;
+}
+
 /** Processes the image and writes both objects to storage. Touches no table, so a retry is safe. */
 export async function prepareUpload(
   scope: ProjectScope,
@@ -137,6 +202,9 @@ export async function prepareUpload(
   need(scope, "edit");
   const storage = requireStorage();
   const { maxUploadBytes, maxPixels } = getEnv().media;
+  if (looksLikeVideo(file.bytes)) {
+    return { ok: false, code: "unsupported_type", message: VIDEO_UPLOAD_REFUSAL };
+  }
   const out = await processUpload(file.bytes, { maxBytes: maxUploadBytes, maxPixels });
   if (!out.ok) return out;
   const id = randomUUID();
@@ -211,6 +279,8 @@ const listSchema = z.object({
   unused: z.boolean().optional(),
   missingAlt: z.boolean().optional(),
   q: z.string().max(100).optional(),
+  /** The composer's picker passes `["processing", "ready"]`; the library stays unfiltered. */
+  states: z.array(z.enum(["processing", "ready", "failed"])).min(1).optional(),
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).max(101).optional(),
   offset: z.number().int().min(0).optional(),
@@ -227,6 +297,7 @@ export async function listMedia(scope: ProjectScope, filter: unknown = {}) {
       ...(f.unused ? { unused: true } : {}),
       ...(f.missingAlt ? { missingAlt: true } : {}),
       ...(f.q ? { q: f.q } : {}),
+      ...(f.states ? { states: f.states } : {}),
       limit: f.limit ?? MEDIA_PAGE_SIZE,
       offset: f.offset ?? (page - 1) * MEDIA_PAGE_SIZE,
     }),
@@ -237,7 +308,8 @@ export async function listMedia(scope: ProjectScope, filter: unknown = {}) {
     items: await Promise.all(
       rows.map(async (r) => {
         const view = await toView(r, r.inUse, r.reservedByJobId);
-        return f.fit ? { ...view, fit: providers.map((p) => fitOf(r, p)) } : view;
+        // A video that is not ready has no facts to judge, so it gets no badges (the card says why).
+        return f.fit ? { ...view, fit: r.processingState === "ready" ? providers.map((p) => fitOf(r, p)) : [] } : view;
       }),
     ),
     platforms: providers.map((p) => ({ key: p.key, name: p.displayName })),
@@ -338,7 +410,7 @@ export async function deleteMedia(scope: ProjectScope, assetId: string): Promise
     await tx.media.detachFromPosts(id, drafts);
     await tx.media.softDelete(id, new Date());
     const variants = await tx.media.deleteVariants(id);
-    doomed.push(asset.storageKey, ...(asset.thumbnailStorageKey ? [asset.thumbnailStorageKey] : []), ...variants.map((v) => v.storageKey));
+    doomed.push(asset.storageKey, ...(asset.sourceStorageKey ? [asset.sourceStorageKey] : []), ...(asset.thumbnailStorageKey ? [asset.thumbnailStorageKey] : []), ...variants.map((v) => v.storageKey));
     return { affected: refs.map(toRef) };
   });
   const storage = getStorage();

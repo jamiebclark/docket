@@ -5,8 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/app/p/[projectSlug]/media/actions", () => ({
   listMediaAction: async () => ({ ok: false, error: "conflict", message: "n/a" }),
   updateMediaAction: async () => ({ ok: false, error: "conflict", message: "n/a" }),
-  uploadMediaAction: async () => ({ ok: false, error: "conflict", message: "n/a" }),
 }));
+
+vi.mock("@/app/p/[projectSlug]/media/upload-actions", () => ({
+  uploadLimitsAction: async () => ({ ok: false, error: "conflict", message: "n/a" }),
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 
 import type { MediaView } from "@/server/services/media";
 import { MediaPicker, moveItem, PickerItem } from "./MediaPicker";
@@ -27,6 +31,11 @@ const view = (id: string, name: string): MediaView => ({
   reservedByJobId: null,
   originalFilename: name,
   createdAt: new Date(0),
+  kind: "image",
+  status: "ready",
+  processingStep: null,
+  processingError: null,
+  video: null,
 });
 
 const render = (props: Partial<Parameters<typeof MediaPicker>[0]>) =>

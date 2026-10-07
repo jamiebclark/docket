@@ -74,7 +74,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
         <EmptyState message="Media storage is not set up. Ask an administrator to configure S3-compatible storage, then you can upload images here." />
       ) : (
         <>
-          {canEdit ? <UploadDropzone slug={projectSlug} maxMegabytes={Math.floor(status.maxUploadBytes / 1024 / 1024)} /> : null}
+          {canEdit ? <UploadDropzone slug={projectSlug} limits={status.limits} /> : null}
           <form action={`/p/${projectSlug}/media`} method="get" role="search" className="flex gap-2">
             <label htmlFor="media-q" className="sr-only">
               Search media

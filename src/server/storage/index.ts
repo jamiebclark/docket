@@ -29,6 +29,7 @@ export function setStorageForTests(storage: Storage | null | undefined): void {
 }
 
 type Ext = "jpg" | "png" | "webp";
+type VideoExt = "mp4" | "mov";
 
 /** The only way the service layer builds object keys; every key starts with `projects/<projectId>/`. */
 export function mediaKeys(projectId: string, assetId: string) {
@@ -37,5 +38,11 @@ export function mediaKeys(projectId: string, assetId: string) {
     original: (ext: Ext) => `${base}/original.${ext}`,
     thumbnail: `${base}/thumb.webp`,
     variant: (hash: string, ext: Ext) => `${base}/v/${hash}.${ext}`,
+    video: (ext: VideoExt) => `${base}/original.${ext}`,
   };
+}
+
+/** Staging object of one upload session: the bucket assembles the multipart upload here (contracts/uploads.md). */
+export function uploadStagingKey(projectId: string, uploadId: string): string {
+  return `projects/${projectId}/uploads/${uploadId}/source`;
 }

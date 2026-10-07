@@ -13,6 +13,40 @@ export interface CustomCountingRule {
 }
 export type TextCountingRule = BuiltInCountingRule | CustomCountingRule;
 
+export type VideoContainer = "mp4" | "mov";
+
+export interface VideoCapabilities {
+  /** 0 = this provider does not accept video (yet). */
+  maxVideos: number;
+  /** A video may share a post with images. Default false. */
+  withImages?: boolean;
+  containers?: readonly VideoContainer[];
+  /** ffprobe codec names, e.g. "h264". */
+  videoCodecs?: readonly string[];
+  audioCodecs?: readonly string[];
+  /** A video with no audio stream is accepted. Default true. */
+  silentAllowed?: boolean;
+  maxBytes?: number;
+  minDurationSeconds?: number;
+  maxDurationSeconds?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  /** width ÷ height of the displayed frame, inclusive. */
+  minAspectRatio?: number;
+  maxAspectRatio?: number;
+  maxFrameRate?: number;
+}
+
+export interface VideoFacts {
+  container: VideoContainer;
+  durationSeconds: number;
+  frameRate: number | null;
+  videoCodec: string;
+  audioCodec: string | null;
+}
+
 export interface ProviderCapabilities {
   text: {
     maxLength: number;
@@ -40,6 +74,7 @@ export interface ProviderCapabilities {
     maxAspectRatio?: number;
     maxAltTextLength?: number;
   };
+  video: VideoCapabilities;
   /** e.g. Instagram: false */
   textOnlyAllowed: boolean;
   postTypes: readonly PostType[];
@@ -79,6 +114,8 @@ export type ConnectResult =
 export interface StepContent {
   text: string;
   mediaCount: number;
+  /** How many of the media are videos. Absent = none. */
+  videoCount?: number;
 }
 
 export interface ProviderEnvIssue {
@@ -163,6 +200,14 @@ export interface MediaItem {
   height: number | null;
   bytes: number;
   altText: string;
+  /** Absent = image. */
+  kind?: "image" | "video";
+  /** Absent = ready. */
+  status?: "processing" | "ready" | "failed";
+  /** Set when failed. */
+  failureReason?: string;
+  /** Set on ready videos. */
+  video?: VideoFacts;
 }
 
 export interface PostContent {
@@ -193,6 +238,22 @@ export interface ValidationIssue {
     | "variant_failed"
     | "alt_text_too_long"
     | "media_unavailable"
+    | "video_not_accepted"
+    | "too_many_videos"
+    | "video_with_images"
+    | "video_container_not_allowed"
+    | "video_codec_not_allowed"
+    | "audio_codec_not_allowed"
+    | "audio_required"
+    | "video_too_large"
+    | "video_too_short"
+    | "video_too_long"
+    | "video_too_small"
+    | "video_too_big"
+    | "video_aspect_out_of_range"
+    | "video_frame_rate_too_high"
+    | "media_processing"
+    | "media_failed"
     | (string & {});
   message: string;
   field: "text" | "media" | "postType" | `media.${number}`;

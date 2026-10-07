@@ -4,12 +4,18 @@ export interface CspInput {
   /** Origin of the public media store when it is plain `http:` (local MinIO), else null. */
   publicMediaOrigin: string | null;
   oauthOrigins: readonly string[];
+  /** Origin browsers send upload parts to (direct transport), else null. */
+  uploadOrigin: string | null;
 }
 
 /** The Content-Security-Policy for one request (FR-024, contracts/http-security.md §2). */
 export function buildCsp(input: CspInput): string {
   const img = ["'self'", "data:", "blob:", "https:"];
   if (input.publicMediaOrigin?.startsWith("http:")) img.push(input.publicMediaOrigin);
+  const media = ["'self'", "blob:", "https:"];
+  if (input.publicMediaOrigin?.startsWith("http:")) media.push(input.publicMediaOrigin);
+  const connect = ["'self'"];
+  if (input.uploadOrigin) connect.push(input.uploadOrigin);
   const script = ["'self'", `'nonce-${input.nonce}'`, "'strict-dynamic'"];
   if (input.dev) script.push("'unsafe-eval'");
   return [
@@ -17,8 +23,9 @@ export function buildCsp(input: CspInput): string {
     `script-src ${script.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src ${img.join(" ")}`,
+    `media-src ${media.join(" ")}`,
     "font-src 'self'",
-    "connect-src 'self'",
+    `connect-src ${connect.join(" ")}`,
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

@@ -4,6 +4,7 @@ import type { MediaItem, ProviderCapabilities, SocialProvider, ValidationIssue }
 import type { MediaRow, VariantRow } from "../dal/media";
 import type { createSchedulingRepos } from "../dal/scope";
 import { constraintsHash } from "../media/hash";
+import { videoFieldsOf } from "../media/item";
 import { generateVariant } from "../media/variants";
 import { getStorage, mediaKeys } from "../storage";
 import type { Storage } from "../storage";
@@ -26,7 +27,7 @@ export interface VariantFailure {
  * `label` replaces "Image N" in the planner's sentences (the library names no position).
  */
 export const planFor = (asset: MediaRow, c: MediaConstraints, index: number, platform: string, label?: string): ImagePlan =>
-  asset.width && asset.height
+  asset.kind !== "video" && asset.width && asset.height
     ? planImage({ mimeType: asset.mimeType, width: asset.width, height: asset.height, bytes: asset.byteSize }, c, {
         index,
         platform,
@@ -48,6 +49,7 @@ const itemOf = (asset: MediaRow, v?: VariantRow): MediaItem => ({
   height: v?.height ?? asset.height,
   bytes: v?.byteSize ?? asset.byteSize,
   altText: asset.altText,
+  ...videoFieldsOf(asset),
 });
 
 /** Live assets of a post, in post order. */
@@ -178,6 +180,7 @@ export async function ensureVariant(
   c: MediaConstraints,
   index = 0,
 ): Promise<{ ok: true; variant: VariantRow | null } | { ok: false; message: string }> {
+  if (asset.kind === "video") return { ok: false, message: "Videos are not sent to the model." };
   const plan = planFor(asset, c, index, "the model");
   if (plan.kind === "original") return { ok: true, variant: null };
   if (plan.kind === "refuse") return { ok: false, message: plan.issues[0]?.message ?? "The image cannot be used." };
@@ -252,7 +255,8 @@ export async function resolvePublishMedia(
   const media: MediaItem[] = [];
   for (const [i, id] of ids.entries()) {
     const asset = rows.get(id)!;
-    const unavailable = { ok: false as const, error: `Image ${i + 1} is no longer available.` };
+    const noun = asset.kind === "video" ? "Video" : "Image";
+    const unavailable = { ok: false as const, error: `${noun} ${i + 1} is no longer available.` };
     if (storage && !(await storage.exists(asset.storageKey).catch(() => true))) return unavailable;
     const plan = planFor(asset, c, i, provider.displayName);
     if (plan.kind === "original") {

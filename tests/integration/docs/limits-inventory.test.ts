@@ -11,7 +11,7 @@ const ENFORCEMENT = "tests/integration/limits/enforcement.test.ts";
 
 /** Which generated suites may prove a row, by its "Enforced in" cell. */
 function suitesFor(enforcedIn: string): Suite[] | undefined {
-  if (enforcedIn === "validateResolvedContent") return ["core", "text"];
+  if (enforcedIn === "validateResolvedContent") return ["core", "text", "video"];
   if (enforcedIn === "media planner") return ["planner"];
   if (/^(engine deferral|account limit)/.test(enforcedIn)) return ["limits"];
   return undefined;
@@ -71,6 +71,29 @@ function declared(provider: SocialProvider): Map<string, string[]> {
     ["alt text length", media.maxAltTextLength],
   ];
   for (const [k, v] of optional) if (v !== undefined) m.set(k, [String(v)]);
+  const video = provider.capabilities.video;
+  m.set("videos", [String(video.maxVideos)]);
+  if (video.maxVideos > 0) {
+    const yesNo = (b: boolean) => (b ? "yes" : "no");
+    const listed: [string, string | undefined][] = [
+      ["video with images", video.withImages === undefined ? undefined : yesNo(video.withImages)],
+      ["video containers", video.containers?.join(", ")],
+      ["video codecs", video.videoCodecs?.join(", ")],
+      ["audio codecs", video.audioCodecs?.join(", ")],
+      ["silent video", video.silentAllowed === undefined ? undefined : yesNo(video.silentAllowed)],
+      ["video bytes", video.maxBytes?.toString()],
+      ["min duration", video.minDurationSeconds?.toString()],
+      ["max duration", video.maxDurationSeconds?.toString()],
+      ["video min width", video.minWidth?.toString()],
+      ["video max width", video.maxWidth?.toString()],
+      ["video min height", video.minHeight?.toString()],
+      ["video max height", video.maxHeight?.toString()],
+      ["video min aspect", video.minAspectRatio?.toString()],
+      ["video max aspect", video.maxAspectRatio?.toString()],
+      ["max frame rate", video.maxFrameRate?.toString()],
+    ];
+    for (const [k, v] of listed) if (v !== undefined) m.set(k, [v]);
+  }
   m.set("media required", [media.required ? "yes" : "no"]);
   m.set("text only", [textOnlyAllowed ? "yes" : "no"]);
   const limits = providerPublishLimits(provider).map((l) => `${l.count} / ${l.windowSeconds} s`);

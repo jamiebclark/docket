@@ -51,6 +51,7 @@ function mentioned(name: string): boolean {
 const groups: Record<string, string[]> = {
   SocialProvider: memberNames(declaration("SocialProvider")),
   ProviderCapabilities: memberNames(declaration("ProviderCapabilities")),
+  VideoCapabilities: memberNames(declaration("VideoCapabilities")),
   CustomCountingRule: memberNames(declaration("CustomCountingRule")),
   OAuthConnectGroup: memberNames(declaration("OAuthConnectGroup")),
   CredentialField: memberNames(declaration("CredentialField")),

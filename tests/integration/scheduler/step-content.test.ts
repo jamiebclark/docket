@@ -66,7 +66,7 @@ describe("stepFor receives the content shape (G4)", () => {
     });
     const tick = await runTick({ config: {} });
     expect(tick.publishing.counts).toMatchObject({ claimed: 1, done: 1 });
-    expect(shapes).toEqual([{ text: "override text", mediaCount: 0 }]);
+    expect(shapes).toEqual([{ text: "override text", mediaCount: 0, videoCount: 0 }]);
     expect(target.id).toBeTruthy();
   });
 
@@ -84,8 +84,8 @@ describe("stepFor receives the content shape (G4)", () => {
 
     const byText = (t: string) => contexts.find((c) => c.content.text === t);
     expect(byText("text only")?.step).toEqual({ name: "publish", mayPublish: true });
-    expect(shapes).toContainEqual({ text: "text only", mediaCount: 0 });
-    expect(shapes).toContainEqual({ text: "with media", mediaCount: 1 });
+    expect(shapes).toContainEqual({ text: "text only", mediaCount: 0, videoCount: 0 });
+    expect(shapes).toContainEqual({ text: "with media", mediaCount: 1, videoCount: 0 });
     // The media post's first step does not publish; the provider sees the step the engine leased.
     const media = byText("with media");
     if (media) expect(media.step).toEqual({ name: "upload_media", mayPublish: false });

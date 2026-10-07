@@ -6,12 +6,12 @@ import { member, organization, projects, session, user } from "../../src/server/
 import type { Role } from "../../src/server/auth/access";
 import { createVoiceProfilesRepo, createVoiceVersionsRepo, type VoiceProfileRecord } from "../../src/server/dal/voice";
 import { setDefaultVoiceProfile } from "../../src/server/dal/projects";
-import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import type { PostRecord } from "../../src/server/dal/posts";
 import type { TargetRecord } from "../../src/server/dal/targets";
 import { EMPTY_VOICE_CONTENT, type VoiceContent } from "../../src/lib/validation/voice";
 import type { GenerationMetadata } from "../../src/lib/validation/generation";
 import { createJobItemsRepo, createJobsRepo, type JobItemRecord, type JobRecord } from "../../src/server/dal/jobs";
+import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import { createMediaAsset, createMockAccount } from "./scheduling";
 
 // Factories write straight through the test client, so they run as deliberate cross-project work.
@@ -252,6 +252,48 @@ export async function createJobItem(
 }
 
 /** `count` image assets (an alt text on each, so no gaps), newest last. Returns the rows. */
+export interface VideoAssetOptions {
+  state?: "processing" | "ready" | "failed";
+  durationSeconds?: number;
+  frameRate?: number | null;
+  videoCodec?: string;
+  audioCodec?: string | null;
+  container?: "mp4" | "mov";
+  width?: number;
+  height?: number;
+  byteSize?: number;
+  error?: string;
+}
+
+/** A video row with the given facts, no ffmpeg and no stored object: for limits, validation and gate tests. */
+export async function createVideoAsset(projectId: string, o: VideoAssetOptions = {}) {
+  const state = o.state ?? "ready";
+  const container = o.container ?? "mp4";
+  const key = `test/${unique()}.${container}`;
+  const ready = state === "ready";
+  return forSchedulerProject(projectId).media.insert({
+    storageKey: key,
+    publicUrl: `http://localhost:3000/media/${key}`,
+    mimeType: container === "mov" ? "video/quicktime" : "video/mp4",
+    byteSize: o.byteSize ?? 5_000_000,
+    kind: "video",
+    processingState: state,
+    processingStep: state === "processing" ? "queued" : null,
+    processingError: state === "failed" ? (o.error ?? "Docket could not read this video.") : null,
+    ...(ready
+      ? {
+          width: o.width ?? 1280,
+          height: o.height ?? 720,
+          durationMs: Math.round((o.durationSeconds ?? 20) * 1000),
+          frameRate: o.frameRate === undefined ? 30 : o.frameRate,
+          videoCodec: o.videoCodec ?? "h264",
+          audioCodec: o.audioCodec === undefined ? "aac" : o.audioCodec,
+          container,
+        }
+      : {}),
+  });
+}
+
 export async function createImageAssets(projectId: string, count: number, opts: { altText?: string } = {}) {
   const out = [];
   for (let i = 0; i < count; i++) out.push(await createMediaAsset(projectId, { altText: opts.altText ?? `Image ${i + 1}` }));

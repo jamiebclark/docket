@@ -280,7 +280,7 @@ describe("POST compose/check", () => {
         },
       });
       expect(target.requirements.image.convertedFrom.map((f: { value: string }) => f.value)).toEqual(["image/png", "image/webp"]);
-      expect(target.requirements).not.toHaveProperty("video");
+      expect(target.requirements.video).toMatchObject({ maxVideos: 1, withImages: false });
     });
 
     it("gives a Bluesky target its own numbers and null for what is not checked", async () => {

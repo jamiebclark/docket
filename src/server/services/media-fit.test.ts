@@ -76,3 +76,44 @@ describe("fitOf", () => {
     expect(fit.details[0]).toMatch(/^This image is 200×200; Instagram needs at least/);
   });
 });
+
+describe("fitOf for video", () => {
+  const video = (over: Partial<MediaRow> = {}): MediaRow =>
+    ({
+      id: "v",
+      kind: "video",
+      processingState: "ready",
+      processingError: null,
+      mimeType: "video/mp4",
+      width: 1280,
+      height: 720,
+      byteSize: 5_000_000,
+      altText: "",
+      durationMs: 20_000,
+      frameRate: 30,
+      videoCodec: "h264",
+      audioCodec: "aac",
+      container: "mp4",
+      ...over,
+    }) as MediaRow;
+
+  it("fits the mock for a short H.264 clip", () => {
+    expect(fitOf(video(), by("mock"))).toMatchObject({ state: "fits", details: [], steps: [], convertedTo: null });
+  });
+  it("refuses a long video on the mock, with the sentence in 'This video' wording", () => {
+    const fit = fitOf(video({ durationMs: 222_000 }), by("mock"));
+    expect(fit).toMatchObject({ state: "refused", details: ["This video is 3:42 long; the limit is 1 minute."] });
+  });
+  it("refuses every provider that does not accept video", () => {
+    for (const p of listProviders().filter((x) => x.capabilities.video.maxVideos === 0)) {
+      expect(fitOf(video(), p), p.key).toMatchObject({ state: "refused", details: ["This account does not accept video yet."] });
+    }
+  });
+  it("is never converted", () => {
+    for (const p of listProviders()) {
+      for (const asset of [video(), video({ durationMs: 999_000 }), video({ container: "mov" })]) {
+        expect(fitOf(asset, p).state, p.key).not.toBe("converted");
+      }
+    }
+  });
+});

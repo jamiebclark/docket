@@ -5,8 +5,11 @@ import { runTick } from "./server/scheduler";
 import { runLoop } from "./server/scheduler/loop";
 import { waitForSchema } from "./server/scheduler/schema-wait";
 import { validateConfiguration } from "./server/startup/validate";
+import { markWorkerProcess } from "./server/video/guard";
+import { runMediaLoop } from "./server/video/loop";
 
 async function main(): Promise<void> {
+  markWorkerProcess();
   const validation = validateConfiguration(process.env);
   if (!validation.ok) {
     console.error(formatEnvIssues(validation.issues));
@@ -26,11 +29,14 @@ async function main(): Promise<void> {
   process.on("SIGINT", onSignal);
 
   if (await waitForSchema({ ready: schemaIsReady, signal: controller.signal })) {
-    await runLoop({
-      tick: () => runTick(),
-      intervalMs: getEnv().WORKER_INTERVAL_SECONDS * 1000,
-      signal: controller.signal,
-    });
+    await Promise.all([
+      runLoop({
+        tick: () => runTick(),
+        intervalMs: getEnv().WORKER_INTERVAL_SECONDS * 1000,
+        signal: controller.signal,
+      }),
+      runMediaLoop({ signal: controller.signal }),
+    ]);
   }
   await closeDb();
   process.exit(0);

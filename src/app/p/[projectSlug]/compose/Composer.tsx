@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { MediaView } from "@/server/services/media";
+import { mediaProcessingStatusAction } from "../media/upload-actions";
 import { saveDraftAction } from "./actions";
 import {
   counterText,
@@ -51,6 +52,8 @@ export interface ComposerInitial {
   reviewBlocked: boolean;
 }
 
+/** How often attached media that is still processing is looked at (P15). */
+const MEDIA_POLL_MS = 2_000; // limit-literal-ok: not a platform limit
 const DEBOUNCE_MS = 200;
 
 /** Why an account can't be picked, or `null` when it can. */
@@ -109,6 +112,9 @@ export function Composer({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [nowOpen, setNowOpen] = useState(false);
   const first = useRef(true);
+  // Bumped when an attached video finishes processing, so the check runs again and "still processing" clears (D8).
+  const [mediaVersion, setMediaVersion] = useState(0);
+  const waitingIds = useMemo(() => media.filter((m) => m.status === "processing").map((m) => m.id), [media]);
 
   // With nothing selected there is nothing to check; the last result no longer applies.
   const check = selected.length === 0 ? null : lastCheck;
@@ -135,7 +141,33 @@ export function Composer({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [slug, postId, baseText, mediaIds, targets, initialCheck]);
+  }, [slug, postId, baseText, mediaIds, targets, initialCheck, mediaVersion]);
+
+  // Polls attached media that is not ready yet (P15); stops when none is.
+  const waitingKey = waitingIds.join(",");
+  useEffect(() => {
+    if (waitingKey === "") return;
+    let stopped = false;
+    const timer = setInterval(async () => {
+      const res = await mediaProcessingStatusAction(slug, { ids: waitingKey.split(",") });
+      if (stopped || !res.ok) return;
+      const done = new Map(res.data.items.filter((i) => i.status !== "processing").map((i) => [i.id, i]));
+      if (done.size === 0) return;
+      setMedia((current) =>
+        current.map((m) => {
+          const d = done.get(m.id);
+          if (!d) return m;
+          if (d.status === "ready" && d.item) return d.item as MediaView;
+          return { ...m, status: "failed", processingStep: null, processingError: d.error ?? "Docket could not read this video." };
+        }),
+      );
+      setMediaVersion((v) => v + 1);
+    }, MEDIA_POLL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [slug, waitingKey]);
 
   if (accounts.length === 0) {
     return (

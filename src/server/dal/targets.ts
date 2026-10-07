@@ -1,5 +1,7 @@
 import { and, asc, desc, count, eq, gte, inArray, isNotNull, isNull, lte, gt, ne, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
+import type { VideoFacts } from "../../providers/types";
+import { videoFieldsOf } from "../media/item";
 import { mediaAssets, postMedia, postTargets, posts, type PostTargetRow } from "../db/schema";
 
 export type TargetRecord = PostTargetRow;
@@ -22,6 +24,10 @@ export interface EffectiveContent {
     height: number | null;
     bytes: number;
     altText: string;
+    kind?: "image" | "video";
+    status?: "processing" | "ready" | "failed";
+    failureReason?: string;
+    video?: VideoFacts;
   }[];
 }
 
@@ -333,6 +339,14 @@ export function createTargetsRepo(db: Database, projectId: string): TargetsRepo 
           height: mediaAssets.height,
           bytes: mediaAssets.byteSize,
           altText: mediaAssets.altText,
+          kind: mediaAssets.kind,
+          processingState: mediaAssets.processingState,
+          processingError: mediaAssets.processingError,
+          durationMs: mediaAssets.durationMs,
+          frameRate: mediaAssets.frameRate,
+          videoCodec: mediaAssets.videoCodec,
+          audioCodec: mediaAssets.audioCodec,
+          container: mediaAssets.container,
         })
         .from(postMedia)
         .innerJoin(
@@ -341,7 +355,18 @@ export function createTargetsRepo(db: Database, projectId: string): TargetsRepo 
         )
         .where(and(eq(postMedia.projectId, projectId), eq(postMedia.postId, head.postId)))
         .orderBy(asc(postMedia.position));
-      return { text: head.overrideText ?? head.baseText, media };
+      return {
+        text: head.overrideText ?? head.baseText,
+        media: media.map((m) => ({
+          url: m.url,
+          mimeType: m.mimeType,
+          width: m.width,
+          height: m.height,
+          bytes: m.bytes,
+          altText: m.altText,
+          ...videoFieldsOf(m),
+        })),
+      };
     },
   };
 }

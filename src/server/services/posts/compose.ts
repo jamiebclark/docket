@@ -6,6 +6,7 @@ import { findProvider } from "@/providers/registry";
 import { countText, countingRuleName } from "@/providers/text";
 import type { PostType, ValidationIssue } from "@/providers/types";
 import { inferPostType } from "@/providers/validation";
+import { videoFieldsOf } from "../../media/item";
 import { postInputSchema } from "@/lib/validation/scheduling";
 import * as clock from "../../dal/clock";
 import { ForbiddenError, NotFoundError } from "../../dal/errors";
@@ -69,7 +70,7 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
     if (!account) throw new NotFoundError();
     const provider = findProvider(account.providerKey);
     const effectiveText = target.overrideText ? target.overrideText : parsed.baseText;
-    const media = assets.map((a) => ({ url: a.publicUrl, mimeType: a.mimeType, width: a.width, height: a.height, bytes: a.byteSize, altText: a.altText }));
+    const media = assets.map((a) => ({ url: a.publicUrl, mimeType: a.mimeType, width: a.width, height: a.height, bytes: a.byteSize, altText: a.altText, ...videoFieldsOf(a) }));
     const issues =
       (await validateTargetContent(scope, account, { text: effectiveText, assets, referenced: assets.length }, { preview: true })) ?? [];
     const rule = provider?.capabilities.text.countingRule ?? null;

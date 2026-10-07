@@ -51,7 +51,9 @@ const mediaTypeOf = (mime: string): LlmImageMediaType =>
   mime === "image/png" || mime === "image/webp" || mime === "image/gif" ? mime : "image/jpeg";
 
 /** Prepares attached media for a model call. Messages name the image, never a URL or key. */
-export async function imagesForModel(scope: ProjectScope, assets: readonly MediaRow[]): Promise<Result> {
+export async function imagesForModel(scope: ProjectScope, allAssets: readonly MediaRow[]): Promise<Result> {
+  // A video is never sent to the model (FR-045).
+  const assets = allAssets.filter((a) => a.kind === "image");
   if (assets.length === 0) return { ok: true, images: [], record: [] };
   const storage = getStorage();
   if (!storage) return { ok: false, message: NOT_SET_UP };

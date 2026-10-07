@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { UnknownProviderError } from "./errors";
-import { mediaConstraintsOf } from "./media";
+import { assertVideoCapabilities, mediaConstraintsOf } from "./media";
 import { readFileSync } from "node:fs";
 import { findConnectGroup, findProvider, getProvider, listConnectGroups, listProviders } from "./registry";
 
@@ -36,6 +36,18 @@ describe("provider registry", () => {
   });
   it("declares consistent media constraints for every provider", () => {
     for (const p of listProviders()) expect(() => mediaConstraintsOf(p.capabilities), p.key).not.toThrow();
+  });
+  it("rejects inconsistent video declarations", () => {
+    const base = getProvider("mock").capabilities;
+    const bad = (video: typeof base.video, over: Partial<typeof base> = {}) =>
+      expect(() => assertVideoCapabilities({ ...base, ...over, video })).toThrow(/Inconsistent video constraints|Inconsistent media constraints/);
+    bad({ maxVideos: -1 });
+    bad({ maxVideos: 1, minDurationSeconds: 10, maxDurationSeconds: 5 });
+    bad({ maxVideos: 1, minWidth: 10, maxWidth: 5 });
+    bad({ maxVideos: 1, minAspectRatio: 2, maxAspectRatio: 1 });
+    bad({ maxVideos: 1, withImages: true }, { media: { ...base.media, maxImages: 0 } });
+    bad({ maxVideos: 1 }, { postTypes: ["text", "image"] });
+    expect(() => assertVideoCapabilities({ ...base, video: { maxVideos: 0 } })).not.toThrow();
   });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {

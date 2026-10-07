@@ -1,6 +1,15 @@
 import { MIME_LABEL } from "@/lib/media/types";
 import { countingRuleName, countingUnit } from "./text";
 import type { PostType, ProviderCapabilities } from "./types";
+import {
+  CONTAINER_LABEL,
+  audioCodecLabel,
+  durationLabel,
+  fpsLabel,
+  ratioLabel,
+  videoBytesLabel,
+  videoCodecLabel,
+} from "./video-labels";
 
 export interface Labelled<T> {
   value: T;
@@ -33,6 +42,23 @@ export interface RequirementsSummary {
     height: Range;
     aspectRatio: Range;
     maxAltTextLength: number | null;
+  };
+  video: {
+    /** 0 = video not accepted yet. */
+    maxVideos: number;
+    withImages: boolean;
+    /** `[]` = no limit Docket checks. */
+    containers: Labelled<string>[];
+    videoCodecs: Labelled<string>[];
+    audioCodecs: Labelled<string>[];
+    silentAllowed: boolean;
+    maxBytes: Labelled<number> | null;
+    /** Seconds. */
+    duration: Range;
+    width: Range;
+    height: Range;
+    aspectRatio: Range;
+    maxFrameRate: Labelled<number> | null;
   };
   post: {
     mediaRequired: boolean;
@@ -72,6 +98,7 @@ const px = (n: number) => `${n} px`;
 
 export function requirementsOf(caps: ProviderCapabilities, ctx: { uploadTypes: readonly string[] }): RequirementsSummary {
   const m = caps.media;
+  const v = caps.video;
   const accepts = m.maxImages > 0;
   const output = m.outputMimeType ?? m.allowedMimeTypes[0];
   return {
@@ -92,6 +119,20 @@ export function requirementsOf(caps: ProviderCapabilities, ctx: { uploadTypes: r
       height: range(m.minHeight, m.maxHeight, px),
       aspectRatio: range(m.minAspectRatio, m.maxAspectRatio, aspectLabel),
       maxAltTextLength: m.maxAltTextLength ?? null,
+    },
+    video: {
+      maxVideos: v.maxVideos,
+      withImages: v.withImages ?? false,
+      containers: (v.containers ?? []).map((c) => ({ value: c, label: CONTAINER_LABEL[c] })),
+      videoCodecs: (v.videoCodecs ?? []).map((c) => ({ value: c, label: videoCodecLabel(c) })),
+      audioCodecs: (v.audioCodecs ?? []).map((c) => ({ value: c, label: audioCodecLabel(c) })),
+      silentAllowed: v.silentAllowed ?? true,
+      maxBytes: v.maxBytes === undefined ? null : { value: v.maxBytes, label: videoBytesLabel(v.maxBytes) },
+      duration: range(v.minDurationSeconds, v.maxDurationSeconds, durationLabel),
+      width: range(v.minWidth, v.maxWidth, px),
+      height: range(v.minHeight, v.maxHeight, px),
+      aspectRatio: range(v.minAspectRatio, v.maxAspectRatio, ratioLabel),
+      maxFrameRate: v.maxFrameRate === undefined ? null : { value: v.maxFrameRate, label: fpsLabel(v.maxFrameRate) },
     },
     post: {
       mediaRequired: m.required || !caps.textOnlyAllowed,

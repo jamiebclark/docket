@@ -223,7 +223,15 @@ describe("parseEnv media storage", () => {
     const r = parseEnv(base);
     if (!r.ok) throw new Error(JSON.stringify(r.issues));
     expect(r.env.storage).toBeNull();
-    expect(r.env.media).toEqual({ maxUploadBytes: 20 * 1024 * 1024, maxPixels: 50_000_000 });
+    expect(r.env.media).toEqual({
+      maxUploadBytes: 20 * 1024 * 1024,
+      maxPixels: 50_000_000,
+      maxVideoBytes: 1024 * 1024 * 1024,
+      maxVideoSeconds: 900,
+      uploadTransport: "direct",
+      uploadExpiryHours: 24,
+      maxOpenUploads: 10,
+    });
   });
 
   it("parses a full R2 configuration", () => {
@@ -271,6 +279,58 @@ describe("parseEnv media storage", () => {
       "S3_PUBLIC_BASE_URL",
     ]);
     expect(issues({ ...base, MEDIA_MAX_UPLOAD_MB: "26" }).map((i) => i.name)).toEqual(["MEDIA_MAX_UPLOAD_MB"]);
+  });
+
+  it("validates the video and upload settings", () => {
+    const r = parseEnv({
+      ...base,
+      MEDIA_MAX_VIDEO_MB: "2048",
+      MEDIA_MAX_VIDEO_SECONDS: "60",
+      MEDIA_UPLOAD_TRANSPORT: "via_app",
+      MEDIA_UPLOAD_EXPIRY_HOURS: "48",
+      MEDIA_MAX_OPEN_UPLOADS: "3",
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.issues));
+    expect(r.env.media).toMatchObject({
+      maxVideoBytes: 2048 * 1024 * 1024,
+      maxVideoSeconds: 60,
+      uploadTransport: "via_app",
+      uploadExpiryHours: 48,
+      maxOpenUploads: 3,
+    });
+    const bad: [string, string][] = [
+      ["MEDIA_MAX_VIDEO_MB", "4097"],
+      ["MEDIA_MAX_VIDEO_SECONDS", "0"],
+      ["MEDIA_UPLOAD_TRANSPORT", "carrier-pigeon"],
+      ["MEDIA_UPLOAD_EXPIRY_HOURS", "169"],
+      ["MEDIA_MAX_OPEN_UPLOADS", "51"],
+    ];
+    for (const [name, value] of bad) {
+      expect(issues({ ...base, [name]: value }).map((i) => i.name)).toEqual([name]);
+    }
+  });
+
+  it("accepts S3_BROWSER_ENDPOINT with the storage group", () => {
+    const r = parseEnv({ ...base, ...group, S3_ENDPOINT: "http://minio:9000", S3_BROWSER_ENDPOINT: "http://localhost:9000" });
+    if (!r.ok) throw new Error(JSON.stringify(r.issues));
+    expect(r.env.storage?.browserEndpoint).toBe("http://localhost:9000");
+    expect(issues({ ...base, S3_BROWSER_ENDPOINT: "http://localhost:9000" }).map((i) => i.name)).toEqual([
+      "S3_BROWSER_ENDPOINT",
+    ]);
+  });
+
+  it("refuses an http S3_BROWSER_ENDPOINT when Docket is served over https", () => {
+    const secure = { ...base, ...group, BETTER_AUTH_URL: "https://docket.example.com" };
+    expect(issues({ ...secure, S3_BROWSER_ENDPOINT: "http://localhost:9000" })).toEqual([
+      { name: "S3_BROWSER_ENDPOINT", reason: "must be https when BETTER_AUTH_URL is https" },
+    ]);
+    expect(parseEnv({ ...secure, S3_BROWSER_ENDPOINT: "https://s3.example.com" }).ok).toBe(true);
+  });
+
+  it("refuses S3_BROWSER_ENDPOINT with the via_app transport", () => {
+    expect(
+      issues({ ...base, ...group, S3_BROWSER_ENDPOINT: "http://localhost:9000", MEDIA_UPLOAD_TRANSPORT: "via_app" }),
+    ).toEqual([{ name: "S3_BROWSER_ENDPOINT", reason: "is not used by the via_app transport; remove it" }]);
   });
 
   it("requires https in production except for localhost", () => {

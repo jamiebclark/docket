@@ -5,6 +5,7 @@ import type { MediaItem, ProviderCapabilities } from "./types";
 const caps: ProviderCapabilities = {
   text: { maxLength: 10, countingRule: "graphemes" },
   media: { maxImages: 2, allowedMimeTypes: ["image/png"], maxBytesPerFile: 1000, required: false },
+  video: { maxVideos: 0 },
   textOnlyAllowed: true,
   postTypes: ["text", "image", "carousel"],
 };
@@ -76,5 +77,119 @@ describe("validateAgainstCapabilities", () => {
     const c = { ...caps, media: { ...caps.media, maxAltTextLength: 5 } };
     expect(codes("x", [img({ altText: "123456" })], c)).toEqual(["alt_text_too_long"]);
     expect(codes("x", [img({ altText: "12345" })], c)).toEqual([]);
+  });
+});
+
+const videoCaps: ProviderCapabilities = {
+  ...caps,
+  video: {
+    maxVideos: 1,
+    withImages: false,
+    containers: ["mp4"],
+    videoCodecs: ["h264"],
+    audioCodecs: ["aac"],
+    silentAllowed: false,
+    maxBytes: 1000,
+    minDurationSeconds: 1,
+    maxDurationSeconds: 60,
+    minWidth: 100,
+    maxWidth: 1920,
+    minHeight: 100,
+    maxHeight: 1920,
+    minAspectRatio: 9 / 16,
+    maxAspectRatio: 16 / 9,
+    maxFrameRate: 60,
+  },
+  postTypes: ["text", "image", "carousel", "video"],
+};
+const vid = (over: Partial<MediaItem> = {}, facts: Partial<NonNullable<MediaItem["video"]>> = {}): MediaItem => ({
+  url: "http://x/a.mp4",
+  mimeType: "video/mp4",
+  width: 1280,
+  height: 720,
+  bytes: 500,
+  altText: "",
+  kind: "video",
+  status: "ready",
+  video: { container: "mp4", durationSeconds: 20, frameRate: 30, videoCodec: "h264", audioCodec: "aac", ...facts },
+  ...over,
+});
+
+describe("video validation", () => {
+  it("infers a video post type", () => {
+    expect(inferPostType({ text: "", media: [img(), vid()] })).toBe("video");
+  });
+  it("accepts a clip inside every bound", () => {
+    expect(codes("x", [vid()], videoCaps)).toEqual([]);
+  });
+  it("refuses video where maxVideos is 0, without unsupported_post_type", () => {
+    const issues = validateAgainstCapabilities({ text: "x", media: [vid()] }, caps);
+    expect(issues.map((i) => [i.code, i.field])).toEqual([["video_not_accepted", "media.0"]]);
+    expect(issues[0]!.message).toBe("This account does not accept video yet.");
+  });
+  it("applies unsupported_post_type when video is accepted but not a post type", () => {
+    expect(codes("x", [vid()], { ...videoCaps, postTypes: ["text", "image"] })).toEqual(["unsupported_post_type"]);
+  });
+  it("counts images only for too_many_images, and keeps alt rules off videos", () => {
+    const c = { ...videoCaps, video: { ...videoCaps.video, withImages: true } };
+    expect(codes("x", [img(), img(), vid()], c)).toEqual([]);
+    expect(codes("x", [img(), img(), img(), vid()], c)).toEqual(["too_many_images"]);
+  });
+  it("limits videos and mixing with images", () => {
+    expect(validateAgainstCapabilities({ text: "x", media: [vid(), vid()] }, videoCaps)[0]).toMatchObject({
+      code: "too_many_videos",
+      field: "media",
+      count: 2,
+      limit: 1,
+    });
+    expect(codes("x", [img(), vid()], videoCaps)).toEqual(["video_with_images"]);
+  });
+  it.each([
+    ["container", { container: "mov" as const }, "video_container_not_allowed"],
+    ["video codec", { videoCodec: "hevc" }, "video_codec_not_allowed"],
+    ["audio codec", { audioCodec: "opus" }, "audio_codec_not_allowed"],
+    ["silent", { audioCodec: null }, "audio_required"],
+    ["too short", { durationSeconds: 0.5 }, "video_too_short"],
+    ["too long", { durationSeconds: 222 }, "video_too_long"],
+    ["frame rate", { frameRate: 120 }, "video_frame_rate_too_high"],
+  ])("flags %s", (_n, facts, code) => {
+    expect(codes("x", [vid({}, facts)], videoCaps)).toEqual([code]);
+  });
+  it("refuses a container the provider does not list", () => {
+    expect(codes("x", [vid({ mimeType: "video/quicktime" }, { container: "mov" })], videoCaps)).toEqual(["video_container_not_allowed"]);
+    expect(codes("x", [vid({ mimeType: "video/quicktime" }, { container: "mov" })], { ...videoCaps, video: { ...videoCaps.video, containers: ["mp4", "mov"] } })).toEqual([]);
+  });
+  it("accepts a silent video unless the provider forbids it", () => {
+    const silent = vid({}, { audioCodec: null });
+    expect(codes("x", [silent], { ...videoCaps, video: { ...videoCaps.video, silentAllowed: true } })).toEqual([]);
+    expect(codes("x", [silent], { ...videoCaps, video: { ...videoCaps.video, silentAllowed: undefined } })).toEqual([]);
+    expect(codes("x", [silent], videoCaps)).toEqual(["audio_required"]);
+  });
+  it("keeps boundaries inclusive", () => {
+    expect(codes("x", [vid({ bytes: 1000 }, { durationSeconds: 60, frameRate: 60 })], videoCaps)).toEqual([]);
+    expect(codes("x", [vid({ bytes: 1001 })], videoCaps)).toEqual(["video_too_large"]);
+    expect(codes("x", [vid({}, { durationSeconds: 1 })], videoCaps)).toEqual([]);
+  });
+  it("checks size and aspect, passing an unknown frame rate", () => {
+    expect(codes("x", [vid({ width: 2000, height: 1200 })], videoCaps)).toEqual(["video_too_big"]);
+    expect(codes("x", [vid({ width: 50, height: 100 })], videoCaps)).toEqual(["video_too_small", "video_aspect_out_of_range"]);
+    expect(codes("x", [vid({ width: 1920, height: 1000 })], videoCaps)).toEqual(["video_aspect_out_of_range"]);
+    expect(codes("x", [vid({ width: 1600, height: 900 })], videoCaps)).toEqual([]);
+    expect(codes("x", [vid({}, { frameRate: null })], videoCaps)).toEqual([]);
+  });
+  it("names the limit and value", () => {
+    const [issue] = validateAgainstCapabilities({ text: "x", media: [vid({}, { durationSeconds: 222 })] }, videoCaps);
+    expect(issue).toMatchObject({ message: "Video 1 is 3:42 long; the limit is 1 minute.", count: 222, limit: 60 });
+  });
+  it("blocks processing and failed items with no other rule", () => {
+    const issues = validateAgainstCapabilities(
+      { text: "x", media: [vid({ status: "processing", video: undefined }), vid({ status: "failed", failureReason: "Docket could not read this video", video: undefined })] },
+      { ...videoCaps, video: { ...videoCaps.video, maxVideos: 2 } },
+    );
+    expect(issues.map((i) => [i.code, i.field])).toEqual([
+      ["media_processing", "media.0"],
+      ["media_failed", "media.1"],
+    ]);
+    expect(issues[1]!.message).toBe("Video 2 failed: Docket could not read this video. Remove it to continue.");
   });
 });

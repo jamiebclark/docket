@@ -1,6 +1,6 @@
-import { and, asc, count, eq, gt, inArray, isNotNull, isNull, lte, ne, notInArray, or } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
-import { postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
+import { mediaAssets, postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
 import type { StepContent } from "../../providers/types";
 import { createAttemptsRepo, type AttemptEntry } from "./attempts";
 import { createSchedulingRepos, crossProject } from "./scope";
@@ -115,10 +115,15 @@ export function claimDueTargets(opts: ClaimDueOptions): Promise<ClaimedTarget[]>
             .limit(1);
           if (!head) return null;
           const [media] = await exec
-            .select({ n: count() })
+            .select({ n: count(), videos: count(sql`CASE WHEN ${mediaAssets.kind} = 'video' THEN 1 END`) })
             .from(postMedia)
+            .innerJoin(mediaAssets, and(eq(mediaAssets.id, postMedia.mediaAssetId), eq(mediaAssets.projectId, postMedia.projectId)))
             .where(and(eq(postMedia.projectId, target.projectId), eq(postMedia.postId, target.postId)));
-          return { text: head.overrideText ?? head.baseText, mediaCount: Number(media?.n ?? 0) };
+          return {
+            text: head.overrideText ?? head.baseText,
+            mediaCount: Number(media?.n ?? 0),
+            videoCount: Number(media?.videos ?? 0),
+          };
         },
       };
 

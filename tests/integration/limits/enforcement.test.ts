@@ -11,12 +11,12 @@ import { validateResolvedContent } from "../../../src/server/services/posts/vali
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
-import { createProjectWithMembers } from "../../helpers/factories";
+import { createProjectWithMembers, createVideoAsset } from "../../helpers/factories";
 import { fakeSession } from "../../helpers/auth";
 import { forProject } from "../../../src/server/dal/scope";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDraftPost, createDueTarget, createMediaAsset, createMockAccount, createSlots, parkAllDueTargets } from "../../helpers/scheduling";
-import { coreRows, limitRows, planWith, plannerRows, textRows, type Expectation } from "../../helpers/limit-rows";
+import { coreRows, limitRows, planWith, plannerRows, textRows, videoRows, type Expectation } from "../../helpers/limit-rows";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 
 /** Any request to a platform fails the test: every row below must be refused or deferred before one is made. */
@@ -89,6 +89,30 @@ describe("text rows: refused when scheduling and again at publish time, with no 
         expect(after!.lastError).toMatch(new RegExp(`^Can't publish to ${provider.displayName.replace(/[()]/g, "\\$&")}: `));
         const attempts = await forSchedulerProject(env.project.id).attempts.listForTarget(target.id);
         expect(attempts.map((a) => [a.step, a.outcome])).toEqual([["engine-validate", "fatal_error"]]);
+      });
+    }
+  }
+});
+
+describe("video rows: refused when scheduling, and the provider's advance is never called (FR-039, SC-008)", () => {
+  for (const provider of providers) {
+    for (const row of videoRows(provider)) {
+      it(row.title, async () => {
+        const advance = vi.spyOn(provider, "advance");
+        const env = await createProjectWithMembers();
+        const scope = await forProject(fakeSession(env.owner.id), env.project.slug);
+        const account = await createMockAccount(env.project.id, {}, { providerKey: provider.key });
+        await createSlots(env.project.id, account.id, [{ weekday: 1, localTime: "09:00" }]);
+        const mediaIds: string[] = [];
+        if (row.withImage) mediaIds.push((await createMediaAsset(env.project.id, { mimeType: provider.capabilities.media.allowedMimeTypes[0] })).id);
+        for (const facts of row.videos) mediaIds.push((await createVideoAsset(env.project.id, facts)).id);
+
+        const draft = await posts.createDraft(scope, { baseText: "hi", targets: [{ accountId: account.id }], mediaIds });
+        const queued = await atTime(BEFORE, () => posts.addToQueue(scope, draft.post.id, {}));
+        expect(queued[0]).toMatchObject({ ok: false, code: "validation" });
+        expectOutcome(queued[0]!.ok ? [] : (queued[0]!.issues ?? []), { refuse: [row.code] });
+        expect(advance).not.toHaveBeenCalled();
+        advance.mockRestore();
       });
     }
   }

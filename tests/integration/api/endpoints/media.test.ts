@@ -163,3 +163,23 @@ describe("GET /media", () => {
     expect((await api("GET", `/media/${free!.id}`, { key })).json.reservedByJobId).toBeNull();
   });
 });
+
+describe("video in the public API (018)", () => {
+  const mp4 = () => Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from("ftypisom"), Buffer.alloc(32)]);
+
+  it("refuses a video upload with 415 and points to the app", async () => {
+    const { key, storage } = await setup();
+    const f = new FormData();
+    f.set("file", new File([new Uint8Array(mp4())], "clip.mp4", { type: "video/mp4" }));
+    const r = await api("POST", "/media", { key, body: f });
+    expect(r.status).toBe(415);
+    expect(JSON.stringify(r.json)).toContain("Video upload is available in the Docket app");
+    expect(storage.objects.size).toBe(0);
+  });
+
+  it("returns the video fields on an image", async () => {
+    const { key } = await setup();
+    const r = await api("POST", "/media", { key, body: await form(await jpeg(300, 200)) });
+    expect(r.json).toMatchObject({ kind: "image", processingState: "ready", video: null });
+  });
+});

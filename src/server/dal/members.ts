@@ -22,6 +22,11 @@ export interface MembersRepo {
   delete(userId: string): Promise<void>;
   /** Only meaningful inside a `lockProject` transaction, which serialises owner changes. */
   countOwners(): Promise<number>;
+  /**
+   * Locks the caller's own `member` row with `FOR NO KEY UPDATE`, in its own statement. Serialises one
+   * member's concurrent `createUpload` calls for the open-upload cap. Only meaningful inside a transaction.
+   */
+  lockSelf(userId: string): Promise<boolean>;
 }
 
 export function createMembersRepo(db: Database, projectId: string): MembersRepo {
@@ -69,6 +74,15 @@ export function createMembersRepo(db: Database, projectId: string): MembersRepo 
         .from(member)
         .where(and(eq(member.organizationId, projectId), eq(member.role, "owner")));
       return row?.n ?? 0;
+    },
+    async lockSelf(userId) {
+      const rows = await db
+        .select({ id: member.id })
+        .from(member)
+        .where(and(eq(member.organizationId, projectId), eq(member.userId, userId)))
+        .limit(1)
+        .for("no key update");
+      return rows.length > 0;
     },
     async list() {
       return db
