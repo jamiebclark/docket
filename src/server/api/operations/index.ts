@@ -5,6 +5,7 @@ import { mediaOperations } from "./media";
 import { openApiOperations } from "./openapi";
 import { postOperations } from "./posts";
 import { slotOperations } from "./slots";
+import { targetOperations } from "./targets";
 
 export * from "./types";
 
@@ -14,6 +15,7 @@ export const OPERATIONS: readonly AnyApiOperation[] = [
   ...accountOperations,
   ...mediaOperations,
   ...postOperations,
+  ...targetOperations,
   ...generateOperations,
   ...slotOperations,
   ...jobOperations,
