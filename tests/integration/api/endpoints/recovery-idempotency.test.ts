@@ -78,7 +78,7 @@ describe.each([
   it("422s the same key with a different body", async () => {
     const f = await make();
     await f.post(f.path, f.body, "k1");
-    const other = f.body.outcome ? { outcome: "not_published", requeue: false } : { mode: "requeue" };
+    const other = "outcome" in f.body ? { outcome: "not_published", requeue: false } : { mode: "requeue" };
     const r = await f.post(f.path, other, "k1");
     expect(r.status).toBe(422);
     expect(r.json.error.code).toBe("idempotency_key_reused");

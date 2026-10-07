@@ -115,11 +115,11 @@ description: "Task list for 016 — public API to retry, bulk-retry and resolve 
 
 ### Tests for User Story 5
 
-- [ ] T023 [P] [US5] Create `tests/integration/api/endpoints/recovery-idempotency.test.ts`, per operation: replay of a 200 and of a stored 409 returns the same body with `Idempotent-Replayed: true`, with unchanged attempt count, target row and webhook event count; same key + different body → 422; in-progress claim → 409 with `Retry-After` (hold the claim as `tests/integration/api/idempotency.test.ts` does); a new key after success → 409 `not_failed`; bulk with the same key after `remaining > 0` replays with no new retries, and a new key continues.
+- [x] T023 [P] [US5] Create `tests/integration/api/endpoints/recovery-idempotency.test.ts`, per operation: replay of a 200 and of a stored 409 returns the same body with `Idempotent-Replayed: true`, with unchanged attempt count, target row and webhook event count; same key + different body → 422; in-progress claim → 409 with `Retry-After` (hold the claim as `tests/integration/api/idempotency.test.ts` does); a new key after success → 409 `not_failed`; bulk with the same key after `remaining > 0` replays with no new retries, and a new key continues.
 
 ### Implementation for User Story 5
 
-- [ ] T024 [US5] Fix whatever T023 exposes in `src/server/api/idempotency.ts` / `operations/targets.ts` (single retry and resolve use the default `transaction` mode so effect, webhook rows and stored answer commit together; bulk uses `self_commit`). Confirm no `Idempotency-Key` value appears in any stored response or attempt summary.
+- [x] T024 [US5] Fix whatever T023 exposes in `src/server/api/idempotency.ts` / `operations/targets.ts` (single retry and resolve use the default `transaction` mode so effect, webhook rows and stored answer commit together; bulk uses `self_commit`). Confirm no `Idempotency-Key` value appears in any stored response or attempt summary.
 
 ---
 
