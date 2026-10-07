@@ -20,8 +20,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   switch (outcome.kind) {
     case "chooser":
       return go(`/p/${outcome.projectSlug}/accounts/connect/${outcome.attemptId}`);
-    case "accounts":
-      return go(`/p/${outcome.projectSlug}/accounts?connect=${outcome.code}&group=${encodeURIComponent(outcome.groupKey)}`);
+    case "accounts": {
+      const query = new URLSearchParams({ connect: outcome.code, group: outcome.groupKey });
+      if (outcome.notice) query.set("notice", outcome.notice);
+      return go(`/p/${outcome.projectSlug}/accounts?${query}`);
+    }
     default:
       return go("/connect/invalid");
   }

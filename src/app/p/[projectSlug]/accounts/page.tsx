@@ -9,6 +9,7 @@ import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
 import { findConnectGroup } from "@/providers/registry";
 import * as connect from "@/server/services/connect";
+import { openBannerMessage } from "@/server/services/connect-banner";
 import * as slots from "@/server/services/slots";
 import { ConnectGroupSection } from "./ConnectGroupSection";
 import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
@@ -48,12 +49,17 @@ export default async function AccountsPage({
   searchParams,
 }: {
   params: Promise<{ projectSlug: string }>;
-  searchParams?: Promise<{ connect?: string | string[]; group?: string | string[] }>;
+  searchParams?: Promise<{ connect?: string | string[]; group?: string | string[]; notice?: string | string[] }>;
 }) {
   const { projectSlug } = await params;
   const query = await searchParams;
   const connectParam = query?.connect;
-  const baseBanner = typeof connectParam === "string" ? CONNECT_BANNER[connectParam] : undefined;
+  // The platform's own message replaces the generic text only when Docket sealed it for this project, group and code (G18).
+  const own =
+    typeof connectParam === "string" && connectParam in CONNECT_BANNER && typeof query?.group === "string" && typeof query.notice === "string"
+      ? openBannerMessage({ projectSlug, groupKey: query.group, code: connectParam }, query.notice, new Date())
+      : null;
+  const baseBanner = own ?? (typeof connectParam === "string" ? CONNECT_BANNER[connectParam] : undefined);
   // The hint comes from the registered group, never from platform text; an unknown group value shows nothing.
   const hint =
     typeof connectParam === "string" && typeof query?.group === "string" && HINTED_CODES.has(connectParam)

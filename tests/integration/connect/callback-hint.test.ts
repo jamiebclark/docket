@@ -9,6 +9,7 @@ vi.mock("next/navigation", async () => (await import("../../helpers/actions")).n
 import AccountsPage from "../../../src/app/p/[projectSlug]/accounts/page";
 import { GET } from "../../../src/app/connect/callback/route";
 import * as connect from "../../../src/server/services/connect";
+import { sealBannerMessage } from "../../../src/server/services/connect-banner";
 import { closeDb } from "../../helpers/db";
 import { registerThrowaway, sessionFor, strictGroup, unregisterThrowaway } from "../../helpers/connect-group";
 import { postsEnv } from "../../helpers/posts-env";
@@ -41,8 +42,8 @@ async function withSession<T>(userId: string, sessionId: string, fn: () => Promi
 }
 
 /** Starts a real attempt, lands the platform callback with `extra`, and returns the redirect's search params. */
-async function callback(extra: string): Promise<URLSearchParams> {
-  const env = await postsEnv();
+async function callback(extra: string, env?: Awaited<ReturnType<typeof postsEnv>>): Promise<URLSearchParams> {
+  env ??= await postsEnv();
   const session = await sessionFor(env.owner.id);
   const { url } = await connect.startOAuthConnect(env.scope, { groupKey: "throwaway-strict" }, session);
   const state = new URL(url).searchParams.get("state")!;
@@ -54,11 +55,11 @@ async function callback(extra: string): Promise<URLSearchParams> {
   return location.searchParams;
 }
 
-async function renderAccounts(query: Record<string, string>): Promise<string> {
-  const env = await postsEnv();
+async function renderAccounts(query: Record<string, string>, env?: Awaited<ReturnType<typeof postsEnv>>): Promise<string> {
+  env ??= await postsEnv();
   const session = await sessionFor(env.owner.id);
   return withSession(env.owner.id, session.sessionId, async () =>
-    renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }), searchParams: Promise.resolve(query) })),
+    renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env!.project.slug }), searchParams: Promise.resolve(query) })),
   );
 }
 
@@ -97,5 +98,48 @@ describe("accounts banner hint", () => {
     const plain = await renderAccounts({ connect: "platform_error", group: "throwaway" });
     expect(plain).toContain("The platform returned an error.");
     expect(plain).not.toContain(HINT);
+  });
+});
+
+describe("the platform's own message in the banner (G18)", () => {
+  const OWN = "Strict could not be reached. Nothing changed. Try again.";
+
+  it("carries a refused exchange's message sealed, and the page shows it", async () => {
+    const env = await postsEnv();
+    const spy = vi.spyOn(strictGroup, "exchangeCode").mockResolvedValue({ ok: false, message: OWN });
+    try {
+      const q = await callback("code=abc", env);
+      expect([...q.keys()].sort()).toEqual(["connect", "group", "notice"]);
+      expect(q.get("connect")).toBe("exchange_failed");
+      expect(q.toString()).not.toContain("reached");
+      const html = await renderAccounts(Object.fromEntries(q), env);
+      expect(html).toContain(OWN);
+      expect(html).not.toContain("Could not finish signing in.");
+      expect(html).toContain(HINT);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("shows the group's own text for a platform error", async () => {
+    strictGroup.describeCallbackError = () => ({ code: "platform_error", message: "Strict returned an error. Nothing changed." });
+    try {
+      const env = await postsEnv();
+      const q = await callback("error=server_error", env);
+      expect(await renderAccounts(Object.fromEntries(q), env)).toContain("Strict returned an error. Nothing changed.");
+    } finally {
+      strictGroup.describeCallbackError = (p) => ({ code: p.get("error") === "access_denied" ? "cancelled" : "platform_error", message: "" });
+    }
+  });
+
+  it("falls back to the generic text for a forged, foreign or mismatched notice", async () => {
+    const env = await postsEnv();
+    const sealed = (projectSlug: string, code: string) =>
+      sealBannerMessage({ projectSlug, groupKey: "throwaway-strict", code }, "Your account is suspended", new Date())!;
+    for (const notice of ["Your account is suspended", sealed("another-project", "exchange_failed"), sealed(env.project.slug, "cancelled")]) {
+      const html = await renderAccounts({ connect: "exchange_failed", group: "throwaway-strict", notice }, env);
+      expect(html).not.toContain("Your account is suspended");
+      expect(html).toContain("Could not finish signing in.");
+    }
   });
 });

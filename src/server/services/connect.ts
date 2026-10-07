@@ -8,6 +8,7 @@ import { redirectUriProblem } from "@/providers/connect";
 import { ForbiddenError, NotFoundError } from "../dal/errors";
 import { forProject, type ProjectScope } from "../dal/scope";
 import { decryptSecret, encryptSecret } from "../crypto/secrets";
+import { sealBannerMessage } from "./connect-banner";
 import { generateInvitationToken, hashInvitationToken, isWellFormedToken } from "../crypto/tokens";
 import { getEnv } from "../env";
 import { isGroupConfigured } from "../provider-env";
@@ -263,10 +264,22 @@ export async function chooseConnectCandidates(
 
 export type CallbackOutcome =
   | { kind: "chooser"; projectSlug: string; attemptId: string }
-  | { kind: "accounts"; projectSlug: string; groupKey: string; code: "cancelled" | "platform_error" | "exchange_failed" | "no_candidates" | "too_many" | "not_allowed" }
+  | {
+      kind: "accounts";
+      projectSlug: string;
+      groupKey: string;
+      code: "cancelled" | "platform_error" | "exchange_failed" | "no_candidates" | "too_many" | "not_allowed";
+      /** The group's own user-facing message, sealed for the banner (G18). Never plaintext: it travels in a URL. */
+      notice?: string;
+    }
   | { kind: "invalid" };
 
 const INVALID: CallbackOutcome = { kind: "invalid" };
+
+function optionalNotice(target: Parameters<typeof sealBannerMessage>[0], message: string, now: Date): { notice?: string } {
+  const notice = sealBannerMessage(target, message, now);
+  return notice ? { notice } : {};
+}
 
 /**
  * The platform's redirect back. Order matters (research D5): nothing reaches the platform until the state
@@ -295,11 +308,12 @@ export async function handleOAuthCallback(
   // Expiry and reuse are decided by this single conditional UPDATE, so parallel callbacks cannot both pass.
   if (!(await scope.connectAttempts.consumeState(found.id, { ...caller, now }))) return INVALID;
 
-  const back = (code: Extract<CallbackOutcome, { kind: "accounts" }>["code"]): CallbackOutcome => ({
+  const back = (code: Extract<CallbackOutcome, { kind: "accounts" }>["code"], message?: string): CallbackOutcome => ({
     kind: "accounts",
     projectSlug: found.projectSlug,
     groupKey: found.groupKey,
     code,
+    ...(message ? optionalNotice({ projectSlug: found.projectSlug, groupKey: found.groupKey, code }, message, now) : {}),
   });
   const finish = async (outcome: CallbackOutcome) => {
     await scope.connectAttempts.complete(found.id, now);
@@ -309,7 +323,7 @@ export async function handleOAuthCallback(
   const platformError = params.has("error") || params.has("error_reason") || params.has("error_description");
   if (platformError) {
     const described = entry.group.describeCallbackError?.(params);
-    return finish(back(described?.code ?? "platform_error"));
+    return finish(back(described?.code ?? "platform_error", described?.message));
   }
   const code = params.get("code");
   if (!code) return finish(back("platform_error"));
@@ -326,7 +340,7 @@ export async function handleOAuthCallback(
   } catch {
     return finish(back("exchange_failed"));
   }
-  if (!result.ok) return finish(back("exchange_failed"));
+  if (!result.ok) return finish(back("exchange_failed", result.message));
   if (result.candidates.length === 0) return finish(back("no_candidates"));
   const ciphertext = encryptCandidates(found.id, result.candidates, result.notices);
   if (!ciphertext) return finish(back("too_many"));

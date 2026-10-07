@@ -94,6 +94,7 @@ export interface ConnectCandidate {
 
 export type CandidatesResult =
   | { ok: true; candidates: readonly ConnectCandidate[]; notices?: readonly string[] }
+  /** `message` is shown to the user as written, on the paste form and in the accounts banner (G18): plain text, secrets scrubbed, at most 500 characters. */
   | { ok: false; message: string };
 
 export interface OAuthConnectGroup {
@@ -133,7 +134,7 @@ export interface OAuthConnectGroup {
     now: Date;
     signal: AbortSignal;
   }): Promise<CandidatesResult>;
-  /** Maps the callback's error query (e.g. a cancelled login) to a plain message. */
+  /** Maps the callback's error query (e.g. a cancelled login) to a plain message, shown in the accounts banner (G18). Write it yourself; never echo the query's text, which anyone can put in a link. */
   describeCallbackError?(params: URLSearchParams): { code: "cancelled" | "platform_error"; message: string };
   /** A token generated in the platform's tools → the same candidates. */
   pasteToken?: {
