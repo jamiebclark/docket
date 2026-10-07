@@ -319,6 +319,7 @@ export async function handleOAuthCallback(
     result = await entry.group.exchangeCode({
       code,
       redirectUri: redirectUriFor(),
+      state,
       now,
       signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
     });
