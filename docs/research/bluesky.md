@@ -1,6 +1,6 @@
 # Bluesky — verified facts
 
-Checked 2026-10-02. Sources: lexicons on GitHub, `@atproto/api` source, docs.bsky.app.
+Checked 2026-10-07 (limits re-verified; other sections checked 2026-10-02). Sources: lexicons on GitHub, `@atproto/api` source, docs.bsky.app.
 
 ## Lexicon limits
 - `app.bsky.feed.post` `text`: **maxGraphemes 300**, **maxLength 3000** (bytes).
@@ -37,11 +37,32 @@ Checked 2026-10-02. Sources: lexicons on GitHub, `@atproto/api` source, docs.bsk
   https://github.com/bluesky-social/atproto/blob/main/packages/api/src/rich-text/rich-text.ts
 
 ## Rate limits
-(docs page did not load; numbers from search results quoting it — treat as
-approximate) https://docs.bsky.app/docs/advanced-guides/rate-limits
+Source: https://github.com/bluesky-social/bsky-docs/blob/main/docs/advanced-guides/rate-limits.md
+(the official docs repo; confirmed 2026-10-07 from the raw file. The rendered
+page https://docs.bsky.app/docs/advanced-guides/rate-limits answers 308 to
+bsky.network and did not load through the fetch tool.)
 - `createSession`: **30 / 5 min** and **300 / day** per account → persist and
   refresh sessions, never log in per post.
-- Writes: 5,000 points/hour, 35,000/day; create = 3 points.
+- Writes: **5,000 points/hour, 35,000 points/day**; **CREATE = 3, UPDATE = 2,
+  DELETE = 1** point. So a post (one createRecord) costs 3 points:
+  floor(5000/3) = 1666 per hour, floor(35000/3) = 11666 per day. Points are per
+  account and shared with every other app writing to it. Image uploads
+  (`uploadBlob`) cost: **UNVERIFIED** (not on the summarised text).
+  Changed 2026-10-07: was "approximate, from search results"; now confirmed from the docs repo.
+
+## Limits verification, 2026-10-07
+Checked 2026-10-07 against the raw lexicon files on GitHub (fetch tool
+summarises, so values are as reported).
+| Limit | Verified value | Source |
+|---|---|---|
+| Text | `maxGraphemes` **300**, `maxLength` **3000** (UTF-8 bytes). Both apply. | https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/post.json |
+| Images per post | `images` array `maxLength` **4** | https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/images.json |
+| Image bytes | blob `maxSize` **2,000,000**, `accept` `image/*` | same |
+| Alt text | `alt` is a required string described only as "Alt text description of the image, for accessibility."; **no maximum length in the lexicon** (no `maxLength` or `maxGraphemes`). The client may impose its own; none found officially. | same |
+| Tags | `tags` array max 8, each max 640 bytes / 64 graphemes (not used by Docket) | post.json |
+| Posts per hour/day | 5,000 / 35,000 points, create = 3: 1666 / hour and 11666 / day, shared with other apps on the account (see Rate limits above) | https://github.com/bluesky-social/bsky-docs/blob/main/docs/advanced-guides/rate-limits.md |
+Image dimension limits: none in the lexicon. Not specified: **UNVERIFIED**
+whether the PDS or AppView refuses extreme sizes.
 
 ## Posting
 - Upload each image with `com.atproto.repo.uploadBlob` (≤2,000,000 bytes;

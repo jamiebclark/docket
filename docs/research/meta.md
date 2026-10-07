@@ -1,7 +1,8 @@
 # Meta platforms — verified facts
 
-Checked 2026-10-04 against developers.facebook.com (see "Self-hoster setup
-verification, 2026-10-04" and "Rate limits, 2026-10-04" at the end; earlier sections last fully checked
+Checked 2026-10-07 against developers.facebook.com (see "Limits verification,
+2026-10-07" at the end for every per-platform limit; "Self-hoster setup
+verification, 2026-10-04" and "Rate limits, 2026-10-04" before it; earlier sections last fully checked
 2026-10-02). Re-verify before changing
 provider code (use the `platform-researcher` agent). Items marked
 **UNVERIFIED** could not be confirmed on an official page; cover them with
@@ -61,8 +62,11 @@ and https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/
   1.91:1**, width 320–1440 px (scaled outside), converted to sRGB.
 - Alt text: `alt_text` (≤1000 chars) on images and carousel images, since
   2025-03-24. Not reels/stories.
-- Rate limit: **100 API-published posts per rolling 24 h** per account;
-  check with `GET /{ig-id}/content_publishing_limit`.
+- Rate limit: **CONTRADICTORY, see "Limits verification, 2026-10-07"**: the
+  content-publishing guide says 100 API-published posts per rolling 24 h, the
+  `media_publish` and `content_publishing_limit` references say 50. Check at
+  runtime with `GET /{ig-id}/content_publishing_limit`.
+  Changed 2026-10-07: was "100 API-published posts per rolling 24 h" stated as fact.
 - No text-only posts; media required. Media must be at a public URL.
 
 ## Threads
@@ -388,3 +392,79 @@ wording). Verdicts: confirmed / contradicted / not determinable.
   for backoff in the Meta provider HTTP client.
 - docs/limits.md Facebook publish limit row: the research result is "no
   documented cap"; update the "NEEDS RESEARCH (U2)" note (not edited here).
+
+## Limits verification, 2026-10-07
+Checked 2026-10-07. Scope: replace the interim, UNVERIFIED rows in
+docs/limits.md. Method caveat: the fetch tool returns a model summary of each
+page, not raw text, and it only reports what the page text contains; "not
+specified" below means the summarised page did not state it, and absence is not
+proof that no limit exists. Quotes are as reported by the tool.
+
+### Facebook Page posts
+Sources: https://developers.facebook.com/docs/graph-api/reference/page/photos/,
+https://developers.facebook.com/docs/graph-api/reference/page/feed/,
+https://developers.facebook.com/docs/pages-api/posts
+
+| Limit | Verified value | Source and confidence |
+|---|---|---|
+| Text max length | **NOT DOCUMENTED. UNVERIFIED.** No character limit on the Page feed reference (`message`) or the Pages posts guide. The photo `caption` is described only as "The description of the photo. Supports Emoji". | Page feed + photos references. Keep a conservative interim cap; the 10,000 in code is not from an official page. Counting method also not documented. |
+| Max photos in a multi-photo post | **NOT DOCUMENTED. UNVERIFIED.** `attached_media` takes an array (`attached_media[0]={"media_fbid":...}`, `[1]`, ...); no maximum is stated. The only count found on the feed page is for multi-link posts: "Minimum 2 and maximum of 5 objects" (10 with `multi_share_optimized`), which is a different feature. | photos + feed references. The 10 in code is not official. |
+| Max photo file size | **10 MB**: "Files can not exceed 10MB. For .png files, we recommend not exceeding 1MB or the image may appear pixelated." | https://developers.facebook.com/docs/graph-api/reference/page/photos/ . High confidence for the 10 MB; the 1 MB PNG note is a recommendation, not a limit. |
+| Accepted photo formats | "`.jpeg, .bmp, .png, .gif, .tiff`". WebP is **not** listed. | same page. High confidence. |
+| Text-only posts | **Allowed**: `POST /{page-id}/feed` with `message` (and optional `link`). The guide documents text/link posts without media. | https://developers.facebook.com/docs/pages-api/posts and the feed reference. Medium-high: no sentence says "text-only is allowed", it is shown as the base case. |
+| Dimensions / aspect limits | **Not specified** on the photos reference. | UNVERIFIED that none exist. |
+| Alt text | `alt_text_custom` parameter on photos: "Accessible alternative description for an image". **No character limit stated.** | photos reference. Limit UNVERIFIED. |
+| Native scheduling window | Two pages disagree: feed reference says "between 10 minutes and 75 days"; Pages posts guide says "between 10 minutes and 30 days". Docket does not use native scheduling. | feed reference vs posts guide. CONTRADICTORY. |
+| Posts per 24 h | None documented (see "Rate limits, 2026-10-04" Q4). Re-checked: the feed reference mentions rate limiting without numbers. | UNVERIFIED beyond that. |
+
+Best-supported values for Docket: bytes per file 10,000,000 documented (8,000,000
+in code is safer than the limit, not wrong); formats JPEG/PNG are a subset of the
+documented list; count and text length stay interim and must stay marked
+UNVERIFIED.
+
+### Instagram
+Sources: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media,
+https://developers.facebook.com/docs/instagram-platform/content-publishing,
+https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish,
+https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/content_publishing_limit
+
+| Limit | Verified value | Source and confidence |
+|---|---|---|
+| Caption | "Maximum 2200 characters, 30 hashtags, and 20 @ tags." Counting method (code points vs UTF-16 vs graphemes) **not stated: UNVERIFIED**. | ig-user/media reference. High for the numbers. |
+| Hashtags / @mentions per caption | **30 hashtags, 20 @ tags** (new to Docket's capabilities; not enforced today). | same. |
+| Alt text | "Alternative text, up to 1000 character, for an image." Re-confirmed. | same. |
+| Image format | JPEG only; the guide adds "Extended JPEG formats such as MPO and JPS are not supported." | ig-user/media reference and content-publishing guide. |
+| Image size | 8 MB maximum. | ig-user/media reference. The content-publishing guide as summarised did not repeat it. |
+| Aspect ratio | "Must be within a 4:5 to 1.91:1 range". | ig-user/media reference. |
+| Width | "Minimum width: 320" and "Maximum width: 1440". Re-confirmed, and the older note "scaled outside" is **not** in the summarised text; treat as UNVERIFIED whether out-of-range images are scaled or rejected. | ig-user/media reference. |
+| Carousel | Up to 10 container IDs ("up to 10 total images, videos, or a mix"); carousel images are cropped to the first image, default 1:1 if no ratio is given. | media reference + guide. |
+| Container creation | "An Instagram account can only create 400 containers within a rolling 24 hour period" (new, not in Docket). | ig-user/media reference. |
+| Posts per 24 h | **CONTRADICTORY.** Guide: "Instagram accounts are limited to 100 API-published posts within a 24-hour moving period." `media_publish` reference: "An Instagram professional account can only publish 50 posts within a 24 hour moving period". `content_publishing_limit` reference: `quota_total` "(currently `50`)" with `quota_duration` 86400. The guide as summarised also contains a sentence "Accounts are limited to 50 published posts within a 24-hour period" in the carousel context, so the 50 may be a carousel cap; the page does not make this unambiguous. | Best-supported: **50 is what the endpoint that reports the quota says it is**; 100 is the guide's headline. Medium-low confidence. Read `quota_total` from `content_publishing_limit` at runtime, and do not schedule above 50 per 24 h per account to be safe. |
+| Text-only | Not allowed; media required (unchanged). | content-publishing guide. |
+
+### Threads
+Sources: https://developers.facebook.com/docs/threads/posts,
+https://developers.facebook.com/docs/threads/reference/publishing,
+https://developers.facebook.com/docs/threads/overview,
+https://developers.facebook.com/docs/threads/troubleshooting
+
+| Limit | Verified value | Source and confidence |
+|---|---|---|
+| Text max | 500 characters. Counting: "Emojis are counted as the number of UTF-8 bytes" (posts guide links grapheme-splitter); the publishing reference says "emojis are counted as the number of UTF-8 bytes". Exact treatment of non-emoji characters is not stated: UNVERIFIED. | posts guide, publishing reference, overview ("Text posts are limited to 500 characters"). High. |
+| Carousel | Minimum 2, maximum 20 children. | posts guide, overview. High. |
+| Images | JPEG and PNG, 8 MB maximum, aspect ratio limit 10:1, minimum width 320 px, maximum width 1440 px. Re-confirmed. | posts guide and overview. High. |
+| Links | "The number of links is restricted to 5 or less" (5 unique links per post). `link_attachment` ("The URL attached to a Threads post") works only on **text-only** posts. | posts guide. Medium-high (summarised). |
+| Mentions | **Not specified: UNVERIFIED.** | posts guide, overview. |
+| Topic tag | 1-50 characters, no periods or ampersands. | posts guide and publishing reference. |
+| Alt text | "Maximum length: 1,000 characters." | publishing reference. High. |
+| Posts per 24 h | "Threads profiles are limited to 250 API-published posts within a 24-hour moving period" (carousel counts as one, see Q5); troubleshooting shows `quota_total: 250, quota_duration: 86400`. Also replies 1,000, deletions 100, location searches 500 per 24 h. | overview + troubleshooting. High. |
+
+### Per-account posting rate limits not yet in capabilities
+- Facebook: none documented.
+- Instagram: 400 containers per rolling 24 h (not modelled); publish 50 vs 100 above.
+- Threads: 250 posts, 1,000 replies, 100 deletions, 500 location searches per 24 h; only posts are modelled and match.
+
+### Code impact (from this section)
+- Instagram publish limit is 100 / 86400 in code; official references say 50. Use 50 or read the runtime quota.
+- Facebook `maxBytesPerFile` 8 MB is under the documented 10 MB; text length and image count have no official basis.
+- Instagram caption hashtag (30) and mention (20) limits are documented but not validated by Docket.

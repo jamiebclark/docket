@@ -1,6 +1,6 @@
 # X (formerly Twitter) — verified facts
 
-Checked 2026-10-06 against docs.x.com (the `.md` renderings of each page). The
+Checked 2026-10-07 (publish limit re-confirmed; rest 2026-10-06) against docs.x.com (the `.md` renderings of each page). The
 fetch tool summarises pages, so exact JSON bodies not shown on a page are marked
 **UNVERIFIED** rather than guessed. docs.x.com became unreachable near the end
 of the session; the items it blocked are listed under "Not confirmed". The
@@ -149,6 +149,13 @@ Source: https://docs.x.com/x-api/fundamentals/rate-limits.md (table columns: Per
   https://docs.x.com/x-api/fundamentals/response-codes-and-errors.md
 - A 24-hour per-user post cap is not on the page. Older docs/tier pages had
   per-user daily caps; **UNVERIFIED** whether any applies now.
+- Re-checked 2026-10-07 at https://docs.x.com/x-api/fundamentals/rate-limits
+  (and the `.md` rendering): the row reads `POST /2/tweets | 10,000/24hrs |
+  100/15min` (per app | per user). **100 per 15 min per user is now confirmed
+  on the official page**; the "interim" label in docs/limits.md can be dropped.
+  The 10,000 / 24 h figure is per app, shared by every account. No per-user
+  daily cap and no `x-user-limit-24hour-*` headers appear on the page (fetch
+  tool summary; absence is not proof). Checked 2026-10-07.
 
 ## Media upload (v2)
 Sources: https://docs.x.com/x-api/media/quickstart/media-upload-chunked.md,

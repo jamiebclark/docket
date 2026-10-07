@@ -35,12 +35,12 @@ The build prompt left video out of scope but kept room for it. `PostType` alread
 | Feature | Platform support | Work in Docket |
 |---|---|---|
 | **Instagram Reels** | Yes. Create a container with `media_type=REELS` and a public `video_url`, poll its status, then publish. Videos run 3 s to 15 min. API posts are capped at 50 per 24 hours | New `REELS` state and create step, plus status polling until `FINISHED` |
-| **Instagram feed video / mixed carousel** | Yes. Carousels take up to 10 images, videos or a mix. Reels can't go in a carousel | Carousel items that are videos need their own status polling |
+| **Instagram feed video / mixed carousel** | Yes. A single feed video is a Reel with `share_to_feed=true`, because `media_type=VIDEO` was removed in 2023. Carousels take up to 10 images, videos or a mix. Reels can't go in a carousel | Carousel items that are videos need their own status polling |
 | **Facebook Page Reels** | Yes, through the Reels Publishing API: `POST /{page-id}/video_reels` with `upload_phase=start`, upload to `rupload.facebook.com`, then `finish` with `video_state=PUBLISHED` | Three-step upload, then polling. Separate from the image flow |
 | **Facebook Page video** | Yes (Page `/videos`) | Smaller than Reels; could share the upload code |
 | **Threads video** | Yes (`media_type=VIDEO`, also in carousels) | Same container-and-poll pattern as Instagram |
-| **Bluesky video** | Yes (`app.bsky.embed.video`, short clips) | Upload to the video service, then poll the job |
-| **TikTok** | Yes, through the Content Posting API (video and photo posts). Until the app passes TikTok's audit, which takes weeks, every post is forced private (`SELF_ONLY`) whatever privacy you ask for | A new provider and OAuth app, plus the audit. TikTok also requires its own posting UI elements (privacy picker, interaction toggles), so the composer needs TikTok-specific fields |
+| **Bluesky video** | Yes (`app.bsky.embed.video`: MP4 up to 300 MB, about 25 videos a day; the maximum duration is not documented officially) | Upload to the video service, then poll the job |
+| **TikTok** | Yes, through the Content Posting API (video and photo posts). Until the app passes TikTok's audit (its length is not published), every post is forced private (`SELF_ONLY`) whatever privacy you ask for. Photo posts can only be pulled from a URL on a domain the deployer has verified with TikTok. Videos can be uploaded directly | A new provider and OAuth app, plus the audit. TikTok also requires its own posting UI elements (privacy picker, interaction toggles), so the composer needs TikTok-specific fields |
 
 ### Video formatter (crop and fit for each account)
 
