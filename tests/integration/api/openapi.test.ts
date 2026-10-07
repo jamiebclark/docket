@@ -176,4 +176,25 @@ describe("openapi.json", () => {
     );
     expect(types).toEqual(expect.arrayContaining(["string", "null"]));
   });
+
+  it("documents the Recovery operations with request schemas, examples and every 409 reason", () => {
+    const ids = ["retryPostTarget", "resolvePostTarget", "retryFailedTargets"];
+    const found = operations().filter(({ op }) => ids.includes(op.operationId));
+    expect(found.map((f) => f.op.operationId).sort()).toEqual([...ids].sort());
+    for (const { path, op } of found) {
+      expect(op.tags, path).toContain("Recovery");
+      expect(op.requestBody?.content?.["application/json"]?.schema, path).toBeTruthy();
+      expect(Object.keys(op.requestBody.content["application/json"].examples ?? {}).length, path).toBeGreaterThan(0);
+      const statuses = path === "/targets/retry-failed" ? ["400", "401", "403", "422", "429"] : ["400", "401", "403", "404", "409", "422", "429"];
+      for (const status of statuses) {
+        const examples = op.responses[status]?.content?.["application/json"]?.examples;
+        expect(Object.keys(examples ?? {}).length, `${path} ${status}`).toBeGreaterThan(0);
+      }
+    }
+    const retry409 = found.find((f) => f.op.operationId === "retryPostTarget")!.op.responses["409"].description;
+    for (const reason of ["publishing", "not_failed", "account_removed", "needs_reconnecting", "provider_unavailable"]) {
+      expect(retry409).toContain(reason);
+    }
+    expect(found.find((f) => f.op.operationId === "resolvePostTarget")!.op.responses["409"].description).toMatch(/already_resolved[\s\S]*cannot_publish/);
+  });
 });

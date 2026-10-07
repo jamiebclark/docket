@@ -149,14 +149,14 @@ description: "Task list for 016 — public API to retry, bulk-retry and resolve 
 
 ### Tests for User Story 7
 
-- [ ] T029 [P] [US7] Extend `tests/integration/api/openapi.test.ts`: the three operations exist under tag `Recovery` with request schemas and examples, examples on 200/400/401/403/404/409/422/429, the 409 description lists every reason, all `$ref`s resolve and the document still validates.
-- [ ] T030 [P] [US7] Extend `tests/integration/security/secret-scan.test.ts`: call all three operations with a key and an `Idempotency-Key`, then scan the response bodies, the `publish_attempts` rows written and the rendered Failures-page attempt log for the raw key, its hash, its `last4`, the idempotency key value and any env secret.
+- [x] T029 [P] [US7] Extend `tests/integration/api/openapi.test.ts`: the three operations exist under tag `Recovery` with request schemas and examples, examples on 200/400/401/403/404/409/422/429, the 409 description lists every reason, all `$ref`s resolve and the document still validates.
+- [x] T030 [P] [US7] Extend `tests/integration/security/secret-scan.test.ts`: call all three operations with a key and an `Idempotency-Key`, then scan the response bodies, the `publish_attempts` rows written and the rendered Failures-page attempt log for the raw key, its hash, its `last4`, the idempotency key value and any env secret.
 
 ### Implementation for User Story 7
 
-- [ ] T031 [P] [US7] Add a "7. Recover failed posts" recipe to `docs/n8n.md` (subscribe to `post.failed`, verify signature, `GET /posts/{postId}`, per `failed` target call retry `now`/`requeue`, never retry `ambiguous`, derive a stable `Idempotency-Key` from event id + target id, use a new key to continue a bulk call) and add the new 409 `details.reason` values to its errors table.
-- [ ] T032 [P] [US7] Add a "Through the API" note to `docs/failures.md` (same actions available via API; shown as "API key {name}"); add the one-clause mention to `README.md`; add/complete a `## 016` section in `docs/decisions.md` recording D1–D10 and the plan's P1–P15 judgement calls (permission reuse of `write_posts`, `self_commit` mode, attribution columns, pairing 404).
-- [ ] T033 [US7] Make T029 and T030 pass: adjust `examples`/descriptions in `src/server/api/operations/targets.ts` and `src/server/api/openapi.ts` as needed.
+- [x] T031 [P] [US7] Add a "7. Recover failed posts" recipe to `docs/n8n.md` (subscribe to `post.failed`, verify signature, `GET /posts/{postId}`, per `failed` target call retry `now`/`requeue`, never retry `ambiguous`, derive a stable `Idempotency-Key` from event id + target id, use a new key to continue a bulk call) and add the new 409 `details.reason` values to its errors table.
+- [x] T032 [P] [US7] Add a "Through the API" note to `docs/failures.md` (same actions available via API; shown as "API key {name}"); add the one-clause mention to `README.md`; add/complete a `## 016` section in `docs/decisions.md` recording D1–D10 and the plan's P1–P15 judgement calls (permission reuse of `write_posts`, `self_commit` mode, attribution columns, pairing 404).
+- [x] T033 [US7] Make T029 and T030 pass: adjust `examples`/descriptions in `src/server/api/operations/targets.ts` and `src/server/api/openapi.ts` as needed.
 
 ---
 
