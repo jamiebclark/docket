@@ -55,7 +55,7 @@ export async function deleteMediaAction(slug: string, input: { id: string }): Pr
 /** The picker's library query (client-side filters over a page of 24). */
 export async function listMediaAction(
   slug: string,
-  input: { tag?: string; unused?: boolean; q?: string; page?: number },
+  input: { tag?: string; unused?: boolean; q?: string; page?: number; fit?: { accountIds: string[] } },
 ): Promise<ActionResult<Awaited<ReturnType<typeof media.listMedia>>>> {
   return runAction(slug, (scope) => media.listMedia(scope, input ?? {}));
 }

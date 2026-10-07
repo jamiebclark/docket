@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { listMediaAction, updateMediaAction, uploadMediaAction } from "@/app/p/[projectSlug]/media/actions";
+import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { POST_MEDIA_MAX } from "@/lib/validation/scheduling";
 import type { MediaView } from "@/server/services/media";
 import { Button } from "../ui/Button";
@@ -9,6 +10,7 @@ import { Dialog } from "../ui/Dialog";
 import { LiveRegion } from "../ui/LiveRegion";
 import { checkStyles, controlStyles, labelStyles } from "@/components/ui/controls";
 import { ChoiceField } from "@/components/ui/ChoiceField";
+import { FitBadges } from "./FitBadges";
 
 /** Returns a copy with the item at `from` moved to `to`; out-of-range moves return the list unchanged. */
 export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
@@ -18,6 +20,9 @@ export function moveItem<T>(items: readonly T[], from: number, to: number): T[] 
   out.splice(to, 0, item!);
   return out;
 }
+
+/** A stable default, so an omitted prop does not re-run the picker's query on every render. */
+const NO_ACCOUNTS: string[] = [];
 
 type Library = Awaited<ReturnType<typeof listMediaAction>>;
 
@@ -65,12 +70,15 @@ export function MediaPicker({
   enabled,
   canEdit,
   value,
+  accountIds = NO_ACCOUNTS,
   onChange,
 }: {
   slug: string;
   enabled: boolean;
   canEdit: boolean;
   value: MediaView[];
+  /** The accounts the post is for; each library image is badged for their platforms. */
+  accountIds?: string[];
   onChange: (next: MediaView[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -133,6 +141,7 @@ export function MediaPicker({
         open={open}
         onClose={() => setOpen(false)}
         chosen={value}
+        accountIds={accountIds}
         onAdd={(items) => {
           onChange([...value, ...items.filter((m) => !value.some((x) => x.id === m.id))].slice(0, POST_MEDIA_MAX));
           setOpen(false);
@@ -147,12 +156,14 @@ function PickerDialog({
   open,
   onClose,
   chosen,
+  accountIds,
   onAdd,
 }: {
   slug: string;
   open: boolean;
   onClose: () => void;
   chosen: MediaView[];
+  accountIds: string[];
   onAdd: (items: MediaView[]) => void;
 }) {
   const [q, setQ] = useState("");
@@ -168,7 +179,7 @@ function PickerDialog({
     if (!open) return;
     let live = true;
     const timer = setTimeout(() => {
-      void listMediaAction(slug, { ...(q ? { q } : {}), ...(tag ? { tag } : {}), ...(unused ? { unused: true } : {}) }).then((r) => {
+      void listMediaAction(slug, { ...(q ? { q } : {}), ...(tag ? { tag } : {}), ...(unused ? { unused: true } : {}), fit: { accountIds } }).then((r) => {
         if (live) setLib(r);
       });
     }, 150);
@@ -176,7 +187,7 @@ function PickerDialog({
       live = false;
       clearTimeout(timer);
     };
-  }, [open, slug, q, tag, unused, reload]);
+  }, [open, slug, q, tag, unused, reload, accountIds]);
 
   const room = POST_MEDIA_MAX - chosen.length;
   const toggle = (m: MediaView) =>
@@ -222,7 +233,7 @@ function PickerDialog({
           </label>
         </div>
         <div className="flex items-center gap-2">
-          <input ref={file} type="file" multiple accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Image files" tabIndex={-1} onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ""; }} />
+          <input ref={file} type="file" multiple accept={UPLOAD_MIME_TYPES.join(",")} className="sr-only" aria-label="Image files" tabIndex={-1} onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ""; }} />
           <Button variant="secondary" onClick={() => file.current?.click()}>
             Upload new
           </Button>
@@ -232,23 +243,9 @@ function PickerDialog({
         </div>
         {!lib ? <p className="text-sm">Loading…</p> : !lib.ok ? <p role="alert" className="text-sm">{lib.message}</p> : items.length === 0 ? <p className="text-sm">No images found.</p> : null}
         <ul className="grid grid-cols-3 gap-2">
-          {items.map((m) => {
-            const on = picked.some((x) => x.id === m.id);
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => toggle(m)}
-                  className={`w-full rounded border-2 p-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${on ? "border-primary" : "border-transparent"}`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.thumbnailUrl} alt={m.altText || ""} className="aspect-square w-full rounded object-cover" />
-                  <span className="block truncate text-xs">{m.originalFilename ?? "Image"}</span>
-                </button>
-              </li>
-            );
-          })}
+          {items.map((m) => (
+            <PickerItem key={m.id} item={m} on={picked.some((x) => x.id === m.id)} onToggle={() => toggle(m)} />
+          ))}
         </ul>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
@@ -260,5 +257,26 @@ function PickerDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** One library image in the picker grid: the toggle button, with the platform badges under it and linked by `aria-describedby`. */
+export function PickerItem({ item: m, on, onToggle }: { item: MediaView; on: boolean; onToggle: () => void }) {
+  const fitId = `picker-fit-${m.id}`;
+  return (
+    <li className="flex flex-col gap-1">
+      <button
+        type="button"
+        aria-pressed={on}
+        {...(m.fit && m.fit.length > 0 ? { "aria-describedby": fitId } : {})}
+        onClick={onToggle}
+        className={`w-full rounded border-2 p-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${on ? "border-primary" : "border-transparent"}`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={m.thumbnailUrl} alt={m.altText || ""} className="aspect-square w-full rounded object-cover" />
+        <span className="block truncate text-xs">{m.originalFilename ?? "Image"}</span>
+      </button>
+      {m.fit ? <FitBadges fit={m.fit} id={fitId} /> : null}
+    </li>
   );
 }

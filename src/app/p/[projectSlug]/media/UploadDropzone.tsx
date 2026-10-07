@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
+import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { uploadMediaAction } from "./actions";
 
 type Row = { id: number; name: string; state: "uploading" | "accepted" | "rejected"; reason?: string };
@@ -67,7 +68,7 @@ export function UploadDropzone({ slug, maxMegabytes }: { slug: string; maxMegaby
           ref={input}
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/webp"
+          accept={UPLOAD_MIME_TYPES.join(",")}
           className="sr-only"
           aria-label="Image files"
           tabIndex={-1}

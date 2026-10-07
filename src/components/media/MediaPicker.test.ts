@@ -9,7 +9,8 @@ vi.mock("@/app/p/[projectSlug]/media/actions", () => ({
 }));
 
 import type { MediaView } from "@/server/services/media";
-import { MediaPicker, moveItem } from "./MediaPicker";
+import { MediaPicker, moveItem, PickerItem } from "./MediaPicker";
+import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 
 const view = (id: string, name: string): MediaView => ({
   id,
@@ -30,7 +31,7 @@ const view = (id: string, name: string): MediaView => ({
 
 const render = (props: Partial<Parameters<typeof MediaPicker>[0]>) =>
   renderToStaticMarkup(
-    createElement(MediaPicker, { slug: "p", enabled: true, canEdit: true, value: [], onChange: () => {}, ...props }),
+    createElement(MediaPicker, { slug: "p", enabled: true, canEdit: true, value: [], accountIds: [], onChange: () => {}, ...props }),
   );
 
 describe("moveItem", () => {
@@ -62,5 +63,35 @@ describe("MediaPicker", () => {
     const html = render({ canEdit: false, value: [view("1", "one.png")] });
     expect(html).not.toContain("Move image");
     expect(html).not.toContain(">Add images</button>");
+  });
+});
+
+describe("PickerItem", () => {
+  const fitted = (): MediaView => ({
+    ...view("1", "one.png"),
+    fit: [
+      { providerKey: "instagram", providerName: "Instagram", state: "fits", steps: [], details: [], convertedTo: null },
+      { providerKey: "bluesky", providerName: "Bluesky", state: "refused", steps: [], details: ["This image is too wide."], convertedTo: null },
+    ],
+  });
+  const item = (m: MediaView) => renderToStaticMarkup(createElement("ul", null, createElement(PickerItem, { item: m, on: false, onToggle: () => {} })));
+
+  it("renders a badge per platform under the image, linked by aria-describedby", () => {
+    const html = item(fitted());
+    expect(html).toContain('aria-describedby="picker-fit-1"');
+    expect(html).toContain('id="picker-fit-1"');
+    expect(html).toContain("Instagram: fits");
+    expect(html).toContain("Bluesky: will be refused");
+    expect(html).toContain('aria-label="Platform notes"');
+  });
+
+  it("renders no badges and no link when no account is selected", () => {
+    const html = item({ ...view("1", "one.png"), fit: [] });
+    expect(html).not.toContain("aria-describedby");
+    expect(html).not.toContain(": fits");
+  });
+
+  it("leaves the accepted upload types unchanged", () => {
+    expect(UPLOAD_MIME_TYPES).toEqual(["image/jpeg", "image/png", "image/webp"]);
   });
 });

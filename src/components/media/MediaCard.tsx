@@ -1,15 +1,16 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { MIME_LABEL } from "@/lib/media/types";
 import type { MediaView } from "@/server/services/media";
+import type { PlatformFit } from "@/server/services/media-fit";
 import { Badge } from "../ui/Badge";
+import { FitBadges } from "./FitBadges";
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
-
-const TYPE_LABEL: Record<string, string> = { "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
 
 /**
  * One library item. `actions` is where the client-side edit/delete controls go; `select` is the selection
@@ -20,11 +21,13 @@ export function MediaCard({
   actions,
   select,
   jobHref,
+  fit,
 }: {
   item: MediaView;
   actions?: ReactNode;
   select?: ReactNode;
   jobHref?: (jobId: string) => string;
+  fit?: readonly PlatformFit[];
 }) {
   const dims = item.width && item.height ? `${item.width}×${item.height}` : null;
   return (
@@ -38,7 +41,7 @@ export function MediaCard({
         className="aspect-square w-full rounded bg-muted object-cover"
       />
       <p className="text-xs text-muted-foreground">
-        {[dims, formatBytes(item.byteSize), TYPE_LABEL[item.mimeType] ?? item.mimeType].filter(Boolean).join(" · ")}
+        {[dims, formatBytes(item.byteSize), MIME_LABEL[item.mimeType] ?? item.mimeType].filter(Boolean).join(" · ")}
       </p>
       {item.originalFilename ? <p className="truncate text-sm font-medium">{item.originalFilename}</p> : null}
       <div className="flex flex-wrap gap-1">
@@ -50,6 +53,7 @@ export function MediaCard({
         ) : null}
         {item.missingAlt ? <Badge tone="warning">Missing alt text</Badge> : null}
       </div>
+      {fit ? <FitBadges fit={fit} /> : null}
       {item.tags.length > 0 ? (
         <ul aria-label="Tags" className="flex flex-wrap gap-1 text-xs">
           {item.tags.map((t) => (
