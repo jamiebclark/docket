@@ -8,6 +8,7 @@ vi.mock("next/cache", async () => (await import("../helpers/actions")).cacheModu
 vi.mock("next/navigation", async () => (await import("../helpers/actions")).navigationModule);
 
 import AccountsPage from "../../src/app/p/[projectSlug]/accounts/page";
+import { ProviderIcon } from "../../src/components/ui/Icon";
 import { ConnectCredentialsForm } from "../../src/app/p/[projectSlug]/accounts/ConnectCredentialsForm";
 import { socialAccounts } from "../../src/server/db/schema/accounts";
 import { ConflictError, ForbiddenError } from "../../src/server/dal/errors";
@@ -211,5 +212,14 @@ describe("posting instructions on the accounts page", () => {
     );
     expect(html).toContain("changed the posting instructions for");
     expect(html).toContain(`&quot;${a.displayName}&quot;`);
+  });
+});
+
+describe("provider marks", () => {
+  it("renders the X mark on its brand tile", () => {
+    const html = renderToStaticMarkup(createElement(ProviderIcon, { providerKey: "x" }));
+    expect(html).toContain("<path");
+    expect(html).toContain("#000000");
+    expect(html).not.toContain("lucide");
   });
 });
