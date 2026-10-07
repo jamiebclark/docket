@@ -1,8 +1,16 @@
 import { z } from "zod";
-import type { ApiResolveTargetResult, ApiRetryTargetResult } from "@/lib/api/schemas";
-import { ResolveTargetRequestSchema, ResolveTargetResultSchema, RetryTargetRequestSchema, RetryTargetResultSchema } from "@/lib/api/schemas";
-import { resolveAmbiguous, retryTarget } from "../../services/posts";
-import type { ResolveResult, RetryResult } from "../../services/posts";
+import type { ApiResolveTargetResult, ApiRetryFailedTargetsResult, ApiRetryTargetResult } from "@/lib/api/schemas";
+import {
+  ResolveTargetRequestSchema,
+  ResolveTargetResultSchema,
+  RetryFailedTargetsRequestSchema,
+  RetryFailedTargetsResultSchema,
+  RetryTargetRequestSchema,
+  RetryTargetResultSchema,
+} from "@/lib/api/schemas";
+import { retryAllMessage } from "@/lib/failures/retry-all-text";
+import { resolveAmbiguous, retryAllFailed, retryTarget } from "../../services/posts";
+import type { ResolveResult, RetryAllResult, RetryResult } from "../../services/posts";
 import { toIssue, toWarning } from "./issues";
 import { defineOperation } from "./types";
 
@@ -46,6 +54,18 @@ function toResolveResult(postId: string, targetId: string, r: ResolveResult): Ap
     };
   }
   return { postId, targetId, status: "failed", reason: r.reason, message: r.message };
+}
+
+function toRetryFailedResult(r: RetryAllResult): ApiRetryFailedTargetsResult {
+  return {
+    mode: r.mode,
+    retried: r.count,
+    inScope: r.inScope,
+    skipped: r.skipped,
+    remaining: r.remaining,
+    accounts: r.accounts,
+    message: retryAllMessage(r, { continueWith: "call" }),
+  };
 }
 
 const ids = { postId: "0b6f6c2e-3a51-4f0e-9d6a-5d1f0a7c1a10", targetId: "7c1e2f43-9b0d-4a77-8e55-2a3d4c5b6e71" };
@@ -236,6 +256,88 @@ export const targetOperations = [
       const input = body.outcome === "not_published" && body.requeue && body.expected ? { ...body, expected: new Date(body.expected).toISOString() } : body;
       const r = await resolveAmbiguous(scope, params.targetId, input, { postId: params.postId });
       return { status: 200, body: toResolveResult(params.postId, params.targetId, r) };
+    },
+  }),
+  defineOperation({
+    id: "retryFailedTargets",
+    method: "POST",
+    path: "/targets/retry-failed",
+    permission: "write_posts",
+    tag: "Recovery",
+    summary: "Retry every failed target",
+    description:
+      "Retries the failed targets of the project, or of one account (`accountId`), with `mode` `now` or `requeue`. Each target commits on its own, and one call attempts at most 100; when `remaining` is above zero, call again with a **new** Idempotency-Key (the same key replays this answer). Targets that cannot be retried are counted under `skipped`, so `retried` + the skipped counts + `remaining` = `inScope`. An unknown or foreign `accountId` is reported as nothing to retry.",
+    body: {
+      kind: "json",
+      schema: RetryFailedTargetsRequestSchema,
+      examples: {
+        now: { summary: "Publish everything on the next tick", value: { mode: "now" } },
+        requeue: { summary: "Requeue one account", value: { mode: "requeue", accountId: "5e8d2c1a-7f43-4b6e-a0d9-1c2b3a4f5e60" } },
+      },
+    },
+    responses: {
+      200: {
+        description: "What was retried and what was not",
+        schema: RetryFailedTargetsResultSchema,
+        examples: {
+          retried: {
+            summary: "Some retried, some skipped",
+            value: {
+              mode: "requeue",
+              retried: 3,
+              inScope: 6,
+              skipped: { account_removed: 0, needs_reconnecting: 1, provider_unavailable: 0, no_longer_failed: 0, cannot_publish: 0, no_free_slot: 2 },
+              remaining: 0,
+              accounts: [
+                {
+                  accountId: "5e8d2c1a-7f43-4b6e-a0d9-1c2b3a4f5e60",
+                  name: "Acme Bluesky",
+                  retried: 3,
+                  skipped: { account_removed: 0, needs_reconnecting: 0, provider_unavailable: 0, no_longer_failed: 0, cannot_publish: 0, no_free_slot: 2 },
+                  remaining: 0,
+                },
+                {
+                  accountId: "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
+                  name: "Acme Threads",
+                  retried: 0,
+                  skipped: { account_removed: 0, needs_reconnecting: 1, provider_unavailable: 0, no_longer_failed: 0, cannot_publish: 0, no_free_slot: 0 },
+                  remaining: 0,
+                },
+              ],
+              message: "3 posts were queued into the next free slots. Skipped 3: 1 needs reconnecting, 2 no free slot.",
+            },
+          },
+          nothing: {
+            summary: "Nothing failed",
+            value: {
+              mode: "now",
+              retried: 0,
+              inScope: 0,
+              skipped: { account_removed: 0, needs_reconnecting: 0, provider_unavailable: 0, no_longer_failed: 0, cannot_publish: 0, no_free_slot: 0 },
+              remaining: 0,
+              accounts: [],
+              message: "There are no failed posts to retry.",
+            },
+          },
+        },
+      },
+      400: {
+        description: "Invalid request body (a missing or unknown `mode`, or any other key such as `targetIds`)",
+        examples: { invalid: { summary: "Missing mode", value: errorExample("validation_failed", "Invalid request.") } },
+      },
+      401: { description: "Missing or invalid API key", examples: { invalid: { summary: "Bad key", value: errorExample("invalid_api_key", "Invalid API key.") } } },
+      403: { description: "The key lacks `write_posts`", examples: { missing: { summary: "Read-only key", value: errorExample("missing_permission", "This key lacks the write_posts permission.") } } },
+      422: {
+        description: "The Idempotency-Key was reused with a different request",
+        examples: { mismatch: { summary: "Key reuse", value: errorExample("idempotency_key_reused", "This Idempotency-Key was used with a different request.") } },
+      },
+      429: { description: "Rate limited", examples: { limited: { summary: "Slow down", value: errorExample("rate_limited", "Too many requests.") } } },
+    },
+    idempotent: true,
+    idempotencyMode: "self_commit",
+    async run(scope, { body }) {
+      const r = await retryAllFailed(scope, { ...(body.accountId ? { account: body.accountId } : {}), mode: body.mode });
+      return { status: 200, body: toRetryFailedResult(r) };
     },
   }),
 ];

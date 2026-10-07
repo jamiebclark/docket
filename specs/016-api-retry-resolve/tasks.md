@@ -99,11 +99,11 @@ description: "Task list for 016 — public API to retry, bulk-retry and resolve 
 
 ### Tests for User Story 4
 
-- [ ] T021 [P] [US4] Create `tests/integration/api/endpoints/retry-failed-targets.test.ts` covering: counts add up; all six skip keys present (zeros included); `accountId` filter; unknown and foreign `accountId` give identical 200s with `inScope: 0`; `requeue` exhausting an account → `no_free_slot` with earlier failures getting earlier slots; more than 100 eligible → `remaining > 0` and `message` containing "Call again with a new Idempotency-Key"; `targetIds` key, extra key, missing/invalid mode → 400.
+- [x] T021 [P] [US4] Create `tests/integration/api/endpoints/retry-failed-targets.test.ts` covering: counts add up; all six skip keys present (zeros included); `accountId` filter; unknown and foreign `accountId` give identical 200s with `inScope: 0`; `requeue` exhausting an account → `no_free_slot` with earlier failures getting earlier slots; more than 100 eligible → `remaining > 0` and `message` containing "Call again with a new Idempotency-Key"; `targetIds` key, extra key, missing/invalid mode → 400.
 
 ### Implementation for User Story 4
 
-- [ ] T022 [US4] Add `retryFailedTargets` (`POST /targets/retry-failed`, tag `Recovery`, `write_posts`, `idempotent: true`, `idempotencyMode: "self_commit"`) to `src/server/api/operations/targets.ts`: one call `retryAllFailed(scope, { ...(body.accountId ? { account: body.accountId } : {}), mode: body.mode })`, map `count → retried`, rebuild `message` with `retryAllMessage(..., { continueWith: "call" })` (T006). No wrapper transaction (FR-014). Add examples as in T018. Make T021 pass.
+- [x] T022 [US4] Add `retryFailedTargets` (`POST /targets/retry-failed`, tag `Recovery`, `write_posts`, `idempotent: true`, `idempotencyMode: "self_commit"`) to `src/server/api/operations/targets.ts`: one call `retryAllFailed(scope, { ...(body.accountId ? { account: body.accountId } : {}), mode: body.mode })`, map `count → retried`, rebuild `message` with `retryAllMessage(..., { continueWith: "call" })` (T006). No wrapper transaction (FR-014). Add examples as in T018. Make T021 pass.
 
 ---
 
