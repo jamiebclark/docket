@@ -5,6 +5,7 @@ import { socialAccounts } from "../../../src/server/db/schema/accounts";
 import { member } from "../../../src/server/db/schema/auth";
 import { hashInvitationToken } from "../../../src/server/crypto/tokens";
 import * as connect from "../../../src/server/services/connect";
+import { openBannerMessage } from "../../../src/server/services/connect-banner";
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import {
@@ -143,8 +144,16 @@ describe("platform and exchange failures", () => {
     const state = await begin(env, session);
     vi.spyOn(throwawayGroup, "exchangeCode").mockImplementation(impl as never);
     const outcome = await connect.handleOAuthCallback(new URLSearchParams({ state, code: "c" }), callerFor(env.owner.id, session));
-    expect(outcome).toEqual({ kind: "accounts", projectSlug: env.project.slug, groupKey: "throwaway", code: "exchange_failed" });
+    expect(outcome).toMatchObject({ kind: "accounts", projectSlug: env.project.slug, groupKey: "throwaway", code: "exchange_failed" });
+    // The group's message travels sealed (G18): never in the clear, and only a refused exchange has one.
     expect(JSON.stringify(outcome)).not.toContain("SECRET-VALUE");
+    const notice = outcome.kind === "accounts" ? outcome.notice : undefined;
+    if (_n === "a thrown exchange") expect(notice).toBeUndefined();
+    else {
+      const target = { projectSlug: env.project.slug, groupKey: "throwaway", code: "exchange_failed" };
+      expect(openBannerMessage(target, notice!, new Date())).toBe("bad secret SECRET-VALUE");
+      expect(openBannerMessage({ ...target, code: "cancelled" }, notice!, new Date())).toBeNull();
+    }
     expect(await accountCount(env)).toBe(0);
     const [row] = await testDb().select().from(connectAttempts).where(and(eq(connectAttempts.projectId, env.project.id), eq(connectAttempts.stateHash, hashInvitationToken(state))));
     expect(row?.candidatesEncrypted).toBeNull();
