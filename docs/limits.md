@@ -72,6 +72,21 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | publish limit | 11666 / 86400 s |  | approximate (research U3; 35,000 points/day, `floor(points ÷ 3)`); decisions.md G16 | engine deferral | `tests/integration/limits/enforcement.test.ts` "bluesky: publish limit 11666 / 86400 s" |
 | note: login rate | createSession 30 / 5 min and 300 / day |  | docs/research/bluesky.md | publishing never creates a session; it reuses and refreshes the stored one | `tests/integration/limits/enforcement.test.ts` "Bluesky publishing does not create a session" |
 
+## X
+
+| Category | Value | Counting | Source | Enforced in | Test |
+|---|---|---|---|---|---|
+| text length | 280 | x-weighted (custom rule) | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: text length" |
+| images | 4 |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: images" |
+| bytes per file | 5000000 |  | docs/research/x.md | media planner | `tests/integration/limits/enforcement.test.ts` "x: bytes per file" |
+| formats | image/jpeg, image/png, image/webp |  | docs/research/x.md (JPEG, PNG and WebP are all accepted as uploaded) | media planner | `tests/integration/x/formats.test.ts` "x: formats accepts every uploadable type without converting it" |
+| alt text length | 1000 |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: alt text length" |
+| media required | no |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: media required" |
+| text only | yes |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: text only" |
+| publish limit | 100 / 900 s |  | docs/research/x.md (UNVERIFIED, interim: per-user window, research U-items) | engine deferral | `tests/integration/limits/enforcement.test.ts` "x: publish limit 100 / 900 s" |
+
+X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce that cap (it is shared by every account on the app, not per account), so it has no row; a 429 from it defers the post instead.
+
 ## Mock (offline)
 
 | Category | Value | Counting | Source | Enforced in | Test |

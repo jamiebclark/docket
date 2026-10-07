@@ -59,6 +59,7 @@ The person who clicks **Connect** needs two things:
 | Facebook Page | A role on your Meta app (admin, developer or tester), **and** a task on the Page that lets them create content |
 | Instagram | The same as Facebook, for the Page the Instagram account is linked to |
 | Threads | To be logged in to Threads **as that account**, and that account must be a Threads Tester on your app |
+| X | To be logged in to X **as that account**, with your X developer app set up ([x-setup.md](x-setup.md)) |
 
 ## Posting instructions
 
@@ -104,6 +105,20 @@ and Instagram**, sign in with Facebook, and pick the Pages and linked Instagram 
 - **Removing access:** removing an account in Docket deletes its stored tokens. To revoke the app entirely, the
   connecting person opens Facebook Settings → Business Integrations (or Apps and Websites) and removes it.
 
+## X
+
+First create the X developer app: [x-setup.md](x-setup.md). Then open **Accounts** and choose **X**.
+
+- **Log in to X as the account to post as.** X posts as whoever approves the login; there is no delegated access.
+- **HTTPS is required.** X needs an `https://` callback on a public host, so the button is unavailable (with the
+  reason) on `http://` or `localhost` ([x-setup.md#callback-address](x-setup.md#callback-address)).
+- **Needs reconnecting** means X rejected the stored refresh token.
+- **What is stored:** the access token and the rotating refresh token (encrypted), with their expiry times, and the X
+  account's ID and username. Nothing else.
+- **Verified with mocks only; not checked against the live X API.** See the notice in [x-setup.md](x-setup.md).
+- **Removing access:** removing the account in Docket deletes its tokens. To revoke the app entirely, open X Settings →
+  Security and account access → Connected apps.
+
 ## Threads
 
 First add the Threads use case to the Meta app: [meta-setup.md#threads](meta-setup.md#threads). Then open **Accounts**
@@ -129,6 +144,7 @@ A common setup: you run Docket, and a friend or client owns the Page and account
 | Facebook Page | You | Gives your personal Facebook profile access to **the Page itself**, with permission to create content |
 | Instagram | You, with the Page | Makes the Instagram account professional and links it to that Page |
 | Threads | **The owner** | Accepts the Threads Tester invite, then connects while logged in to their own Threads |
+| X | **The owner** | Connects while logged in to their own X, or lets you log in as them |
 | Bluesky | Either of you | Creates an app password and gives it to you, or types it in themselves |
 
 **Facebook and Instagram.** When you connect with your own Facebook login, the stored Page tokens come from **your**

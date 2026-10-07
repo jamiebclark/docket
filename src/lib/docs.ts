@@ -12,7 +12,8 @@ export type DocPage =
   | "meta-setup"
   | "n8n"
   | "security"
-  | "storage";
+  | "storage"
+  | "x-setup";
 
 /** The published URL of a docs page, optionally at a heading anchor (GitHub-style slug, e.g. "local-https-for-threads"). */
 export function docsUrl(page: DocPage, anchor?: string): string {

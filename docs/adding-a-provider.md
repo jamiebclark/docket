@@ -53,6 +53,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G12 | `callbackHint` | 4 |
 | G13 | `accountNotes?` | 4 |
 | G14 | `defaultPublishLimit` as an array | 8 |
+| G17 | exchangeCode receives state | 4 |
 
 ## 3. Capabilities and counting rules
 
@@ -107,8 +108,9 @@ The generic accounts form and `connectWithCredentials` call it; the typed fields
 
 An `oauth` strategy carries an `OAuthConnectGroup` (`src/providers/types.ts`). Providers that share one app (Facebook and Instagram)
 share one group. A group has a unique `key` and a `displayName`. It supplies `authorizationUrl({ state, redirectUri })`, a server-side
-`exchangeCode({ code, redirectUri, now, signal })` and optionally `describeCallbackError`. Both take `redirectUri`, and `code` is
-the platform's authorization code.
+`exchangeCode({ code, redirectUri, now, signal, state })` and optionally `describeCallbackError`. Both take `redirectUri`, and `code` is
+the platform's authorization code, and `state` is the attempt's raw state, already validated and consumed (G17). Use it only for per-attempt
+derivations, such as a PKCE verifier computed the same way in `authorizationUrl` and `exchangeCode` so nothing needs storing (X does this); never store or echo it.
 Neither exchange saves anything: each returns **candidates** (`ConnectCandidate`: provider key, external id, display name, settings,
 credentials, expiry), and the `providerKey` says which provider the candidate becomes. A candidate may name a `parent` (an Instagram account sits under its Page) and carry `notes`.
 Candidates are held encrypted in `connect_attempts` until the user picks one in the chooser, which then calls
@@ -303,3 +305,29 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
   ambiguous rather than published again.
 - **Framework hooks it uses:** a custom counting rule (G9), a redirect requirement and callback hint (G10, G12), account notes
   (G13) and a held refresh (G11). Its tests are mocked HTTP only, and the DB clock is advanced rather than sleeping.
+
+## 16. Worked example: the `x` provider
+
+`src/providers/x/` shows the OAuth patterns the others do not, all tested with mocked HTTP only.
+
+- **PKCE through G17.** The code verifier is never stored. `authorizationUrl` and `exchangeCode` both derive it from the
+  attempt's `state` as base64url(HMAC-SHA256(`X_CLIENT_SECRET`, "docket:x:pkce:v1:" + state)) (`src/providers/x/pkce.ts`).
+  Only its S256 challenge reaches the browser. `exchangeCode` receives `state` (G17), derives the same verifier and sends it with
+  Basic client auth. A missing refresh token (no `offline.access`) is refused.
+- **A rotating refresh token.** Each refresh returns a new refresh token, and the old one stops working. `refreshCredentials`
+  stores both tokens together, renews an idle account before the estimated 180-day expiry, and holds a failed refresh for
+  five minutes. `invalid_grant` is `needs_reauth`; 5xx, 429 and network errors are transient with `retryAt`.
+- **x-weighted counting.** A custom counting rule (G9) follows twitter-text v3: most characters 1, CJK and emoji 2, every
+  link 23. The count is linear in the text length, and near the limit a post with a link or emoji gets a warning, not a block.
+- **Chunked upload steps.** Each image goes through `initialize`, `append` and `finalize` (status checked until processed),
+  then alt text is set before the post is created. Expired media ids restart the upload.
+- **Create outcomes.** Only `create_post` has `mayPublish: true`.
+
+| Response to create | Result |
+|---|---|
+| 201 with a post id | `published` |
+| 429 with `x-rate-limit-remaining: 0` and a readable reset | `retryable_error` with `notBefore` at the reset |
+| Any other 429 (remaining not 0 or no readable reset; credits or the spending limit may be exhausted) | `retryable_error`, at least an hour |
+| 401 | `credentialsExpired` |
+| 403 duplicate, other 403, other 4xx | `fatal_error` with X's message |
+| 5xx, timeout or reset after send, unreadable 2xx | `ambiguous`, never retried |
