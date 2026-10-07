@@ -41,6 +41,8 @@ export function RetryDialog({
   const [fetched, setFetched] = useState<ExplicitTimePreview | null>(null);
   const timePreview = date && time ? fetched : null;
   const [error, setError] = useState("");
+  // After a successful retry the opener leaves the page, so focus goes to the page heading instead of back to it.
+  const [done, setDone] = useState(false);
   const [pending, start] = useTransition();
   // The preview load has its own transition so it never reads as the confirm button's `pending`.
   const [, startPreview] = useTransition();
@@ -58,6 +60,11 @@ export function RetryDialog({
     // Mounted per open (see TargetResolution), so state starts fresh: mode "now", no error.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, targetId]);
+
+  useEffect(() => {
+    // Child effects run first, so the dialog has already closed and its native focus return is done.
+    if (done && !open) ctx?.focusFallback();
+  }, [done, open, ctx]);
 
   useEffect(() => {
     if (!open || mode !== "at" || !date || !time) return;
@@ -95,10 +102,10 @@ export function RetryDialog({
             : { targetId, mode: "at" as const, at: timePreview?.instant ?? "" };
       const res = await retryTargetAction(slug, input);
       if (res.ok && res.data.status === "scheduled") {
+        setDone(true);
         onClose();
         ctx?.announce(retryAnnouncement(res.data));
         onDone(res.data);
-        ctx?.restoreFocus();
         return;
       }
       const message = res.ok ? (res.data as Extract<RetryResult, { status: "failed" }>).message : res.message;
@@ -112,7 +119,15 @@ export function RetryDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title={`Retry the post to ${accountName}`}>
+    <Dialog
+      open={open}
+      onClose={() => {
+        setDone(false);
+        onClose();
+      }}
+      title={`Retry the post to ${accountName}`}
+      returnFocus={!done}
+    >
       <SegmentedControl
         name={`retry-mode-${targetId}`}
         label="When should it go out?"

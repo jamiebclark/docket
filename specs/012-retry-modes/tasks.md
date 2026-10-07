@@ -118,7 +118,7 @@
 - [x] T036 [P] Create `docs/failures.md` ("Failures and retrying"): the three modes, no-slot behaviour and the explanatory `last_error`, attempt-history entries, blocked reasons. Add a row under "Using Docket" in `docs/index.md` and one sentence plus link in `README.md`.
 - [x] T037 [P] Add `## 012 — Retry modes` to `docs/decisions.md` with D1–D6 (from spec.md "Decisions made while specifying") and P1–P12 (from research.md); append any decision made during implementation.
 - [x] T038 Run the full pass once: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build < /dev/null`. `pnpm db:check` MUST report no pending migration. Verify with `git diff --stat main -- src/app/api` that nothing under the API changed.
-- [ ] T039 🛑 BLOCKED: needs a real browser with a screen reader (VoiceOver/NVDA) — listen to the announcements and confirm focus lands on the page heading after a successful retry and returns to "Retry…" on Escape, per quickstart.md steps 2, 6 and 7. Automated static-markup and pure-helper tests cover the rest.
+- [ ] T039 🛑 BLOCKED: needs a real browser with a screen reader (VoiceOver/NVDA) — also check a successful retry on the Failures page (several rows) and the post page lands focus on the heading (T045) — listen to the announcements and confirm focus lands on the page heading after a successful retry and returns to "Retry…" on Escape, per quickstart.md steps 2, 6 and 7. Automated static-markup and pure-helper tests cover the rest.
 
 ---
 
@@ -161,4 +161,4 @@ Findings are in `specs/012-retry-modes/review.md`. Do T040 first so the existing
 
 Findings are in `specs/012-retry-modes/review.md` (round 2). Commit the fix as a Conventional Commit with explicit `git add <path>` paths.
 
-- [ ] T045 Make focus after a successful retry land on the page heading regardless of refresh timing, while keeping "Back"/Escape returning focus to "Retry…": either let the success path skip `Dialog`'s return-to-opener (e.g. a `returnFocus` option or clearing `returnTo` before `onClose()`) and focus `#page-title` directly, or make `restoreFocus` wait until the opener is disconnected before deciding; add the success case on the Failures page (several rows) and the post page to T039's manual check — review F14 (MAJOR), src/components/targets/RetryDialog.tsx:101
+- [x] T045 Make focus after a successful retry land on the page heading regardless of refresh timing, while keeping "Back"/Escape returning focus to "Retry…": either let the success path skip `Dialog`'s return-to-opener (e.g. a `returnFocus` option or clearing `returnTo` before `onClose()`) and focus `#page-title` directly, or make `restoreFocus` wait until the opener is disconnected before deciding; add the success case on the Failures page (several rows) and the post page to T039's manual check — review F14 (MAJOR), src/components/targets/RetryDialog.tsx:101
