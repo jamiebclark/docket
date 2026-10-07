@@ -128,6 +128,8 @@ export interface OAuthConnectGroup {
   exchangeCode(input: {
     code: string;
     redirectUri: string;
+    /** The attempt's raw state, already validated, bound to this user and session, and consumed (G17). For per-attempt derivations such as a PKCE verifier; never store or echo it. */
+    state: string;
     now: Date;
     signal: AbortSignal;
   }): Promise<CandidatesResult>;

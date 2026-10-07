@@ -77,8 +77,13 @@ describe("docs/adding-a-provider.md covers src/providers/types.ts", () => {
     });
   }
 
-  it("mentions the generic changes G1 to G14", () => {
-    for (let i = 1; i <= 14; i += 1) expect(guide, `G${i}`).toMatch(new RegExp(`\\bG${i}\\b`));
+  it("mentions the generic changes G1 to G14 and G17", () => {
+    for (const i of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 17]) expect(guide, `G${i}`).toMatch(new RegExp(`\\bG${i}\\b`));
+  });
+
+  it("documents that exchangeCode receives state (G17)", () => {
+    expect(guide).toMatch(/\|\s*G17\s*\|\s*exchangeCode receives state\s*\|\s*4\s*\|/);
+    expect(guide).toMatch(/exchangeCode\(\{[^}]*\bstate\b[^}]*\}\)/);
   });
 
   it("has no 004 F5 contradictions", () => {
@@ -89,6 +94,13 @@ describe("docs/adding-a-provider.md covers src/providers/types.ts", () => {
 
   it("carries the refresh hold note", () => {
     expect(guide).toMatch(/refresh hold/i);
+  });
+
+  it("describes the X PKCE verifier as derived from state, never stored", () => {
+    const x = guide.slice(guide.indexOf("## 16. Worked example: the `x` provider"));
+    expect(x).toMatch(/HMAC-SHA256\(`X_CLIENT_SECRET`, "docket:x:pkce:v1:" \+ state\)/);
+    expect(x).not.toMatch(/verifier is kept in/i);
+    expect(x).not.toMatch(/reads the verifier from/i);
   });
 
   it("links to docs/limits.md and explains engine-side checks", () => {

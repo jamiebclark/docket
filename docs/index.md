@@ -1,6 +1,6 @@
 # Docket
 
-Self-hosted, multi-project social scheduler and LLM post generator for Facebook Pages, Instagram, Threads and Bluesky.
+Self-hosted, multi-project social scheduler and LLM post generator for Facebook Pages, Instagram, Threads, Bluesky and X.
 Every account, post, media file and brand setting belongs to exactly one project.
 
 These pages are built from the [`docs/`](https://github.com/jamiebclark/docket/tree/main/docs) folder of the repository, so
@@ -13,6 +13,7 @@ they always match `main`.
 | Deploying (Compose, Unraid, Neon, proxies, backups, Netlify) | [Deploying](deployment.md) |
 | Media storage (R2, S3, MinIO). The bucket must be publicly readable | [Media storage](storage.md) |
 | The one Meta app for Facebook, Instagram and Threads | [Meta app](meta-setup.md) |
+| The X developer app (optional) | [X](x-setup.md) |
 
 ## Using Docket
 

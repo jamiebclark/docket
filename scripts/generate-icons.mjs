@@ -51,6 +51,7 @@ const PROVIDERS = {
   instagram: "instagram",
   threads: "threads",
   bluesky: "bluesky",
+  x: "x",
 };
 
 // Package "exports" hide package.json from require.resolve, so read the installed directories.

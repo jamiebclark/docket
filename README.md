@@ -1,6 +1,6 @@
 # Docket
 
-Self-hosted, multi-project social scheduler and LLM post generator for Facebook Pages, Instagram, Threads and Bluesky.
+Self-hosted, multi-project social scheduler and LLM post generator for Facebook Pages, Instagram, Threads, Bluesky and X.
 One codebase replaces a scheduler, a workflow-automation tool and a CMS: every account, post, media file and brand setting
 belongs to exactly one project.
 
@@ -14,7 +14,7 @@ belongs to exactly one project.
   from images or a CSV. See [docs/generator.md](docs/generator.md).
 - **Public API.** Bearer-token REST API (`/api/v1`, OpenAPI at `/api/v1/openapi.json`) with idempotent writes and signed
   webhooks. See [docs/n8n.md](docs/n8n.md) for rebuilding an n8n flow.
-- **Platforms.** Facebook Pages, Instagram, Threads and Bluesky, plus an offline `mock` provider for trying it out.
+- **Platforms.** Facebook Pages, Instagram, Threads, Bluesky and X, plus an offline `mock` provider for trying it out.
 - **Safe by default.** Credentials encrypted at rest, same-origin checks, publish-time validation, per-platform rate limits, and a
   scheduler that never double-posts (uncertain outcomes become `ambiguous` for a person to resolve).
 
@@ -42,8 +42,8 @@ credentials cannot be decrypted. A clean-checkout run of these steps is recorded
 [docs/deployment.md](docs/deployment.md#verified-run). The full walkthrough, a smoke script, backups, reverse proxies and other
 hosts are in [docs/deployment.md](docs/deployment.md).
 
-**Going live** with real Facebook, Instagram, Threads and Bluesky accounts takes a few more steps, in order: an `https://`
-address, a public media bucket, a Meta app, then connecting accounts. See
+**Going live** with real Facebook, Instagram, Threads, Bluesky and X accounts takes a few more steps, in order: an `https://`
+address, a public media bucket, a Meta app (and an X app if you use X, see [docs/x-setup.md](docs/x-setup.md)), then connecting accounts. See
 [docs/deployment.md](docs/deployment.md#next-connect-real-accounts).
 
 For development without Docker for the app itself (Node 24, see `.nvmrc`; run `corepack enable` first):
@@ -108,6 +108,7 @@ file names and headings stable or update those links.
 | Media storage (R2, S3, MinIO) | [docs/storage.md](docs/storage.md) |
 | Members, roles and connecting accounts (including other people's) | [docs/accounts.md](docs/accounts.md) |
 | Facebook, Instagram and Threads apps | [docs/meta-setup.md](docs/meta-setup.md) |
+| The X developer app (optional) | [docs/x-setup.md](docs/x-setup.md) |
 | Generator and jobs | [docs/generator.md](docs/generator.md) |
 | n8n and the public API | [docs/n8n.md](docs/n8n.md) |
 | Adding a provider | [docs/adding-a-provider.md](docs/adding-a-provider.md) |
@@ -115,7 +116,8 @@ file names and headings stable or update those links.
 | Original product brief (internal build history; describes the author's own setup) | [docs/build-prompt.md](docs/build-prompt.md) |
 
 Connecting accounts: Bluesky uses an **app password** (never your main password, and it is not stored). Facebook, Instagram and
-Threads need one Meta app you create for the whole install; follow [docs/meta-setup.md](docs/meta-setup.md). Facebook, Instagram
+Threads need one Meta app you create for the whole install; follow [docs/meta-setup.md](docs/meta-setup.md). X needs
+one X developer app you create too ([docs/x-setup.md](docs/x-setup.md)), and an HTTPS callback. Facebook, Instagram
 and Threads fetch images by URL, so the bucket must be publicly readable ([docs/storage.md](docs/storage.md)); Threads also needs
 an HTTPS address that is not localhost. Only project owners and admins can connect accounts; see
 [docs/accounts.md](docs/accounts.md).
@@ -124,7 +126,7 @@ an HTTPS address that is not localhost. Only project owners and admins can conne
 
 A platform is one folder under `src/providers/<key>/` and one line in `src/providers/registry.ts`; the scheduler, services and
 schema do not change. [docs/adding-a-provider.md](docs/adding-a-provider.md) covers the contract, step machine, limits and
-refresh, and walks through the mock, Bluesky, Instagram and Threads providers. A test keeps that guide in step with
+refresh, and walks through the mock, Bluesky, Instagram, Threads and X providers. A test keeps that guide in step with
 `src/providers/types.ts`.
 
 ## Testing and contributing

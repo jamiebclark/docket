@@ -92,6 +92,17 @@ describe("provider registry", () => {
         "THREADS_GRAPH_BASE",
       ]);
     });
+    it("registers x in its own connect group", () => {
+      const entry = findConnectGroup("x");
+      expect(entry?.providers.map((p) => p.key)).toEqual(["x"]);
+      expect(entry?.group.displayName).toBe("X");
+      expect(entry?.group.environment.variables.map((v) => [v.name, v.secret])).toEqual([
+        ["X_CLIENT_ID", false],
+        ["X_CLIENT_SECRET", true],
+      ]);
+      expect(entry?.group.pasteToken).toBeUndefined();
+    });
+
     it("documents every environment variable in .env.example", () => {
       const example = readFileSync(".env.example", "utf8");
       for (const { group } of groups) {
