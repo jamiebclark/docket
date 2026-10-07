@@ -36,12 +36,14 @@ export function plannedTime(instant: Date, slotId: string | null, timeZone: stri
 }
 
 /** Free occurrences of the account after `after`, nearest first, skipping `held` and `exclude`. */
-async function freeCandidates(tx: Tx, accountId: string, after: Date, exclude: readonly Date[]) {
+async function freeCandidates(tx: Tx, accountId: string, after: Date, exclude: readonly Date[], ownOccurrence?: Date | null) {
   const slots = await tx.slots.listActiveForAccount(accountId);
   if (slots.length === 0) return null;
   const horizonMs = getEnv().QUEUE_HORIZON_DAYS * 86_400_000;
   const to = new Date(after.getTime() + horizonMs);
   const held = new Set((await tx.targets.heldInstants(accountId, after, to)).map((d) => d.getTime()));
+  // The target's own held occurrence is free to it again; `exclude` is applied after.
+  if (ownOccurrence) held.delete(ownOccurrence.getTime());
   for (const d of exclude) held.add(d.getTime());
   const tz = tx.project.timezone;
   return occurrencesBetween(
@@ -53,10 +55,10 @@ async function freeCandidates(tx: Tx, accountId: string, after: Date, exclude: r
 }
 
 /** The earliest free occurrence, without reserving it (preview, FR-025). */
-export async function peekNextFree(tx: Tx, accountId: string, opts: { after: Date; exclude?: readonly Date[] }): Promise<Allocation> {
+export async function peekNextFree(tx: Tx, accountId: string, opts: { after: Date; exclude?: readonly Date[]; ownOccurrence?: Date | null }): Promise<Allocation> {
   const account = await tx.accounts.get(accountId);
   const name = account?.displayName ?? "That account";
-  const candidates = await freeCandidates(tx, accountId, opts.after, opts.exclude ?? []);
+  const candidates = await freeCandidates(tx, accountId, opts.after, opts.exclude ?? [], opts.ownOccurrence);
   if (candidates === null) {
     return { ok: false, code: "no_active_slots", message: `${name} has no active posting slots. Add or resume a slot first.` };
   }
@@ -75,11 +77,11 @@ export async function peekNextFree(tx: Tx, accountId: string, opts: { after: Dat
 export async function allocateNextFree(
   tx: Tx,
   target: { id: string; accountId: string },
-  opts: { after: Date; exclude?: readonly Date[] },
+  opts: { after: Date; exclude?: readonly Date[]; ownOccurrence?: Date | null },
 ): Promise<Allocation> {
   const account = await tx.accounts.get(target.accountId);
   const name = account?.displayName ?? "That account";
-  const candidates = await freeCandidates(tx, target.accountId, opts.after, opts.exclude ?? []);
+  const candidates = await freeCandidates(tx, target.accountId, opts.after, opts.exclude ?? [], opts.ownOccurrence);
   if (candidates === null) {
     return { ok: false, code: "no_active_slots", message: `${name} has no active posting slots. Add or resume a slot first.` };
   }
