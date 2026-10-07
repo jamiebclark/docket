@@ -18,6 +18,9 @@ export interface ApiRunResult {
 }
 
 /** The single list the router, OpenAPI document and tests use (FR-047, FR-048). */
+/** Named OpenAPI examples. */
+export type ApiExamples = Record<string, { summary: string; value: unknown }>;
+
 export interface ApiOperation<P = unknown, Q = unknown, B = unknown> {
   id: string;
   method: "GET" | "POST";
@@ -30,11 +33,17 @@ export interface ApiOperation<P = unknown, Q = unknown, B = unknown> {
   tag: string;
   params?: z.ZodType<P>;
   query?: z.ZodType<Q>;
-  body?: { kind: "json"; schema: z.ZodType<B> } | { kind: "multipart"; schema: z.ZodType<B> };
-  responses: Record<number, { description: string; schema?: z.ZodType }>;
+  body?:
+    | { kind: "json"; schema: z.ZodType<B>; examples?: ApiExamples }
+    | { kind: "multipart"; schema: z.ZodType<B>; examples?: ApiExamples };
+  responses: Record<number, { description: string; schema?: z.ZodType; examples?: ApiExamples }>;
   /** Writes: true. The pipeline applies research D8 around `run`. */
   idempotent: boolean;
-  idempotencyMode?: "transaction" | "generate";
+  /**
+   * `generate` and `self_commit` run the operation outside the idempotent transaction. `self_commit` is for
+   * operations whose services commit per item, so a failure part-way must not roll back the finished items.
+   */
+  idempotencyMode?: "transaction" | "generate" | "self_commit";
   /** Slow, repeatable pre-work run before the idempotent transaction. Never commits a business effect. */
   prepare?: (scope: ProjectScope, input: { params: P; query: Q; body: B }) => Promise<unknown>;
   /** Calls exactly one service and maps its result. */

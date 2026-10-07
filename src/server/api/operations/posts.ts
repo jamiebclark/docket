@@ -6,6 +6,7 @@ import { NotFoundError } from "../../dal/errors";
 import type { TargetResult as ServiceTargetResult } from "../../services/posts";
 import { addToQueue, createDraft, prepareForScheduling, scheduleAt, validatePost } from "../../services/posts";
 import { loadApiPost } from "../../services/views/load";
+import { toIssue, toWarning } from "./issues";
 import { defineOperation } from "./types";
 
 const postIdParams = z.object({ postId: z.uuid() });
@@ -19,13 +20,6 @@ const createBody = z.object({
 });
 const selectBody = z.object({ targetIds: z.array(z.uuid()).optional() });
 const scheduleBody = selectBody.extend({ at: atSchema });
-
-interface Issue {
-  severity?: string;
-  code: string;
-  message: string;
-  field?: string;
-}
 
 function toResult(r: ServiceTargetResult<{ scheduledAt: string; localTime: string; warnings?: readonly { code: string; message: string }[] }>) {
   if (!r.ok) {
@@ -45,13 +39,9 @@ function toResult(r: ServiceTargetResult<{ scheduledAt: string; localTime: strin
     scheduledAt: r.scheduledAt,
     scheduledAtLocal: r.localTime,
     ...(r.warnings && r.warnings.length > 0
-      ? { warnings: r.warnings.map((w) => ({ severity: "warning", code: w.code, message: w.message })) }
+      ? { warnings: r.warnings.map(toWarning) }
       : {}),
   };
-}
-
-function toIssue(i: { severity?: string; code: string; message: string; field?: string }): Issue {
-  return { ...(i.severity ? { severity: i.severity } : {}), code: i.code, message: i.message, ...(i.field ? { field: i.field } : {}) };
 }
 
 const resultsResponse = z.object({ results: z.array(TargetResultSchema) });

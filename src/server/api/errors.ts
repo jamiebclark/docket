@@ -146,7 +146,9 @@ export function mapServiceError(e: unknown, ctx: { permission: string | null }):
   if (e instanceof JobClosedError) return apiError("job_closed", e.message);
   if (e instanceof MediaReservedError) return apiError("media_reserved", e.message, { items: e.items });
   if (e instanceof JobItemLimitError) return apiError("job_item_limit", e.message);
-  if (e instanceof ConflictError) return apiError("conflict", e.message);
+  if (e instanceof ConflictError) {
+    return apiError("conflict", e.message, e.reason ? { reason: e.reason } : undefined);
+  }
   if (e instanceof ValidationIssuesError) {
     return apiError("validation_failed", e.message, e.issues);
   }

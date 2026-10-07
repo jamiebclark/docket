@@ -5,6 +5,7 @@ import * as clock from "../dal/clock";
 import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { AccountRecord } from "../dal/accounts";
 import type { AttemptRow } from "../dal/attempts";
+import type { AttemptActor } from "../../lib/failures/attempt-actor";
 import type { ProjectScope } from "../dal/scope";
 import type { TargetRecord } from "../dal/targets";
 import { gate, retryBlockedReason } from "./posts";
@@ -36,7 +37,7 @@ export interface AttemptEntryView {
   request: Record<string, unknown>;
   response: Record<string, unknown>;
   error: string | null;
-  actor: { kind: "member"; name: string } | { kind: "system" };
+  actor: AttemptActor;
 }
 
 export interface AttemptRun {
@@ -95,9 +96,18 @@ export function groupAttemptRuns(entries: readonly AttemptEntryView[]): AttemptR
 
 /** Turns stored attempts into views, resolving actor ids with one batched name lookup. */
 export async function toAttemptViews(scope: ProjectScope, rows: readonly AttemptRow[]): Promise<AttemptEntryView[]> {
-  const needsNames = rows.some((r) => r.actorUserId);
+  const needsNames = rows.some((r) => r.actorUserId && !r.actorApiKeyId);
   const names = new Map<string, string>();
   if (needsNames) for (const m of await scope.members.list()) names.set(m.userId, m.name);
+  const keyNames = new Map<string, string | null>();
+  for (const id of new Set(rows.flatMap((r) => (r.actorApiKeyId ? [r.actorApiKeyId] : [])))) {
+    keyNames.set(id, (await scope.apiKeys.get(id))?.name ?? null);
+  }
+  const actorOf = (a: AttemptRow): AttemptActor => {
+    if (a.actorApiKeyId) return { kind: "api_key", name: keyNames.get(a.actorApiKeyId) ?? null };
+    if (a.actorUserId) return { kind: "member", name: names.get(a.actorUserId) ?? "Former member" };
+    return { kind: "system" };
+  };
   return rows.map((a) => ({
     id: a.id,
     at: a.createdAt,
@@ -106,7 +116,7 @@ export async function toAttemptViews(scope: ProjectScope, rows: readonly Attempt
     request: (a.requestSummary ?? {}) as Record<string, unknown>,
     response: (a.responseSummary ?? {}) as Record<string, unknown>,
     error: a.error,
-    actor: a.actorUserId ? { kind: "member", name: names.get(a.actorUserId) ?? "Former member" } : { kind: "system" },
+    actor: actorOf(a),
   }));
 }
 

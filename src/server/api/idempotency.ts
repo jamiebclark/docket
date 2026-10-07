@@ -99,8 +99,8 @@ function storable(e: unknown, permission: string | null, requestId: string): Api
 
 /**
  * Wraps an operation in the idempotency protocol of research D8: claim first, run the effect, store the
- * result. The effect and the stored result commit together, except for `generate` mode, which links the
- * effect to the key through the post's request id.
+ * result. The effect and the stored result commit together, except for `generate` and `self_commit` modes.
+ * `generate` links the effect to the key through the post's request id; `self_commit` services commit per item.
  */
 export async function runIdempotent(req: IdempotencyRequest): Promise<ApiRunResult> {
   const { op, scope, requestId } = req;
@@ -149,7 +149,7 @@ export async function runIdempotent(req: IdempotencyRequest): Promise<ApiRunResu
     }
     const runInput = { ...input, prepared, requestId, idempotencyRecordId: recordId };
 
-    if (op.idempotencyMode === "generate") {
+    if (op.idempotencyMode === "generate" || op.idempotencyMode === "self_commit") {
       let out: ApiRunResult;
       try {
         out = await op.run(scope, runInput);

@@ -88,3 +88,17 @@ describe("skipPhrase", () => {
     expect(skipPhrase(reason, 3)).toBe(table[reason][1]);
   });
 });
+
+describe("retryAllMessage continueWith", () => {
+  const base = { mode: "now" as const, inScope: 5, count: 3, skipped: skips(), remaining: 2 };
+
+  it("tells API callers to call again", () => {
+    expect(retryAllMessage(base, { continueWith: "call" })).toBe(
+      "3 posts will be retried. 2 more failed posts were not retried yet. Call again with a new Idempotency-Key to continue.",
+    );
+  });
+  it("defaults to the button wording", () => {
+    expect(retryAllMessage(base)).toBe(retryAllMessage(base, { continueWith: "press" }));
+    expect(retryAllMessage(base)).toContain("Press Retry all failed again to continue.");
+  });
+});

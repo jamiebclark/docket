@@ -42,13 +42,16 @@ export function skipPhrase(reason: RetryAllSkipReason, n: number): string {
   return n === 1 ? phrase.one : phrase.many(n);
 }
 
-export function retryAllMessage(r: {
-  mode: "now" | "requeue";
-  inScope: number;
-  count: number;
-  skipped: SkipCounts;
-  remaining: number;
-}): string {
+export function retryAllMessage(
+  r: {
+    mode: "now" | "requeue";
+    inScope: number;
+    count: number;
+    skipped: SkipCounts;
+    remaining: number;
+  },
+  opts?: { continueWith?: "press" | "call" },
+): string {
   if (r.inScope === 0) return "There are no failed posts to retry.";
 
   const parts: string[] = [];
@@ -76,7 +79,9 @@ export function retryAllMessage(r: {
       r.remaining === 1
         ? "1 more failed post was not retried yet."
         : `${r.remaining} more failed posts were not retried yet.`,
-      "Press Retry all failed again to continue.",
+      opts?.continueWith === "call"
+        ? "Call again with a new Idempotency-Key to continue."
+        : "Press Retry all failed again to continue.",
     );
   }
   return parts.join(" ");
