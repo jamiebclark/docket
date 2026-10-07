@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { RequirementsSummary } from "@/components/compose/RequirementsSummary";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -248,7 +249,7 @@ export function Composer({
 
           <fieldset className={section}>
             <legend className={legend}>Media</legend>
-            <MediaPicker slug={slug} enabled={mediaEnabled} canEdit={canSave} value={media} onChange={setMedia} />
+            <MediaPicker slug={slug} enabled={mediaEnabled} canEdit={canSave} value={media} accountIds={selected} onChange={setMedia} />
           </fieldset>
 
           {selected.length > 0 ? (
@@ -324,6 +325,7 @@ export function Composer({
                       {over ? " · over the limit" : ""}
                     </span>
                   </div>
+                  <RequirementsSummary providerName={t.providerName} requirements={t.requirements} openInitially={selected.length === 1} />
                   <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
                   {media.length > 0 ? (
                     <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Images, in order">

@@ -9,6 +9,9 @@ vi.mock("./actions", () => ({
   addToQueueAction: async () => ({ ok: false, error: "conflict", message: "n/a" }),
 }));
 
+import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
+import { findProvider } from "@/providers/registry";
+import { requirementsOf } from "@/providers/requirements";
 import { Composer, type AccountOption } from "./Composer";
 import { fetchCheck, type CheckResult } from "./composer-logic";
 
@@ -28,6 +31,7 @@ const target = (over: Partial<CheckResult["targets"][number]> = {}): CheckResult
   postType: "text",
   issues: [],
   canSchedule: true,
+  requirements: requirementsOf(findProvider("bluesky")!.capabilities, { uploadTypes: UPLOAD_MIME_TYPES }),
   ...over,
 });
 const result = (targets: CheckResult["targets"], flags: Partial<CheckResult> = {}): CheckResult => ({
@@ -77,6 +81,48 @@ describe("fetchCheck", () => {
   it("returns null for a non-OK answer or a network failure, so the last result stays", async () => {
     expect(await fetchCheck("demo", { baseText: "", mediaIds: [], targets: [] }, undefined, (async () => new Response("{}", { status: 404 })) as never)).toBeNull();
     expect(await fetchCheck("demo", { baseText: "", mediaIds: [], targets: [] }, undefined, (async () => { throw new Error("offline"); }) as never)).toBeNull();
+  });
+});
+
+describe("Composer requirements summary", () => {
+  const two: AccountOption[] = [...accounts, { id: "a3", displayName: "Third", providerKey: "bluesky", providerName: "Bluesky", status: "active", providerAvailable: true }];
+
+  it("shows each selected account's summary with every field, open when one account is selected", async () => {
+    const html = render({ check: await checked(result([target()])) });
+    expect(html).toContain("300 graphemes · up to 4 images · JPEG, PNG");
+    expect(html).toContain("What Bluesky accepts");
+    expect(html).toContain("300 graphemes</dd>");
+    for (const term of ["Text", "Images", "Formats", "Maximum file size", "Width", "Height", "Aspect ratio", "Alt text", "Image required", "Text-only posts"]) {
+      expect(html).toContain(`<dt class="font-medium">${term}</dt>`);
+    }
+    expect(html).toContain("<details open");
+  });
+
+  it("starts closed with several accounts selected, and shows one summary per account", async () => {
+    const html = render({
+      accounts: two,
+      selected: ["a1", "a3"],
+      check: await checked(result([target(), target({ accountId: "a3", displayName: "Third" })])),
+    });
+    expect(html.match(/data-testid="requirements-summary"/g)).toHaveLength(2);
+    expect(html).not.toContain("<details open");
+  });
+
+  it("shows no summary while checking or when requirements is null, and keeps the counter and issues", async () => {
+    expect(render({ check: null })).not.toContain("requirements-summary");
+    const html = render({
+      check: await checked(
+        result([target({ requirements: null, count: 301, issues: [{ severity: "error", code: "text_too_long", message: "Too long.", field: "text" }] })]),
+      ),
+    });
+    expect(html).not.toContain("requirements-summary");
+    expect(html).toContain("301 / 300");
+    expect(html).toContain("Too long.");
+  });
+
+  it("drops the summary when the account is deselected (AS3)", async () => {
+    const html = render({ accounts: two, selected: ["a3"], check: await checked(result([target()])) });
+    expect(html).not.toContain("requirements-summary");
   });
 });
 

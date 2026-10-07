@@ -11,14 +11,15 @@ import { closeDb } from "../helpers/db";
 import { fakeSession } from "../helpers/auth";
 import { createProjectWithMembers } from "../helpers/factories";
 import { blueskyProvider } from "../../src/providers/bluesky";
-import { blueskyLikeProvider, registerTestProvider } from "../helpers/provider-fixtures";
-import { createMediaAsset } from "../helpers/scheduling";
+import { blueskyLikeProvider, instagramLikeProvider, registerTestProvider } from "../helpers/provider-fixtures";
+import { createMediaAsset, createMockAccount } from "../helpers/scheduling";
 import { postsEnv } from "../helpers/posts-env";
 import { forProject } from "../../src/server/dal/scope";
 import * as accounts from "../../src/server/services/accounts";
 import * as slots from "../../src/server/services/slots";
 
 registerTestProvider(blueskyLikeProvider);
+registerTestProvider(instagramLikeProvider);
 registerTestProvider(blueskyProvider);
 
 afterAll(async () => {
@@ -251,6 +252,69 @@ describe("POST compose/check", () => {
       expect(fb.issues.map((i) => i.code)).not.toContain("text_too_long");
       expect(ig.canSchedule).toBe(false);
       expect(fb.canSchedule).toBe(true);
+    });
+  });
+
+  describe("requirements summary", () => {
+    it("is present with no text and no media, for an Instagram-like target", async () => {
+      const t = await setup();
+      const insta = await accounts.saveConnectedAccount(t.env.scope, {
+        providerKey: "instagram-like",
+        externalAccountId: `i-${Math.random().toString(36).slice(2, 8)}`,
+        displayName: "Grid",
+        settings: {},
+      });
+      const json = await (await call(t.env.project.slug, { baseText: "", mediaIds: [], targets: [{ accountId: insta.id }] })).json();
+      const target = json.data.targets[0];
+      const caps = instagramLikeProvider.capabilities;
+      expect(target.requirements).toMatchObject({
+        text: { maxLength: caps.text.maxLength, countingRule: countingRuleName(caps.text.countingRule) },
+        image: {
+          maxImages: caps.media.maxImages,
+          formats: [{ value: "image/jpeg", label: "JPEG" }],
+          convertedTo: { value: "image/jpeg", label: "JPEG" },
+          maxBytesPerFile: { value: 8_000_000, label: "8 MB" },
+          width: { min: { value: 320, label: "320 px" }, max: { value: 1440, label: "1440 px" } },
+          aspectRatio: { min: { value: 0.8, label: "4:5" }, max: { value: 1.91, label: "1.91:1" } },
+          maxAltTextLength: 1000,
+        },
+      });
+      expect(target.requirements.image.convertedFrom.map((f: { value: string }) => f.value)).toEqual(["image/png", "image/webp"]);
+      expect(target.requirements).not.toHaveProperty("video");
+    });
+
+    it("gives a Bluesky target its own numbers and null for what is not checked", async () => {
+      const t = await setup();
+      const bsky = await accounts.saveConnectedAccount(t.env.scope, {
+        providerKey: "bluesky",
+        externalAccountId: `did:plc:${Math.random().toString(36).slice(2, 10)}`,
+        displayName: "Real Bsky",
+        settings: {},
+      });
+      const json = await (await call(t.env.project.slug, { baseText: "", targets: [{ accountId: bsky.id }] })).json();
+      const r = json.data.targets[0].requirements;
+      expect(r.text).toMatchObject({ maxLength: 300, countingRule: "graphemes", unit: "graphemes" });
+      expect(r.image.maxImages).toBe(4);
+      expect(r.image.formats.map((f: { label: string }) => f.label)).toEqual(["JPEG", "PNG"]);
+      expect(r.image.aspectRatio).toEqual({ min: null, max: null });
+      expect(r.image.maxAltTextLength).toBeNull();
+    });
+
+    it("is null for an account whose provider is not registered", async () => {
+      const t = await setup();
+      const gone = await createMockAccount(t.env.project.id, {}, { providerKey: "retired-provider" });
+      const json = await (await call(t.env.project.slug, { baseText: "", targets: [{ accountId: gone.id }] })).json();
+      expect(json.data.targets[0]).toMatchObject({ limit: null, requirements: null });
+    });
+
+    it("agrees with limit and countingRule, including over-limit text", async () => {
+      const t = await setup();
+      for (const baseText of ["", "x".repeat(blueskyLikeProvider.capabilities.text.maxLength + 50)]) {
+        const json = await (await call(t.env.project.slug, { baseText, targets: [{ accountId: t.account.id }] })).json();
+        const target = json.data.targets[0];
+        expect(target.requirements.text.maxLength).toBe(target.limit);
+        expect(target.requirements.text.countingRule).toBe(target.countingRule);
+      }
     });
   });
 });
