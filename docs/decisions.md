@@ -1082,3 +1082,66 @@ These are fixes to existing helpers, inert for every provider before this entry.
 - **R15 — The callout is a warning `Alert` with `role="status"`**, so it is polite. Screen readers rarely announce a status region that is present at load, so its place first in `main` is what makes it found.
 - **R16 — A `RelativeTime` atom.** `SchedulerHealth`'s `ago()` wording moves to `lib/time/relative.ts`, with unchanged output. The absolute time and zone are the tooltip and screen-reader text.
 - **R17 — No change** to dependencies, environment variables, the public API, webhooks, event kinds, filters or `docker-compose.yml`. **Owed to the operator:** `.claude/skills/docket-ui/SKILL.md` should list `/notifications` and the bell. The pipeline cannot write it.
+
+## 024 — Per-target video formatter (2026-10-08)
+
+Judgement calls from `specs/024-video-target-formatter/spec.md` (D1–D18) and its plan (`research.md`, P1–P27). External facts come from `docs/research/ffmpeg.md` and `docs/research/meta-video.md`. Exact ffmpeg option spellings the research marks UNVERIFIED are confirmed by a CI test against the installed tool's own help (P6). Real publishing of adapted videos is verified with mocks only; the owed live checks go in `docs/meta-setup.md`.
+
+### Spec decisions
+
+- **D1 — One edit per video in a post, shared by all its targets.** The edit holds a trim (default the whole video), a fit (crop, blurred pad or colour pad; default blurred pad), a pad colour (default black), a focal point (default the centre) and "use each platform's recommended shape" (default off). Each carousel video has its own edit. *Reverse:* per-target overrides on the same record.
+- **D2 — Reframe only when required or asked.** It happens when the shape is outside the target's range, or when the person asks for the recommended shape and the target declares one. The new shape is the recommended one if it is in range, otherwise the nearest end of the range.
+- **D3 — Crop and pad.** Crop keeps the largest area of the new shape, as close to the focal point as the frame allows. Pad centres the whole frame on a blurred copy or a solid colour. The focal point is set on the poster frame as displayed.
+- **D4 — Never enlarge the picture.** Sides are even. The output is reduced to the target's maximum, and a target refuses a video below its minimum, saying what it has and what it needs.
+- **D5 — Trim.** Start and end are set to a tenth of a second, keeping at least 1 s. Each target keeps up to its maximum, with a visible note, and refuses a kept part below its minimum. A trimmed video is always re-encoded.
+- **D6 — As is, rewrap or re-encode.** A re-encode is H.264 High 8-bit 4:2:0 with closed GOPs, plus AAC (≤ 48 kHz, ≤ 2 channels), in MP4 with the index at the front. The frame rate is clamped to the target's range. Silence stays silent.
+- **D7 — New declared limits.** These are the maximum video bitrate, the audio encode bitrate, the maximum sample rate and channels, a recommended aspect and "index at front". Instagram: 25 Mbps; Threads: 100 Mbps; 128 kbps, 48 kHz and 2 channels; 9:16 recommended for Reel and Feed video, Threads single video and Facebook Reel. Megabits are decimal. "128 kbps" is the encode target, not a refusal limit.
+- **D8 — One planner,** with the image planner's pattern. Its answer drives the composer, badges, summary, gate, worker and publishing. Identical requests share one version.
+- **D9 — Every video operation runs in the worker,** under leases, with a length-scaled time limit, 3 attempts, configurable concurrency (default 1) and the soonest due first.
+- **D10 — Full versions are built for scheduled, queued and published-now posts,** and again on change. Drafts get previews only. A vanished file is rebuilt.
+- **D11 — A due target waits for its version.** It makes no provider call and uses no attempt, and shows "Preparing video for <platform>". It fails with "The video could not be adapted for <platform>: <reason>" when the version fails or after 2 hours. Retry queues the version again.
+- **D12 — A preview per target, at most 640 px with sound.** It is never a gate.
+- **D13 — Every output is read back** against the plan and the limits before use.
+- **D14 — Size fitting by computed bitrate and bounded retries,** never by truncating the file.
+- **D15 — Badges say "fits", "will be adapted" (with the steps) or "will be refused".** The summary says what Docket adapts and what it cannot. The "Docket does not crop, trim or convert video yet." suffix is removed.
+- **D16 — Edits follow the post's role and locking rules.** Versions belong to the video's project, live in the same bucket, are deleted with the video, and are removed when no current edit refers to them.
+- **D17 — Mock, Instagram, Facebook and Threads use the formatter through capabilities only.** Bluesky (entry 7) and TikTok (entry 8) get it by declaring limits.
+- **D18 — Stored originals get their index at the front from now on** (still a stream copy). Older originals are not rewritten; they get a rewrap when a target needs it.
+
+### Plan decisions
+
+- **P1 — `planVideo` is pure** and lives in `src/providers/video-plan.ts` beside `planImage`. It returns `original`, `derive{rewrap|encode}`, `refuse` or `checking`. The worker builds only from the frozen recipe; it never re-plans.
+- **P2 — A version's key is the hash of its numeric recipe** (with `VIDEO_PIPELINE_VERSION` and the kind), not of the raw limits.
+  - Identical limits and edits always share a version, and so do different limits that give the same output.
+  - Fields that do not affect the output do not rebuild.
+  - A result for a stale edit is never looked up.
+- **P3 — Geometry is in even integers, computed in Node.**
+  - **A padded canvas's long side is at most the larger of the source's long side and 1,920 px.** D4 allows a canvas larger than the source, but unbounded it would be 1920×3413 for a 1080p clip padded to 9:16. With the bound it is 1080×1920 (the platforms' recommendation), and a small source still gets a larger canvas: 640×360 becomes 640×1138, which meets Facebook's 540×960.
+  - A reframe within 0.5% of the source shape is no reframe.
+- **P5 — Mode order.** Re-encode wins over rewrap, which wins over as is. When ffprobe gives no stream bitrate, the bitrate is estimated from the file size (an upper bound, so nothing is assumed to fit). A rewrap keeps the source container when the target accepts it, and reuses entry 2's verified remux.
+- **P6 — Encode settings.** libx264 High yuv420p, `veryfast`, CRF 23 with `-maxrate`/`-bufsize` only when capped, a 2 s GOP, AAC 128 kbps by default, and faststart. Every option spelling is checked in CI against `ffmpeg -h` (the research marks several UNVERIFIED; the planning machine had no ffmpeg).
+- **P8 — The size floor.** The planner refuses up front when the size budget leaves under 150 kbps for video. The worker tries at most 4 encodes: two bitrate corrections, then one at 0.75× resolution.
+- **P9 — New facts.** Bitrates, sample rate, channels and index position are recorded with `facts_version = 2`. Videos stored before this entry are marked 1; the worker re-reads each once (the file is not rewritten), and their badge says "checking" until then. After 3 failed reads, they are refused with "upload it again".
+- **P10 — Edits live in `post_video_edits`,** not `post_media`, because `setMedia` rewrites `post_media` on every save. No row means the default edit, so API, generated and bulk posts get the default with no write.
+- **P11, P12 — `video_versions` holds both full versions and previews.** The worker loop has `VIDEO_ENCODE_CONCURRENCY` lanes (1–4, default 1).
+  - Work runs due soonest first; a preview is due when it is requested.
+  - The time limit per attempt is `min(60 min, 2 min + 2 s per kept second)` for a full version and `min(15 min, 1 min + 0.5 s per kept second)` for a preview.
+  - Output is uploaded only after the readback, and marked ready only while the worker holds the lease and the video is live.
+  - A `video` heartbeat at most once a minute.
+- **P13 — The claim-time gate.** The wait happens in the tick's claim decision, on the first step only, with DB reads and pure planning: no tool, storage or provider call, no attempt row and no lease. It sets `post_targets.video_wait_since`.
+  - **It does not wait in `execute()`:** `release()` would write an attempt row every tick for up to 2 hours and set `publishStartedAt`.
+  - **When no worker is running** (no `video` heartbeat for 10 minutes), the two-hour failure says "video adapting needs the worker process, which is not running".
+  - **A lost version object** requeues the version (one `released` row). Nothing is ever built in the tick.
+- **P14 — `syncVideoVersions` runs after the commit** of queue, schedule, publish-now, edit and retry. It requeues failed versions on scheduling and retry. Any miss is healed by the claim-time gate.
+- **P16 — Previews only for re-encodes.** A rewrap is visually identical, so its preview is the original, marked "rewrapped".
+- **P17 — Cleanup in housekeeping.** At most 20 rows per tick, after 24 h unrequested and unchecked. It recomputes the keys wanted by every post using the video, and deletes unwanted rows and their objects. It needs no ffmpeg.
+- **P18 — Badge states.** `FitState` gains `adapted` and `checking`; images keep "will be converted". The summary gains "Docket adapts" and "Docket cannot fix" lists.
+- **P19 — The gate sees the planned output for `derive`.** A missing version never fails the gate, because versions are built after scheduling. `checking` is a note, not an error.
+- **P20, P21 — The composer edit dialog.**
+  - Trim fields in `m:ss.s`, a fit control, a colour field and the recommended-shape checkbox.
+  - The focal point marker is a keyboard slider: arrows move 5%, Shift + arrows 1%, Home centres it, with live announcements.
+  - Edits travel as `videoEdits` in the composer's own schemas, never the public API's. The server checks them against the video's length.
+- **P22 — One new optional setting, `VIDEO_ENCODE_CONCURRENCY`.** There is no required `docker-compose.yml` change. The optional `/tmp` volume edit is restated with the encode's disk needs: about the source plus twice the output.
+- **P24 — Mock limits.** The mock declares a full small set (8 Mbps, 128 kbps, 48 kHz, 2 channels, index at front, 1,920 px, 9:16 recommended). Test factories default the new facts to fitting values, so existing as-is tests keep their outcome.
+- **P25 — Generated enforcement rows change meaning.** Rows for limits the formatter now adapts (too long, too big, aspect, frame rate, codecs, container, bytes, bitrate, audio, index) become "adapted" rows proved by the video planner. Rows for what it cannot fix (too short, too small, counts, mixing, silence) stay refusals. This goes beyond FR-042's "wording only" for these generated rows, and SC-001 requires it.
+- **P26 — SC-007 is measured in the docker CI job** with `--cpus=2` and recorded here in the implementation outcome.
