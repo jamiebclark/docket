@@ -816,3 +816,10 @@ Judgement calls from `specs/019-instagram-video/spec.md` (D1–D13) and its plan
 - **P27 — No `docker-compose.yml` or `.env.example` change.** Migration `0012` runs at start-up.
 
 ---
+
+### Implementation outcome
+
+- **Judgement calls kept.** Status detail is read for video containers only (P16), so image requests are unchanged. `docs/limits.md` has a real `creation allowance` category (P26), so the inventory test checks it against the declaration.
+- **Accepted approximations (creation allowance).** Reservations are kept when a lease fails before Instagram is called; a retried create adds 1 whether or not a container was made; other apps' containers on the same account are invisible; builds already in flight at deploy have no up-front reservation.
+- **No deployment change.** `docker-compose.yml` and `.env.example` do not change (FR-031, P27). Migration `0012` runs at start-up.
+- **Owed.** The four live checks in `docs/meta-setup.md`. Until then Instagram video is verified with mocks only.

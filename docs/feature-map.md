@@ -13,10 +13,15 @@ spec is written.
   each image for each target before publishing. A video formatter would follow the same pattern.
 - **Video groundwork (018).** MP4 and MOV upload to the media library (and the picker) by resumable multipart upload
   straight to the bucket, ffprobe facts, metadata stripping and a poster frame in the worker, per-provider `video`
-  capabilities with composer warnings, and ffmpeg in the image. No provider publishes video yet, and generation ignores videos.
+  capabilities with composer warnings, and ffmpeg in the image. Instagram publishes video as of 019; no other provider does yet, and generation ignores videos.
   Not yet owned by any spec: API video upload, a generator that uses posters, and resuming an upload after a page reload.
+- **Instagram video (019).** Reels, Feed video (a Reel shared to the feed, chosen per post in the composer) and
+  carousels that mix images and videos, with per-type limits, video status polling and a daily container allowance.
+  Verified with mocks only until the live checks in `docs/meta-setup.md` are done. Not yet owned by any spec: resumable
+  Instagram upload for very large files, cover frames and the optional Reel fields (caption tags, audio name), API video
+  upload, and a public post update API.
 
-## Video (publishing not built)
+## Video (other platforms not built)
 
 The build prompt left video out of scope but kept room for it. `PostType` already includes `video`, `story` and
 `reel`. The publish step machine supports the multi-minute container polling that video needs. Each provider's
@@ -38,8 +43,6 @@ The build prompt left video out of scope but kept room for it. `PostType` alread
 
 | Feature | Platform support | Work in Docket |
 |---|---|---|
-| **Instagram Reels** | Yes. Create a container with `media_type=REELS` and a public `video_url`, poll its status, then publish. Videos run 3 s to 15 min. API posts are capped at 50 per 24 hours | New `REELS` state and create step, plus status polling until `FINISHED` |
-| **Instagram feed video / mixed carousel** | Yes. A single feed video is a Reel with `share_to_feed=true`, because `media_type=VIDEO` was removed in 2023. Carousels take up to 10 images, videos or a mix. Reels can't go in a carousel | Carousel items that are videos need their own status polling |
 | **Facebook Page Reels** | Yes, through the Reels Publishing API: `POST /{page-id}/video_reels` with `upload_phase=start`, upload to `rupload.facebook.com`, then `finish` with `video_state=PUBLISHED` | Three-step upload, then polling. Separate from the image flow |
 | **Facebook Page video** | Yes (Page `/videos`) | Smaller than Reels; could share the upload code |
 | **Threads video** | Yes (`media_type=VIDEO`, also in carousels) | Same container-and-poll pattern as Instagram |
@@ -65,7 +68,7 @@ follows subjects would be a later, optional step.
 ### Suggested order
 
 1. Groundwork (video in the media library, `ffprobe`, worker transcoding).
-2. Instagram Reels and feed video, which reuse the existing container flow.
+2. Instagram Reels and feed video, which reuse the existing container flow (built in 019).
 3. Facebook Reels and Threads video.
 4. Video formatter (crop and fit for each target).
 5. Bluesky video.
