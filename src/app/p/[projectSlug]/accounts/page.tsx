@@ -234,6 +234,7 @@ export default async function AccountsPage({
                 slug={projectSlug}
                 groupKey={g.key}
                 displayName={g.displayName}
+                providerKeys={g.providerKeys}
                 providerNames={g.providerNames}
                 configured={g.configured}
                 setupDoc={g.setupDoc}
@@ -245,18 +246,24 @@ export default async function AccountsPage({
             ))}
             {canManage && mockEnabled ? (
               <section aria-labelledby="connect-mock-heading" className="flex flex-col gap-3 rounded-xl border border-dashed border-input bg-surface p-5">
-                <h3 id="connect-mock-heading" className="text-base font-semibold">
-                  Mock account (offline testing)
-                </h3>
+                <div className="flex items-center gap-3">
+                  <ProviderIcon providerKey="mock" size={32} />
+                  <h3 id="connect-mock-heading" className="text-base font-semibold">
+                    Mock account (offline testing)
+                  </h3>
+                </div>
                 <ConnectMockForm slug={projectSlug} />
               </section>
             ) : null}
             {canManage
               ? credentialProviders.map((p) => (
                   <section key={p.key} aria-labelledby={`connect-${p.key}-heading`} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
-                    <h3 id={`connect-${p.key}-heading`} className="text-lg font-semibold">
-                      Connect a {p.displayName} account
-                    </h3>
+                    <div className="flex items-center gap-3">
+                      <ProviderIcon providerKey={p.key} size={32} />
+                      <h3 id={`connect-${p.key}-heading`} className="text-lg font-semibold">
+                        Connect a {p.displayName} account
+                      </h3>
+                    </div>
                     <ConnectCredentialsForm slug={projectSlug} providerKey={p.key} providerName={p.displayName} fields={p.fields} submitLabel="Connect" />
                   </section>
                 ))
