@@ -21,6 +21,7 @@ import { deferralTime, effectiveLimits } from "./limits";
 import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
 import { markInvalidEmitting, refreshForPublish } from "./credentials";
+import { eventForDecision } from "../services/activity/classify";
 import { applyStepResult, recordStepResult } from "./record";
 
 export interface PublishingCounts {
@@ -82,10 +83,19 @@ export async function runPublishing(opts: {
       limit: Math.min(config.batchSize, config.maxItems - handled.size),
       excludeIds: [...handled],
       async decide(target, account, ctx) {
-        const finish = (patch: TargetPatch, outcome: ClaimDecision["attempts"]): ClaimDecision => ({
-          patch: { ...UNLEASED, ...patch },
-          ...(outcome ? { attempts: outcome } : {}),
-        });
+        const finish = (patch: TargetPatch, outcome: ClaimDecision["attempts"]): ClaimDecision => {
+          const activity = eventForDecision({
+            decision: { patch, attempts: outcome },
+            target,
+            account,
+            now,
+          });
+          return {
+            patch: { ...UNLEASED, ...patch },
+            ...(outcome ? { attempts: outcome } : {}),
+            ...(activity ? { activity } : {}),
+          };
+        };
         const provider = findProvider(account.providerKey);
         const attempts: NonNullable<ClaimDecision["attempts"]> = [];
         let patch: TargetPatch = {};
@@ -190,19 +200,23 @@ export async function runPublishing(opts: {
           firstStep: target.firstStepAt === null,
           before: { status: target.status, firstStepAt: target.firstStepAt, publishStartedAt: target.publishStartedAt },
         });
+        const leasePatch: TargetPatch = {
+          ...patch,
+          status: "publishing",
+          leaseOwner: token,
+          leaseUntil: new Date(now.getTime() + config.leaseMs),
+          inFlightStep: info.name,
+          inFlightMayPublish: info.mayPublish,
+          firstStepAt: target.firstStepAt ?? now,
+          // A start is the most recent lease of a first step, so the attempt that may publish is what counts.
+          publishStartedAt: firstStep ? now : target.publishStartedAt,
+        };
+        // An interrupted safe step that is re-leased is worth one event; a plain lease is not.
+        const activity = eventForDecision({ decision: { patch: leasePatch, attempts }, target, account, now });
         return {
-          patch: {
-            ...patch,
-            status: "publishing",
-            leaseOwner: token,
-            leaseUntil: new Date(now.getTime() + config.leaseMs),
-            inFlightStep: info.name,
-            inFlightMayPublish: info.mayPublish,
-            firstStepAt: target.firstStepAt ?? now,
-            // A start is the most recent lease of a first step, so the attempt that may publish is what counts.
-            publishStartedAt: firstStep ? now : target.publishStartedAt,
-          },
+          patch: leasePatch,
           ...(attempts.length > 0 ? { attempts } : {}),
+          ...(activity ? { activity } : {}),
         };
       },
     });
@@ -435,6 +449,8 @@ async function execute(
     projectId: target.projectId,
     postId: target.postId,
     targetId: target.id,
+    socialAccountId: account.id,
+    providerKey: account.providerKey,
     token,
     step: validationFailed ? "engine-validate" : lease.step,
     outcome,

@@ -24,9 +24,10 @@ over fancy.** Every screen must be fully usable from the keyboard.
 
 ## Structure
 - Routes: `/p/[projectSlug]/...` for everything project-scoped; `/login`,
-  `/signup` (invitation token only), `/setup` (first-run), `/invitations`.
+  `/signup` (invitation token only), `/setup` (first-run), `/invitations`,
+  `/activity` (all-projects activity across the user's memberships).
 - App shell (`src/app/p/[projectSlug]/layout.tsx`): grouped left nav — Publish
-  (Calendar, Posts, Compose, Review, Failures), Create (Generate, Jobs, Media,
+  (Calendar, Posts, Compose, Review, Failures, Activity), Create (Generate, Jobs, Media,
   Voice), Project (Accounts, Settings) — from `NAV_SECTIONS` in
   `src/components/shell/LeftNav.tsx`; sticky top bar with the logo, the
   **project switcher** and a scheduler-health indicator (last successful tick;

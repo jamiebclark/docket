@@ -7,6 +7,7 @@ import { Cell, Row, Table } from "@/components/ui/Table";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
+import { CONNECT_BANNER, HINTED_CODES, connectBannerText } from "@/lib/accounts/connect-banner-text";
 import { findConnectGroup } from "@/providers/registry";
 import * as connect from "@/server/services/connect";
 import { openBannerMessage } from "@/server/services/connect-banner";
@@ -33,17 +34,6 @@ const STATUS: Record<accounts.AccountView["status"], { label: string; tone: "suc
   needs_reauth: { label: "Needs reconnecting", tone: "danger" },
 };
 
-const CONNECT_BANNER: Record<string, string> = {
-  cancelled: "Connecting was cancelled. Nothing changed.",
-  platform_error: "The platform returned an error. Nothing changed. Try again.",
-  exchange_failed: "Could not finish signing in. Check the app id, secret and redirect address in the setup guide.",
-  no_candidates: "No accounts were found for this login. Check the permissions you granted and try again.",
-  too_many: "That login found too many accounts to list. Narrow the permissions you granted and try again.",
-  not_allowed: "Only project owners and admins can connect accounts.",
-};
-
-const HINTED_CODES: ReadonlySet<string> = new Set(["platform_error", "exchange_failed", "no_candidates"]);
-
 export default async function AccountsPage({
   params,
   searchParams,
@@ -59,13 +49,12 @@ export default async function AccountsPage({
     typeof connectParam === "string" && connectParam in CONNECT_BANNER && typeof query?.group === "string" && typeof query.notice === "string"
       ? openBannerMessage({ projectSlug, groupKey: query.group, code: connectParam }, query.notice, new Date())
       : null;
-  const baseBanner = own ?? (typeof connectParam === "string" ? CONNECT_BANNER[connectParam] : undefined);
   // The hint comes from the registered group, never from platform text; an unknown group value shows nothing.
   const hint =
     typeof connectParam === "string" && typeof query?.group === "string" && HINTED_CODES.has(connectParam)
       ? findConnectGroup(query.group)?.group.callbackHint
       : undefined;
-  const banner = baseBanner && hint ? `${baseBanner} ${hint}` : baseBanner;
+  const banner = typeof connectParam === "string" ? connectBannerText({ code: connectParam, own, hint }) : undefined;
   let scope;
   try {
     scope = await forProject(await getSession(), projectSlug);

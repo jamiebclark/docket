@@ -51,3 +51,7 @@ If someone else retries or resolves the target while your dialog is open, confir
 ## Through the API
 
 Retry, resolve and Retry all failed are also available over the public API with a key holding `write_posts`; the rules are the same as above. The attempt log shows those actions as "API key {name}". See the recipe in [n8n.md](n8n.md#7-recover-failed-posts).
+
+## Linking to one entry
+
+`/p/{project}/failures?target={targetId}` shows just that target, with a **Show all failures** link. The [Activity](activity.md) page uses it for rows whose target is still failed or ambiguous.

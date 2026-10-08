@@ -24,6 +24,15 @@ describe("listFailures", () => {
     expect(await countNeedsDecision(env.scope)).toBe(1);
   });
 
+  it("narrows to one target with ?target= and an unknown target is empty", async () => {
+    const env = await postsEnv();
+    const a = await outcomeTarget(env, "fatal");
+    await outcomeTarget(env, "ambiguous");
+    expect((await listFailures(env.scope, { target: a.targetId })).rows.map((r) => r.targetId)).toEqual([a.targetId]);
+    expect((await listFailures(env.scope, { target: "00000000-0000-4000-8000-000000000000" })).rows).toEqual([]);
+    expect((await listFailures(env.scope, { target: "nope" })).rows).toHaveLength(2);
+  });
+
   it("filters by status and account, and an unknown account is empty", async () => {
     const env = await postsEnv();
     const a = await outcomeTarget(env, "fatal");

@@ -65,7 +65,13 @@ import { closeDb, testDb } from "../../helpers/db";
 import { addMember } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { forSchedulerProject } from "../../../src/server/dal/scheduler";
+import { eventsFor } from "../../helpers/activity";
+import { pageCandidate, registerThrowaway, sessionFor, throwawayGroup, unregisterThrowaway } from "../../helpers/connect-group";
+import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
+import { postsEnv } from "../../helpers/posts-env";
+import type { PublishContext, SocialProvider, StepResult } from "../../../src/providers/types";
 import { createMemoryStorage } from "../../helpers/storage";
 import { deliverAt, webhookEnv } from "../../helpers/webhooks";
 
@@ -399,5 +405,67 @@ describe("secret scan (FR-020, SC-005)", () => {
     // Something was captured from every kind of place, so an empty corpus cannot pass.
     expect(new Set(pieces.map((p) => p.place.split(":")[0])).size).toBeGreaterThan(6);
     expect(scan(pieces, [...ENV_SECRETS, ...credentials, ...oneTime])).toEqual([]);
+  });
+
+  it("activity events store no secret even when a provider, refresh or connect error echoes one (SC-006)", async () => {
+    await parkAllDueTargets();
+    const TOKEN = "scan-activity-token-9f8e7d6c5b4a39281706f5e4d3c2b1a0";
+    const CODE = "scan-activity-code-0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+    const PASSWORD_ECHO = "scan-activity-app-password-aabbccddeeff00112233445566";
+
+    registerTestProvider({
+      ...blueskyLikeProvider,
+      key: "scan-activity-echo",
+      displayName: "Echo",
+      advance: async (ctx: PublishContext): Promise<StepResult> => ({
+        kind: "retryable_error",
+        error: `Provider rejected ${(ctx.account.credentials as { token: string }).token}`,
+      }),
+      refreshCredentials: async ({ credentials }) => ({ ok: false, transient: false, reason: `Refresh refused for ${(credentials as { token: string }).token}` }),
+    } as SocialProvider);
+
+    const env = await postsEnv();
+    const repos = forSchedulerProject(env.project.id);
+    const account = await createMockAccount(env.project.id, {}, { providerKey: "scan-activity-echo", displayName: "Echo", credentialsExpiresAt: new Date(Date.now() + 3_600_000) });
+    await repos.accounts.setCredentials(account.id, accounts.encryptCredentials(account.id, { token: TOKEN }), new Date(Date.now() + 3_600_000));
+    await createDueTarget(env.project.id, account.id);
+    await runTick({ config: { refreshMaxAccounts: 1000 } });
+    await runTick({ config: { refreshMaxAccounts: 1000 } });
+
+    // A connect callback whose platform text and exchange message echo the authorization code.
+    registerThrowaway();
+    try {
+      const sess = await sessionFor(env.owner.id);
+      throwawayGroup.describeCallbackError = (params) => ({ code: "platform_error", message: `Denied for code ${params.get("code")}` });
+      const begin = async () => new URL((await connect.startOAuthConnect(env.scope, { groupKey: "throwaway" }, sess)).url).searchParams.get("state")!;
+      const caller = { userId: env.owner.id, sessionId: sess.sessionId };
+      await connect.handleOAuthCallback(new URLSearchParams({ state: await begin(), error: "denied", error_description: CODE, code: CODE }), caller);
+      delete throwawayGroup.describeCallbackError;
+      vi.spyOn(throwawayGroup, "exchangeCode").mockResolvedValueOnce({ ok: false, message: `Bad code ${CODE}` });
+      await connect.handleOAuthCallback(new URLSearchParams({ state: await begin(), code: CODE }), caller);
+      void pageCandidate;
+    } finally {
+      delete throwawayGroup.describeCallbackError;
+      unregisterThrowaway();
+    }
+
+    // A credential connect whose refusal echoes the app password.
+    const pds = createFakePds();
+    vi.stubGlobal("fetch", pds.fetch);
+    pds.route("POST", "/xrpc/com.atproto.server.createSession", { status: 401, json: { error: "AuthenticationRequired", message: `no ${PASSWORD_ECHO}` } });
+    await accounts.connectWithCredentials(env.scope, { providerKey: "bluesky", fields: { handle: "echo.bsky.social", appPassword: PASSWORD_ECHO, pdsUrl: "" } });
+    vi.unstubAllGlobals();
+
+    const rows = await eventsFor(env.project.id);
+    // The scan covers something real: a needs-reauth and connect failures at least.
+    expect(rows.map((r) => r.kind)).toEqual(expect.arrayContaining(["account_needs_reauth", "account_connect_failed"]));
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+    const pieces: Piece[] = rows.map((r) => ({ place: `activity_events:${r.kind}`, text: `${r.message}\n${JSON.stringify(r.details)}` }));
+    const echoed: Secret[] = [
+      { name: "credential token", value: TOKEN },
+      { name: "authorization code", value: CODE },
+      { name: "app password", value: PASSWORD_ECHO },
+    ];
+    expect(scan(pieces, [...ENV_SECRETS, ...echoed])).toEqual([]);
   });
 });

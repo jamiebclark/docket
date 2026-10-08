@@ -823,3 +823,71 @@ Judgement calls from `specs/019-instagram-video/spec.md` (D1–D13) and its plan
 - **Accepted approximations (creation allowance).** Reservations are kept when a lease fails before Instagram is called; a retried create adds 1 whether or not a container was made; other apps' containers on the same account are invisible; builds already in flight at deploy have no up-front reservation.
 - **No deployment change.** `docker-compose.yml` and `.env.example` do not change (FR-031, P27). Migration `0012` runs at start-up.
 - **Owed.** The four live checks in `docs/meta-setup.md`. Until then Instagram video is verified with mocks only.
+
+## 020 — Activity history (2026-10-07)
+
+### Spec decisions
+
+- **D1 — One event per target or account state change.** Changes that leave the state as it was write nothing: continue, deferral, a stale result, or a requeue that found no free slot. Post-level webhook transitions are not separate events.
+- **D2 — Every path into a state counts.**
+  - Engine settles and lease recovery are *failed* events.
+  - An interrupted step that may have gone out is *ambiguous*.
+  - The last retryable error is *failed* ("Gave up after N attempts").
+  - An interrupted step being retried is *retrying*.
+- **D3 — Resolutions are their own outcome**, counted as neither success nor problem. Successes are *published*. Problems are *failed*, *ambiguous*, *needs reauth* and *connect failed*.
+- **D4 — Connect refusals are recorded with the text the person was shown:**
+  - OAuth platform errors, refused or thrown exchanges, no accounts found, too many accounts;
+  - token-paste refusals;
+  - credential refusals, unreachable providers, and reconnecting as a different account.
+
+  Not recorded: a cancel, a forged, unknown, expired or reused state, a caller without permission, local validation, and an empty or expired chooser.
+- **D5 — The API uses the existing `read` key permission.** No new permission.
+- **D6 — Paging is keyset, not offset**, so new events never repeat or skip rows. The API cursor stays opaque.
+- **D7 — Days and "Today" use each project's own time zone**, including in the all-projects view.
+- **D8 — Summary counts ignore the outcome filter**, and the label says so.
+- **D9 — History survives post and account deletion.** Only deleting the project removes it.
+- **D10 — The backfill covers current state, once.**
+  - One event per published, failed or ambiguous target, at its real time, with the resolver as actor.
+  - One event per account that needs reauth today.
+  - It is idempotent and never duplicates live events.
+
+### Plan decisions
+
+- **P1 — A stored `activity_events` table, not a derived view.** Attempt outcomes cannot tell a change from a non-change (`retry_requested` with no free slot; `retryable_error` on exhaustion). Account and connect events have no attempts. The notifications entry needs durable ids.
+- **P2 — One pure classifier, called at each site, inside that site's existing transaction.** Claim decisions carry `ClaimDecision.activity`, and `claimDueTargets` inserts it beside the attempts.
+- **P4 — FKs and append-only.**
+  - **FKs kept**: `project_id` (cascade), the actor user (set null) and `(project_id, actor_api_key_id)`.
+  - **No FKs** to posts, targets or accounts, so history outlives them. An account FK would also add a post → account `KEY SHARE` lock inside `recordStepResult`, which reverses `removeAccount`'s account → post order.
+  - **Append-only** is enforced by the DAL surface (insert, list, summary) and the no-raw-DB lint rule. No trigger, because a trigger would block the project-delete cascade.
+- **P5 — Order is `occurred_at DESC, seq DESC`.** `seq` is a `bigint` identity column.
+  - `occurred_at` is constrained to whole milliseconds, so a JS `Date` cursor is exact.
+  - The cursor is base64url `{ v: 2, t, s }`.
+  - Known bound: a transaction that commits after a reader passed its position can be missed by that walk. The n8n recipe re-reads with an overlap and dedupes by `id`.
+- **P6 — Four indexes**: project/time, project/outcome/time, project/account/time (partial) and project/target (partial). Drizzle 0.45 has no `INCLUDE`, so none is used. SC-004 is shown by a seeded timing test.
+- **P7 — `provider_keys text[]`** lets a group connect failure match each of its platforms with `@>`, without `OR`, which the scope check treats as unpinned.
+- **P8 — Excerpts are read from the post at render time with `excerptOf`.** Posts are only soft-deleted, so a deleted post's row keeps its excerpt. No content is copied into events.
+- **P9 — Messages and details.** Messages come from already-redacted sources. Connect messages are also redacted against the code, state or pasted token. Messages are clipped to 500 code points, enforced by a CHECK. `details` is a strict per-kind Zod union of at most 2,000 bytes.
+- **P10 — The connect banner texts move to `src/lib/accounts/connect-banner-text.ts`**, so the event records exactly the banner's words.
+- **P11 — All-projects queries.**
+  - `forMyProjects` resolves memberships per request.
+  - Each statement is a `UNION ALL` of single-project branches, each pinned to one id with its own Temporal day window and a `member` join for the caller.
+  - The scope harness gains a named "project set" section: every project pin in it must be one of the caller's resolved ids.
+- **P12 — One filter parser**, lenient for screens (ignore bad values) and strict for the API (400 with per-field details). Windows run from `PlainDate.toZonedDateTime` to the next day's start, so DST days are 23 or 25 hours long.
+- **P14 — The backfill is a custom SQL migration (`0013`)** in the 0009 style, idempotent through `NOT EXISTS` on the target or account.
+- **P15 — Failures gains `?target=<id>`** as the link target for still-failed or still-ambiguous rows. Other rows link to the post or to Accounts.
+- **P16 — Screens.**
+  - Routes: `/p/[slug]/activity` (Publish group, after Failures) and `/activity` (linked from the user menu and the project switcher).
+  - Filters are GET search parameters.
+  - A new `CursorPagination` atom.
+- **P17 — `GET /api/v1/activity` (`listActivity`)**, with tag Activity, permission `read`, and the same filters and cursor.
+- **No change** to webhooks, env vars, dependencies or `docker-compose.yml`.
+- **Done by the front end:** `.claude/skills/docket-ui/SKILL.md` lists `/activity` and the Activity nav item. The pipeline could not write it.
+
+### Implementation decisions
+
+- **I1 — SC-004 is asserted by a seeded timing test** (`tests/integration/activity/performance.test.ts`): 100,000 events in one project and 200,000 across a member's 20 projects, seeded with `generate_series`. Every filter combination must return its first page and counts in under 1 s. On a development machine the slowest was about 0.6 s (all projects, no filter). The test logs `EXPLAIN (ANALYZE, BUFFERS)` for the slowest combination.
+
+### After review (front end, 2026-10-08)
+
+- **Migrations renumbered on merging main.** Main gained `0012_sudden_scarlet_spider` (019, Instagram video) while this branch was open. The activity schema is regenerated as `0013_foamy_colleen_wing.sql`, byte-for-byte the reviewed SQL, and the backfill is `0014_backfill_activity_events.sql`.
+- **All-projects list: limit before joining.** CI measured 1.3 s for the unfiltered all-projects first page at 200,000 events, against the 1 s budget. Each per-project branch had joined posts, targets, accounts and members over all of its rows before sorting. Now each branch takes its `limit + 1` events off the `(project_id, occurred_at, seq)` index first and joins only those. The joined tables are pinned through `projects.id = $n` so the scope harness still sees every table pinned. The summary is one `UNION ALL` query instead of one per project, and actor names load in parallel. Measured on a loaded development machine: the list went from 1,720 ms to under 340 ms.

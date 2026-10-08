@@ -12,6 +12,10 @@ import { sealBannerMessage } from "./connect-banner";
 import { generateInvitationToken, hashInvitationToken, isWellFormedToken } from "../crypto/tokens";
 import { getEnv } from "../env";
 import { isGroupConfigured } from "../provider-env";
+import { connectBannerText, HINTED_CODES } from "@/lib/accounts/connect-banner-text";
+import type { ConnectFailCode } from "@/lib/activity/details";
+import { attemptActor } from "../dal/scope";
+import { connectFailedEvent } from "./activity/classify";
 import { saveConnectedAccountTx, type AccountView } from "./accounts";
 
 export const CONNECT_ATTEMPT_MINUTES = 10;
@@ -275,6 +279,7 @@ export type CallbackOutcome =
   | { kind: "invalid" };
 
 const INVALID: CallbackOutcome = { kind: "invalid" };
+const LOGGED_OAUTH_CODES: ReadonlySet<string> = new Set(["platform_error", "exchange_failed", "no_candidates", "too_many"]);
 
 function optionalNotice(target: Parameters<typeof sealBannerMessage>[0], message: string, now: Date): { notice?: string } {
   const notice = sealBannerMessage(target, message, now);
@@ -315,7 +320,34 @@ export async function handleOAuthCallback(
     code,
     ...(message ? optionalNotice({ projectSlug: found.projectSlug, groupKey: found.groupKey, code }, message, now) : {}),
   });
-  const finish = async (outcome: CallbackOutcome) => {
+  const providerKeys = entry.providers.map((p) => p.key);
+  const secrets = [params.get("code"), state].filter((v): v is string => !!v);
+  // The four D4 codes are failures worth a log row; cancelled and not_allowed are not. Written with `complete`, in one transaction.
+  const finish = async (outcome: CallbackOutcome, message?: string) => {
+    if (outcome.kind === "accounts" && LOGGED_OAUTH_CODES.has(outcome.code)) {
+      const code = outcome.code as ConnectFailCode;
+      const text = connectBannerText({
+        code,
+        own: message?.trim() ? message : null,
+        hint: HINTED_CODES.has(code) ? entry.group.callbackHint : undefined,
+      });
+      await scope.transaction(async (tx) => {
+        await tx.activity.insert(
+          connectFailedEvent({
+            via: "oauth",
+            code,
+            message: text?.trim() ? text : "Connecting failed.",
+            providerKeys,
+            groupKey: found.groupKey,
+            actor: attemptActor(tx),
+            now,
+            secrets,
+          }),
+        );
+        await tx.connectAttempts.complete(found.id, now);
+      });
+      return outcome;
+    }
     await scope.connectAttempts.complete(found.id, now);
     return outcome;
   };
@@ -323,7 +355,7 @@ export async function handleOAuthCallback(
   const platformError = params.has("error") || params.has("error_reason") || params.has("error_description");
   if (platformError) {
     const described = entry.group.describeCallbackError?.(params);
-    return finish(back(described?.code ?? "platform_error", described?.message));
+    return finish(back(described?.code ?? "platform_error", described?.message), described?.message);
   }
   const code = params.get("code");
   if (!code) return finish(back("platform_error"));
@@ -340,7 +372,7 @@ export async function handleOAuthCallback(
   } catch {
     return finish(back("exchange_failed"));
   }
-  if (!result.ok) return finish(back("exchange_failed", result.message));
+  if (!result.ok) return finish(back("exchange_failed", result.message), result.message);
   if (result.candidates.length === 0) return finish(back("no_candidates"));
   const ciphertext = encryptCandidates(found.id, result.candidates, result.notices);
   if (!ciphertext) return finish(back("too_many"));
@@ -371,14 +403,30 @@ export async function pasteConnectToken(
   if (!isGroupConfigured(entry.group.key)) throw new NotFoundError("That connection is not configured.");
   const now = await clock.now();
   await purgeExpiredConnectAttempts(now);
+  const providerKeys = entry.providers.map((p) => p.key);
+  const refuse = async (code: ConnectFailCode, message: string): Promise<PasteOutcome> => {
+    await scope.activity.insert(
+      connectFailedEvent({
+        via: "paste",
+        code,
+        message,
+        providerKeys,
+        groupKey: entry.group.key,
+        actor: attemptActor(scope),
+        now,
+        secrets: [parsed.data.token],
+      }),
+    );
+    return { ok: false, message };
+  };
   let result;
   try {
     result = await paste.exchange({ token: parsed.data.token, now, signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS) });
   } catch {
-    return { ok: false, message: "Could not check that token. Nothing changed. Try again." };
+    return refuse("paste_unreachable", "Could not check that token. Nothing changed. Try again.");
   }
-  if (!result.ok) return { ok: false, message: result.message };
-  if (result.candidates.length === 0) return { ok: false, message: `No accounts were found for that token. ${paste.help}` };
+  if (!result.ok) return refuse("paste_refused", result.message);
+  if (result.candidates.length === 0) return refuse("paste_none", `No accounts were found for that token. ${paste.help}`);
   let tooMany = false;
   const created = await scope.connectAttempts.createReady({
     userId: scope.membership.userId,
@@ -398,6 +446,6 @@ export async function pasteConnectToken(
     if (tooMany) return null;
     throw error;
   });
-  if (!created) return { ok: false, message: "That token can reach too many accounts to list. Nothing changed." };
+  if (!created) return refuse("paste_too_many", "That token can reach too many accounts to list. Nothing changed.");
   return { ok: true, attemptId: created.id };
 }
