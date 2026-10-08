@@ -83,11 +83,27 @@ describe("notification list", () => {
   });
 
   it("names a removed account, marks a deleted post, and drops the link", () => {
-    const html = list([item({ accountName: null, postDeleted: true, link: null, isNew: false })]);
+    const html = list([item({ accountName: "Removed account", postDeleted: true, link: null, isNew: false })]);
     expect(html).toContain("Removed account");
     expect(html).toContain("Post deleted");
     expect(html).not.toContain("<a ");
     expect(html).not.toContain(">New<");
+  });
+
+  it("does not label an account-less two-platform event as a removed account", () => {
+    const html = list([
+      item({
+        outcome: "connect_failed",
+        accountName: null,
+        platforms: [
+          { key: "bluesky", name: "Bluesky" },
+          { key: "mastodon", name: "Mastodon" },
+        ],
+      }),
+    ]);
+    expect(html).toContain("Bluesky and Mastodon");
+    expect(html).not.toContain("Removed account");
+    expect(html).not.toContain("Mastodon ·");
   });
 
   it("says so when empty", () => {

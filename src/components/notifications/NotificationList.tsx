@@ -26,8 +26,7 @@ export function NotificationList({ items, now }: { items: NotificationItem[]; no
             ))}
             <span>
               {item.platforms.map((p) => p.name).join(" and ")}
-              {item.platforms.length > 0 ? " · " : ""}
-              {item.accountName ?? "Removed account"}
+              {item.accountName !== null ? ` · ${item.accountName}` : ""}
               {item.postDeleted ? " · Post deleted" : ""}
             </span>
           </div>
