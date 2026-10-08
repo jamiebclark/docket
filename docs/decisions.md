@@ -1162,3 +1162,48 @@ Judgement calls from `specs/024-video-target-formatter/spec.md` (D1–D18) and i
 **What ran where.** Locally: `pnpm lint` (0 errors, 18 pre-existing-style warnings), `pnpm typecheck`, `pnpm db:check`, `pnpm build` all passed; `pnpm test` ran 4,235 passing. This machine has **no ffmpeg**, so the ffmpeg suites and `scripts/video-smoke.ts --formatter` did **not** run here; they are owed to CI (docker job, which now runs the `--formatter` smoke at `--cpus=2`). Timing-sensitive suites (`activity/performance`, `notifications/performance`, `retry-failed-targets` cap, `retry-all-cap`, `jobs/budget`) fail on timeouts or thresholds only when the full run loads the machine; alone, all but `activity/performance` (1.0-1.2 s against a 1 s limit, unrelated to video) passed.
 
 **SC-007** (30 s preview at `--cpus=2` within 60 s) is not yet measured; see T061.
+
+## 025 — Bluesky video (2026-10-08)
+
+Judgement calls from `specs/025-bluesky-video/spec.md` (D1–D13) and its plan (`research.md`, P1–P22). External facts come from `docs/research/bluesky-video.md` and `docs/research/bluesky.md`; library shapes were read from the installed `@atproto/api` 0.22.0. Real publishing of Bluesky video is verified with mocks only; the owed live checks go in `docs/accounts.md`.
+
+### Spec decisions
+
+- **D1 — A Bluesky video post is one video and nothing else.** Post types become text, image, carousel and video; two videos, or a video with images, are refused before scheduling. No post type choice.
+- **D2 — Declared limits.** MP4; H.264; AAC or silent; at most 300,000,000 bytes; at most 180 s (the research's conservative product limit; the client's 10 minutes is unverified as a server limit). No other bound is declared. *Reverse:* raise to 600 s after a live check; drop the codec lists once Bluesky publishes them.
+- **D3 — Upload in parts, one part per step,** so every step stays inside the provider time limit and a large upload resumes where it stopped. Host and auth of the parts calls are UNVERIFIED. *Reverse:* the single-request `uploadVideo`, only for files that fit one step.
+- **D4 — Service tokens per step, never kept,** scoped to the method, expiring at most 5 minutes after the request. Upload calls use the account's PDS as audience; the limits and status reads use the video service (UNVERIFIED).
+- **D5 — Upload limits are checked before an upload starts.** A refusal waits an hour and checks again; a refused check (other than a rate limit or server error) is skipped and the start's own `DailyLimitExceeded` is authoritative.
+- **D6 — A daily allowance of 25 videos.** The 10 GB daily byte cap is not modelled (25 × 300 MB = 7.5 GB).
+- **D7 — Job polling:** first read 30 s after the upload finished, every minute until 10 minutes, then every 5 minutes; fail at 30 minutes, after at most 16 reads. A blob completes the job; unknown states mean still processing; a deduplicated job is polled by its new id.
+- **D8 — Plain explanations** for each start error and job failure code, with Bluesky's code and message (secrets removed).
+- **D9 — The embed:** the blob as returned, the aspect ratio when both dimensions are known, alt text when not empty; no captions, no presentation hint.
+- **D10 — The file sent is the one entry 6 planned:** the original as is, or Bluesky's version; its size is checked before the start declares it.
+- **D11 — Only creating the post may publish.** Every earlier step is retried on a timeout, dropped connection, rate limit or server error and is never ambiguous. An expired upload restarts at most twice.
+- **D12 — Saved state** records the upload's progress and never a token; a post whose media changed starts again.
+- **D13 — Summary and badges** come from capabilities, with two notes: about 25 videos a day, and a verified email for Bluesky-hosted accounts.
+
+### Plan decisions
+
+- **P1 — Declaration** in `src/providers/bluesky/capabilities.ts`, with a notes-only `byPostType.video` entry (as Facebook's) for the two notes.
+- **P2 — The allowance is reserved at `check_upload_limits`, the first step of an upload** (one unit; none on its retries or during a limit wait), and `start_upload` reserves one more only on a retry. *Why:* FR-005 names the start step, but US4 #6 requires a spent allowance to defer the target with no Bluesky call, and the limits check comes first. *Reverse:* move `{ units: 1, retryUnits: 1 }` back to `start_upload` and accept one limits check per deferred target.
+- **P3 — Token audience and method per call,** `exp` = engine clock + 300 s, minted through the configured server (the entryway proxies it, as for every other call).
+- **P4 — The PDS host comes from `getSession`'s DID document** (`#atproto_pds`, read the way the installed `getPdsEndpoint` does), once per upload, kept in the upload state, falling back to the configured server's host. *Why not at connect or refresh:* the credentials schema would change, old accounts would lack it, and the engine redacts every credentials string, which would hide every audience in the attempt log. `@atproto/common-web` is not imported because it is not a direct dependency.
+- **P5 — The video service is called with a small `fetch` client,** not an `Agent`: its errors subclass `XRPCError` but keep the reply body, which carries an "already processed" blob and is needed for exact part headers.
+- **P6 — Parts are read by HTTP `Range` from the media's public URL;** a store that ignores ranges is never read whole. No `Storage` interface change. That the public URL honours ranges is an owed operator check.
+- **P7 — Part arithmetic** uses the service's own part size and count, checked for consistency before the first part.
+- **P8 — Step names:** `check_upload_limits`, `start_upload`, `upload_part_<k>`, `finish_upload`, `check_job`, `create_post`.
+- **P9 — The limit wait fails at the refusal 23 hours after the first,** not 24. *Why:* the engine fails a target `PUBLISH_MAX_DURATION_HOURS` (default 24) after its first step, which is at or before the first refusal, so a 24-hour rule would never be reached and the person would see "Publishing did not complete." instead of Bluesky's reason.
+- **P10 — A refused limits check is skipped:** any 4xx other than 429 (401 and 403 included, since its token audience is UNVERIFIED), a refused token for it, or an unreadable 2xx.
+- **P11 — G24: `continue` may carry `wait`,** recorded (redacted) as the target's `lastError`, so a provider wait can show its reason without spending an attempt (Threads' hourly quota wait spends one each time and fails after 5). Inert for every existing provider. *Reverse:* drop the member; waits show nothing.
+- **P12 — Pace constants** and a last read at the 30-minute ceiling, so a blob arriving at the end is not missed.
+- **P13 — Status-read auth fallback:** a 401 or 403 on a token-bearing read switches later reads to no token; a second refusal fails. *Why:* the token audience is UNVERIFIED, and a wrong guess must not fail every uploaded video.
+- **P14 — One restart counter (0–2)** for expiry, a lost upload (`UploadExpired`, `UploadNotFound`, `UploadAborted`, `PartSizeMismatch`, `MissingParts`) and a stored size that changed. `UploadAlreadyCompleted` on a part moves on to finish. These part and finish error names are in the installed lexicon types, not in the research.
+- **P15 — A blob in any start or finish reply,** success or error body, is used without polling.
+- **P16 — A failed state wins over a blob** in the same status.
+- **P17 — Bluesky's messages are sanitised** (control characters removed, at most 200 characters) and scrubbed of the step's tokens before they are shown.
+- **P18 — `fitState`** restarts a state whose media kind no longer matches, and treats an inconsistent upload as unreadable; a changed file (URL or size) starts again from the first step.
+- **P19 — Bluesky wording** for the two refused mixes.
+- **P20 — One generic assertion changes:** `requirements.test.ts`'s "unchanged" loop drops `bluesky`, because FR-018 requires its notes. No existing Bluesky test file changes.
+- **P21 — A part timeout names `SCHEDULER_PROVIDER_TIMEOUT_SECONDS`,** so a part that never fits the limit ends with a reason the operator can act on.
+- **P22 — No `docker-compose.yml` or `.env.example` change.**
