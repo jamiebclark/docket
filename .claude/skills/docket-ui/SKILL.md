@@ -25,13 +25,17 @@ over fancy.** Every screen must be fully usable from the keyboard.
 ## Structure
 - Routes: `/p/[projectSlug]/...` for everything project-scoped; `/login`,
   `/signup` (invitation token only), `/setup` (first-run), `/invitations`,
-  `/activity` (all-projects activity across the user's memberships).
+  `/activity` (all-projects activity across the user's memberships),
+  `/notifications` (recent problems and mute settings; the bell's no-JavaScript
+  target).
 - App shell (`src/app/p/[projectSlug]/layout.tsx`): grouped left nav — Publish
   (Calendar, Posts, Compose, Review, Failures, Activity), Create (Generate, Jobs, Media,
   Voice), Project (Accounts, Settings) — from `NAV_SECTIONS` in
   `src/components/shell/LeftNav.tsx`; sticky top bar with the logo, the
   **project switcher** and a scheduler-health indicator (last successful tick;
-  red banner when stale). Signed-out pages use `AuthShell`.
+  red banner when stale), then the invitations badge, the **notification bell**
+  (unread problems across the user's projects, `src/components/notifications/`)
+  and the user menu. Signed-out pages use `AuthShell`.
 - **Server components by default.** Fetch through `src/server/services/` (never
   the DB directly). Client components (`"use client"`) only for interactivity:
   composer, calendar drag/drop, switcher, live validation. Keep them leaf-level.

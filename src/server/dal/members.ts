@@ -1,6 +1,7 @@
 import { and, asc, count, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { member, user } from "../db/schema";
+import { createNotificationsRepo } from "./notifications";
 
 export interface MemberRow {
   memberId: string;
@@ -57,6 +58,8 @@ export function createMembersRepo(db: Database, projectId: string): MembersRepo 
         .values({ organizationId: projectId, userId, role })
         .returning({ memberId: member.id });
       if (!row) throw new Error("Member insert returned no row");
+      // The reading position starts at the newest problem, so joining never shows old problems as unread (022).
+      await createNotificationsRepo(db, projectId, userId).createAtCurrentPosition();
       return row;
     },
     async updateRole(userId, role) {

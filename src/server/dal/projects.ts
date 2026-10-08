@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
-import { member, organization, projects } from "../db/schema";
+import { member, notificationStates, organization, projects } from "../db/schema";
 import { ConflictError } from "./errors";
 import { crossProject } from "./scope";
 
@@ -46,6 +46,7 @@ export async function createProject(
           .returning();
         if (!project) throw new Error("Project insert returned no row");
         await tx.insert(member).values({ organizationId: org.id, userId, role: "owner" });
+        await tx.insert(notificationStates).values({ projectId: org.id, userId, seenSeq: 0n });
         return project;
       });
     } catch (error) {

@@ -67,6 +67,13 @@ export const activityEvents = pgTable(
     index("activity_events_project_target_idx")
       .on(t.projectId, t.postTargetId)
       .where(sql`${t.postTargetId} IS NOT NULL`),
+    // Unread counting (022). The outcome lists are literals so the planner can match the partial predicate.
+    index("activity_events_attention_seq_idx")
+      .on(t.projectId, t.seq)
+      .where(sql`${t.outcome} IN ('failed', 'ambiguous', 'needs_reauth')`),
+    index("activity_events_connect_failed_actor_idx")
+      .on(t.projectId, t.actorUserId, t.seq)
+      .where(sql`${t.outcome} = 'connect_failed'`),
   ],
 );
 

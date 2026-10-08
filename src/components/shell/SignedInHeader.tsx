@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoMark } from "@/components/brand/Logo";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { InvitationBadge } from "@/components/shell/InvitationBadge";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { signOut } from "@/components/shell/actions";
@@ -35,6 +36,7 @@ export async function SignedInHeader({
       </div>
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <InvitationBadge count={pending} />
+        <NotificationBell />
         <UserMenu name={user.name} signOut={signOut} />
       </div>
     </header>

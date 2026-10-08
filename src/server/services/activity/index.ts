@@ -74,6 +74,32 @@ export function platformOptions(): { key: string; name: string }[] {
     .map((p) => ({ key: p.key, name: p.displayName }));
 }
 
+/** The row-building pieces below are shared with the notifications panel (022), so both show a record the same way. */
+export function recordPlatforms(r: ActivityRecord): { key: string; name: string }[] {
+  return r.providerKeys.map((key) => ({ key, name: platformName(key) }));
+}
+
+export function recordAccount(r: ActivityRecord): { id: string; name: string; removed: boolean } | null {
+  return r.socialAccountId
+    ? {
+        id: r.socialAccountId,
+        name: r.accountName !== null && r.accountRemovedAt === null ? r.accountName : "Removed account",
+        removed: r.accountName === null || r.accountRemovedAt !== null,
+      }
+    : null;
+}
+
+export function recordPostDeleted(r: ActivityRecord): boolean {
+  return r.postId !== null && (r.postDeletedAt !== null || r.postText === null);
+}
+
+export function recordLink(r: ActivityRecord): ActivityLink | null {
+  return activityLink(
+    { kind: r.kind, outcome: r.outcome, postId: r.postId, postTargetId: r.postTargetId, postDeleted: recordPostDeleted(r), targetStatus: r.targetStatus },
+    r.projectSlug,
+  );
+}
+
 /** Maps a stored record to the read model, resolving the actor with the caller's lookups. */
 export function toActivityRow(r: ActivityRecord, actors: ActorLookup): ActivityRow {
   const actor: ActivityActor = r.actorApiKeyId
@@ -81,8 +107,8 @@ export function toActivityRow(r: ActivityRecord, actors: ActorLookup): ActivityR
     : r.actorUserId
       ? { kind: "member", name: actors.member(r.actorUserId) }
       : { kind: "scheduler" };
-  const platforms = r.providerKeys.map((key) => ({ key, name: platformName(key) }));
-  const postDeleted = r.postId !== null && (r.postDeletedAt !== null || r.postText === null);
+  const platforms = recordPlatforms(r);
+  const postDeleted = recordPostDeleted(r);
   return {
     id: r.id,
     kind: r.kind,
@@ -93,21 +119,12 @@ export function toActivityRow(r: ActivityRecord, actors: ActorLookup): ActivityR
     project: { id: r.projectId, slug: r.projectSlug, name: r.projectName, timeZone: r.projectTimeZone },
     platform: r.providerKey ? { key: r.providerKey, name: platformName(r.providerKey) } : null,
     platforms,
-    account: r.socialAccountId
-      ? {
-          id: r.socialAccountId,
-          name: r.accountName !== null && r.accountRemovedAt === null ? r.accountName : "Removed account",
-          removed: r.accountName === null || r.accountRemovedAt !== null,
-        }
-      : null,
+    account: recordAccount(r),
     post: r.postId ? { id: r.postId, excerpt: r.postText ? excerptOf(r.postText) : "", deleted: postDeleted } : null,
     target: r.postTargetId ? { id: r.postTargetId, currentStatus: r.targetStatus } : null,
     actor,
     actorLabel: activityActorLabel(actor),
-    link: activityLink(
-      { kind: r.kind, outcome: r.outcome, postId: r.postId, postTargetId: r.postTargetId, postDeleted, targetStatus: r.targetStatus },
-      r.projectSlug,
-    ),
+    link: recordLink(r),
   };
 }
 

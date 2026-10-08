@@ -1,16 +1,6 @@
 import { alertStyles } from "@/components/ui/Alert";
+import { relativeTimeText } from "@/lib/time/relative";
 import type { SchedulerHealth as Health } from "@/server/services/scheduler-health";
-
-function ago(from: Date, to: Date): string {
-  const s = Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
-  if (s < 60) return `${s} s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60);
-  if (h < 48) return `${h} ${h === 1 ? "hour" : "hours"} ago`;
-  const d = Math.floor(h / 24);
-  return `${d} days ago`;
-}
 
 function absolute(at: Date, timezone: string): string {
   return `${new Intl.DateTimeFormat("en-GB", {
@@ -29,7 +19,7 @@ function absolute(at: Date, timezone: string): string {
 function When({ at, now, timezone }: { at: Date; now: Date; timezone: string }) {
   return (
     <time dateTime={at.toISOString()} title={absolute(at, timezone)}>
-      {ago(at, now)}
+      {relativeTimeText(at, now)}
     </time>
   );
 }

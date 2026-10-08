@@ -10,6 +10,7 @@ belongs to exactly one project.
   schedule or publish now. Month and week calendar views with drag and drop and keyboard alternatives. Retry, cancel and resolve
   ambiguous targets from the posts screen. Retrying a failed post can go now, to the next free slot, or at a chosen time, and Retry all failed does it for every failed post at once; see [docs/failures.md](docs/failures.md). The same actions are available over the API.
 - **Activity.** A per-project and all-projects history of what published, failed, needed a decision or needed reconnecting, with filters and an API endpoint; see [docs/activity.md](docs/activity.md).
+- **Problem notifications.** A header bell counts unread failures and reconnect requests across your projects, with a recent-problems panel and per-project muting; see [docs/activity.md](docs/activity.md#notifications).
 - **Media.** Upload, tag and add alt text. Images are converted, downscaled or compressed to each platform's rules. MP4 and MOV video uploads (see [docs/storage.md](docs/storage.md#large-uploads-video)) are probed, stripped of metadata and given a poster frame.
 - **Generator.** Draft posts with OpenAI or Anthropic from a voice profile and a brief, then review and approve them. Batch jobs
   from images or a CSV. See [docs/generator.md](docs/generator.md).

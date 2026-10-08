@@ -20,6 +20,15 @@ describe("auth gate", () => {
     expect(isPublicPath("/api/v1")).toBe(true);
   });
 
+  it("lets the session-only bell endpoints through so they answer 401 themselves", () => {
+    for (const p of ["/api/me/notifications", "/api/me/notifications/recent"]) {
+      expect(isPublicPath(p)).toBe(true);
+      expect(loginRedirectFor(p, "", false)).toBeNull();
+    }
+    expect(isPublicPath("/api/me")).toBe(false);
+    expect(isPublicPath("/api/mex/notifications")).toBe(false);
+  });
+
   it("does not treat look-alike paths as public", () => {
     expect(isPublicPath("/login/evil")).toBe(false);
     expect(isPublicPath("/api/authx")).toBe(false);

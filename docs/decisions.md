@@ -958,3 +958,73 @@ Judgement calls from `specs/021-facebook-video/spec.md` (D1–D15) and its plan 
 
 - **Migrations renumbered on merging main.** Main gained `0012_sudden_scarlet_spider` (019, Instagram video) while this branch was open. The activity schema is regenerated as `0013_foamy_colleen_wing.sql`, byte-for-byte the reviewed SQL, and the backfill is `0014_backfill_activity_events.sql`.
 - **All-projects list: limit before joining.** CI measured 1.3 s for the unfiltered all-projects first page at 200,000 events, against the 1 s budget. Each per-project branch had joined posts, targets, accounts and members over all of its rows before sorting. Now each branch takes its `limit + 1` events off the `(project_id, occurred_at, seq)` index first and joins only those. The joined tables are pinned through `projects.id = $n` so the scope harness still sees every table pinned. The summary is one `UNION ALL` query instead of one per project, and actor names load in parallel. Measured on a loaded development machine: the list went from 1,720 ms to under 340 ms.
+
+## 022 — Problem notifications (2026-10-08)
+
+### Spec decisions
+
+- **N1 — Attention events are the *Problems* preset, minus other people's connect attempts.** Failed, ambiguous and needs reauth count for every member. Connect failed counts only for the member who tried; with no recorded actor it counts for nobody. Published, retrying and resolved never count. The count, the panel and the callout use the same rule.
+- **N2 — Unread means "newer than where you last looked", not "still broken".** A problem stays unread until it is marked read, even after it has been fixed.
+- **N3 — One position per person per project, and it only moves forward.** There is no per-event read state.
+- **N4 — Exactly three things mark read**:
+  1. "Mark all as read" (every project the person belongs to, muted or not);
+  2. the project's Activity with the *Problems* preset and no other filter, first page;
+  3. All activity with the *Problems* preset and no other filter, first page (the projects it covers).
+
+  Opening the panel, other Activity views, paging and prefetching mark nothing.
+- **N5 — Muting is personal and hides; it does not delete.** Events stay in Activity. Notifications are on by default.
+- **N6 — Unmuting starts fresh**: turning notifications back on marks the project read at that moment.
+- **N7 — Starting points.**
+  - A new member starts at the moment they joined.
+  - A rejoin starts again.
+  - The first deploy marks everything up to then as read.
+- **N8 — Leaving deletes the state**, in the same transaction as the membership; it also goes with the project or the user.
+- **N9 — The bell is always shown; the count hides at zero.** The display is capped at "99+", and counting stops at 100.
+- **N10 — Muting is edited on a personal Notifications page** (linked from the user menu and the panel) and on each project's settings page, for every role.
+- **N11 — The callout appears on the project home and on Posts.**
+- **N12 — The refresh is quiet.** It runs every 60 s while the tab is visible and once on becoming visible. It is announced politely only when the count rises.
+
+### Plan decisions
+
+- **R1 — A `notification_states` table**, one row per membership: `seen_seq`, `seen_at` and `muted`.
+  - The primary key is `(project_id, user_id)`.
+  - A composite FK to `member (organization_id, user_id) ON DELETE CASCADE` deletes the row with the membership, project or user, in the same statement.
+  - It is not columns on Better Auth's `member`, where marking would contend with `lockSelf`.
+- **R2 — The position is `activity_events.seq`, not a time.** `occurred_at` is the writer's clock taken before commit, and it is historical for the 0014 backfill.
+- **R3 — Marking read is exact.** This closes 020's P5 bound for notifications.
+  - **Writers.** `ActivityRepo.insert` takes `FOR KEY SHARE` on the project row before drawing `seq`. The FK check takes the same lock anyway, but only after the row is formed.
+  - **Marking.** Each mark is its own transaction, in this order:
+    1. `SET LOCAL lock_timeout = '2s'`;
+    2. the project row `FOR UPDATE`;
+    3. a membership re-check;
+    4. the newest attention `seq`;
+    5. `GREATEST` upsert.
+  - **Why it is exact.** A writer that locked first is waited for, and its event is covered. A writer that locks later draws a larger `seq`, and its event counts.
+  - **Deadlocks.** There are none: a mark waits only on its one project row, and only before it holds any other lock.
+  - **Timeouts.** A timeout marks nothing.
+  - **Nothing new.** When no attention event is newer than the position, the lock is skipped.
+  - **Invariant.** The `seq` identity sequence must keep `CACHE 1`.
+- **R4 — Two partial indexes on `activity_events`.**
+  - `(project_id, seq)` where the outcome is failed, ambiguous or needs reauth.
+  - `(project_id, actor_user_id, seq)` where the outcome is connect failed.
+
+  They serve counting and the newest position. The panel reuses the outcome/time index, with one branch per outcome. Outcome lists are SQL literals, so partial-index matching works. These are the only changes to the log.
+- **R5 — One counting statement over the caller's resolved set**, in the project-set section.
+  - Each project contributes two branches.
+  - Each branch re-joins `member` for the caller and the unmuted state, and is limited to 100, under an outer limit of 100.
+- **R6 — Starting points are written with the membership**: `createProject` at 0, and `MembersRepo.insert` at the newest attention `seq` under the existing project lock. Custom migration `0016` starts every existing member at the global `max(seq)`. A missing row counts nothing and is repaired on the next write.
+- **R7 — "The *Problems* preset" is the existing URL `?outcome=problems`.** The spec's `preset=problems` refers to it, and no parameter is added. The view qualifies only with no platform, account, range or dates, and with no `before` or `after`.
+- **R8 — The view mark runs once per request.** A React-cached `ensureProblemsViewMarked()` reads the URL that the proxy forwards in `x-docket-path`. The bell calls it before counting, and both activity pages call it before listing, so the header count is right even without JavaScript.
+- **R9 — Prefetches never mark.** Requests with `next-router-prefetch`, `next-router-segment-prefetch`, or a `Sec-Purpose` / `Purpose` header containing `prefetch` are ignored. This matters because a prefetch of a route with `loading.tsx` renders the layout and so the header. Links to problems views also set `prefetch={false}`.
+- **R10 — The bell is a link to `/notifications` without JavaScript, and a disclosure button with it.** Its non-modal panel loads `GET /api/me/notifications/recent` when opened. `router.refresh()` is never used, because it would re-mark a problems view.
+- **R11 — Two session-only GET routes under `/api/me/`.**
+  - API keys get 401.
+  - No input is read.
+  - Responses carry `Cache-Control: private, no-store` and `Vary: Cookie`.
+  - `/api/me/` is a public prefix in the auth gate, so a cookie-less request gets 401 instead of a login redirect.
+- **R12 — The poller is pure, injectable logic**, tested without a DOM. It also refreshes at once on a `docket:notifications-changed` event.
+- **R13 — Mutations are server actions over the caller's own resolved projects.** An unknown project and someone else's give the same "not found". The proxy's same-origin check refuses forged POSTs. The only allowed `returnTo` is `/notifications`.
+- **R14 — Muting UI.** Each project has one form with a single "Turn off" / "Turn on" button, named with the project, and its state shown as text. A redirect confirms the change, so it works without JavaScript.
+- **R15 — The callout is a warning `Alert` with `role="status"`**, so it is polite. Screen readers rarely announce a status region that is present at load, so its place first in `main` is what makes it found.
+- **R16 — A `RelativeTime` atom.** `SchedulerHealth`'s `ago()` wording moves to `lib/time/relative.ts`, with unchanged output. The absolute time and zone are the tooltip and screen-reader text.
+- **R17 — No change** to dependencies, environment variables, the public API, webhooks, event kinds, filters or `docker-compose.yml`. **Owed to the operator:** `.claude/skills/docket-ui/SKILL.md` should list `/notifications` and the bell. The pipeline cannot write it.

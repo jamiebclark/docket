@@ -52,3 +52,5 @@ export {
   recordWithLease,
   releaseLease,
 } from "./scheduler";
+export { NotificationsBusyError } from "./notifications";
+export type { NotificationStateRow, NotificationsRepo } from "./notifications";

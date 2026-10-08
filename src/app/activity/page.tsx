@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { ActivityFilters } from "@/components/activity/ActivityFilters";
 import { ActivityList } from "@/components/activity/ActivityList";
 import { ActivitySummary } from "@/components/activity/ActivitySummary";
+import { NotificationsChanged } from "@/components/notifications/NotificationsChanged";
+import { ensureProblemsViewMarked } from "@/components/notifications/request";
 import { SignedInHeader } from "@/components/shell/SignedInHeader";
 import { Alert } from "@/components/ui/Alert";
 import { buttonStyles } from "@/components/ui/Button";
@@ -30,6 +32,7 @@ function hrefWith(page: ActivityPage, key: "before" | "after", cursor: string | 
 }
 
 export default async function AllActivityPage({ searchParams }: Props) {
+  const marked = await ensureProblemsViewMarked();
   const session = await getSession();
   if (!session) redirect("/login?next=/activity");
   const raw = await searchParams;
@@ -40,6 +43,7 @@ export default async function AllActivityPage({ searchParams }: Props) {
 
   return (
     <>
+      {marked ? <NotificationsChanged /> : null}
       <SignedInHeader user={session.user} />
       <main id="main" className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8">
         <PageHeader

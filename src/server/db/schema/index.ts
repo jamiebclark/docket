@@ -14,3 +14,4 @@ export * from "./jobs";
 export * from "./api";
 export * from "./webhooks";
 export * from "./activity";
+export * from "./notifications";
