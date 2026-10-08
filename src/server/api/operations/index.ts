@@ -1,4 +1,5 @@
 import { accountOperations } from "./accounts";
+import { activityOperations } from "./activity";
 import { generateOperations } from "./generate";
 import { jobOperations } from "./jobs";
 import { mediaOperations } from "./media";
@@ -19,5 +20,6 @@ export const OPERATIONS: readonly AnyApiOperation[] = [
   ...generateOperations,
   ...slotOperations,
   ...jobOperations,
+  ...activityOperations,
   ...openApiOperations,
 ];

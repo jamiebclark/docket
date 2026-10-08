@@ -10,12 +10,14 @@ import {
 import type { AccountRecord } from "../dal/accounts";
 import * as clock from "../dal/clock";
 import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
-import type { ProjectScope } from "../dal/scope";
+import { attemptActor, type ProjectScope } from "../dal/scope";
 import { decryptSecret, encryptSecret } from "../crypto/secrets";
 import { getEnv } from "../env";
 import type { ApiAccount } from "@/lib/api/schemas";
 import { redact } from "../scheduler/redact";
 import { normaliseInstructions, POSTING_INSTRUCTIONS_MAX } from "@/lib/generation/groups";
+import { connectFailedEvent } from "./activity/classify";
+import { recordConnectFailed } from "./activity/record";
 import { recordAudit } from "./audit";
 import { toApiAccount } from "./views/account";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./posts/cancel";
@@ -209,6 +211,21 @@ export async function connectWithCredentials(scope: ProjectScope, input: unknown
   const built = buildFields(provider.connect.fields, parsed.fields);
   if ("fieldErrors" in built) return { ok: false, message: "Check the highlighted fields.", fieldErrors: built.fieldErrors };
   const secrets = provider.connect.fields.filter((f) => f.secret).map((f) => built.values[f.name] ?? "").filter(Boolean);
+  const recordFailure = async (code: "credentials_refused" | "credentials_unreachable" | "different_account", message: string) =>
+    recordConnectFailed(
+      scope,
+      connectFailedEvent({
+        via: "credentials",
+        code,
+        message,
+        providerKeys: [provider.key],
+        providerKey: provider.key,
+        accountId: existing?.id ?? null,
+        actor: attemptActor(scope),
+        now: await clock.now(),
+        secrets,
+      }),
+    );
 
   let result;
   try {
@@ -218,10 +235,13 @@ export async function connectWithCredentials(scope: ProjectScope, input: unknown
       signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
     });
   } catch {
-    return { ok: false, message: "Could not connect. Try again." };
+    const message = "Could not connect. Try again.";
+    await recordFailure("credentials_unreachable", message);
+    return { ok: false, message };
   }
   if (!result.ok) {
     const message = redact(result.message, secrets);
+    await recordFailure("credentials_refused", message);
     return {
       ok: false,
       message,
@@ -231,10 +251,9 @@ export async function connectWithCredentials(scope: ProjectScope, input: unknown
   }
   const { account } = result;
   if (existing && account.externalId !== existing.externalAccountId) {
-    return {
-      ok: false,
-      message: `That is a different ${provider.displayName} account. Sign in as ${existing.displayName} to reconnect it, or connect it as a new account.`,
-    };
+    const message = `That is a different ${provider.displayName} account. Sign in as ${existing.displayName} to reconnect it, or connect it as a new account.`;
+    await recordFailure("different_account", redact(message, secrets));
+    return { ok: false, message };
   }
   const save = () =>
     saveConnectedAccount(scope, {

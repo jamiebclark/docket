@@ -1,13 +1,15 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { queryObservers, type ObservedQuery } from "../../src/server/db/client";
-import { runCrossProject } from "../../src/server/db/cross-project";
+import { runCrossProject, runForProjectSet } from "../../src/server/db/cross-project";
 import { projectOwnedTables } from "../../src/server/db/project-owned";
 import { connectAttempts, member, projects } from "../../src/server/db/schema";
 import { claimDueTargets, claimRefreshAccounts, forSchedulerProject } from "../../src/server/dal/scheduler";
 import { createConnectAttemptsRepo } from "../../src/server/dal/connect-attempts";
+import { forMyProjects } from "../../src/server/dal/my-projects";
+import { createActivityRepo } from "../../src/server/dal/activity";
 import { closeDb, testDb } from "../helpers/db";
-import { createProjectWithMembers } from "../helpers/factories";
+import { addMember, createProject, createProjectWithMembers, createUser } from "../helpers/factories";
 import { checkScope, type QueryRecord } from "../helpers/scope-check";
 import { clearRecordedQueries } from "../setup/scope-recorder";
 
@@ -20,7 +22,9 @@ const scopeRepo = (projectId: string) => createConnectAttemptsRepo(testDb(), pro
 async function capture(fn: () => Promise<unknown>): Promise<QueryRecord[]> {
   const seen: QueryRecord[] = [];
   const obs = (q: ObservedQuery) =>
-    seen.push({ sql: q.sql, params: q.params, ...(q.crossProjectReason ? { crossProjectReason: q.crossProjectReason } : {}) });
+    seen.push({ sql: q.sql, params: q.params, ...(q.crossProjectReason ? { crossProjectReason: q.crossProjectReason } : {}),
+      ...(q.projectSet ? { projectSet: q.projectSet } : {}),
+    });
   queryObservers.add(obs);
   try {
     await fn();
@@ -188,5 +192,32 @@ describe("scope check against the real client", () => {
     const bad = await capture(() => testDb().select().from(connectAttempts));
     expect(checkScope(bad, projectOwnedTables).violations).toHaveLength(1);
     clearRecordedQueries();
+  });
+
+  it("passes a real forMyProjects list and summary, and fails a pin outside the caller's set", async () => {
+    const mine = await createProject();
+    const other = await createProject();
+    const me = await createUser();
+    await addMember(mine.id, me.id, "owner");
+    const set = await forMyProjects({ user: { id: me.id } });
+    const q = { windows: [{ projectId: mine.id, from: null, to: null }], outcomes: null, platform: null, accountId: null };
+    const records = await capture(async () => {
+      await set.activity.list({ ...q, cursor: null, direction: "older", limit: 5 });
+      await set.activity.summary(q);
+    });
+    expect(records.every((r) => r.projectSet?.projectIds.includes(mine.id))).toBe(true);
+    const result = checkScope(records, projectOwnedTables);
+    expect(result.violations).toEqual([]);
+    expect(result.projectSet.length).toBeGreaterThanOrEqual(2);
+
+    // A reader built over a wider set than the caller's, asked about a project outside it, is caught by the harness.
+    const wide = createActivityRepo(testDb(), other.id);
+    const stray = await capture(() =>
+      runForProjectSet({ reason: "activity: my projects", projectIds: [mine.id] }, () =>
+        wide.list({ ...q, windows: [{ projectId: other.id, from: null, to: null }], cursor: null, direction: "older", limit: 5 }),
+      ),
+    );
+    expect(checkScope(stray, projectOwnedTables).violations.join("\n")).toMatch(/outside the caller's set/);
+    clearRecordedQueries(); // the afterEach hook would otherwise fail this test
   });
 });

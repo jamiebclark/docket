@@ -4,6 +4,7 @@ import { getDb, type Database } from "../db/client";
 import { runCrossProject } from "../db/cross-project";
 import { member, projects, type ApiKeyPermission } from "../db/schema";
 import { createAccountsRepo, type AccountsRepo } from "./accounts";
+import { createActivityRepo, type ActivityRepo } from "./activity";
 import { createAttemptsRepo, type AttemptsRepo } from "./attempts";
 import { createAuditRepo, type AuditRepo } from "./audit";
 import { createConnectAttemptsRepo, type ConnectAttemptsRepo } from "./connect-attempts";
@@ -113,6 +114,7 @@ export interface ProjectScope {
   readonly posts: PostsRepo;
   readonly targets: TargetsRepo;
   readonly attempts: AttemptsRepo;
+  readonly activity: ActivityRepo;
   readonly connectAttempts: ConnectAttemptsRepo;
   readonly voiceProfiles: VoiceProfilesRepo;
   readonly voiceVersions: VoiceVersionsRepo;
@@ -177,6 +179,7 @@ export function createSchedulingRepos(exec: Database, projectId: string) {
     posts: createPostsRepo(exec, projectId),
     targets: createTargetsRepo(exec, projectId),
     attempts: createAttemptsRepo(exec, projectId),
+    activity: createActivityRepo(exec, projectId),
     webhooks: createWebhooksRepo(exec, projectId),
   };
 }

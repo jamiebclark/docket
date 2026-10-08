@@ -137,3 +137,19 @@ Idempotency-Key: retry-{{event.id}}-{{targetId}}
 5. To retry everything at once, call `POST {{base}}/api/v1/targets/retry-failed` with `{"mode":"now"}` (add `accountId` to limit it to one account). Each call handles a capped batch. While the answer shows `remaining > 0`, call again with a **new** `Idempotency-Key`, because the same key replays the first answer.
 
 The action is recorded in the attempt log as "API key {name}". Branch on the 409 `details.reason` values listed in section 4.
+
+## 8. Read activity
+
+`GET {{base}}/api/v1/activity` lists what happened to publishing, newest first, with a key holding `read`:
+
+```http
+GET {{base}}/api/v1/activity?outcome=problems&range=7d&limit=100
+Authorization: Bearer {{key}}
+```
+
+Filters: `outcome` (repeatable or comma-separated; the seven outcomes, or the presets `successes` and `problems`), `platform`, `account`, `from` and `to` (`YYYY-MM-DD`, in the project's time zone) or `range` (`today`, `7d`, `30d`), `limit` (1–100) and `cursor`. A bad value is a `400` naming each field.
+
+Each event has `outcome`, `message`, `occurredAt`, `platform`, `account`, `post` (with `excerpt`) and `actor`. Page with `nextCursor` until it is `null`.
+
+**To poll for new events**, re-read from your last `occurredAt` (`from=` takes a day, so start from that day), then drop ids you have already seen. A walk can miss an event that commits after the page it belongs to was read, so overlap rather than start exactly after the last one. Branch on `outcome`, not on the message text.
+

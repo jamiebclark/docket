@@ -27,6 +27,12 @@ describe("SignedInHeader (shown on /p/new and /invitations)", () => {
     expect(html).toContain("Sign out");
   });
 
+  it("links to the all-projects activity screen", async () => {
+    const html = await render(await createUser());
+    expect(html).toContain('href="/activity"');
+    expect(html).toMatch(/>Activity</);
+  });
+
   it("hides the count when nothing is pending", async () => {
     const lonely = await createUser();
     const html = await render(lonely);

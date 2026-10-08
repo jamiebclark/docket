@@ -39,6 +39,7 @@ const FIXTURES: Record<string, Fixture> = {
   retryFailedTargets: { body: () => ({ mode: "now" }) },
   generatePost: { body: (p) => ({ brief: "x", accountIds: [p.account.id] }) },
   listUpcomingSlots: {},
+  listActivity: {},
   listJobs: {},
   createJob: { body: () => ({}) },
   getJob: { params: (p) => ({ jobId: p.job.id }) },

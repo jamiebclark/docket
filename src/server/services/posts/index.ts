@@ -13,6 +13,8 @@ import { prepareVariants } from "../media-variants";
 import { applyDerivedStatus } from "./status";
 import { lockPost, need, withLockedTarget } from "./locked";
 import { errorsOf, gate, issuesFor } from "./gate";
+import { resolvedEvent } from "../activity/classify";
+import { recordTargetEvent } from "../activity/record";
 import type { PostType } from "@/providers/types";
 import { assertPostTypeOffered } from "./content";
 
@@ -635,6 +637,9 @@ export async function resolveAmbiguous(
     if (target.status !== "ambiguous") throw new ConflictError("This post was already resolved.", { reason: "already_resolved" });
     const common = { ...resolverColumns(tx), resolvedAt: now };
     const lost = () => new ConflictError("This post was already resolved.", { reason: "already_resolved" });
+    const providerKey = (await tx.accounts.get(target.socialAccountId))?.providerKey ?? "unknown";
+    const record = (extra: Pick<Parameters<typeof resolvedEvent>[0], "action" | "url" | "scheduledAt" | "requeue">) =>
+      recordTargetEvent(tx, resolvedEvent({ target, providerKey, actor: attemptActor(tx), now, ...extra }));
     if (resolution.outcome === "published") {
       const done = await tx.targets.update(
         target.id,
@@ -643,6 +648,7 @@ export async function resolveAmbiguous(
       );
       if (!done) throw lost();
       await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_published", ...attemptActor(tx), at: now });
+      await record({ action: "marked_published", url: resolution.url ?? null });
       return { status: "published" };
     }
     if (!resolution.requeue) {
@@ -653,6 +659,7 @@ export async function resolveAmbiguous(
       );
       if (!done) throw lost();
       await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "resolved_failed", ...attemptActor(tx), at: now });
+      await record({ action: "marked_not_published" });
       return { status: "failed", reason: "not_requeued", message: NOT_REQUEUED };
     }
     const g = await gate(tx, target);
@@ -673,6 +680,7 @@ export async function resolveAmbiguous(
         ...attemptActor(tx),
         at: now,
       });
+      await record({ action: "marked_not_published", requeue: "no_free_slot" });
       return { status: "failed", reason: "no_free_slot", message: NO_FREE_SLOT };
     }
     const done = await tx.targets.update(
@@ -702,6 +710,7 @@ export async function resolveAmbiguous(
       ...attemptActor(tx),
       at: new Date(now.getTime() + 1),
     });
+    await record({ action: "requeued", scheduledAt: slot.instant });
     return {
       status: "scheduled",
       scheduledAt: slot.planned.scheduledAt,

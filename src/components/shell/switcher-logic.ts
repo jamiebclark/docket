@@ -1,17 +1,20 @@
 export const CREATE_PROJECT_HREF = "/p/new";
+export const ALL_ACTIVITY_HREF = "/activity";
 
 export type SwitcherProject = { slug: string; name: string };
 
 export type SwitcherItem =
   | { kind: "project"; slug: string; label: string; href: string }
+  | { kind: "all-activity"; label: string; href: string }
   | { kind: "create"; label: string; href: string };
 
-/** Projects matching `filter` (name or slug, case-insensitive), then "Create project" always last. */
+/** Projects matching `filter` (name or slug, case-insensitive), then "All activity" and "Create project" always last. */
 export function filterSwitcherItems(projects: SwitcherProject[], filter: string): SwitcherItem[] {
   const needle = filter.trim().toLowerCase();
   const items: SwitcherItem[] = projects
     .filter((p) => !needle || p.name.toLowerCase().includes(needle) || p.slug.toLowerCase().includes(needle))
     .map((p) => ({ kind: "project", slug: p.slug, label: p.name, href: `/p/${p.slug}` }));
+  items.push({ kind: "all-activity", label: "All activity", href: ALL_ACTIVITY_HREF });
   items.push({ kind: "create", label: "Create project", href: CREATE_PROJECT_HREF });
   return items;
 }

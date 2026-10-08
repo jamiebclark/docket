@@ -23,6 +23,7 @@ they always match `main`.
 | Voice profiles, the generator, review and batch jobs | [Generator and jobs](generator.md) |
 | The public API, webhooks and rebuilding an n8n flow | [n8n and the public API](n8n.md) |
 | Retrying failed posts: now, next free slot or a chosen time, one at a time or all at once | [Failures and retrying](failures.md) |
+| What happened to publishing: successes, failures and account problems, per project or across all of them | [Activity](activity.md) |
 
 ## Reference
 

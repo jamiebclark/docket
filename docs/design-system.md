@@ -247,6 +247,7 @@ full width, size `lg`.
 | `Dialog`, `ShowOnceDialog` | — | Native `<dialog>`, `rounded-2xl`, `shadow-overlay`, blurred backdrop (base layer). |
 | `Menu` | items, `triggerClassName` | Trigger looks like `secondary sm` unless `triggerClassName` is given (calendar chips); focused item lavender. |
 | `Pagination` | — | `secondary sm` buttons; disabled ends at 50% opacity. |
+| `CursorPagination` | `newerHref`, `olderHref` | Newer/Older links for keyset-paged lists (Activity). `secondary sm`, `rel="prev"`/`"next"`; a direction with nothing more is a 50%-opacity disabled span; renders nothing when both are null. Use `Pagination` for numbered pages. |
 | `CopyField` | — | Mono read-only input plus secondary Copy button. |
 | `Skeleton` | `className` | `bg-muted`, pulses only with `motion-safe`. |
 | `Icon` | `name`, `size` | The one UI icon set: Lucide (ISC), 24-px grid, 1.75 stroke, `currentColor`, always `aria-hidden` beside a text label. Names say what they mean (`failures`, `arrowLeft`). Add one by adding a line to `ICONS` in `scripts/generate-icons.mjs` and running `pnpm icons`; never hand-draw paths, and never use emoji or Unicode symbols (← ✓ ⚠) as icons. |

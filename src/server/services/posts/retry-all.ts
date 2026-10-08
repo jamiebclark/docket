@@ -132,7 +132,7 @@ async function retryOne(scope: ProjectScope, targetId: string, mode: "now" | "re
       if (target.status !== "failed") return { kind: "skip", reason: "no_longer_failed" };
       const key = blockedKeyFor((await tx.accounts.get(target.socialAccountId)) ?? undefined);
       if (key) return { kind: "skip", reason: key };
-      const r = await retryLockedTarget(tx, target, now, { mode });
+      const r = await retryLockedTarget(tx, target, now, { mode }, { via: "bulk" });
       if (r.status === "scheduled") return { kind: "retried" };
       if (r.reason === "no_active_slots" || r.reason === "no_free_occurrence") return { kind: "skip", reason: "no_free_slot", exhausted: true };
       return { kind: "skip", reason: "cannot_publish" };

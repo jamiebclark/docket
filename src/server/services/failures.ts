@@ -17,6 +17,7 @@ export const FAILURES_PAGE_SIZE = 25;
 export const failuresQuerySchema = z.object({
   status: z.enum(["all", "ambiguous", "failed"]).catch("all").default("all"),
   account: z.uuid().optional().catch(undefined),
+  target: z.uuid().optional().catch(undefined),
   page: z.coerce.number().int().min(1).max(100_000).catch(1).default(1),
 });
 
@@ -146,6 +147,7 @@ export async function listFailures(scope: ProjectScope, input?: unknown): Promis
     scope.targets.listAttention({
       statuses,
       accountId: query.account,
+      targetId: query.target,
       limit: FAILURES_PAGE_SIZE,
       offset: (query.page - 1) * FAILURES_PAGE_SIZE,
     }),

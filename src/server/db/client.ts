@@ -2,13 +2,14 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "drizzle-orm/logger";
 import { Pool } from "pg";
 import { getEnv } from "../env";
-import { currentCrossProjectReason } from "./cross-project";
+import { currentCrossProjectReason, currentProjectSet, type ProjectSet } from "./cross-project";
 import * as schema from "./schema";
 
 export interface ObservedQuery {
   sql: string;
   params: readonly unknown[];
   crossProjectReason?: string;
+  projectSet?: ProjectSet;
 }
 
 /** Empty in production. The test harness registers a recorder (scope check). */
@@ -19,7 +20,13 @@ const logger: Logger = {
   logQuery(sql, params) {
     if (queryObservers.size === 0) return;
     const reason = currentCrossProjectReason();
-    const query: ObservedQuery = { sql, params, ...(reason ? { crossProjectReason: reason } : {}) };
+    const projectSet = currentProjectSet();
+    const query: ObservedQuery = {
+      sql,
+      params,
+      ...(reason ? { crossProjectReason: reason } : {}),
+      ...(projectSet ? { projectSet } : {}),
+    };
     for (const observer of queryObservers) observer(query);
   },
 };

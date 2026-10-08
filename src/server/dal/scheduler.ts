@@ -1,7 +1,8 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { allowanceUses, mediaAssets, postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
 import type { PostType, StepContent } from "../../providers/types";
+import { createActivityRepo, type NewActivityEvent } from "./activity";
 import { createAttemptsRepo, type AttemptEntry } from "./attempts";
 import { createSchedulingRepos, crossProject } from "./scope";
 import type { TargetPatch, TargetRecord } from "./targets";
@@ -19,6 +20,8 @@ export interface ClaimDecision {
   patch: TargetPatch;
   /** Attempt rows to append in the same transaction. */
   attempts?: Omit<AttemptEntry, "postTargetId" | "at">[];
+  /** Activity event to append in the same transaction, right after the attempts. */
+  activity?: NewActivityEvent;
 }
 
 export interface ClaimContext {
@@ -179,6 +182,7 @@ export function claimDueTargets(opts: ClaimDueOptions): Promise<ClaimedTarget[]>
         for (const attempt of decision.attempts ?? []) {
           await attempts.insert({ ...attempt, postTargetId: row.id, at: opts.now });
         }
+        if (decision.activity) await createActivityRepo(exec, row.projectId).insert(decision.activity);
         claimed.push({ target: updated ?? row, account, decision });
       }
       return claimed;

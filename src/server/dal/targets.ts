@@ -39,6 +39,7 @@ export interface RangeTarget {
 export interface AttentionOptions {
   statuses: readonly ("ambiguous" | "failed")[];
   accountId?: string;
+  targetId?: string;
   limit: number;
   offset: number;
 }
@@ -103,11 +104,12 @@ function isUniqueViolation(error: unknown): boolean {
 
 export function createTargetsRepo(db: Database, projectId: string): TargetsRepo {
   const mine = (id: string) => and(eq(postTargets.projectId, projectId), eq(postTargets.id, id));
-  const attentionWhere = (statuses: readonly ("ambiguous" | "failed")[], accountId?: string) =>
+  const attentionWhere = (statuses: readonly ("ambiguous" | "failed")[], accountId?: string, targetId?: string) =>
     and(
       eq(postTargets.projectId, projectId),
       inArray(postTargets.status, [...statuses]),
       accountId ? eq(postTargets.socialAccountId, accountId) : undefined,
+      targetId ? eq(postTargets.id, targetId) : undefined,
     );
   const livePost = and(
     eq(posts.id, postTargets.postId),
@@ -117,7 +119,7 @@ export function createTargetsRepo(db: Database, projectId: string): TargetsRepo 
   return {
     async listAttention(opts) {
       if (opts.statuses.length === 0) return { rows: [], total: 0 };
-      const where = attentionWhere(opts.statuses, opts.accountId);
+      const where = attentionWhere(opts.statuses, opts.accountId, opts.targetId);
       const found = await db
         .select({ target: postTargets, baseText: posts.baseText })
         .from(postTargets)
