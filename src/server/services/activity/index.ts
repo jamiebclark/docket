@@ -230,12 +230,15 @@ export async function listMyActivity(set: ProjectSetScope, raw: RawParams): Prom
     cursor,
     limit: ACTIVITY_PAGE_SIZE,
   });
-  const members = new Map<string, Map<string, string>>();
-  const keys = new Map<string, string | null>();
-  for (const r of page.records) {
-    if (r.actorUserId && !r.actorApiKeyId && !members.has(r.projectId)) members.set(r.projectId, await set.memberNames(r.projectId));
-    if (r.actorApiKeyId && !keys.has(r.actorApiKeyId)) keys.set(r.actorApiKeyId, await set.apiKeyName(r.projectId, r.actorApiKeyId));
-  }
+  // Names for the page's actors, looked up once per project or key and in parallel (up to one per project).
+  const memberProjects = [...new Set(page.records.filter((r) => r.actorUserId && !r.actorApiKeyId).map((r) => r.projectId))];
+  const keyRefs = [...new Map(page.records.filter((r) => r.actorApiKeyId).map((r) => [r.actorApiKeyId!, r.projectId] as const))];
+  const [memberLists, keyNames] = await Promise.all([
+    Promise.all(memberProjects.map((projectId) => set.memberNames(projectId))),
+    Promise.all(keyRefs.map(([keyId, projectId]) => set.apiKeyName(projectId, keyId))),
+  ]);
+  const members = new Map(memberProjects.map((projectId, i) => [projectId, memberLists[i]!]));
+  const keys = new Map(keyRefs.map(([keyId], i) => [keyId, keyNames[i] ?? null]));
   return {
     ...base,
     rows: page.records.map((r) =>

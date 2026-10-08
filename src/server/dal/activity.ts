@@ -118,6 +118,11 @@ function memberJoin(userId: string | null): SQL {
     : sql``;
 }
 
+/**
+ * One project's newest (or oldest) `limit + 1` events. The events are read straight off the
+ * (project_id, occurred_at, seq) index with no joins, so the scan stops after `limit + 1` rows; the display joins
+ * then run over those rows only. Every joined table is pinned to the window's project id through `projects.id`.
+ */
 function listBranch(
   window: BranchQuery["windows"][number],
   q: BranchQuery,
@@ -127,24 +132,25 @@ function listBranch(
   memberUserId: string | null,
 ): SQL {
   const order = sql.raw(direction === "older" ? "DESC" : "ASC");
+  const pid = window.projectId;
   return sql`(SELECT
-      activity_events.id AS id,
-      activity_events.seq::text AS seq,
-      activity_events.project_id AS project_id,
-      activity_events.occurred_at AS occurred_at,
-      ${iso("activity_events.occurred_at")} AS occurred_iso,
-      activity_events.kind::text AS kind,
-      activity_events.outcome::text AS outcome,
-      activity_events.post_id AS post_id,
-      activity_events.post_target_id AS post_target_id,
-      activity_events.social_account_id AS social_account_id,
-      activity_events.provider_key AS provider_key,
-      activity_events.provider_keys AS provider_keys,
-      activity_events.group_key AS group_key,
-      activity_events.actor_user_id AS actor_user_id,
-      activity_events.actor_api_key_id AS actor_api_key_id,
-      activity_events.message AS message,
-      activity_events.details AS details,
+      ev.id AS id,
+      ev.seq::text AS seq,
+      ev.project_id AS project_id,
+      ev.occurred_at AS occurred_at,
+      ${iso("ev.occurred_at")} AS occurred_iso,
+      ev.kind::text AS kind,
+      ev.outcome::text AS outcome,
+      ev.post_id AS post_id,
+      ev.post_target_id AS post_target_id,
+      ev.social_account_id AS social_account_id,
+      ev.provider_key AS provider_key,
+      ev.provider_keys AS provider_keys,
+      ev.group_key AS group_key,
+      ev.actor_user_id AS actor_user_id,
+      ev.actor_api_key_id AS actor_api_key_id,
+      ev.message AS message,
+      ev.details AS details,
       projects.slug AS project_slug,
       projects.name AS project_name,
       projects.timezone AS project_time_zone,
@@ -153,15 +159,19 @@ function listBranch(
       ${iso("posts.deleted_at")} AS post_deleted_iso,
       coalesce(post_targets.override_text, posts.base_text) AS post_text,
       post_targets.status::text AS target_status
-    FROM activity_events
-    JOIN projects ON projects.id = activity_events.project_id
-    LEFT JOIN posts ON posts.project_id = activity_events.project_id AND posts.id = activity_events.post_id
-    LEFT JOIN post_targets ON post_targets.project_id = activity_events.project_id AND post_targets.id = activity_events.post_target_id
-    LEFT JOIN social_accounts ON social_accounts.project_id = activity_events.project_id AND social_accounts.id = activity_events.social_account_id
-    ${memberJoin(memberUserId)}
-    WHERE ${joinConds(branchConditions(window, q, position))}
-    ORDER BY activity_events.occurred_at ${order}, activity_events.seq ${order}
-    LIMIT ${limit + 1})`;
+    FROM (
+      SELECT activity_events.* FROM activity_events
+      ${memberJoin(memberUserId)}
+      WHERE ${joinConds(branchConditions(window, q, position))}
+      ORDER BY activity_events.occurred_at ${order}, activity_events.seq ${order}
+      LIMIT ${limit + 1}
+    ) AS ev
+    JOIN projects ON projects.id = ev.project_id
+    LEFT JOIN posts ON posts.project_id = projects.id AND posts.id = ev.post_id
+    LEFT JOIN post_targets ON post_targets.project_id = projects.id AND post_targets.id = ev.post_target_id
+    LEFT JOIN social_accounts ON social_accounts.project_id = projects.id AND social_accounts.id = ev.social_account_id
+    WHERE projects.id = ${pid}
+    ORDER BY ev.occurred_at ${order}, ev.seq ${order})`;
 }
 
 type Row = Record<string, unknown>;
@@ -228,18 +238,21 @@ export function createActivityReader(
       check(q);
       let successes = 0;
       let problems = 0;
-      for (const w of q.windows) {
-        const query = sql`SELECT activity_events.outcome::text AS outcome, count(*)::int AS n
+      if (q.windows.length === 0) return { successes, problems };
+      // One round trip: each window counts on its own (project-led) index, and the branches are summed.
+      const branches = q.windows.map(
+        (w) => sql`SELECT activity_events.outcome::text AS outcome, count(*)::int AS n
           FROM activity_events
           ${memberJoin(memberUserId)}
           WHERE ${joinConds(branchConditions(w, q, null))}
-          GROUP BY activity_events.outcome`;
-        for (const r of rowsOf(await db.execute(query))) {
-          const outcome = r.outcome as ActivityOutcome;
-          const n = Number(r.n);
-          if (SUCCESS_OUTCOMES.includes(outcome)) successes += n;
-          else if (PROBLEM_OUTCOMES.includes(outcome)) problems += n;
-        }
+          GROUP BY activity_events.outcome`,
+      );
+      const query = sql`SELECT outcome, sum(n)::int AS n FROM (${sql.join(branches, sql` UNION ALL `)}) AS activity_counts GROUP BY outcome`;
+      for (const r of rowsOf(await db.execute(query))) {
+        const outcome = r.outcome as ActivityOutcome;
+        const n = Number(r.n);
+        if (SUCCESS_OUTCOMES.includes(outcome)) successes += n;
+        else if (PROBLEM_OUTCOMES.includes(outcome)) problems += n;
       }
       return { successes, problems };
     },
