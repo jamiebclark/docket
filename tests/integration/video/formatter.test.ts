@@ -6,6 +6,7 @@ import type { VideoCapabilities, VideoFacts } from "../../../src/providers/types
 import { planVideo, type VideoPlan } from "../../../src/providers/video-plan";
 import { buildFile } from "../../../src/server/video/encode";
 import { indexAtFront } from "../../../src/server/video/boxes";
+import { markWorkerProcess } from "../../../src/server/video/guard";
 import { probeFile, type ProbeResult } from "../../../src/server/video/probe";
 import { readBack } from "../../../src/server/video/readback";
 import { requireFfmpeg } from "../../helpers/ffmpeg";
@@ -59,6 +60,7 @@ const plan = (
 requireFfmpeg()("the formatter builds what the plan says", () => {
   let fx: VideoFixtures;
   beforeAll(() => {
+    markWorkerProcess();
     fx = createVideoFixtures();
   });
   afterAll(() => fx?.cleanup());

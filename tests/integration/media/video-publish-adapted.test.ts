@@ -52,7 +52,12 @@ requireFfmpeg()("one video, two targets, one too strict for it", () => {
       await repos.posts.setMedia(post.id, [asset.id]);
     }
     const { version } = await queueVersionFor({ repos, asset }, strictVideoProvider);
-    expect(await buildNext({ signal })).toBe(true);
+    // The claim is cross-project, so versions other files left queued may be built first.
+    const ours = async () => (await repos.videoVersions.getByKeys([{ assetId: asset.id, kind: "full", key: version.key }]))[0];
+    for (let i = 0; i < 20 && (await ours())?.state !== "ready"; i++) {
+      if (!(await buildNext({ signal }))) break;
+    }
+    expect(await ours()).toMatchObject({ state: "ready" });
 
     await runTick({ config: {} });
 
