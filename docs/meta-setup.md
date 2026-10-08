@@ -141,6 +141,18 @@ Until the owner runs these four checks in one sitting, Instagram video is "verif
 4. **Large file.** Publish a Reel of roughly 200 to 300 MB. This confirms that Instagram fetches a large file from the bucket by
    `video_url`, and shows how long processing takes.
 
+## Facebook video: owed live checks
+
+Facebook video needs **no new permission**; the existing Page permissions cover it. There is no `docker-compose.yml` change.
+Until the owner runs these four checks in one sitting, Facebook video is "verified with mocks only". Report all results together.
+
+1. **Page video.** Publish a landscape video as **Page video**. Note whether Facebook shows it as a Reel.
+2. **Reel.** Publish a 9:16 video as **Reel**. Record what `rupload.facebook.com` returns for a `file_url` header.
+3. **Status replies.** Record the real `GET /<video-id>?fields=status` reply at each stage and compare it with `readReelStatus`
+   in `src/providers/facebook/`.
+4. **Failed processing.** Make a Page video fail processing and see whether `fields=status` reports it (Docket does not poll
+   Page videos today).
+
 ## Threads
 
 Threads has its own app id and secret, separate from the App ID and App Secret above. You can add it to the same Meta app

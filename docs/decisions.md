@@ -883,3 +883,10 @@ Judgement calls from `specs/021-facebook-video/spec.md` (D1–D15) and its plan 
 - **P20 — No `docker-compose.yml`, `.env.example` or migration change.**
 
 ---
+
+### Implementation outcome
+
+- **Built as planned.** Page video and Reel post types for Facebook, Reel steps start, upload, upload check, finish, publish check, with G23 in the engine.
+- **No deployment change.** `docker-compose.yml`, `.env.example` and migrations do not change (FR-028, P20).
+- **Unowned.** Byte or chunked upload, Page video status checks, optional fields, Facebook-side scheduling, API video upload and generator video are listed in `docs/feature-map.md` (FR-025).
+- **Owed.** The four live checks in `docs/meta-setup.md`. Until then Facebook video is verified with mocks only.

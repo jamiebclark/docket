@@ -55,6 +55,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G14 | `defaultPublishLimit` as an array | 8 |
 | G17 | exchangeCode receives state | 4 |
 | G18 | the group's own message in the accounts banner | 4 |
+| G23 | `afterPublish`, `credentialsInvalid` on `ambiguous` | 6, 7 |
 
 ## 3. Capabilities and counting rules
 
@@ -233,6 +234,15 @@ Honour `ctx.signal` on every network call.
 A `fatal_error` may set `credentialsInvalid: true` when the platform rejected the token and no refresh exists (Page tokens). The
 engine then flags the account `needs_reauth`, conditionally on the ciphertext it used, and does not retry (G7).
 
+### Steps after publishing (G23)
+
+A step that runs after a `mayPublish` step was sent can declare `afterPublish: true` on its `StepInfo` (with `mayPublish: false`).
+The engine then never records **failed** for that lease on its own: media that vanished, unreadable credentials or settings, running
+out of attempts on `retryable_error`, and a lease that expired too many times all become `ambiguous`, with "The post may already be
+live; check before retrying." Only a `fatal_error` the provider itself returns still fails. An `ambiguous` result may also set
+`credentialsInvalid: true`: the account is flagged `needs_reauth` as for a fatal, the target stays `ambiguous`, and `lastError` ends
+"Reconnect <account> to publish again." A provider that never sets `afterPublish` sees no change.
+
 A `retryable_error` may set `credentialsExpired: true` when the platform said the access token has lapsed. The engine then
 refreshes the credentials before the retry (the result is still retryable, and nothing was published).
 
@@ -384,3 +394,13 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
 | 401 | `credentialsExpired` |
 | 403 duplicate, other 403, other 4xx | `fatal_error` with X's message |
 | 5xx, timeout or reset after send, unreadable 2xx | `ambiguous`, never retried |
+
+## 17. Worked example: the `facebook` provider (video)
+
+Facebook video reuses G19–G22 and adds G23, with no composer, schema or engine code specific to Facebook.
+
+- **Post types (G19–G21).** `video` ("Page video", the base `video` block) and `reel` (`byPostType.reel`, 9:16, 3–90 s). The default is Page video.
+- **Creation allowance (G22).** Only the Reel `start` step reserves, 30 per Page per rolling 24 h.
+- **Steps.** A Page video is one `videos` request with `file_url`. A Reel runs start, upload (`rupload.facebook.com` with a `file_url` header), upload check, finish, then publish check. Only `finish` has `mayPublish: true`.
+- **After publishing (G23).** The publish check declares `afterPublish: true`, so the engine can only record it `ambiguous`, never `failed`, unless Facebook's own error report says so.
+- **Where to look.** `src/providers/facebook/` (`capabilities.ts`, `requests.ts`, `state.ts`, `steps.ts`, `publish.ts`) and `tests/integration/facebook/`.
