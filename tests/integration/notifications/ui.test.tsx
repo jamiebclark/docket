@@ -178,6 +178,27 @@ describe("per-project notification controls", () => {
     expect(await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ changed: "nope" }) }))).not.toContain("Earlier problems");
   });
 
+  it.each([
+    ["busy", "Could not change notifications just now. Try again."],
+    ["not_found", "That project could not be found."],
+    ["invalid", "That change was not understood. Try again."],
+  ])("shows the %s failure as an alert on both pages", async (code, text) => {
+    const p = await createProject({ name: "Failing" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    const page = (await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ notifications: code }) }))).replaceAll("<!-- -->", "");
+    expect(page).toContain(text);
+    const settings = (
+      await renderAsync(
+        await ProjectSettingsPage({ params: Promise.resolve({ projectSlug: p.slug }), searchParams: Promise.resolve({ notifications: code }) }),
+      )
+    ).replaceAll("<!-- -->", "");
+    expect(settings).toContain(text);
+    expect(await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ notifications: "weird" }) }))).not.toContain(text);
+  });
+
   it("shows the Your notifications card to an editor, with the off confirmation", async () => {
     const p = await createProject({ name: "Editable" });
     const u = await createUser();

@@ -4,7 +4,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { mutedConfirmation } from "@/lib/notifications/text";
+import { muteErrorText, mutedConfirmation, parseMuteError } from "@/lib/notifications/text";
 import { myStateForProject } from "@/server/services/notifications";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
@@ -33,6 +33,7 @@ export default async function ProjectSettingsPage({
   const p = scope.project;
   const { on } = await myStateForProject(scope);
   const confirmed = raw.notifications === "on" || raw.notifications === "off" ? raw.notifications === "on" : null;
+  const muteError = parseMuteError(raw.notifications);
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Project settings</h1>
@@ -48,6 +49,7 @@ export default async function ProjectSettingsPage({
       />
       <Card title="Your notifications" description="Only you see this. Problems in this project always stay in Activity.">
         <div className="flex flex-col gap-4">
+          {muteError ? <Alert tone="danger">{muteErrorText(muteError)}</Alert> : null}
           {confirmed !== null ? <Alert tone="success">{mutedConfirmation(p.name, confirmed)}</Alert> : null}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="flex items-center gap-2 text-sm">

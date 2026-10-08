@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import { fail, failFromError, fieldErrorsFromZod, ok, type ActionResult } from "@/lib/action-result";
-import { forProject, NotFoundError } from "@/server/dal";
+import { forProject, NotFoundError, NotificationsBusyError } from "@/server/dal";
+import type { MuteErrorCode } from "@/lib/notifications/text";
 import { getSession } from "@/server/auth/session";
 import * as notifications from "@/server/services/notifications";
 import * as projects from "@/server/services/projects";
@@ -42,13 +43,17 @@ export async function setMyProjectNotifications(_prev: ActionResult<never> | nul
   const slug = String(formData.get("projectSlug") ?? "");
   const session = await getSession();
   if (!session) redirect(`/login?next=${encodeURIComponent(`/p/${slug}/settings`)}`);
-  let on: boolean;
+  let on = false;
+  let failed: MuteErrorCode | null = null;
   try {
     const scope = await forProject(session, slug);
     ({ on } = await notifications.setMyProjectNotifications(scope, { on: String(formData.get("on") ?? "") }));
   } catch (error) {
-    if (error instanceof NotFoundError) return fail("not_found", "That project could not be found.");
-    return failFromError(error);
+    if (error instanceof NotFoundError) failed = "not_found";
+    else if (error instanceof NotificationsBusyError) failed = "busy";
+    else if (error instanceof ZodError) failed = "invalid";
+    else return failFromError(error);
   }
+  if (failed) redirect(`/p/${slug}/settings?notifications=${failed}`);
   redirect(`/p/${slug}/settings?notifications=${on ? "on" : "off"}`);
 }

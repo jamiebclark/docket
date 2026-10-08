@@ -27,3 +27,16 @@ export function mutedConfirmation(name: string, on: boolean): string {
     ? `Notifications for ${name} are on. Earlier problems are marked as read.`
     : `Notifications for ${name} are off. Its problems still appear in Activity.`;
 }
+
+export type MuteErrorCode = "busy" | "not_found" | "invalid";
+
+export function parseMuteError(value: unknown): MuteErrorCode | null {
+  return value === "busy" || value === "not_found" || value === "invalid" ? value : null;
+}
+
+/** Shown when turning notifications on or off did not take effect. */
+export function muteErrorText(code: MuteErrorCode): string {
+  if (code === "busy") return "Could not change notifications just now. Try again.";
+  if (code === "not_found") return "That project could not be found.";
+  return "That change was not understood. Try again.";
+}

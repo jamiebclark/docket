@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { getSession } from "@/server/auth/session";
 import { forMyProjects } from "@/server/dal";
 import { myProjectStates, recentPanel } from "@/server/services/notifications";
-import { mutedConfirmation } from "@/lib/notifications/text";
+import { muteErrorText, mutedConfirmation, parseMuteError } from "@/lib/notifications/text";
 import { markAllRead } from "./actions";
 
 export const metadata: Metadata = { title: "Notifications" };
@@ -29,6 +29,7 @@ export default async function NotificationsPage({ searchParams }: Props) {
   const panel = await recentPanel(set, now);
   const states = await myProjectStates(set);
   const raw = await searchParams;
+  const muteError = parseMuteError(raw.notifications);
   const marked = raw.marked === "1";
   const busy = typeof raw.busy === "string" ? raw.busy.split(",").filter(Boolean) : [];
   const changed = typeof raw.changed === "string" ? states.find((s) => s.slug === raw.changed) : undefined;
@@ -52,6 +53,7 @@ export default async function NotificationsPage({ searchParams }: Props) {
           />
         ) : (
           <div className="flex flex-col gap-6">
+            {muteError ? <Alert tone="danger">{muteErrorText(muteError)}</Alert> : null}
             {changed ? <Alert tone="success">{mutedConfirmation(changed.name, changed.on)}</Alert> : null}
             {marked ? (
               <Alert tone="success">

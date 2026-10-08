@@ -4,6 +4,20 @@ vi.mock("@/server/auth/session", async () => (await import("../../helpers/action
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
+const busyMode = vi.hoisted(() => ({ on: false }));
+vi.mock("@/server/services/notifications", async () => {
+  const actual = await vi.importActual<typeof import("../../../src/server/services/notifications")>("@/server/services/notifications");
+  const { NotificationsBusyError } = await import("../../../src/server/dal/notifications");
+  const guard = () => {
+    if (busyMode.on) throw new NotificationsBusyError();
+  };
+  return {
+    ...actual,
+    setNotificationsBySlug: ((...a: Parameters<typeof actual.setNotificationsBySlug>) => (guard(), actual.setNotificationsBySlug(...a))) as typeof actual.setNotificationsBySlug,
+    setMyProjectNotifications: ((...a: Parameters<typeof actual.setMyProjectNotifications>) => (guard(), actual.setMyProjectNotifications(...a))) as typeof actual.setMyProjectNotifications,
+  };
+});
+
 import { setNotifications } from "../../../src/app/notifications/actions";
 import { setMyProjectNotifications } from "../../../src/app/p/[projectSlug]/settings/actions";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
@@ -91,14 +105,35 @@ describe("per-project notifications", () => {
     );
   });
 
-  it("answers a foreign slug exactly like a nonexistent one", async () => {
+  it("answers a foreign slug exactly like a nonexistent one, by redirecting with not_found", async () => {
     const { u } = await fixture();
     const foreign = await createProject({ name: "Foreign" });
     actAs(u);
-    const real = await setNotifications(null, form({ projectSlug: foreign.slug, on: "false" }));
-    const none = await setNotifications(null, form({ projectSlug: "no-such-project", on: "false" }));
-    expect(real).toEqual(none);
-    expect(real).toMatchObject({ ok: false, error: "not_found", message: "That project could not be found." });
+    const real = await redirectOf(() => setNotifications(null, form({ projectSlug: foreign.slug, on: "false" })));
+    const none = await redirectOf(() => setNotifications(null, form({ projectSlug: "no-such-project", on: "false" })));
+    expect(real).toBe("/notifications?notifications=not_found");
+    expect(none).toBe(real);
+  });
+
+  it("redirects with invalid for a malformed switch and busy when the write is locked, on both forms", async () => {
+    const { a, u } = await fixture();
+    actAs(u);
+    expect(await redirectOf(() => setNotifications(null, form({ projectSlug: a.slug, on: "maybe" })))).toBe("/notifications?notifications=invalid");
+    expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, on: "maybe" })))).toBe(
+      `/p/${a.slug}/settings?notifications=invalid`,
+    );
+    expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: "no-such-project", on: "false" })))).toBe(
+      "/p/no-such-project/settings?notifications=not_found",
+    );
+    busyMode.on = true;
+    try {
+      expect(await redirectOf(() => setNotifications(null, form({ projectSlug: a.slug, on: "false" })))).toBe("/notifications?notifications=busy");
+      expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, on: "false" })))).toBe(
+        `/p/${a.slug}/settings?notifications=busy`,
+      );
+    } finally {
+      busyMode.on = false;
+    }
   });
 
   it("sends a signed-out caller to login", async () => {

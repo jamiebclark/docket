@@ -1,9 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { fail, failFromError, ok, type ActionResult } from "@/lib/action-result";
+import { failFromError, ok, type ActionResult } from "@/lib/action-result";
 import { getSession } from "@/server/auth/session";
-import { forMyProjects, NotFoundError } from "@/server/dal";
+import { forMyProjects, NotFoundError, NotificationsBusyError } from "@/server/dal";
+import type { MuteErrorCode } from "@/lib/notifications/text";
+import { ZodError } from "zod";
 import { markAllRead as markAllReadService, setNotificationsBySlug } from "@/server/services/notifications";
 
 /** Only the Notifications page itself: an absolute URL, a protocol-relative one or any other path is ignored. */
@@ -32,16 +34,20 @@ export async function markAllRead(
   return ok({ count, busy });
 }
 
-/** Turns one project's notifications on or off, then returns to the page with a confirmation. */
+/** Turns one project's notifications on or off, then returns to the page with a confirmation, or with the reason it failed. */
 export async function setNotifications(_prev: ActionResult<never> | null, formData: FormData): Promise<ActionResult<never>> {
   const session = await getSession();
   if (!session) redirect("/login?next=/notifications");
   const projectSlug = String(formData.get("projectSlug") ?? "");
+  let failed: MuteErrorCode | null = null;
   try {
     await setNotificationsBySlug(await forMyProjects(session), { projectSlug, on: String(formData.get("on") ?? "") });
   } catch (error) {
-    if (error instanceof NotFoundError) return fail("not_found", "That project could not be found.");
-    return failFromError(error);
+    if (error instanceof NotFoundError) failed = "not_found";
+    else if (error instanceof NotificationsBusyError) failed = "busy";
+    else if (error instanceof ZodError) failed = "invalid";
+    else return failFromError(error);
   }
+  if (failed) redirect(`/notifications?notifications=${failed}`);
   redirect(`/notifications?changed=${encodeURIComponent(projectSlug)}`);
 }
