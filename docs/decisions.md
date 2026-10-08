@@ -809,3 +809,7 @@ Judgement calls from `specs/018-video-groundwork/spec.md` (D1–D12) and its pla
 - **P17 — `GET /api/v1/activity` (`listActivity`)**, with tag Activity, permission `read`, and the same filters and cursor.
 - **No change** to webhooks, env vars, dependencies or `docker-compose.yml`.
 - **Owed to the operator**: `.claude/skills/docket-ui/SKILL.md` is not writable from the pipeline. Adding "Activity" to its Structure list is left for an interactive session.
+
+### Implementation decisions
+
+- **I1 — SC-004 is asserted by a seeded timing test** (`tests/integration/activity/performance.test.ts`): 100,000 events in one project and 200,000 across a member's 20 projects, seeded with `generate_series`. Every filter combination must return its first page and counts in under 1 s. On a development machine the slowest was about 0.6 s (all projects, no filter). The test logs `EXPLAIN (ANALYZE, BUFFERS)` for the slowest combination.
