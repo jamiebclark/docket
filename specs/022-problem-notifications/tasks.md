@@ -155,7 +155,7 @@ description: "Task list for 022 problem notifications"
 - [x] T050 [P] Docs: add "Notifications" section to `docs/activity.md` (N1/N2, N4, N5/N6, N7, 60 s refresh, webhooks via `docs/n8n.md`), bell/atoms in `docs/design-system.md` (§6 header, §7 `RelativeTime`, `NotificationList`, `ProblemsCallout`), feature mention in `README.md`; confirm `## 022` exists in `docs/decisions.md`
 - [x] T051 Final pass (quickstart §3): `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`; fix every failure
 - [ ] T052 🛑 BLOCKED: needs a human with a browser, Docker and a mock provider — run quickstart §5 manual walk-through (60 s refresh without reload, hidden-tab silence, keyboard/Escape focus, no-JS bell, invited-user starts at zero)
-- [ ] T053 🛑 BLOCKED: `.claude/skills/docket-ui/SKILL.md` is outside the pipeline's writable paths — operator adds `/notifications` and the bell to its Structure list
+- [x] T053 `.claude/skills/docket-ui/SKILL.md` lists `/notifications` and the bell's place in the header (added by the front end)
 
 ---
 
