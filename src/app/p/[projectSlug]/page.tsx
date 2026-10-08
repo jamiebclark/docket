@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ProblemsCallout } from "@/components/notifications/ProblemsCallout";
 import { forProject } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 
@@ -14,6 +15,7 @@ export default async function ProjectHome({ params }: Props) {
   const scope = await forProject(await getSession(), projectSlug);
   return (
     <section>
+      <ProblemsCallout scope={scope} />
       <h1 className="text-2xl font-semibold">{scope.project.name}</h1>
       <p className="mt-2 text-sm">Pick a section from the navigation to get started.</p>
     </section>

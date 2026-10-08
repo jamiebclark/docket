@@ -6,6 +6,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/server/auth/session", async () => (await import("../../helpers/actions")).sessionModule);
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
+vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 import ActivityPage from "../../../src/app/p/[projectSlug]/activity/page";
 import { ActivityFilters } from "../../../src/components/activity/ActivityFilters";

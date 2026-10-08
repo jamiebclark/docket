@@ -1,3 +1,9 @@
+import { vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+// An async server component cannot render under renderToStaticMarkup; the bell has its own tests (notifications/ui.test.tsx).
+vi.mock("../../src/components/notifications/NotificationBell", () => ({ NotificationBell: () => null }));
+
 import { afterAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SignedInHeader } from "../../src/components/shell/SignedInHeader";

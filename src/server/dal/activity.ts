@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { PROBLEM_OUTCOMES, SUCCESS_OUTCOMES, KIND_OUTCOME, type ActivityKind, type ActivityOutcome } from "../../lib/activity/outcomes";
 import { activityDetailsSchema, type ActivityDetails } from "../../lib/activity/details";
+import { ATTENTION_MEMBER_OUTCOMES, CONNECT_FAILED } from "../../lib/notifications/attention";
 import { clipMessage } from "../../lib/activity/text";
 import type { Database } from "../db/client";
 import { activityEvents } from "../db/schema";
@@ -75,6 +76,12 @@ export interface ActivityRepo {
   summary(q: BranchQuery): Promise<{ successes: number; problems: number }>;
 }
 
+/** An equality outcome (and optionally the actor) for one branch; the literals come from the attention constants, never from input. */
+interface BranchExtra {
+  outcomeEq: ActivityOutcome;
+  actorEq?: string;
+}
+
 const ISO = `'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'`;
 
 function iso(column: string): SQL {
@@ -90,12 +97,17 @@ function branchConditions(
   window: BranchQuery["windows"][number],
   q: BranchQuery,
   position: { cursor: ActivityPosition; direction: "older" | "newer" } | null,
+  extra: BranchExtra | null = null,
 ): SQL[] {
   const e = sql.raw("activity_events");
   const conds: SQL[] = [sql`${e}.project_id = ${window.projectId}`];
   if (window.from) conds.push(sql`${e}.occurred_at >= ${window.from.toISOString()}::timestamptz`);
   if (window.to) conds.push(sql`${e}.occurred_at < ${window.to.toISOString()}::timestamptz`);
   if (q.outcomes) conds.push(sql`${e}.outcome = ANY(${sql.param([...q.outcomes])}::activity_outcome[])`);
+  if (extra) {
+    conds.push(sql`${e}.outcome = ${sql.raw(`'${extra.outcomeEq}'`)}`);
+    if (extra.actorEq) conds.push(sql`${e}.actor_user_id = ${extra.actorEq}`);
+  }
   if (q.platform) conds.push(sql`${e}.provider_keys @> ARRAY[${q.platform}]::text[]`);
   if (q.accountId) conds.push(sql`${e}.social_account_id = ${q.accountId}`);
   if (position) {
@@ -130,6 +142,7 @@ function listBranch(
   direction: "older" | "newer",
   limit: number,
   memberUserId: string | null,
+  extra: BranchExtra | null = null,
 ): SQL {
   const order = sql.raw(direction === "older" ? "DESC" : "ASC");
   const pid = window.projectId;
@@ -162,7 +175,7 @@ function listBranch(
     FROM (
       SELECT activity_events.* FROM activity_events
       ${memberJoin(memberUserId)}
-      WHERE ${joinConds(branchConditions(window, q, position))}
+      WHERE ${joinConds(branchConditions(window, q, position, extra))}
       ORDER BY activity_events.occurred_at ${order}, activity_events.seq ${order}
       LIMIT ${limit + 1}
     ) AS ev
@@ -214,7 +227,10 @@ export function createActivityReader(
   db: Database,
   allowedProjectIds: readonly string[],
   opts: { memberUserId?: string } = {},
-): Pick<ActivityRepo, "list" | "summary"> {
+): Pick<ActivityRepo, "list" | "summary"> & {
+  /** Attention events for `userId` (022): four equality-outcome branches per project, newest first, up to `limit`. */
+  listAttention(q: { projectIds: readonly string[]; userId: string; limit: number }): Promise<ActivityRecord[]>;
+} {
   const memberUserId = opts.memberUserId ?? null;
   const allowed = new Set(allowedProjectIds);
   function check(q: BranchQuery): void {
@@ -223,6 +239,24 @@ export function createActivityReader(
     }
   }
   return {
+    async listAttention(q) {
+      for (const id of q.projectIds) {
+        if (!allowed.has(id)) throw new Error("Activity window names a project outside this scope");
+      }
+      if (q.projectIds.length === 0) return [];
+      const base = { outcomes: null, platform: null, accountId: null };
+      const branches: SQL[] = [];
+      for (const projectId of q.projectIds) {
+        const bq: BranchQuery = { ...base, windows: [{ projectId, from: null, to: null }] };
+        const window = bq.windows[0]!;
+        for (const outcomeEq of ATTENTION_MEMBER_OUTCOMES) {
+          branches.push(listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq }));
+        }
+        branches.push(listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq: CONNECT_FAILED, actorEq: q.userId }));
+      }
+      const query = sql`SELECT * FROM (${sql.join(branches, sql` UNION ALL `)}) AS activity_attention ORDER BY occurred_at DESC, seq::bigint DESC LIMIT ${q.limit}`;
+      return rowsOf(await db.execute(query)).map(toRecord);
+    },
     async list(q) {
       check(q);
       if (q.windows.length === 0) return [];
@@ -260,13 +294,17 @@ export function createActivityReader(
 }
 
 export function createActivityRepo(db: Database, projectId: string): ActivityRepo {
+  const { list, summary } = createActivityReader(db, [projectId]);
   return {
-    ...createActivityReader(db, [projectId]),
+    list,
+    summary,
     async insert(event) {
       const details = activityDetailsSchema(event.kind).parse(event.details);
       const message = clipMessage(event.message);
       if (message.length === 0) throw new Error("An activity event needs a message");
       const providerKeys = event.providerKeys ?? (event.providerKey ? [event.providerKey] : []);
+      // Writers take a shared lock on the project row before drawing `seq`, so marking read can wait them out (022 R3).
+      await db.execute(sql`SELECT 1 FROM projects WHERE id = ${projectId} FOR KEY SHARE`);
       const [row] = await db
         .insert(activityEvents)
         .values({

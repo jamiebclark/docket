@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { ActivityFilters } from "@/components/activity/ActivityFilters";
 import { ActivitySummary } from "@/components/activity/ActivitySummary";
 import { ActivityList } from "@/components/activity/ActivityList";
+import { NotificationsChanged } from "@/components/notifications/NotificationsChanged";
+import { ensureProblemsViewMarked } from "@/components/notifications/request";
 import { Alert } from "@/components/ui/Alert";
 import { buttonStyles } from "@/components/ui/Button";
 import { CursorPagination } from "@/components/ui/CursorPagination";
@@ -32,6 +34,7 @@ function hrefWith(slug: string, page: ActivityPage, key: "before" | "after", cur
 }
 
 export default async function ActivityPage({ params, searchParams }: Props) {
+  const marked = await ensureProblemsViewMarked();
   const { projectSlug } = await params;
   const raw = await searchParams;
   let scope;
@@ -48,6 +51,7 @@ export default async function ActivityPage({ params, searchParams }: Props) {
 
   return (
     <section>
+      {marked ? <NotificationsChanged /> : null}
       <PageHeader
         title="Activity"
         description={`Everything that happened to publishing in this project. Times are in ${zone}.`}

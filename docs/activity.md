@@ -55,3 +55,17 @@ Each row shows the time, outcome, platform and account, the post, what happened,
 ## API
 
 `GET /api/v1/activity` returns the same events newest first, with the same filters (`outcome`, `platform`, `account`, `from`, `to`, `range`) and an opaque `cursor`. A key needs the `read` permission. See the OpenAPI document at `/api/v1/openapi.json`, and the [n8n recipe](n8n.md#8-read-activity).
+
+## Notifications
+
+Docket tells you about problems without you opening Activity. A **bell** in the header shows how many problems are unread; it is always there and the count hides at zero ("99+" above 99).
+
+- **What counts.** Failed, ambiguous and needs-reauth events from your projects. A connect attempt that failed counts only for the person who made it. Webhooks for the same events are described in [n8n](n8n.md); notifications are the in-app view.
+- **Unread** means newer than where you last looked in that project, not "still broken": a problem stays unread after it is fixed until it is marked read. Each person has one position per project, and it only moves forward.
+- **Marking read.** Exactly three things do it: *Mark all as read* (every project you belong to, muted or not), the project's Activity with the *Problems* preset and no other filter (first page), and All activity with the same preset (the projects it covers). Opening the bell, other filters and paging mark nothing.
+- **Muting.** Turn a project's notifications off on your **Notifications** page (`/notifications`, in the user menu and the bell panel) or on the project's settings page. Muting hides; the events stay in Activity. Turning notifications back on starts fresh: the project is marked read at that moment.
+- **Starting points.** A new member starts at the moment they joined, so an invited person sees no old problems. A rejoin starts again. The first deploy marked everything before it as read.
+- **Refresh.** The count updates every 60 seconds while the tab is visible, and once when it becomes visible again. It is quiet: screen readers hear it only when the count rises. Without JavaScript the bell is a link to `/notifications`.
+- **Only inside Docket.** Docket only notifies you inside Docket; to get problems by email, chat or phone, send its webhooks to a tool such as n8n (see [n8n.md](n8n.md)).
+- **Callout.** A project's home and Posts show "Problems since you last looked" with a link to Activity with Problems.
+- **API.** `GET /api/me/notifications` (count) and `/api/me/notifications/recent` (up to 10 items) serve the signed-in session only; they never carry event details, tokens or post text.
