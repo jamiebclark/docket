@@ -200,6 +200,13 @@ export const postTargets = pgTable(
     overrideText: text("override_text"),
     /** The post type a person or API caller chose; null = the provider's default. */
     chosenPostType: text("chosen_post_type").$type<PostType>(),
+    /** The target's posting values (G25), parsed by the provider's `posting.valuesSchema`; null = never set. */
+    postingFields: jsonb("posting_fields"),
+    /** Who agreed to the provider's consent declaration (G27), when, and the fingerprint and details shown. */
+    consentByUserId: uuid("consent_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    consentAt: timestamp("consent_at", { withTimezone: true }),
+    consentFingerprint: text("consent_fingerprint"),
+    consentDetails: jsonb("consent_details"),
     stepState: jsonb("step_state"),
     inFlightStep: text("in_flight_step"),
     inFlightMayPublish: boolean("in_flight_may_publish"),
@@ -235,6 +242,10 @@ export const postTargets = pgTable(
     check(
       "post_targets_chosen_post_type_known",
       sql`${t.chosenPostType} IS NULL OR ${t.chosenPostType} IN ('text','image','carousel','video','story','reel')`,
+    ),
+    check(
+      "post_targets_consent_pair",
+      sql`(${t.consentAt} IS NULL) = (${t.consentFingerprint} IS NULL) AND (${t.consentDetails} IS NULL OR ${t.consentFingerprint} IS NOT NULL)`,
     ),
     check("post_targets_lease_pair", sql`(${t.leaseUntil} IS NULL) = (${t.leaseOwner} IS NULL)`),
     check(
