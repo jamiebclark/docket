@@ -6,6 +6,8 @@ import type { AccountRecord } from "../../dal/accounts";
 import { ConflictError } from "../../dal/errors";
 import { attemptActor, type ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
+import { resolvedEvent } from "../activity/classify";
+import { recordTargetEvent } from "../activity/record";
 import { allocateNextFree, nearQueuedWarnings, plannedTime, type Warning } from "../queue";
 import { gate } from "./gate";
 import { withLockedTarget } from "./locked";
@@ -68,15 +70,22 @@ export function retryBlockedReason(account: AccountRecord | null, providerRegist
  * The body of `retryTarget` for callers that already hold the post and target locks (bulk retry).
  * The caller does the permission check, the locking and `applyDerivedStatus`.
  */
-export async function retryLockedTarget(tx: Tx, target: TargetRecord, now: Date, input: RetryInput): Promise<RetryResult> {
+export async function retryLockedTarget(
+  tx: Tx,
+  target: TargetRecord,
+  now: Date,
+  input: RetryInput,
+  opts?: { via?: "bulk" },
+): Promise<RetryResult> {
   if (target.status === "publishing") throw new ConflictError("Publishing in progress. Try again in a moment.", { reason: "publishing" });
   if (target.status !== "failed") throw new ConflictError("This post is no longer failed.", { reason: "not_failed" });
   const account = await tx.accounts.get(target.socialAccountId);
   const providerRegistered = !!account && !!findProvider(account.providerKey);
   const blocked = retryBlockedReason(account, providerRegistered);
   if (blocked) throw new ConflictError(blocked, { reason: retryBlockedKey(account, providerRegistered)! });
-  if (input.mode === "requeue") return requeueTarget(tx, target, account!.displayName, now, input.expected);
-  if (input.mode === "at") return retryAtTime(tx, target, now, new Date(input.at));
+  const ev: EventCtx = { providerKey: account!.providerKey, via: opts?.via };
+  if (input.mode === "requeue") return requeueTarget(tx, target, account!.displayName, now, input.expected, ev);
+  if (input.mode === "at") return retryAtTime(tx, target, now, new Date(input.at), ev);
   const updated = await tx.targets.update(
     target.id,
     {
@@ -92,6 +101,7 @@ export async function retryLockedTarget(tx: Tx, target: TargetRecord, now: Date,
   );
   if (!updated) throw new ConflictError("This post is no longer failed.", { reason: "not_failed" });
   await tx.attempts.insert({ postTargetId: target.id, step: "user", outcome: "retry_requested", ...attemptActor(tx), at: now });
+  await recordRetried(tx, target, now, ev, "retry_now", { mode: "now", scheduledAt: now });
   return {
     status: "scheduled",
     mode: "now",
@@ -103,11 +113,47 @@ export async function retryLockedTarget(tx: Tx, target: TargetRecord, now: Date,
   };
 }
 
+interface EventCtx {
+  providerKey: string;
+  via: "bulk" | undefined;
+}
+
+/** The activity row for a retry that was applied; a bulk run reads as `bulk_retry` whichever mode it used. */
+async function recordRetried(
+  tx: Tx,
+  target: TargetRecord,
+  now: Date,
+  ev: EventCtx,
+  action: "retry_now" | "retry_requeue" | "retry_at",
+  extra: { mode?: "now" | "requeue"; scheduledAt?: Date },
+): Promise<void> {
+  const { actorUserId, actorApiKeyId } = attemptActor(tx);
+  await recordTargetEvent(
+    tx,
+    resolvedEvent({
+      action: ev.via === "bulk" ? "bulk_retry" : action,
+      target,
+      providerKey: ev.providerKey,
+      actor: { actorUserId, actorApiKeyId },
+      now,
+      ...(extra.scheduledAt && action !== "retry_now" ? { scheduledAt: extra.scheduledAt } : {}),
+      ...(ev.via === "bulk" && extra.mode ? { mode: extra.mode } : {}),
+    }),
+  );
+}
+
 const lost = () => new ConflictError("This post is no longer failed.", { reason: "not_failed" });
 
 const RESETS = { attemptCount: 0, stepState: null, firstStepAt: null, publishStartedAt: null, lastError: null } as const;
 
-async function requeueTarget(tx: Tx, target: TargetRecord, accountName: string, now: Date, expected?: string): Promise<RetryResult> {
+async function requeueTarget(
+  tx: Tx,
+  target: TargetRecord,
+  accountName: string,
+  now: Date,
+  expected: string | undefined,
+  ev: EventCtx,
+): Promise<RetryResult> {
   const g = await gate(tx, target);
   if (!g.ok) return { status: "failed", reason: g.code === "validation" ? "validation" : "account_unavailable", message: g.message, issues: g.issues };
   const slot = await allocateNextFree(tx, { id: target.id, accountId: target.socialAccountId }, { after: now, ownOccurrence: target.slotOccurrenceAt });
@@ -140,6 +186,7 @@ async function requeueTarget(tx: Tx, target: TargetRecord, accountName: string, 
     ...attemptActor(tx),
     at: now,
   });
+  await recordRetried(tx, target, now, ev, "retry_requeue", { mode: "requeue", scheduledAt: slot.instant });
   return {
     status: "scheduled",
     mode: "requeue",
@@ -151,7 +198,7 @@ async function requeueTarget(tx: Tx, target: TargetRecord, accountName: string, 
   };
 }
 
-async function retryAtTime(tx: Tx, target: TargetRecord, now: Date, when: Date): Promise<RetryResult> {
+async function retryAtTime(tx: Tx, target: TargetRecord, now: Date, when: Date, ev: EventCtx): Promise<RetryResult> {
   if (when.getTime() <= now.getTime()) {
     return { status: "failed", reason: "in_past", message: "That time has passed. Use Retry now instead." };
   }
@@ -167,6 +214,7 @@ async function retryAtTime(tx: Tx, target: TargetRecord, now: Date, when: Date):
     ...attemptActor(tx),
     at: now,
   });
+  await recordRetried(tx, target, now, ev, "retry_at", { scheduledAt: when });
   return {
     status: "scheduled",
     mode: "at",

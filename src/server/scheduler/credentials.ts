@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { RefreshResult, SocialProvider } from "../../providers/types";
 import * as clock from "../dal/clock";
 import { forSchedulerProject, type ClaimedAccount } from "../dal/scheduler";
+import { recordAccountNeedsReauth } from "../services/activity/record";
 import { emitEvent } from "../services/webhooks/emit";
 import { decryptCredentials, encryptCredentials } from "../services/accounts";
 import type { SchedulerConfig } from "./config";
@@ -16,7 +17,10 @@ export async function recordRefreshEmitting(repos: Repos, id: string, token: str
   if (patch.status !== "needs_reauth") return (await repos.accounts.recordRefresh(id, token, patch)).changed;
   return repos.transaction(async (tx) => {
     const r = await tx.accounts.recordRefresh(id, token, patch);
-    if (r.changed && r.previousStatus === "active") await emitEvent(tx, "account.needs_reauth", { accountId: id });
+    if (r.changed && r.previousStatus === "active") {
+      await emitEvent(tx, "account.needs_reauth", { accountId: id });
+      await recordAccountNeedsReauth(tx, id, "renewal_refused");
+    }
     return r.changed;
   });
 }
@@ -29,7 +33,10 @@ export async function markInvalidEmitting(
 ): Promise<boolean> {
   return repos.transaction(async (tx) => {
     const r = await tx.accounts.markCredentialsInvalid(id, opts);
-    if (r.changed && r.previousStatus === "active") await emitEvent(tx, "account.needs_reauth", { accountId: id });
+    if (r.changed && r.previousStatus === "active") {
+      await emitEvent(tx, "account.needs_reauth", { accountId: id });
+      await recordAccountNeedsReauth(tx, id, "credentials_invalid");
+    }
     return r.changed;
   });
 }

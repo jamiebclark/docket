@@ -2,6 +2,7 @@ import type { StepResult } from "../../providers/types";
 import type { AttemptOutcome } from "../dal/attempts";
 import { forSchedulerProject } from "../dal/scheduler";
 import type { TargetPatch } from "../dal/targets";
+import { eventForStep } from "../services/activity/classify";
 import { applyDerivedStatus } from "../services/posts/status";
 import { nextRetryAt } from "./backoff";
 import type { SchedulerConfig } from "./config";
@@ -103,6 +104,9 @@ export interface RecordInput {
   projectId: string;
   postId: string;
   targetId: string;
+  /** With `providerKey`, lets an applied result write its activity event in this transaction. */
+  socialAccountId?: string;
+  providerKey?: string;
   token: string;
   step: string;
   outcome: StepOutcome;
@@ -136,7 +140,18 @@ export function recordStepResult(input: RecordInput): Promise<boolean> {
       tickId: input.tickId,
       at: input.now,
     });
-    if (applied) await applyDerivedStatus(tx, input.postId);
+    if (applied) {
+      if (input.socialAccountId && input.providerKey) {
+        const event = eventForStep({
+          outcome: input.outcome,
+          now: input.now,
+          target: { id: input.targetId, postId: input.postId, socialAccountId: input.socialAccountId },
+          account: { id: input.socialAccountId, providerKey: input.providerKey },
+        });
+        if (event) await tx.activity.insert(event);
+      }
+      await applyDerivedStatus(tx, input.postId);
+    }
     return applied;
   });
 }
