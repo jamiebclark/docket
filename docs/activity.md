@@ -25,6 +25,16 @@ Nothing is written when nothing changed, for example a retry that found no free 
 
 History outlives what it describes. Deleting a post or removing an account keeps its events (labelled "Post deleted" or "Removed account"). Only deleting the project removes them.
 
+## What is not recorded
+
+- **No publish content.** An event keeps at most a short excerpt of the post's text, never the full text or media. The post itself is the source for content.
+- **No secrets.** Messages are scrubbed of tokens, passwords and other credentials before they are stored, and the stored details are limited to a small set of fields (counts, times, a link to the published post).
+- **No engagement metrics.** Likes, reach and the like are not part of Activity.
+
+## Retention
+
+Docket keeps every event until its project is deleted; there is no automatic expiry and nothing edits or removes an event. An event takes about 0.5 KB, so 100,000 events is roughly 50 MB. The date filters are index-backed, so they stay fast as the table grows.
+
 ## Filtering
 
 Every filter is a URL parameter, so a view can be bookmarked or shared.
