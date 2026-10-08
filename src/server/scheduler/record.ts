@@ -13,6 +13,8 @@ export interface StepOutcome {
   error: string | null;
 }
 
+export const AFTER_PUBLISH_SUFFIX = "The post may already be live; check before retrying.";
+
 const RELEASED = { leaseOwner: null, leaseUntil: null, inFlightStep: null, inFlightMayPublish: null } as const;
 
 /**
@@ -25,6 +27,8 @@ export function applyStepResult(input: {
   now: Date;
   config: Pick<SchedulerConfig, "maxAttempts" | "backoffBaseMs" | "backoffMaxMs">;
   secrets?: readonly string[];
+  /** The leased step runs after the publishing step was sent: running out of attempts is ambiguous, not failed. */
+  afterPublish?: boolean;
 }): StepOutcome {
   const { result, target, now, config } = input;
   const secrets = input.secrets ?? [];
@@ -61,6 +65,14 @@ export function applyStepResult(input: {
     case "retryable_error": {
       const error = clean(result.error);
       const attemptCount = target.attemptCount + 1;
+      if (attemptCount >= config.maxAttempts && input.afterPublish) {
+        const message = `${error} ${AFTER_PUBLISH_SUFFIX}`;
+        return {
+          outcome: "ambiguous",
+          error: message,
+          patch: { ...RELEASED, status: "ambiguous", attemptCount, nextAttemptAt: null, lastError: message },
+        };
+      }
       if (attemptCount >= config.maxAttempts) {
         return {
           outcome: "retryable_error",

@@ -313,6 +313,12 @@ export interface StepInfo {
   mayPublish: boolean;
   /** Units of the provider's creation allowance this lease reserves. Requires `creationAllowance`. */
   allowance?: { units: number; retryUnits: number };
+  /**
+   * A step that may publish has already been sent for this target. Requires `mayPublish: false`.
+   * The engine never fails such a lease on its own: an outcome it would record as failed is ambiguous.
+   * A provider's own `fatal_error` still fails.
+   */
+  afterPublish?: true;
 }
 
 export interface PublishContext {
@@ -349,7 +355,8 @@ export type StepResult = (
   | { kind: "done"; externalId: string; url?: string }
   | { kind: "retryable_error"; error: string; notBefore?: Date; credentialsExpired?: boolean }
   | { kind: "fatal_error"; error: string; credentialsInvalid?: true }
-  | { kind: "ambiguous"; error: string }
+  /** `credentialsInvalid`: the platform rejected the credentials; the account is flagged, and the target stays ambiguous. */
+  | { kind: "ambiguous"; error: string; credentialsInvalid?: true }
 ) & { summary?: AttemptSummary };
 
 export type RefreshResult =

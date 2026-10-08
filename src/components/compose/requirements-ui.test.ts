@@ -72,9 +72,9 @@ describe("conversionText / rangeText", () => {
 
 describe("videoLine and the video rows", () => {
   it("says video is not accepted yet", () => {
-    expect(videoLine(of("facebook"))).toBe("Video: not accepted yet");
-    expect(row(of("facebook"), "Video")).toBe("not accepted yet");
-    expect(row(of("facebook"), "Video width")).toBeUndefined();
+    expect(videoLine(of("x"))).toBe("Video: not accepted yet");
+    expect(row(of("x"), "Video")).toBe("not accepted yet");
+    expect(row(of("x"), "Video width")).toBeUndefined();
   });
   it("describes the mock's limits and marks undeclared ones", () => {
     const r = of("mock");

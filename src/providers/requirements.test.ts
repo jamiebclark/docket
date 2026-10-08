@@ -186,8 +186,24 @@ describe("label helpers", () => {
       });
     });
 
+    it("pins one Instagram summary note list per type", () => {
+      const notes = (postType: "video" | "reel" | "carousel") => requirementsOf(ig, { uploadTypes, postType }).video.notes;
+      expect(notes("video")).toEqual([]);
+      expect(notes("reel")).toEqual([]);
+      expect(notes("carousel")).toEqual(["Reels cannot be carousel items."]);
+    });
+
+    it("shows the notes of any shown type, not only carousel", () => {
+      const caps: ProviderCapabilities = {
+        ...ig,
+        video: { ...ig.video, byPostType: { ...ig.video.byPostType, reel: { ...ig.video.byPostType?.reel, notes: ["Vertical only."] } } },
+      };
+      expect(requirementsOf(caps, { uploadTypes, postType: "reel" }).video.notes).toEqual(["Vertical only."]);
+      expect(requirementsOf(caps, { uploadTypes, postType: "video" }).video.notes).toEqual([]);
+    });
+
     it("leaves providers without choices or per-type limits unchanged", () => {
-      for (const key of ["mock", "facebook", "threads", "bluesky", "x"]) {
+      for (const key of ["mock", "threads", "bluesky", "x"]) {
         const r = requirementsOf(findProvider(key)!.capabilities, { uploadTypes });
         expect(r.carousel, key).toBeNull();
         expect(r.video.postType, key).toBeNull();

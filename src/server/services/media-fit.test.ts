@@ -118,6 +118,11 @@ describe("fitOf for video", () => {
     ]);
     expect(fitOf(video({ frameRate: 15 }), by("instagram")).details[0]).toMatch(/^This video is 15 fps; the minimum is 23 fps for an Instagram Feed video/);
   });
+  it("fits Facebook as a Page video, even a long one, and is never converted", () => {
+    for (const asset of [video(), video({ durationMs: 999_000 }), video({ container: "mov" })]) {
+      expect(fitOf(asset, by("facebook"))).toMatchObject({ state: "fits", details: [], steps: [], convertedTo: null });
+    }
+  });
   it("is never converted", () => {
     for (const p of listProviders()) {
       for (const asset of [video(), video({ durationMs: 999_000 }), video({ container: "mov" })]) {

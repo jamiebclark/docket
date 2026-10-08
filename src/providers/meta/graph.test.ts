@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeGraph } from "../../../tests/helpers/fake-graph";
-import { graphList, graphRequest, type MetaApp } from "./graph";
+import { graphList, graphRequest, ruploadRequest, type MetaApp } from "./graph";
 
 const app: MetaApp = { graphBase: "https://graph.facebook.com", version: "v26.0" };
 const fake = createFakeGraph();
@@ -107,5 +107,47 @@ describe("graphList", () => {
     expect(await graphList(app, { method: "GET", path: "/me/accounts", signal: signal() }, 4)).toEqual({ kind: "ok", items: [], truncated: false });
     fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { nope: 1 } });
     expect((await graphList(app, { method: "GET", path: "/me/accounts", signal: signal() }, 4)).kind).toBe("unparseable");
+  });
+});
+
+describe("ruploadRequest", () => {
+  const url = new URL("https://rupload.facebook.com/video-upload/555");
+
+  it("sends a header-only POST with the token only in Authorization", async () => {
+    fake.on("POST", "/video-upload/555", { kind: "ok", body: { success: true } });
+    const r = await ruploadRequest({ url, token: "SECRET", headers: { file_url: "https://m/v.mp4" }, signal: signal() });
+    expect(r).toEqual({ kind: "ok", status: 200, body: { success: true } });
+    const [req] = fake.requests;
+    expect(req).toMatchObject({ method: "POST", host: "rupload.facebook.com", path: "/video-upload/555", params: {}, bodyBytes: 0, hadToken: true });
+    expect(req?.headers).toMatchObject({ file_url: "https://m/v.mp4", authorization: "[redacted]" });
+  });
+
+  it("never puts the token in the URL or the body", async () => {
+    const seen: { url: string; init?: RequestInit }[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = ((u: RequestInfo | URL, i?: RequestInit) => {
+      seen.push({ url: String(u), ...(i ? { init: i } : {}) });
+      return real(u, i);
+    }) as typeof fetch;
+    await ruploadRequest({ url, token: "SECRET", headers: {}, signal: signal() });
+    expect(seen[0]?.url).not.toContain("SECRET");
+    expect(seen[0]?.init?.body).toBeUndefined();
+    expect((seen[0]?.init?.headers as Record<string, string>).authorization).toBe("OAuth SECRET");
+  });
+
+  it("maps outcomes like graphRequest", async () => {
+    fake.on("POST", "/video-upload/555", [
+      { kind: "graph_error", code: 190 },
+      { kind: "http", status: 503 },
+      { kind: "unparseable" },
+      { kind: "pre_send_failure" },
+      { kind: "hang" },
+    ]);
+    const call = (s = signal()) => ruploadRequest({ url, token: "T", headers: {}, signal: s });
+    expect(await call()).toMatchObject({ kind: "graph_error", error: { code: 190 } });
+    expect(await call()).toEqual({ kind: "http_error", status: 503 });
+    expect(await call()).toMatchObject({ kind: "unparseable" });
+    expect(await call()).toEqual({ kind: "network", phase: "before_send" });
+    expect(await call(AbortSignal.timeout(20))).toEqual({ kind: "network", phase: "after_send" });
   });
 });

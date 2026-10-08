@@ -5,6 +5,8 @@ import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import { runTick } from "../../src/server/scheduler";
 import { encryptCredentials } from "../../src/server/services/accounts";
 import { testDb } from "./db";
+import type { PostType } from "../../src/providers/types";
+import { createVideoAsset } from "./factories";
 import { jpeg } from "./images";
 import { createDueTarget } from "./scheduling";
 import { createProjectWithMembers } from "./factories";
@@ -54,4 +56,33 @@ export async function metaSetup(providerKey: "facebook" | "instagram", externalI
   const row = async () =>
     (await testDb().select().from(postTargets).where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, target.id))))[0]!;
   return { projectId, accountId: account.id, targetId: target.id, tick, row };
+}
+
+/**
+ * A project with a connected Facebook Page and one due target carrying one ready landscape video (1920 × 1080, 20 s, H.264/AAC).
+ * `video` overrides its facts; `postType` is the target's chosen post type, and `setPostType` changes it between ticks.
+ */
+export async function facebookVideoSetup(
+  storage: MemoryStorage,
+  text: string,
+  opts: { postType?: PostType; video?: Parameters<typeof createVideoAsset>[1] } = {},
+) {
+  const base = await metaSetup("facebook", PAGE_ID, storage, text, 0);
+  const { projectId, targetId } = base;
+  const [target] = await testDb()
+    .select({ postId: postTargets.postId })
+    .from(postTargets)
+    .where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, targetId)));
+  const postId = target!.postId;
+  const video = await createVideoAsset(projectId, { width: 1920, height: 1080, durationSeconds: 20, ...opts.video });
+  await storage.put(video.storageKey, Buffer.from("not really a video"), "video/mp4"); // the engine checks the object exists
+  await createSchedulingRepos(testDb(), projectId).posts.setMedia(postId, [video.id]);
+  const setPostType = async (type: PostType | null) => {
+    await testDb()
+      .update(postTargets)
+      .set({ chosenPostType: type })
+      .where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, targetId)));
+  };
+  if (opts.postType) await setPostType(opts.postType);
+  return { ...base, postId, video, setPostType };
 }

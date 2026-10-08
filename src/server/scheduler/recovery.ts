@@ -16,7 +16,7 @@ export type Recovery =
  * Handles a claimed target whose lease expired while a step was in flight (FR-035, D5).
  * A step that could have published is never repeated; a safe one is retried with the attempt counted.
  */
-export function recoverExpiredLease(target: TargetRecord, config: SchedulerConfig, tickId: string): Recovery {
+export function recoverExpiredLease(target: TargetRecord, config: SchedulerConfig, tickId: string, opts: { afterPublish?: boolean } = {}): Recovery {
   if (target.inFlightStep === null) return { kind: "none" };
   if (target.inFlightMayPublish) {
     return {
@@ -32,6 +32,15 @@ export function recoverExpiredLease(target: TargetRecord, config: SchedulerConfi
   const attempts: Attempts = [
     { step: target.inFlightStep, outcome: "recovered_retry", tickId, error: "Lease expired; the step is being retried." },
   ];
+  if (attemptCount >= config.maxAttempts && opts.afterPublish) {
+    const lastError = "Publishing was interrupted too many times after the post was sent; check before retrying.";
+    return {
+      kind: "settled",
+      outcome: "ambiguous",
+      patch: { status: "ambiguous", attemptCount, nextAttemptAt: null, lastError },
+      attempts,
+    };
+  }
   if (attemptCount >= config.maxAttempts) {
     return {
       kind: "settled",
