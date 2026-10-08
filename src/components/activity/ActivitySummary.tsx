@@ -4,7 +4,7 @@ import type { ActivityPreset } from "@/lib/activity/outcomes";
 import type { ActivitySummary as Summary } from "@/server/services/activity";
 import { filterToSearchParams, type ActivityFilter } from "@/server/services/activity/filters";
 
-/** "{label}: N successes · M problems"; each count links to its preset with the other filters kept. */
+/** "{label}: N successes · M problems" (singular for one); each count links to its preset with the other filters kept. */
 export function ActivitySummary({ summary, filter, basePath }: { summary: Summary; filter: ActivityFilter; basePath: string }) {
   const href = (preset: ActivityPreset) => {
     const p = filterToSearchParams(filter);
@@ -15,11 +15,11 @@ export function ActivitySummary({ summary, filter, basePath }: { summary: Summar
     <p aria-live="polite" className="text-sm">
       <span className="font-medium">{summary.label}:</span>{" "}
       <Link href={href("successes")} prefetch={false} className="underline">
-        {summary.successes} successes
+        {summary.successes} {summary.successes === 1 ? "success" : "successes"}
       </Link>
       {" · "}
       <Link href={href("problems")} prefetch={false} className="underline">
-        {summary.problems} problems
+        {summary.problems} {summary.problems === 1 ? "problem" : "problems"}
       </Link>
       {filter.outcomes ? <span className={hintStyles}> (counts ignore the outcome filter)</span> : null}
     </p>
