@@ -20,6 +20,7 @@ export const projectOwnedTables = [
   { table: "post_media", scopeColumn: "project_id" },
   { table: "post_targets", scopeColumn: "project_id" },
   { table: "publish_attempts", scopeColumn: "project_id" },
+  { table: "activity_events", scopeColumn: "project_id" },
   { table: "connect_attempts", scopeColumn: "project_id" },
   { table: "voice_profiles", scopeColumn: "project_id" },
   { table: "voice_profile_versions", scopeColumn: "project_id" },

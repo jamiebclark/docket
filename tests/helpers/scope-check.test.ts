@@ -111,3 +111,42 @@ describe("generation tables are in the project-owned registry", () => {
     },
   );
 });
+
+describe("project-set statements", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const B = "22222222-2222-4222-8222-222222222222";
+  const OUTSIDE = "33333333-3333-4333-8333-333333333333";
+  const registry = [...projectOwnedTables];
+  const set = { reason: "activity: my projects", projectIds: [A, B] };
+  const sql = (n: number) => `select * from activity_events where activity_events.project_id = $${n}`;
+
+  it("passes a pin inside the caller's set", () => {
+    const r = checkScope([{ sql: sql(1), params: [A], projectSet: set }], registry);
+    expect(r.violations).toEqual([]);
+    expect(r.projectSet.map((p) => p.reason)).toEqual(["activity: my projects"]);
+  });
+
+  it("fails a pin outside the set", () => {
+    const { violations } = checkScope([{ sql: sql(2), params: ["x", OUTSIDE], projectSet: set }], registry);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/^Project-set query pinned to a project outside the caller's set \("activity: my projects"\)/);
+  });
+
+  it("fails an unpinned activity_events query inside the section", () => {
+    const { violations } = checkScope(
+      [{ sql: "select * from activity_events where activity_events.outcome = $1", params: ["failed"], projectSet: set }],
+      registry,
+    );
+    expect(violations[0]).toMatch(/^Unscoped query on project-owned table "activity_events"/);
+  });
+
+  it("checks every pin of a union, and ignores non-pin parameters", () => {
+    const union = `(select * from activity_events where activity_events.project_id = $1 and activity_events.platform = $2) union all (select * from activity_events where activity_events.project_id = $3)`;
+    expect(checkScope([{ sql: union, params: [A, OUTSIDE, B], projectSet: set }], registry).violations).toEqual([]);
+    expect(checkScope([{ sql: union, params: [A, A, OUTSIDE], projectSet: set }], registry).violations).toHaveLength(1);
+  });
+
+  it("leaves a record without a project set exactly as before", () => {
+    expect(checkScope([{ sql: sql(1), params: [OUTSIDE] }], registry).violations).toEqual([]);
+  });
+});

@@ -18,6 +18,8 @@ export type { WebhooksRepo } from "./webhooks";
 export type { AuditEntry, AuditRow, MembershipAction } from "./audit";
 export { bootstrapFirstUser, isSetupAvailable } from "./install";
 export type { FirstUserInput } from "./install";
+export { forMyProjects } from "./my-projects";
+export type { MyProject, ProjectSetScope } from "./my-projects";
 export { createProject, listMyProjects, getProject } from "./projects";
 export type { NewProject, ProjectRecord, ProjectSummary } from "./projects";
 export type { MemberRow, MembersRepo } from "./members";
@@ -36,6 +38,7 @@ export type {
   TargetsRepo,
   TargetStatus,
 } from "./targets";
+export type { ActivityPosition, ActivityRecord, ActivityRepo, BranchQuery, NewActivityEvent } from "./activity";
 export type { AttemptEntry, AttemptOutcome, AttemptRow, AttemptsRepo } from "./attempts";
 export { now, runAtTime } from "./clock";
 export { closeDb } from "../db/client";

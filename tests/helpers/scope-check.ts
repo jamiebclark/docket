@@ -7,12 +7,15 @@ export interface QueryRecord {
   sql: string;
   params?: readonly unknown[];
   crossProjectReason?: string;
+  /** Set for statements run inside `runForProjectSet`: every project pin must be one of `projectIds`. */
+  projectSet?: { reason: string; projectIds: readonly string[] };
 }
 
 export interface ScopeCheckResult {
   violations: string[];
   checked: number;
   crossProject: { reason: string; sql: string }[];
+  projectSet: { reason: string; sql: string }[];
 }
 
 interface TableRef {
@@ -173,6 +176,23 @@ function splitScopes(sql: string): string[] {
   );
 }
 
+/** Every `scopeColumn = $n` pin of a project-set statement must bind one of the caller's project ids. */
+function foreignPins(sql: string, refs: TableRef[], record: QueryRecord): string[] {
+  const set = record.projectSet!;
+  const out: string[] = [];
+  const eq = new RegExp(`${COL}\\s*=\\s*\\$(\\d+)`, "gi");
+  for (const m of sql.matchAll(eq)) {
+    const { q, col } = parseCol(m[1], m[2], m[3], m[4]);
+    const isPin = refs.some((r) => r.scopeColumn === col && (!q || r.alias === q || r.table === q));
+    if (!isPin) continue;
+    const value = record.params?.[Number(m[5]) - 1];
+    if (typeof value !== "string" || !set.projectIds.includes(value)) {
+      out.push(`Project-set query pinned to a project outside the caller's set ("${set.reason}"):\n  ${sql}`);
+    }
+  }
+  return out;
+}
+
 export function checkScope(
   records: readonly QueryRecord[],
   projectOwnedTables: readonly ProjectOwnedTable[],
@@ -181,7 +201,7 @@ export function checkScope(
     table: o.table.toLowerCase(),
     scopeColumn: o.scopeColumn.toLowerCase(),
   }));
-  const result: ScopeCheckResult = { violations: [], checked: 0, crossProject: [] };
+  const result: ScopeCheckResult = { violations: [], checked: 0, crossProject: [], projectSet: [] };
 
   for (const record of records) {
     const sql = record.sql.replace(/\s+/g, " ").trim();
@@ -189,8 +209,13 @@ export function checkScope(
       result.crossProject.push({ reason: record.crossProjectReason, sql });
       continue;
     }
-    if (findTables(sql, owned).length === 0) continue;
+    const allRefs = findTables(sql, owned);
+    if (allRefs.length === 0) continue;
     result.checked++;
+    if (record.projectSet) {
+      result.projectSet.push({ reason: record.projectSet.reason, sql });
+      result.violations.push(...foreignPins(sql, allRefs, record));
+    }
     const statementKind = sql.match(/^\s*(\w+)/)?.[1]?.toLowerCase();
 
     // Each query scope (outer query, every subquery) is checked on its own.
