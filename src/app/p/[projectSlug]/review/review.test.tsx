@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../../../../../tests/helpers/actions")).sessionModule);
 vi.mock("next/cache", async () => (await import("../../../../../tests/helpers/actions")).cacheModule);
+vi.mock("server-only", () => ({}));
+// An async server component cannot render under renderToStaticMarkup; the callout has its own tests (notifications/ui.test.tsx).
+vi.mock("@/components/notifications/ProblemsCallout", () => ({ ProblemsCallout: () => null }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }),
   usePathname: () => "/p/x/review",
