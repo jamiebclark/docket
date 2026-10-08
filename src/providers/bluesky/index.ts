@@ -1,4 +1,5 @@
 import type { SocialProvider, StepResult } from "../types";
+import { BLUESKY_VIDEO_ALLOWANCE, blueskyCapabilities } from "./capabilities";
 import { advance } from "./publish";
 import { connectAccount, needsRefresh, refreshCredentials } from "./session";
 import { BLUESKY_DEFAULT_PUBLISH_LIMITS, DEFAULT_PDS_URL, blueskySettingsSchema, type BlueskySettings, type BlueskyState } from "./settings";
@@ -8,19 +9,8 @@ import { validateBluesky } from "./validate";
 export const blueskyProvider: SocialProvider<BlueskySettings, BlueskyState> = {
   key: "bluesky",
   displayName: "Bluesky",
-  capabilities: {
-    text: { maxLength: 300, countingRule: "graphemes" },
-    media: {
-      maxImages: 4,
-      allowedMimeTypes: ["image/jpeg", "image/png"],
-      outputMimeType: "image/jpeg",
-      maxBytesPerFile: 2_000_000,
-      required: false,
-    },
-    video: { maxVideos: 0 },
-    textOnlyAllowed: true,
-    postTypes: ["text", "image", "carousel"],
-  },
+  capabilities: blueskyCapabilities,
+  creationAllowance: BLUESKY_VIDEO_ALLOWANCE,
   connect: {
     strategy: "credentials",
     fields: [

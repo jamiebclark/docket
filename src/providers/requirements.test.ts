@@ -1,3 +1,4 @@
+import { BLUESKY_VIDEO_NOTES } from "./bluesky/capabilities";
 import { describe, expect, it } from "vitest";
 import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { aspectLabel, bytesLabel, requirementsOf } from "./requirements";
@@ -249,13 +250,34 @@ describe("label helpers", () => {
     });
 
     it("leaves providers without choices or per-type limits unchanged", () => {
-      for (const key of ["mock", "bluesky", "x"]) {
+      for (const key of ["mock", "x"]) {
         const r = requirementsOf(findProvider(key)!.capabilities, { uploadTypes });
         expect(r.carousel, key).toBeNull();
         expect(r.video.postType, key).toBeNull();
         expect(r.video.notes, key).toEqual([]);
         expect(r.video.minFrameRate, key).toBeNull();
       }
+    });
+
+    it("summarises Bluesky's video: one MP4 up to 3 minutes and 300 MB, two notes, no post type choice", () => {
+      const r = requirementsOf(findProvider("bluesky")!.capabilities, { uploadTypes });
+      expect(r.carousel).toBeNull();
+      expect(r.video).toMatchObject({
+        maxVideos: 1,
+        withImages: false,
+        silentAllowed: true,
+        postType: null,
+        minFrameRate: null,
+        maxFrameRate: null,
+        adapts: ["cut to 3 minutes", "rewrapped or re-encoded"],
+        cannot: ["cannot be made smaller than 300 MB"],
+      });
+      expect(r.video.containers).toEqual([{ value: "mp4", label: "MP4" }]);
+      expect(r.video.videoCodecs).toEqual([{ value: "h264", label: "H.264" }]);
+      expect(r.video.audioCodecs).toEqual([{ value: "aac", label: "AAC" }]);
+      expect(r.video.maxBytes?.label).toBe("300 MB");
+      expect(r.video.duration).toEqual({ min: null, max: { value: 180, label: "3 minutes" } });
+      expect(r.video.notes).toEqual([...BLUESKY_VIDEO_NOTES]);
     });
   });
 

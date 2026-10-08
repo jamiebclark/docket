@@ -44,7 +44,7 @@ export function applyStepResult(input: {
           status: "publishing",
           stepState: result.state ?? null,
           attemptCount: 0,
-          lastError: null,
+          lastError: result.wait ? clean(result.wait) : null,
           nextAttemptAt: new Date(Math.max(now.getTime(), result.notBefore?.getTime() ?? 0)),
         },
       };

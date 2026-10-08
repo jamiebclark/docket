@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { videoUploadSchema } from "./video-state";
 
 export const DEFAULT_PDS_URL = "https://bsky.social";
 
@@ -39,6 +40,8 @@ export const blueskyStateSchema = z.object({
       }),
     )
     .default([]),
+  /** The video upload in progress (video posts only; data-model §2). */
+  video: videoUploadSchema.optional(),
 });
 export type BlueskyState = z.infer<typeof blueskyStateSchema>;
 

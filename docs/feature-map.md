@@ -15,8 +15,12 @@ spec is written.
   re-encode, or a rewrap) and builds previews. The composer has a video edit dialog (trim, fit, focal point, fill colour). A provider that
   declares video limits gets it. Not yet owned by any spec: burned-in captions, smart crop that follows subjects, a cover frame chosen per
   platform, per-target edits, video upload or edit fields in the public API, generator video input, HDR tone mapping, enlarging small
-  videos, joining or splitting clips, speed or filter effects, audio replacement and adding a silent track. Bluesky video and TikTok
+  videos, joining or splitting clips, speed or filter effects, audio replacement and adding a silent track. Bluesky video (025) and TikTok
   get the formatter by declaring their limits.
+- **Bluesky video (025).** One video per post (MP4, up to 300 MB), uploaded to Bluesky's video service in parts, then checked until
+  Bluesky has processed it, with plain error explanations, an upload-limit check and a daily allowance of about 25. Verified with mocks
+  only until the live checks in `docs/accounts.md` are done. Not yet owned by any spec: WebVTT captions, a GIF hint, a gallery embed,
+  quote posts with video, more than one video or video with images, another video service, API video upload and generator video.
 - **Video groundwork (018).** MP4 and MOV upload to the media library (and the picker) by resumable multipart upload
   straight to the bucket, ffprobe facts, metadata stripping and a poster frame in the worker, per-provider `video`
   capabilities with composer warnings, and ffmpeg in the image. Instagram publishes video as of 019, Facebook as of 021 and Threads as of 023; no other provider does yet, and generation ignores videos.
@@ -61,7 +65,7 @@ The build prompt left video out of scope but kept room for it. `PostType` alread
 | **Facebook Page Reels** (Built, 021) | Yes, through the Reels Publishing API: `POST /{page-id}/video_reels` with `upload_phase=start`, upload to `rupload.facebook.com`, then `finish` with `video_state=PUBLISHED` | Three-step upload, then polling. Separate from the image flow |
 | **Facebook Page video** (Built, 021) | Yes (Page `/videos`) | Built: one `videos` request with `file_url`, chosen per target as Page video or Reel. Not yet owned: byte or chunked upload, Page video status checks, optional fields (title, place, thumbnail, collaborators, draft), Facebook-side scheduling, API video upload, generator video |
 | **Threads video** (Built, 023) | Yes (`media_type=VIDEO`, also in carousels) | Same container-and-poll pattern as Instagram |
-| **Bluesky video** | Yes (`app.bsky.embed.video`: MP4 up to 300 MB, about 25 videos a day; the maximum duration is not documented officially) | Upload to the video service, then poll the job |
+| **Bluesky video** (Built, 025) | Yes (`app.bsky.embed.video`: MP4 up to 300 MB, about 25 videos a day; the maximum duration is not documented officially) | Upload to the video service, then poll the job |
 | **TikTok** | Yes, through the Content Posting API (video and photo posts). Until the app passes TikTok's audit (its length is not published), every post is forced private (`SELF_ONLY`) whatever privacy you ask for. Photo posts can only be pulled from a URL on a domain the deployer has verified with TikTok. Videos can be uploaded directly | A new provider and OAuth app, plus the audit. TikTok also requires its own posting UI elements (privacy picker, interaction toggles), so the composer needs TikTok-specific fields |
 
 ### Video formatter (crop and fit for each account)

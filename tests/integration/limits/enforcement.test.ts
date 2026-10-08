@@ -253,8 +253,9 @@ describe("a creation allowance defers without a platform request or a counted at
         await testDb().insert(allowanceUses).values({ projectId: env.project.id, socialAccountId: account.id, units: row.count, createdAt: usedAt });
         const { target, post } = await createDueTarget(env.project.id, account.id, { baseText: "hi", dueAt: new Date(T0.getTime() - 1000) });
         // Facebook counts only Reels against its allowance, so its target is a Reel; the others count any container.
+        // Bluesky counts only video uploads, so its target carries a video.
         const reel = provider.key === "facebook";
-        const asset = reel ? await createVideoAsset(env.project.id, { width: 1080, height: 1920 }) : await createMediaAsset(env.project.id);
+        const asset = reel || provider.key === "bluesky" ? await createVideoAsset(env.project.id, { width: 1080, height: 1920 }) : await createMediaAsset(env.project.id);
         await forSchedulerProject(env.project.id).posts.setMedia(post.id, [asset.id]);
         if (reel) await forSchedulerProject(env.project.id).targets.update(target.id, { chosenPostType: "reel" });
         await atTime(T0, () => runTick({ config: { maxItems: 100 } }));

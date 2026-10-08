@@ -5,6 +5,8 @@ import { classify, errorName, rateLimitNotBefore, statusOf, type ErrorKind } fro
 import { buildFacets } from "./facets";
 import { blueskyCredentialsSchema, blueskyStateSchema, type BlueskyCredentials, type BlueskyState } from "./settings";
 import { mentionHandles, stepForContent } from "./steps";
+import { advanceVideo } from "./video-publish";
+import { fitState } from "./video-state";
 
 const POST_COLLECTION = "app.bsky.feed.post";
 
@@ -43,7 +45,9 @@ function failed(err: unknown, kind: ErrorKind, request: Record<string, unknown>,
 export async function advance(ctx: PublishContext): Promise<StepResult> {
   try {
     const stateResult = ctx.state === null || ctx.state === undefined ? blueskyStateSchema.safeParse({ v: 1 }) : blueskyStateSchema.safeParse(ctx.state);
-    const expected = stepForContent(ctx.state, { text: ctx.content.text, mediaCount: ctx.content.media.length });
+    const kinds = ctx.content.media.map((m) => m.kind ?? "image");
+    const isVideo = kinds.length === 1 && kinds[0] === "video";
+    const expected = stepForContent(ctx.state, { text: ctx.content.text, mediaCount: ctx.content.media.length, kinds });
     if (!stateResult.success || expected.name === "invalid_state") return fatal("Publishing state is unreadable. Use Retry to start again.");
     if (expected.name !== ctx.step.name) return retryable("The post changed while publishing; will retry.");
     const creds = blueskyCredentialsSchema.safeParse(ctx.account.credentials);
@@ -51,8 +55,9 @@ export async function advance(ctx: PublishContext): Promise<StepResult> {
     const pdsUrl = (ctx.account.settings as { pdsUrl?: unknown } | null)?.pdsUrl;
     if (typeof pdsUrl !== "string") return fatal("Stored account settings are unreadable; reconnect the account.");
 
-    const env: Env = { ctx, pdsUrl, creds: creds.data, state: stateResult.data };
+    const env: Env = { ctx, pdsUrl, creds: creds.data, state: fitState(stateResult.data, { isVideo }) };
     if (ctx.step.name === "resolve_mentions") return await resolveMentions(env);
+    if (isVideo && ctx.step.name !== "create_post") return await advanceVideo(env);
     if (ctx.step.name === "create_post") return await createPost(env);
     return await uploadImage(env);
   } catch {
@@ -130,6 +135,8 @@ async function uploadImage(env: Env): Promise<StepResult> {
   }
 }
 
+const isVideoPost = (ctx: PublishContext) => ctx.content.media.length === 1 && ctx.content.media[0]?.kind === "video";
+
 async function createPost(env: Env): Promise<StepResult> {
   const { ctx, state, creds } = env;
   const { text, media } = ctx.content;
@@ -139,7 +146,16 @@ async function createPost(env: Env): Promise<StepResult> {
     text,
     createdAt: ctx.now.toISOString(),
     ...(built.facets.length ? { facets: built.facets } : {}),
-    ...(state.blobs.length
+    ...(isVideoPost(ctx) && state.video?.blob
+      ? {
+          embed: {
+            $type: "app.bsky.embed.video",
+            video: state.video.blob,
+            ...(media[0]?.width && media[0]?.height ? { aspectRatio: { width: media[0].width, height: media[0].height } } : {}),
+            ...(media[0]?.altText?.trim() ? { alt: media[0].altText } : {}),
+          },
+        }
+      : state.blobs.length
       ? {
           embed: {
             $type: "app.bsky.embed.images",
@@ -160,6 +176,7 @@ async function createPost(env: Env): Promise<StepResult> {
     graphemes: new RichText({ text }).graphemeLength,
     textBytes: Buffer.byteLength(text),
     images: state.blobs.length,
+    ...(state.video?.blob ? { video: true } : {}),
     facets: built.counts,
   };
 
