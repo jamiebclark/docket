@@ -66,5 +66,6 @@ Docket tells you about problems without you opening Activity. A **bell** in the 
 - **Muting.** Turn a project's notifications off on your **Notifications** page (`/notifications`, in the user menu and the bell panel) or on the project's settings page. Muting hides; the events stay in Activity. Turning notifications back on starts fresh: the project is marked read at that moment.
 - **Starting points.** A new member starts at the moment they joined, so an invited person sees no old problems. A rejoin starts again. The first deploy marked everything before it as read.
 - **Refresh.** The count updates every 60 seconds while the tab is visible, and once when it becomes visible again. It is quiet: screen readers hear it only when the count rises. Without JavaScript the bell is a link to `/notifications`.
+- **Only inside Docket.** Docket only notifies you inside Docket; to get problems by email, chat or phone, send its webhooks to a tool such as n8n (see [n8n.md](n8n.md)).
 - **Callout.** A project's home and Posts show "Problems since you last looked" with a link to Activity with Problems.
 - **API.** `GET /api/me/notifications` (count) and `/api/me/notifications/recent` (up to 10 items) serve the signed-in session only; they never carry event details, tokens or post text.

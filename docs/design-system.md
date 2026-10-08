@@ -186,7 +186,7 @@ text/UI pairs in both themes.
 
 ### Notification bell (header)
 
-`NotificationBell` sits in the signed-in header between the project switcher and the user menu, always rendered. The count badge hides at zero and caps at "99+"; the accessible name is the label ("3 unread problems"). The client part refreshes every 60 s while the tab is visible and announces politely only when the count rises. Its panel (`NotificationPanel`) lists up to 10 recent problems with `NotificationList`, moves focus to "Recent problems" on open and returns it to the bell on Escape. Without JavaScript the bell is a link to `/notifications`.
+`NotificationBell` sits in the signed-in header between Invitations and the user menu, always rendered. The count badge hides at zero and caps at "99+"; the accessible name is the label ("3 unread problems"). The client part refreshes every 60 s while the tab is visible and announces politely only when the count rises. Its panel (`NotificationPanel`) lists up to 10 recent problems with `NotificationList`, moves focus to "Recent problems" on open and returns it to the bell on Escape. Without JavaScript the bell is a link to `/notifications`.
 
 ### Page anatomy
 
