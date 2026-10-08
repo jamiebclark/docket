@@ -13,6 +13,7 @@ export type DocPage =
   | "n8n"
   | "security"
   | "storage"
+  | "tiktok-setup"
   | "x-setup";
 
 /** The published URL of a docs page, optionally at a heading anchor (GitHub-style slug, e.g. "local-https-for-threads"). */

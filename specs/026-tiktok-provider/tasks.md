@@ -48,17 +48,17 @@
 
 **Independent Test**: mocked authorize/token/creator-info; callback with code, `scopes`, `state`; confirm token request fields, stored candidate, refusal without `video.publish`, unaudited note (contracts/tiktok-connect.md §5).
 
-- [ ] T016 [P] [US1] Create `src/providers/tiktok/config.ts` (`parseTikTokEnv`: key/secret both or neither, `TIKTOK_APP_AUDITED` default false, endpoints, constants) with `config.test.ts`
-- [ ] T017 [P] [US1] Create `src/providers/tiktok/http.ts` (`tiktokRequest`, `readEnvelope` incl. error codes in HTTP 200 bodies, `scrubTikTok`) with `http.test.ts`
-- [ ] T018 [P] [US1] Create `src/providers/tiktok/credentials.ts` (zod schema, `accountExpiry` = refresh expiry, `needsRefresh` 30 minutes before access expiry)
-- [ ] T019 [US1] Create `src/providers/tiktok/oauth.ts` (code exchange as form body, refresh call) with `oauth.test.ts`
-- [ ] T020 [P] [US1] Create `src/providers/tiktok/creator.ts` (`readCreatorInfo`, `creatorDetailsSchema`)
-- [ ] T021 [US1] Create `src/providers/tiktok/connect-group.ts` (authorize URL, `https` public-host redirect requirement with reason and setup-doc link, no PKCE, no paste fallback, scopes from callback with token-reply fallback, `open_id` identity, `describeCallbackError`) with `connect-group.test.ts`
-- [ ] T022 [US1] Create `src/providers/tiktok/refresh.ts` (rotation replaces refresh token, absent keeps old, refusal → needs_reauth, transient retry after 5 min) with `refresh.test.ts`
-- [ ] T023 [US1] Create `src/providers/tiktok/settings.ts` (settings schema; account notes: unaudited, photo-domain, "Reconnect TikTok before <date>" within 30 days using `now`)
-- [ ] T024 [US1] Create `src/providers/tiktok/index.ts` `SocialProvider` with stub publish steps that fail before any call, and add the one-line registration in `src/providers/registry.ts`
-- [ ] T025 [P] [US1] Create `tests/helpers/fake-tiktok.ts` (scripted OAuth, creator info, init, PUT, status; routes `www.tiktok.com`, `open.tiktokapis.com`, upload host; records requests with secrets redacted)
-- [ ] T026 [US1] Write `tests/integration/tiktok/connect.test.ts` and `tests/integration/tiktok/refresh.test.ts` per contracts/tiktok-connect.md §5 (authorize params, localhost refused, config errors, missing scope refused with no token call, no token in chooser HTML/attempt row/activity/logs, refresh via scheduled section and publish path)
+- [X] T016 [P] [US1] Create `src/providers/tiktok/config.ts` (`parseTikTokEnv`: key/secret both or neither, `TIKTOK_APP_AUDITED` default false, endpoints, constants) with `config.test.ts`
+- [X] T017 [P] [US1] Create `src/providers/tiktok/http.ts` (`tiktokRequest`, `readEnvelope` incl. error codes in HTTP 200 bodies, `scrubTikTok`) with `http.test.ts`
+- [X] T018 [P] [US1] Create `src/providers/tiktok/credentials.ts` (zod schema, `accountExpiry` = refresh expiry, `needsRefresh` 30 minutes before access expiry)
+- [X] T019 [US1] Create `src/providers/tiktok/oauth.ts` (code exchange as form body, refresh call) with `oauth.test.ts`
+- [X] T020 [P] [US1] Create `src/providers/tiktok/creator.ts` (`readCreatorInfo`, `creatorDetailsSchema`)
+- [X] T021 [US1] Create `src/providers/tiktok/connect-group.ts` (authorize URL, `https` public-host redirect requirement with reason and setup-doc link, no PKCE, no paste fallback, scopes from callback with token-reply fallback, `open_id` identity, `describeCallbackError`) with `connect-group.test.ts`
+- [X] T022 [US1] Create `src/providers/tiktok/refresh.ts` (rotation replaces refresh token, absent keeps old, refusal → needs_reauth, transient retry after 5 min) with `refresh.test.ts`
+- [X] T023 [US1] Create `src/providers/tiktok/settings.ts` (settings schema; account notes: unaudited, photo-domain, "Reconnect TikTok before <date>" within 30 days using `now`)
+- [X] T024 [US1] Create `src/providers/tiktok/index.ts` `SocialProvider` with stub publish steps that fail before any call, and add the one-line registration in `src/providers/registry.ts`
+- [X] T025 [P] [US1] Create `tests/helpers/fake-tiktok.ts` (scripted OAuth, creator info, init, PUT, status; routes `www.tiktok.com`, `open.tiktokapis.com`, upload host; records requests with secrets redacted)
+- [X] T026 [US1] Write `tests/integration/tiktok/connect.test.ts` and `tests/integration/tiktok/refresh.test.ts` per contracts/tiktok-connect.md §5 (authorize params, localhost refused, config errors, missing scope refused with no token call, no token in chooser HTML/attempt row/activity/logs, refresh via scheduled section and publish path)
 
 **Checkpoint**: US1 works with mocks.
 
