@@ -1,7 +1,7 @@
-import { and, asc, count, eq, gt, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
-import { mediaAssets, postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
-import type { StepContent } from "../../providers/types";
+import { allowanceUses, mediaAssets, postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
+import type { PostType, StepContent } from "../../providers/types";
 import { createAttemptsRepo, type AttemptEntry } from "./attempts";
 import { createSchedulingRepos, crossProject } from "./scope";
 import type { TargetPatch, TargetRecord } from "./targets";
@@ -29,7 +29,11 @@ export interface ClaimContext {
    * What `stepFor` may look at: the target's effective text (`override_text ?? base_text`) and its post's media count,
    * pinned by `project_id`. `null` when the post row is gone.
    */
-  contentShape(target: { id: string; projectId: string; postId: string }): Promise<StepContent | null>;
+  contentShape(target: { id: string; projectId: string; postId: string }): Promise<ContentShape | null>;
+  /** Creation-allowance reservations for the account since `since`, oldest first. */
+  allowanceUsed(accountId: string, projectId: string, since: Date): Promise<{ at: Date; units: number }[]>;
+  /** Records a reservation stamped with the claim's clock; commits with the lease patch. */
+  reserveAllowance(input: { accountId: string; projectId: string; targetId: string; units: number }): Promise<void>;
 }
 
 export interface ClaimDueOptions {
@@ -41,6 +45,9 @@ export interface ClaimDueOptions {
   /** Per target: return a decision, or `null` to leave it untouched. */
   decide(target: TargetRecord, account: ClaimedAccount, ctx: ClaimContext): Promise<ClaimDecision | null>;
 }
+
+/** `StepContent` plus the target's stored post type choice. */
+export type ContentShape = StepContent & { chosenPostType: PostType | null };
 
 export interface ClaimedTarget {
   target: TargetRecord;
@@ -108,22 +115,49 @@ export function claimDueTargets(opts: ClaimDueOptions): Promise<ClaimedTarget[]>
         },
         async contentShape(target) {
           const [head] = await exec
-            .select({ overrideText: postTargets.overrideText, baseText: posts.baseText })
+            .select({
+              overrideText: postTargets.overrideText,
+              baseText: posts.baseText,
+              chosenPostType: postTargets.chosenPostType,
+            })
             .from(postTargets)
             .innerJoin(posts, and(eq(posts.id, postTargets.postId), eq(posts.projectId, postTargets.projectId)))
             .where(and(eq(postTargets.projectId, target.projectId), eq(postTargets.id, target.id)))
             .limit(1);
           if (!head) return null;
-          const [media] = await exec
-            .select({ n: count(), videos: count(sql`CASE WHEN ${mediaAssets.kind} = 'video' THEN 1 END`) })
+          const items = await exec
+            .select({ kind: mediaAssets.kind })
             .from(postMedia)
             .innerJoin(mediaAssets, and(eq(mediaAssets.id, postMedia.mediaAssetId), eq(mediaAssets.projectId, postMedia.projectId)))
-            .where(and(eq(postMedia.projectId, target.projectId), eq(postMedia.postId, target.postId)));
+            .where(and(eq(postMedia.projectId, target.projectId), eq(postMedia.postId, target.postId)))
+            .orderBy(asc(postMedia.position));
+          const kinds = items.map((i) => (i.kind === "video" ? ("video" as const) : ("image" as const)));
           return {
             text: head.overrideText ?? head.baseText,
-            mediaCount: Number(media?.n ?? 0),
-            videoCount: Number(media?.videos ?? 0),
+            mediaCount: kinds.length,
+            videoCount: kinds.filter((k) => k === "video").length,
+            kinds,
+            chosenPostType: head.chosenPostType,
           };
+        },
+        async allowanceUsed(accountId, projectId, since) {
+          const used = await exec
+            .select({ at: allowanceUses.createdAt, units: allowanceUses.units })
+            .from(allowanceUses)
+            .where(
+              and(
+                eq(allowanceUses.projectId, projectId),
+                eq(allowanceUses.socialAccountId, accountId),
+                gt(allowanceUses.createdAt, since),
+              ),
+            )
+            .orderBy(asc(allowanceUses.createdAt), asc(allowanceUses.id));
+          return used;
+        },
+        async reserveAllowance({ accountId, projectId, targetId, units }) {
+          await exec
+            .insert(allowanceUses)
+            .values({ projectId, socialAccountId: accountId, postTargetId: targetId, units, createdAt: opts.now });
         },
       };
 
@@ -237,3 +271,12 @@ export async function recordWithLease(
   return row !== null;
 }
 
+
+/** Housekeeping: deletes at most `limit` reservations older than `before`; callers wrap this in `crossProject`. */
+export async function pruneAllowanceUsesBefore(before: Date, limit: number): Promise<number> {
+  const db = getDb();
+  const ids = await db.select({ id: allowanceUses.id }).from(allowanceUses).where(lt(allowanceUses.createdAt, before)).limit(limit);
+  if (ids.length === 0) return 0;
+  const gone = await db.delete(allowanceUses).where(inArray(allowanceUses.id, ids.map((r) => r.id))).returning({ id: allowanceUses.id });
+  return gone.length;
+}

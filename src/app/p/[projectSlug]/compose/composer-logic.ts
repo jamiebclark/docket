@@ -1,3 +1,4 @@
+import type { PostType } from "@/providers/types";
 import type { CompositionCheck, TargetCheck } from "@/server/services/posts";
 
 export type Severity = "error" | "warning" | "info";
@@ -11,7 +12,7 @@ export interface CheckInput {
   postId?: string;
   baseText: string;
   mediaIds: string[];
-  targets: { accountId: string; overrideText?: string | null }[];
+  targets: { accountId: string; overrideText?: string | null; postType?: PostType | null }[];
 }
 
 export const counterText = (t: Pick<TargetCheck, "count" | "limit">): string =>

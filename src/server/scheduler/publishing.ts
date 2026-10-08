@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { findProvider } from "../../providers/registry";
-import { inferPostType } from "../../providers/validation";
+import { resolvePostType } from "../../providers/post-type";
 import type { SocialProvider, StepResult } from "../../providers/types";
 import * as clock from "../dal/clock";
 import { writeHeartbeat } from "../dal/heartbeats";
@@ -151,7 +151,35 @@ export async function runPublishing(opts: {
             [...attempts, { step: "engine", outcome: "fatal_error", tickId, error: "The post is no longer available." }],
           );
         }
-        const info = provider.stepFor(target.stepState, settings, shape);
+        const { chosenPostType, ...stepContent } = shape;
+        const kinds = stepContent.kinds ?? [];
+        const info = provider.stepFor(target.stepState, settings, {
+          ...stepContent,
+          postType: resolvePostType(provider.capabilities, kinds.map((kind) => ({ kind })), chosenPostType),
+        });
+        const creation = provider.creationAllowance;
+        const attemptsSoFar = patch.attemptCount ?? target.attemptCount;
+        const units = !creation || !info.allowance ? 0 : attemptsSoFar > 0 ? info.allowance.retryUnits : info.allowance.units;
+        if (creation && units > 0) {
+          const uses = await ctx.allowanceUsed(account.id, target.projectId, new Date(now.getTime() - creation.windowSeconds * 1000));
+          const used = uses.reduce((n, u) => n + u.units, 0);
+          if (used + units > creation.count) {
+            let freed = 0;
+            let until = now;
+            for (const u of uses) {
+              freed += u.units;
+              until = new Date(u.at.getTime() + creation.windowSeconds * 1000 + 1000);
+              if (used - freed + units <= creation.count) break;
+            }
+            const error = `Waiting for ${creation.name} (${used} of ${creation.count} used in the last ${windowLabel(creation.windowSeconds)}); nothing was created.`;
+            counts.deferred++;
+            return finish({ ...patch, nextAttemptAt: until, lastError: error }, [
+              ...attempts,
+              { step: "engine", outcome: "deferred", tickId, error },
+            ]);
+          }
+          await ctx.reserveAllowance({ accountId: account.id, projectId: target.projectId, targetId: target.id, units });
+        }
         const token = randomUUID();
         leased.set(target.id, {
           claimed: undefined as unknown as ClaimedTarget,
@@ -304,7 +332,8 @@ async function execute(
       if (!resolved.ok) throw new MediaUnavailable(resolved.error);
       media = resolved.media;
     }
-    const content = { text: loaded.text, media };
+    const postType = resolvePostType(provider.capabilities, media, target.chosenPostType);
+    const content = { text: loaded.text, media, postType };
     // G15: a capability lowered after scheduling must not reach the platform. Runs on the first step only,
     // before credentials are read.
     if (target.stepState === null) {
@@ -363,7 +392,7 @@ async function execute(
           credentials,
         },
         content,
-        postType: inferPostType(content),
+        postType,
         step: { name: lease.step, mayPublish: lease.mayPublish },
         state: target.stepState,
         now: await clock.now(),
@@ -447,4 +476,9 @@ async function execute(
       counts.ambiguous++;
       break;
   }
+}
+
+function windowLabel(seconds: number): string {
+  const hours = Math.round(seconds / 3600);
+  return hours >= 1 ? `${hours} ${hours === 1 ? "hour" : "hours"}` : `${Math.max(1, Math.round(seconds / 60))} minutes`;
 }

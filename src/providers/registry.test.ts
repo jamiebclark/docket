@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { UnknownProviderError } from "./errors";
 import { assertVideoCapabilities, mediaConstraintsOf } from "./media";
+import { assertCreationAllowance } from "./registry";
 import { readFileSync } from "node:fs";
 import { findConnectGroup, findProvider, getProvider, listConnectGroups, listProviders } from "./registry";
 
@@ -48,6 +49,38 @@ describe("provider registry", () => {
     bad({ maxVideos: 1, withImages: true }, { media: { ...base.media, maxImages: 0 } });
     bad({ maxVideos: 1 }, { postTypes: ["text", "image"] });
     expect(() => assertVideoCapabilities({ ...base, video: { maxVideos: 0 } })).not.toThrow();
+  });
+  it("rejects bad post type choices and per-type limits", () => {
+    const base = getProvider("mock").capabilities;
+    const opt = (type: "video" | "reel" | "story") => ({ type, label: type, description: type });
+    const choice = (over: Record<string, unknown> = {}) => ({
+      shape: "single_video" as const,
+      options: [opt("video"), opt("reel")],
+      default: "video" as const,
+      ...over,
+    });
+    const caps = (postTypeChoices: unknown[], over: Record<string, unknown> = {}) =>
+      ({ ...base, postTypes: [...base.postTypes, "reel"], postTypeChoices, ...over }) as typeof base;
+    expect(() => assertVideoCapabilities(caps([choice()]))).not.toThrow();
+    expect(() => assertVideoCapabilities(caps([choice({ default: "story" })]))).toThrow(/default/);
+    expect(() => assertVideoCapabilities(caps([choice({ options: [opt("video")] })]))).toThrow(/at least 2/);
+    expect(() => assertVideoCapabilities(caps([choice({ options: [opt("video"), opt("story")] })]))).toThrow(/not in postTypes/);
+    expect(() => assertVideoCapabilities(caps([choice({ options: [opt("video"), opt("video")] })]))).toThrow(/duplicate/);
+    expect(() => assertVideoCapabilities(caps([choice(), choice()]))).toThrow(/more than one choice/);
+    const video = (extra: Record<string, unknown>) => ({ ...base, video: { ...base.video, ...extra } }) as typeof base;
+    expect(() => assertVideoCapabilities(video({ byPostType: { nope: {} } }))).toThrow(/not a post type/);
+    expect(() => assertVideoCapabilities(video({ byPostType: { reel: { minDurationSeconds: 9, maxDurationSeconds: 3 } } }))).toThrow(/Inconsistent/);
+    expect(() => assertVideoCapabilities(video({ minFrameRate: 0 }))).toThrow(/minFrameRate/);
+    expect(() => assertVideoCapabilities(video({ minFrameRate: 90, maxFrameRate: 60 }))).toThrow(/minFrameRate/);
+    expect(() => assertVideoCapabilities(video({ minFrameRate: 23, byPostType: { reel: { minDurationSeconds: 3 } } }))).not.toThrow();
+  });
+  it("rejects a malformed creation allowance", () => {
+    const ok = { key: "x", creationAllowance: { count: 50, windowSeconds: 86_400, name: "A" } };
+    expect(() => assertCreationAllowance(ok)).not.toThrow();
+    expect(() => assertCreationAllowance({ key: "x" })).not.toThrow();
+    for (const bad of [{ count: 10 }, { count: 11.5 }, { windowSeconds: 604_801 }, { windowSeconds: 0 }, { name: " " }]) {
+      expect(() => assertCreationAllowance({ ...ok, creationAllowance: { ...ok.creationAllowance, ...bad } }), JSON.stringify(bad)).toThrow(/creation allowance/);
+    }
   });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {

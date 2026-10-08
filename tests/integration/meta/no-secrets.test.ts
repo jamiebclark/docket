@@ -8,6 +8,7 @@ import * as connect from "../../../src/server/services/connect";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb, testDb } from "../../helpers/db";
 import { facebookSetup, PAGE_ID, PAGE_TOKEN } from "../../helpers/facebook-publish";
+import { IG_ID, instagramVideoSetup } from "../../helpers/instagram-publish";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { sessionFor } from "../../helpers/connect-group";
 import { eq } from "drizzle-orm";
@@ -136,6 +137,26 @@ describe("Meta credentials never leak", () => {
       expect(await plaintextColumnsContaining(secret), `column holds ${secret}`).toEqual([]);
     }
     for (const r of fake.requests.filter((x) => x.method === "POST")) expect(r.path).not.toContain("EAA");
+  });
+});
+
+// 019: a video container `ERROR` whose status detail echoes the page token.
+describe("Instagram video errors never leak the token", () => {
+  it("keeps the token out of lastError, the attempts, every column and the logs", async () => {
+    const output = captureConsole();
+    fake.on("POST", `/v26.0/${IG_ID}/media`, { kind: "ok", body: { id: "r1" } });
+    fake.on("GET", "/v26.0/r1", { kind: "ok", body: { status_code: "ERROR", status: `Error: bad codec, token ${PAGE_TOKEN}` } });
+    const s = await instagramVideoSetup(storage, "video", ["video"], { postType: "video" });
+    const base = Date.now() + 60_000;
+    const tickAt = (seconds: number) => atTime(new Date(base + seconds * 1000), () => s.tick());
+    await tickAt(0);
+    await tickAt(61);
+    const row = await s.row();
+    expect(row.status).toBe("failed");
+    expect(row.lastError).toContain("Instagram could not process the video");
+    const blob = `${JSON.stringify(row)}\n${JSON.stringify(await forSchedulerProject(s.projectId).targets.get(s.targetId))}\n${output()}`;
+    expect(blob).not.toContain(PAGE_TOKEN);
+    expect(await plaintextColumnsContaining(PAGE_TOKEN)).toEqual([]);
   });
 });
 

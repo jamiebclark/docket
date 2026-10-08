@@ -37,8 +37,13 @@ export const POST_MEDIA_MAX = 10;
 
 export const baseTextSchema = z.string().max(POST_TEXT_MAX, { error: "The post text is too long" });
 
+/** The values of `PostType`; which of them a provider offers is checked in the posts service. */
+export const POST_TYPES = ["text", "image", "carousel", "video", "story", "reel"] as const;
+
 export const postTargetInputSchema = z.object({
   accountId: z.uuid({ error: "Choose an account" }),
+  /** Absent keeps the stored choice; null clears it. */
+  postType: z.enum(POST_TYPES, { error: "Choose a post type" }).nullish(),
   overrideText: z.string().max(POST_TEXT_MAX, { error: "The override text is too long" }).nullish(),
 });
 

@@ -85,6 +85,13 @@
       "when": 1791391850606,
       "tag": "0011_massive_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791405171094,
+      "tag": "0012_sudden_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

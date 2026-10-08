@@ -1,5 +1,6 @@
 import { findProvider } from "../../../providers/registry";
-import type { PostContent, SocialProvider, ValidationIssue } from "../../../providers/types";
+import { resolvePostType } from "../../../providers/post-type";
+import type { PostContent, PostType, SocialProvider, ValidationIssue } from "../../../providers/types";
 import type { AccountRecord } from "../../dal/accounts";
 import type { MediaRow } from "../../dal/media";
 import type { ProjectScope } from "../../dal/scope";
@@ -12,6 +13,8 @@ export interface TargetContent {
   assets: readonly MediaRow[];
   /** How many images the post references; more than `assets` means some were deleted. */
   referenced: number;
+  /** The target's stored post type choice; absent or null = the provider's default. */
+  chosenPostType?: PostType | null;
 }
 
 type Tx = Pick<ProjectScope, "targets" | "posts" | "media">;
@@ -23,7 +26,7 @@ export async function loadTargetContent(tx: Tx, target: TargetRecord): Promise<T
   const ids = await tx.posts.listMediaIds(target.postId);
   const rows = new Map((await tx.media.getMany(ids)).map((r) => [r.id, r]));
   const assets = ids.map((id) => rows.get(id)).filter((r): r is MediaRow => !!r);
-  return { text: content.text, assets, referenced: ids.length };
+  return { text: content.text, assets, referenced: ids.length, chosenPostType: target.chosenPostType };
 }
 
 const FIELD_RANK = (field: string): number =>
@@ -53,7 +56,8 @@ export async function validateTargetContent(
   const { media, issues: planIssues } = await adaptedMediaFor(tx, provider.capabilities, provider.displayName, content.assets, opts);
   // An image the planner already refused (or could not adapt) would only repeat itself as a provider error.
   const planned = new Set(planIssues.filter((i) => i.severity === "error").map((i) => i.field));
-  const providerIssues = validateResolvedContent(provider, { text: content.text, media }).filter((i) => !planned.has(i.field));
+  const postType = resolvePostType(provider.capabilities, media, content.chosenPostType ?? null);
+  const providerIssues = validateResolvedContent(provider, { text: content.text, media, postType }).filter((i) => !planned.has(i.field));
   const unavailable: ValidationIssue[] =
     content.referenced > content.assets.length
       ? [{ severity: "error", code: "media_unavailable", message: "An image on this post has been deleted.", field: "media" }]

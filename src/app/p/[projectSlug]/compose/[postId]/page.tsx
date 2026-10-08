@@ -50,7 +50,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
         postId: detail.post.id,
         baseText: detail.post.baseText,
         mediaIds: detail.mediaIds,
-        targets: live.map((t) => ({ accountId: t.accountId, overrideText: t.overrideText })),
+        targets: live.map((t) => ({ accountId: t.accountId, overrideText: t.overrideText, postType: t.chosenPostType ?? null })),
         editable: !detail.targets.some((t) => ["publishing", "published", "ambiguous"].includes(t.status)),
         reviewBlocked: detail.post.reviewState === "needs_review",
       }}

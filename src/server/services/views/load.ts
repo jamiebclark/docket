@@ -35,7 +35,7 @@ export async function loadApiPost(scope: ProjectScope, postId: string): Promise<
   const views = await Promise.all(
     mediaIds.map(async (id) => {
       const row = byId.get(id);
-      return row ? { id, url: (await toView(row)).publicUrl, altText: row.altText } : { id, url: null, altText: "" };
+      return row ? { id, url: (await toView(row)).publicUrl, altText: row.altText, kind: row.kind === "video" ? ("video" as const) : ("image" as const) } : { id, url: null, altText: "" };
     }),
   );
   return toApiPost({

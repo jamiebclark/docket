@@ -5,7 +5,8 @@ import { requirementsOf, type RequirementsSummary } from "@/providers/requiremen
 import { findProvider } from "@/providers/registry";
 import { countText, countingRuleName } from "@/providers/text";
 import type { PostType, ValidationIssue } from "@/providers/types";
-import { inferPostType } from "@/providers/validation";
+import { choiceFor, resolvePostType } from "@/providers/post-type";
+import type { PostTypeOption } from "@/providers/types";
 import { videoFieldsOf } from "../../media/item";
 import { postInputSchema } from "@/lib/validation/scheduling";
 import * as clock from "../../dal/clock";
@@ -13,6 +14,7 @@ import { ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
 import { nearQueuedWarnings, type Warning } from "../queue";
 import { resolveLocalDateTime } from "../queue/occurrences";
+import { assertPostTypeOffered } from "./content";
 import { validateTargetContent } from "./validate";
 
 const STARTED = ["publishing", "published", "ambiguous"] as const;
@@ -27,7 +29,10 @@ export interface TargetCheck {
   count: number;
   limit: number | null;
   countingRule: string | null;
+  /** The resolved post type for this content and choice. */
   postType: PostType | null;
+  /** Present exactly when the provider offers a choice for this content (one video on Instagram). */
+  postTypeChoice: { options: PostTypeOption[]; selected: PostType; default: PostType } | null;
   issues: ValidationIssue[];
   canSchedule: boolean;
   /** What the account accepts; `null` exactly when `limit` is `null` (provider not registered). Present with no text and no media. */
@@ -55,24 +60,33 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
   if (rows.size !== ids.length) throw new NotFoundError();
   const assets = parsed.mediaIds.map((id) => rows.get(id)!);
 
+  const stored = new Map<string, PostType | null>();
   let editable = true;
   let reviewBlocked = false;
   if (parsed.postId) {
     const post = await scope.posts.get(parsed.postId);
     if (!post) throw new NotFoundError();
     reviewBlocked = post.reviewState === "needs_review";
-    editable = !(await scope.targets.listForPost(post.id)).some((t) => (STARTED as readonly string[]).includes(t.status));
+    const existing = await scope.targets.listForPost(post.id);
+    for (const t of existing) stored.set(t.socialAccountId, t.chosenPostType);
+    editable = !existing.some((t) => (STARTED as readonly string[]).includes(t.status));
   }
 
   const targets: TargetCheck[] = [];
-  for (const target of parsed.targets) {
+  for (const [i, target] of parsed.targets.entries()) {
     const account = await scope.accounts.get(target.accountId);
     if (!account) throw new NotFoundError();
+    if (target.postType != null) assertPostTypeOffered(account.providerKey, target.postType, ["targets", i, "postType"]);
+    // Absent = the stored value (when the post is saved), null = cleared.
+    const chosen = target.postType !== undefined ? target.postType : (stored.get(account.id) ?? null);
     const provider = findProvider(account.providerKey);
     const effectiveText = target.overrideText ? target.overrideText : parsed.baseText;
     const media = assets.map((a) => ({ url: a.publicUrl, mimeType: a.mimeType, width: a.width, height: a.height, bytes: a.byteSize, altText: a.altText, ...videoFieldsOf(a) }));
     const issues =
-      (await validateTargetContent(scope, account, { text: effectiveText, assets, referenced: assets.length }, { preview: true })) ?? [];
+      (await validateTargetContent(scope, account, { text: effectiveText, assets, referenced: assets.length, chosenPostType: chosen }, { preview: true })) ?? [];
+    const caps = provider?.capabilities ?? null;
+    const resolved = resolvePostType(caps, media, chosen);
+    const choice = choiceFor(caps, media);
     const rule = provider?.capabilities.text.countingRule ?? null;
     targets.push({
       accountId: account.id,
@@ -82,10 +96,11 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
       count: rule ? countText(effectiveText, rule) : 0,
       limit: provider?.capabilities.text.maxLength ?? null,
       countingRule: rule ? countingRuleName(rule) : null,
-      postType: provider ? inferPostType({ text: effectiveText, media }) : null,
+      postType: provider ? resolved : null,
+      postTypeChoice: choice ? { options: [...choice.options], selected: resolved, default: choice.default } : null,
       issues,
       canSchedule: !!provider && account.status === "active" && !issues.some((i) => i.severity === "error"),
-      requirements: provider ? requirementsOf(provider.capabilities, { uploadTypes: UPLOAD_MIME_TYPES }) : null,
+      requirements: provider ? requirementsOf(provider.capabilities, { uploadTypes: UPLOAD_MIME_TYPES, postType: resolved }) : null,
     });
   }
   return { targets, editable, reviewBlocked };

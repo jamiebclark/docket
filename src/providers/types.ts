@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-export type PostType = "text" | "image" | "carousel" | "video" | "story" | "reel"; // only the first three are used now
+export type PostType = "text" | "image" | "carousel" | "video" | "story" | "reel";
 export type BuiltInCountingRule = "graphemes" | "code_points" | "utf8_bytes";
 export interface CustomCountingRule {
   kind: "custom";
@@ -14,6 +14,30 @@ export interface CustomCountingRule {
 export type TextCountingRule = BuiltInCountingRule | CustomCountingRule;
 
 export type VideoContainer = "mp4" | "mov";
+
+/** Shapes of post that may be published as more than one post type. Closed; reused by later providers. */
+export type PostShape = "single_video";
+
+export interface PostTypeOption {
+  type: PostType;
+  /** Shown as is: "Feed video". */
+  label: string;
+  /** One line, shown under the option and in the summary. */
+  description: string;
+}
+
+export interface PostTypeChoice {
+  shape: PostShape;
+  /** At least 2. */
+  options: readonly PostTypeOption[];
+  /** One of `options`. */
+  default: PostType;
+}
+
+export type VideoLimitOverrides = Partial<Omit<VideoCapabilities, "byPostType">> & {
+  /** Plain sentences shown in the summary for this type. */
+  notes?: readonly string[];
+};
 
 export interface VideoCapabilities {
   /** 0 = this provider does not accept video (yet). */
@@ -37,6 +61,10 @@ export interface VideoCapabilities {
   minAspectRatio?: number;
   maxAspectRatio?: number;
   maxFrameRate?: number;
+  /** Lowest frame rate, inclusive. A video whose frame rate is unknown is not refused on it. */
+  minFrameRate?: number;
+  /** Limits for one post type, merged over this block by `videoLimitsFor`. */
+  byPostType?: Partial<Record<PostType, VideoLimitOverrides>>;
 }
 
 export interface VideoFacts {
@@ -78,6 +106,8 @@ export interface ProviderCapabilities {
   /** e.g. Instagram: false */
   textOnlyAllowed: boolean;
   postTypes: readonly PostType[];
+  /** Shapes of post that may be published as more than one post type. */
+  postTypeChoices?: readonly PostTypeChoice[];
 }
 
 export interface PublishLimit {
@@ -116,6 +146,10 @@ export interface StepContent {
   mediaCount: number;
   /** How many of the media are videos. Absent = none. */
   videoCount?: number;
+  /** Kind of each item in post order. Absent = all images (callers before 019). */
+  kinds?: readonly ("image" | "video")[];
+  /** The target's resolved post type. Absent = inferred with no choice. */
+  postType?: PostType;
 }
 
 export interface ProviderEnvIssue {
@@ -213,6 +247,8 @@ export interface MediaItem {
 export interface PostContent {
   text: string;
   media: readonly MediaItem[];
+  /** The target's resolved post type. Absent = `resolvePostType(caps, media, null)`. */
+  postType?: PostType;
 }
 
 export interface ValidationIssue {
@@ -252,6 +288,8 @@ export interface ValidationIssue {
     | "video_too_big"
     | "video_aspect_out_of_range"
     | "video_frame_rate_too_high"
+    | "video_frame_rate_too_low"
+    | "too_many_items"
     | "media_processing"
     | "media_failed"
     | (string & {});
@@ -261,9 +299,20 @@ export interface ValidationIssue {
   limit?: number;
 }
 
+export interface CreationAllowance {
+  /** At least 11. */
+  count: number;
+  /** At most 604_800. */
+  windowSeconds: number;
+  /** "Instagram's daily container allowance", used in the wait message. */
+  name: string;
+}
+
 export interface StepInfo {
   name: string;
   mayPublish: boolean;
+  /** Units of the provider's creation allowance this lease reserves. Requires `creationAllowance`. */
+  allowance?: { units: number; retryUnits: number };
 }
 
 export interface PublishContext {
@@ -314,6 +363,8 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   capabilities: ProviderCapabilities;
   /** One limit, or several that all apply (the strictest wins per window). Read through `providerPublishLimits`. */
   defaultPublishLimit?: PublishLimit | readonly PublishLimit[];
+  /** A rolling allowance on creating containers, reserved when a step is leased. */
+  creationAllowance?: CreationAllowance;
   connect: ConnectStrategy;
   /** Non-secret per-account settings; `z.object({})` if none. */
   settingsSchema: z.ZodType<Settings>;

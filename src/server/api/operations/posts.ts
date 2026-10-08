@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { PostSchema, TargetResultSchema, TargetSchema, TargetValidationSchema } from "@/lib/api/schemas";
 import type { ApiTarget } from "@/lib/api/schemas";
-import { atSchema, baseTextSchema, POST_MEDIA_MAX } from "@/lib/validation/scheduling";
+import { atSchema, baseTextSchema, POST_MEDIA_MAX, POST_TYPES } from "@/lib/validation/scheduling";
 import { NotFoundError } from "../../dal/errors";
 import type { TargetResult as ServiceTargetResult } from "../../services/posts";
 import { addToQueue, createDraft, prepareForScheduling, scheduleAt, validatePost } from "../../services/posts";
+import { assertPostTypesForAccounts } from "../../services/posts/content";
 import { loadApiPost } from "../../services/views/load";
 import { toIssue, toWarning } from "./issues";
 import { defineOperation } from "./types";
@@ -17,6 +18,12 @@ const createBody = z.object({
   accountIds: z.array(z.uuid()).min(1).max(50),
   overrides: z.record(z.uuid(), baseTextSchema).optional(),
   mediaIds: z.array(z.uuid()).max(POST_MEDIA_MAX).optional(),
+  postTypes: z
+    .record(z.uuid(), z.enum(POST_TYPES))
+    .optional()
+    .describe(
+      "Optional post type per account, for accounts whose provider offers a choice (Instagram: `video` = Feed video, `reel` = Reel). Absent = the provider's default.",
+    ),
 });
 const selectBody = z.object({ targetIds: z.array(z.uuid()).optional() });
 const scheduleBody = selectBody.extend({ at: atSchema });
@@ -63,12 +70,14 @@ export const postOperations = [
     },
     idempotent: true,
     async run(scope, { body }) {
+      await assertPostTypesForAccounts(scope, body.accountIds, body.postTypes);
       const created = await createDraft(scope, {
         baseText: body.text,
         mediaIds: body.mediaIds ?? [],
         targets: body.accountIds.map((accountId) => ({
           accountId,
           ...(body.overrides?.[accountId] !== undefined ? { overrideText: body.overrides[accountId] } : {}),
+          ...(body.postTypes?.[accountId] !== undefined ? { postType: body.postTypes[accountId] } : {}),
         })),
       });
       const issues = await validatePost(scope, created.post.id);

@@ -750,3 +750,76 @@ Judgement calls from `specs/018-video-groundwork/spec.md` (D1–D12) and its pla
 - **Deviation:** `tests/integration/scheduler/step-content.test.ts` asserted the exact `StepContent` shape. `stepFor` now also receives `videoCount`, so the expectations were updated to include `videoCount: 0`.
 - **Known flake, unrelated:** `tests/integration/x/connect.test.ts` compares an expiry against `Date.now()` and can miss by a few milliseconds under load. It passes on re-run.
 - **Owed to the operator (not runnable in the pipeline):** a ~200 MB offline upload with Retry, a 1 GB direct upload to a real R2 or S3 bucket, a `via_app` upload behind a 9 MB proxy limit, and `ffmpeg -version` in the worker on Unraid (T053–T056).
+
+## 019 — Instagram video (2026-10-07)
+
+Judgement calls from `specs/019-instagram-video/spec.md` (D1–D13) and its plan (`research.md`, P1–P27). External facts come from `docs/research/meta-video.md` (Instagram section) and `docs/research/meta.md`. Real publishing is verified with mocks only; the owed live checks are in `docs/meta-setup.md`.
+
+### Spec decisions
+
+- **D1 — Feed video is a Reel shared to the feed.** Docket never sends `media_type=VIDEO` (removed by Meta on 2023-11-09). A single video is always a `REELS` container. **Feed video** (post type `video`) sends `share_to_feed=true`, and **Reel** (`reel`) sends `share_to_feed=false`.
+- **D2 — The default for a single Instagram video is Feed video.** It applies when nobody chose: new targets, API posts without the field, generated and bulk posts.
+- **D3 — A per-target post type choice, declared by the provider** (generic change G19, below).
+- **D4 — Video limits may differ by post type** (G20).
+- **D5 — Instagram's Reel and Feed video limits.**
+  - The limits: MP4 or MOV; H.264 or HEVC; AAC or silent; at most 300,000,000 bytes (decimal "300 MB", the safe reading); 3–900 s; at most 1,920 px wide; aspect 0.01–10; 23–60 fps.
+  - Not checked, because Docket has no facts for them: bitrate, audio sample rate and channels, scan type, GOP, chroma subsampling, edit lists and moov position. Instagram reports breaks as `ERROR`, with its detail.
+- **D6 — A lowest frame rate** (G21). An unknown frame rate is not refused on it.
+- **D7 — Video items in a carousel.** A carousel holds 2–10 items in any mix, all videos included. Each video item meets the Reel limits plus aspect 0.8–1.91; outside that range it is refused, not cropped (entry 6 owns cropping). No alt text is sent for video items, and the crop notice covers them.
+- **D8 — Media type of a video carousel item:** omitted (plan P14).
+- **D9 — Video polling.** The first check is 1 min after creation, then once a minute until 5 min, then every 5 min. The target fails at 60 min with "Instagram did not finish processing the video within 60 minutes; nothing was published", after at most 16 checks. Image containers keep 10 s doubling to 5 min.
+- **D10 — Docket keeps within 400 containers per account per rolling 24 h** (G22). A target's whole need is checked and reserved before its first create.
+- **D11 — Instagram fetches the video by its public `video_url`** (the stored, metadata-stripped original). There is no resumable upload; that is unowned and recorded in `docs/feature-map.md`.
+- **D12 — No optional Reel fields:** no cover, collaborators, location, user tags, audio name, trial Reels or AI label. They are unowned and recorded in `docs/feature-map.md`.
+- **D13 — A changed post or choice before publish restarts the target from its first create step.** Abandoned containers still count towards D10.
+
+### Generic changes
+
+- **G19 post type choices** (`ProviderCapabilities.postTypeChoices`, `post_targets.chosen_post_type`, `resolvePostType`).
+  - *What:* a provider declares, for a post shape (`single_video` today), the post types a person may choose between, each with a label and a one-line description, and a default.
+  - *Storage:* the choice is stored per target, kept while the shape does not offer it, and ignored then.
+  - *Refusals:* an unoffered value gets a 400 or a form error.
+  - *API:* `createPost` takes `postTypes`, and `Target.postType` is the effective type.
+  - *Why:* the Reel-or-Feed-video choice without provider code in the composer or schema. Facebook (entry 4) reuses it.
+  - *Reverse:* drop the column, the member and the composer fieldset; every target then uses the provider default.
+- **G20 per-type video limits** (`VideoCapabilities.byPostType`, `videoLimitsFor`).
+  - *What:* per-type overrides are merged over the base `video` block, and the validator, summary and badges use the target's resolved type.
+  - *Instagram:* the base block holds the Reel limits, and the `carousel` override is 10 videos, mixed with images, aspect 0.8–1.91.
+  - *Reverse:* remove `byPostType`; the base block applies to every type.
+- **G21 lowest frame rate** (`VideoCapabilities.minFrameRate`, code `video_frame_rate_too_low`).
+  - *What:* the floor is checked like `maxFrameRate`.
+  - *Values:* Instagram declares 23; Facebook Reels (entry 4) needs 24.
+  - *Reverse:* remove the member and the check.
+- **G22 creation allowance** (`SocialProvider.creationAllowance`, `StepInfo.allowance`, table `allowance_uses`).
+  - *What:* a provider declares a count per rolling window. `stepFor` says how many units a lease reserves: `units` on a first run, `retryUnits` on a re-run (`attemptCount > 0`).
+  - *Enforcement:* in the claim transaction, with the account row locked, the engine sums the account's reservations in the window. It either defers the target with a message, without creating anything, or inserts a reservation. Housekeeping prunes rows after 7 days.
+  - *Instagram:* 400 per 86,400 s. Its first create step of a build reserves the whole need (1, or items + 1), and any retried create reserves 1.
+  - *Why:* D10, exact under concurrency, with no advisory locks (Neon). *Accepted:* it over-counts leases that fail before reaching Instagram, cannot see other apps' containers, and builds already in flight at deploy have no up-front reservation.
+  - *Reverse:* drop the member, the table and the engine block.
+
+### Plan decisions
+
+- **P2 — `inferPostType` now calls any 2+ items a `carousel`** (it used to say `video` whenever a video was present). The validator still counts images and videos separately, so the mock's refusals are unchanged.
+- **P3 — `chosen_post_type` update semantics.** An absent field keeps the value and `null` clears it, so text-only edits never wipe a choice.
+- **P7 — No post update API.** FR-009's "update" applies to the service the composer uses. A public update operation is unowned (`docs/feature-map.md`).
+- **P12 — Instagram video refusals** name the type ("for an Instagram Reel" or "carousel item") and end "Docket does not crop, trim or convert video yet."
+- **P14 (D8) — Video carousel items are created with `media_type` omitted.**
+  - *How:* `video_url` identifies them, as `image_url` identifies image items. The value is one constant, `VIDEO_ITEM_MEDIA_TYPE` in `src/providers/instagram/requests.ts`.
+  - *Rejected:* `REELS`, because Reels are not carousel children per the research. `VIDEO` is forbidden by D1.
+  - *Safety:* a wrong choice fails at `create_item_<n>` with Instagram's message, before anything is published. A live check is owed.
+- **P16 — Status reads.** Video containers are read with `fields=status_code,status`; image-only containers keep `fields=status_code`.
+  - *Why:* this is a spec-internal conflict between FR-017 ("every status read") and FR-005/SC-008 (image requests unchanged, asserted by an existing test). It is resolved for the image requirement, because the detail is only used in the video message.
+- **P19 — Instagram state stays `v: 1`, with optional fields** (`REELS`, `shareToFeed`, `kinds`, `itemProgress`), so states saved by the previous release resume unchanged.
+- **P20 — The 23 h guard for a carousel with video** measures from its oldest container (the first video item); otherwise it is unchanged. An item `ERROR` names its position.
+- **P24 — The allowance wait** writes a `deferred` attempt and sets `lastError` ("Waiting for Instagram's daily container allowance (N of 400 used in the last 24 hours); nothing was created."). It retries just after enough reservations leave the window.
+- **P26 — `docs/limits.md` uses a real `creation allowance` category** instead of the note row FR-029 asks for, so the inventory test checks it against the declaration. Per-type rows are prefixed with the type (`carousel video min aspect`).
+- **P27 — No `docker-compose.yml` or `.env.example` change.** Migration `0012` runs at start-up.
+
+---
+
+### Implementation outcome
+
+- **Judgement calls kept.** Status detail is read for video containers only (P16), so image requests are unchanged. `docs/limits.md` has a real `creation allowance` category (P26), so the inventory test checks it against the declaration.
+- **Accepted approximations (creation allowance).** Reservations are kept when a lease fails before Instagram is called; a retried create adds 1 whether or not a container was made; other apps' containers on the same account are invisible; builds already in flight at deploy have no up-front reservation.
+- **No deployment change.** `docker-compose.yml` and `.env.example` do not change (FR-031, P27). Migration `0012` runs at start-up.
+- **Owed.** The four live checks in `docs/meta-setup.md`. Until then Instagram video is verified with mocks only.

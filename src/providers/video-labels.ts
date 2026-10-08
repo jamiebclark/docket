@@ -34,12 +34,16 @@ export function durationLabel(seconds: number): string {
 /** Decimal megabytes with at most one decimal place. */
 export const videoBytesLabel = (n: number) => `${Number((n / 1_000_000).toFixed(1))} MB`;
 
-/** `a:b` for a small exact fraction (0.5625 → "9:16", 16/9 → "16:9"), else `r:1`. */
+/** `a:b` for a small exact fraction (0.5625 → "9:16", 16/9 → "16:9"), `1:n` for a tiny one (0.01 → "1:100"), else `r:1`. */
 export function ratioLabel(r: number): string {
   for (let b = 1; b <= 20; b++) {
     for (let a = 1; a <= 21; a++) {
       if (Math.abs(a / b - r) < 1e-9) return `${a}:${b}`;
     }
+  }
+  if (r > 0 && r < 1 / 20) {
+    const n = Math.round(1 / r);
+    if (n <= 1000 && Math.abs(1 / n - r) < 1e-9) return `1:${n}`;
   }
   return `${Number(r.toFixed(2))}:1`;
 }

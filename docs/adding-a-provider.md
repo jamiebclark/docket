@@ -104,11 +104,35 @@ only when declared:
 - `containers` (`"mp4"`, `"mov"`), `videoCodecs` and `audioCodecs` (ffprobe codec names such as `h264` and `aac`), `silentAllowed` (default true);
 - `maxBytes`, `minDurationSeconds`, `maxDurationSeconds`;
 - `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, measured on the displayed frame;
-- `minAspectRatio`, `maxAspectRatio` (width ÷ height), `maxFrameRate`.
+- `minAspectRatio`, `maxAspectRatio` (width ÷ height), `minFrameRate`, `maxFrameRate`.
 
 `maxVideos` above 0 needs `"video"` in `postTypes`, and `withImages` needs `maxImages` above 0; `assertVideoCapabilities` in `src/providers/media.ts`
 rejects an inconsistent declaration when the registry loads. `StepContent.videoCount` carries the number of videos in a post to `validate`. Videos are never adapted: they are sent as stored or refused, so the badges say
 "fits" or "will be refused", never "converted". Add a row for every declared video category to `docs/limits.md`.
+
+### Post type choices, per-type video limits and the frame-rate floor (G19–G21)
+
+Three optional hooks let one provider publish the same content as more than one post type. Each is inert for a provider that declares nothing.
+
+- **G19, `postTypeChoices`** (on `capabilities`). A list of `PostTypeChoice`: a `shape` (today only `single_video`), at least two `options`
+  (`PostTypeOption`: `type`, `label`, `description`) and a `default` that is one of them. The composer shows one control per target from this
+  declaration, the choice is stored in `post_targets.chosen_post_type`, and `resolvePostType(caps, items, chosen)` in `src/providers/post-type.ts`
+  is the single resolver: total, never throws, and it ignores `chosen` for a shape with no declared choice. `ValidateInput.postType` and
+  `StepContent.postType` carry the resolved type; absent means "resolve with no choice".
+- **G20, `byPostType`** (on `capabilities.video`). Per-type overrides (`VideoLimitOverrides`: any video bound except `byPostType` itself, plus `notes`
+  shown in the summary) merged over the base block by `videoLimitsFor(caps, type)` in `src/providers/validation.ts`.
+- **G21, `minFrameRate`** (on `capabilities.video`). A lower bound, inclusive. A video whose frame rate is unknown is not refused on it; one below
+  it fails with `video_frame_rate_too_low`. `too_many_items` is the matching code for a post with more items than the type allows.
+- **Mixed media.** `ValidateInput.kinds` lists each item as `"image"` or `"video"` in post order; absent means all images.
+
+### Creation allowance (G22)
+
+`creationAllowance` (on the provider, not on `capabilities`) declares a rolling cap on creating something, such as Instagram's containers: a
+`CreationAllowance` of `count` (at least 11), `windowSeconds` (at most 604 800) and a `name` used in the wait message. A step that creates
+declares `StepInfo.allowance` as `{ units, retryUnits }`: the units it reserves when leased, and the units a retry reserves. The scheduler
+reads the ledger (`allowance_uses`), and when the window cannot take the units it defers the target with a wait message instead
+of attempting the step; housekeeping prunes rows older than seven days. The reservation is made at lease time, so a crash after it counts the
+units as used: the cap is approximated on the safe side.
 
 ## 4. Connect strategies and where credentials live
 
@@ -309,6 +333,11 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
   with fresh state, up to `MAX_RECREATIONS`, then fails.
 - **Quota.** `check_quota` reads the 100-per-24-hour publishing limit. When it is spent it returns `retryable_error` with
   `notBefore` of `QUOTA_RETRY_MS` (nothing was published, so this is safe); otherwise it returns `continue` with `quotaChecked: true`.
+- **Video (019).** Reels, Feed video and mixed carousels. A single video is a `single_video` choice (`postTypeChoices`: Reel by default,
+  or Feed video); `byPostType` carries the Reel and Feed limits. Both are created as a `REELS` container with a `video_url`; a Feed video
+  sets `share_to_feed` (`shareToFeed` in state) and the Reel does not. A carousel item that is a video omits `media_type`. `check_status`
+  reads the container's status detail for video containers only, so a failed upload reports Instagram's own reason. Each create step
+  declares `allowance`, and `creationAllowance` is Instagram's daily container allowance. Video polling uses the same `notBefore` loop.
 - **Outcomes.** Only the `publish` call can be `ambiguous`; every earlier step is `retryable_error` on transient failures.
   A revoked token is `fatal_error` with `credentialsInvalid: true`.
 
