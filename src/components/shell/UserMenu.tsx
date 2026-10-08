@@ -28,8 +28,8 @@ export function UserMenu({ name, signOut }: { name: string; signOut: () => Promi
         className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <Icon name="activity" />
-        <span className="hidden sm:inline">Activity</span>
-        <span className="sr-only sm:hidden">Activity</span>
+        <span className="hidden sm:inline">All activity</span>
+        <span className="sr-only sm:hidden">All activity</span>
       </Link>
       <Link
         href="/notifications"
