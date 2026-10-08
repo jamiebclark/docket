@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ACTIVITY_KINDS, ACTIVITY_OUTCOMES } from "@/lib/activity/outcomes";
+import { pageQuerySchema } from "@/lib/validation/api";
 import { atSchema, externalUrlSchema } from "@/lib/validation/scheduling";
 
 // Output shapes of the public API (contracts/http-api.md). Each carries `.meta({ id })` so the OpenAPI
@@ -316,3 +318,49 @@ export const RetryFailedTargetsResultSchema = z
 export type ApiRetryTargetResult = z.infer<typeof RetryTargetResultSchema>;
 export type ApiResolveTargetResult = z.infer<typeof ResolveTargetResultSchema>;
 export type ApiRetryFailedTargetsResult = z.infer<typeof RetryFailedTargetsResultSchema>;
+
+export const ApiActivityEventSchema = z
+  .object({
+    id: z.uuid(),
+    kind: z.enum(ACTIVITY_KINDS),
+    outcome: z.enum(ACTIVITY_OUTCOMES),
+    occurredAt: iso,
+    occurredAtLocal: z.string().meta({
+      description: "The same instant in the project time zone, as an RFC 9557 string with the zone name.",
+      example: "2026-10-06T09:02:11.512-04:00[America/New_York]",
+    }),
+    platform: z.string().nullable().meta({ description: "The provider key; null for a connect failure that spans several platforms." }),
+    platforms: z.array(z.string()),
+    account: z.object({ id: z.uuid(), name: z.string(), removed: z.boolean() }).nullable(),
+    post: z.object({ id: z.uuid(), targetId: z.uuid(), excerpt: z.string(), deleted: z.boolean() }).nullable(),
+    message: z.string(),
+    actor: z.object({
+      type: z.enum(["scheduler", "member", "api_key"]),
+      name: z.string().meta({ description: '"Scheduler", the member name, "Former member", "API key {name}" or "Removed API key".' }),
+    }),
+    details: z.record(z.string(), z.unknown()).meta({ description: "Per-kind keys only. Never a secret or post content." }),
+  })
+  .meta({ id: "ApiActivityEvent" });
+
+export const ApiActivityPageSchema = z
+  .object({ data: z.array(ApiActivityEventSchema), nextCursor: z.string().nullable() })
+  .meta({ id: "ApiActivityPage" });
+
+const activityParam = (description: string, example?: string) =>
+  z.union([z.string(), z.array(z.string())]).optional().meta({ description, ...(example ? { example } : {}) });
+
+/** Strict: an unknown parameter is a 400. Values are checked by `listActivityForApi`, which reports each bad field. */
+export const ApiActivityQuerySchema = z.strictObject({
+  outcome: activityParam(
+    "An outcome (published, failed, ambiguous, retrying, resolved, needs_reauth, connect_failed) or a preset (successes, problems). Repeat or comma-separate to combine.",
+    "problems",
+  ),
+  platform: activityParam("A platform key such as instagram. Group connect failures match each of their platforms.", "instagram"),
+  account: activityParam("A connected account id. Another project's account matches nothing."),
+  from: activityParam("First day, YYYY-MM-DD, in the project time zone. Inclusive.", "2026-10-01"),
+  to: activityParam("Last day, YYYY-MM-DD, in the project time zone. Inclusive.", "2026-10-07"),
+  range: activityParam("today, 7d or 30d, counted in the project time zone and including today. Overrides from and to.", "7d"),
+  ...pageQuerySchema.shape,
+});
+export type ApiActivityQuery = z.infer<typeof ApiActivityQuerySchema>;
+export type ApiActivityPage = z.infer<typeof ApiActivityPageSchema>;

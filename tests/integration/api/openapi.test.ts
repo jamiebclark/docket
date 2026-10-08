@@ -177,6 +177,21 @@ describe("openapi.json", () => {
     expect(types).toEqual(expect.arrayContaining(["string", "null"]));
   });
 
+  it("documents listActivity with its query parameters and examples", () => {
+    const found = operations().find(({ op }) => op.operationId === "listActivity")!;
+    expect(found.path).toBe("/activity");
+    expect(found.method).toBe("get");
+    expect(found.op.tags).toContain("Activity");
+    const names = found.op.parameters.map((p: { name: string }) => p.name);
+    for (const n of ["outcome", "platform", "account", "from", "to", "range", "limit", "cursor"]) expect(names).toContain(n);
+    for (const status of ["200", "400", "401", "403"]) {
+      const examples = found.op.responses[status]?.content?.["application/json"]?.examples;
+      expect(Object.keys(examples ?? {}).length, status).toBeGreaterThan(0);
+    }
+    expect(Object.keys(found.op.responses["200"].content["application/json"].examples)).toEqual(["problems", "published"]);
+    expect(Object.keys(doc().components.schemas)).toEqual(expect.arrayContaining(["ApiActivityEvent", "ApiActivityPage"]));
+  });
+
   it("documents the Recovery operations with request schemas, examples and every 409 reason", () => {
     const ids = ["retryPostTarget", "resolvePostTarget", "retryFailedTargets"];
     const found = operations().filter(({ op }) => ids.includes(op.operationId));
