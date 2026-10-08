@@ -1207,3 +1207,9 @@ Judgement calls from `specs/025-bluesky-video/spec.md` (D1–D13) and its plan (
 - **P20 — One generic assertion changes:** `requirements.test.ts`'s "unchanged" loop drops `bluesky`, because FR-018 requires its notes. No existing Bluesky test file changes.
 - **P21 — A part timeout names `SCHEDULER_PROVIDER_TIMEOUT_SECONDS`,** so a part that never fits the limit ends with a reason the operator can act on.
 - **P22 — No `docker-compose.yml` or `.env.example` change.**
+
+### Implementation outcome
+
+- Built as planned (T001–T039): capabilities, G24, the upload in parts, limits check, job polling, error explanations, summary and badges, and the daily allowance, with unit and integration suites (`video*.test.ts`, including a no-secrets suite).
+- `docker-compose.yml` and `.env.example` are unchanged (FR-025).
+- Real publishing is verified with mocks only (FR-027); the live checks are owed in `docs/accounts.md` (T040, blocked on a real account).

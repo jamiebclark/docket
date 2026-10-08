@@ -20,6 +20,15 @@ describe("applyStepResult", () => {
     const r = applyStepResult({ result: { kind: "continue", state: {} }, target: fresh, now, config });
     expect(r.patch.nextAttemptAt).toEqual(now);
   });
+  it("a continue with a wait message shows it and uses no attempt", () => {
+    const r = applyStepResult({ result: { kind: "continue", state: {}, wait: "Waiting. secret-xyz" }, target: { attemptCount: 2, stepState: null }, now, config, secrets: ["secret-xyz"] });
+    expect(r.patch).toMatchObject({ status: "publishing", attemptCount: 0 });
+    expect(r.patch.lastError).toBe("[redacted]");
+  });
+  it("a continue without one still clears lastError", () => {
+    const r = applyStepResult({ result: { kind: "continue", state: {} }, target: fresh, now, config });
+    expect(r.patch.lastError).toBeNull();
+  });
   it("retryable before any step → scheduled with backoff", () => {
     const r = applyStepResult({ result: { kind: "retryable_error", error: "boom" }, target: fresh, now, config });
     expect(r.patch).toMatchObject({ status: "scheduled", attemptCount: 1, lastError: "boom" });

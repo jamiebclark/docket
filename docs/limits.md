@@ -146,10 +146,23 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | formats | image/jpeg, image/png |  | docs/research/bluesky.md (`image/*`); an uploaded WebP (or an oversize PNG) is converted to JPEG | media planner | `tests/integration/limits/enforcement.test.ts` "bluesky: formats" |
 | media required | no |  | docs/research/bluesky.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "bluesky: media required" |
 | text only | yes |  | docs/research/bluesky.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "bluesky: text only" |
-| videos | 0 |  | not accepted in Docket yet (018 D4); researched limits arrive with entries 3, 4, 5 and 7 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "bluesky: videos" |
+| videos | 1 |  | docs/research/bluesky-video.md (the embed holds one video) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "bluesky: videos" |
+| video with images | no |  | docs/research/bluesky-video.md (the embed is one union member) | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
+| video containers | mp4 |  | docs/research/bluesky-video.md (blob `video/mp4`) | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
+| video codecs | h264 |  | docs/research/bluesky-video.md ("send H.264/AAC MP4"; codecs not published) | video planner | `tests/integration/limits/enforcement.test.ts` "bluesky: video codecs" |
+| audio codecs | aac |  | docs/research/bluesky-video.md ("send H.264/AAC MP4"; codecs not published) | video planner | `tests/integration/limits/enforcement.test.ts` "bluesky: audio codecs" |
+| silent video | yes |  | docs/research/bluesky-video.md; silence is accepted (D2) | validateResolvedContent | `src/providers/validation.test.ts` "accepts a silent video unless the provider forbids it" |
+| video bytes | 300000000 |  | docs/research/bluesky-video.md (embed lexicon) | video planner | `tests/integration/limits/enforcement.test.ts` "bluesky: video bytes" |
+| max duration | 180 |  | docs/research/bluesky-video.md (conservative product limit, not confirmed as a server limit) | video planner | `tests/integration/limits/enforcement.test.ts` "bluesky: max duration" |
+| creation allowance | 25 / 86400 s |  | docs/research/bluesky-video.md (about 25 videos a day, help page) | engine deferral | `tests/integration/limits/enforcement.test.ts` "bluesky: creation allowance" |
 | publish limit | 1666 / 3600 s |  | approximate (research U3; docs/research/bluesky.md: 5,000 points/hour, a create costs 3, so `floor(points ÷ 3)`); points are shared with any other app writing to the account (decisions.md G16) | engine deferral | `tests/integration/limits/enforcement.test.ts` "bluesky: publish limit 1666 / 3600 s" |
 | publish limit | 11666 / 86400 s |  | approximate (research U3; 35,000 points/day, `floor(points ÷ 3)`); decisions.md G16 | engine deferral | `tests/integration/limits/enforcement.test.ts` "bluesky: publish limit 11666 / 86400 s" |
 | note: login rate | createSession 30 / 5 min and 300 / day |  | docs/research/bluesky.md | publishing never creates a session; it reuses and refreshes the stored one | `tests/integration/limits/enforcement.test.ts` "Bluesky publishing does not create a session" |
+| note: daily bytes | 10 GB a day, not modelled (25 × 300 MB = 7.5 GB) | | docs/research/bluesky-video.md (decisions.md D6) | not enforced | `src/providers/bluesky/capabilities.test.ts` "carries the two notes and the daily allowance" |
+| note: upload limits check | `getUploadLimits` before each upload; refusals wait an hour and fail 23 h after the first | | docs/research/bluesky-video.md (decisions.md D5) | Bluesky step machine | `tests/integration/bluesky/video-limits.test.ts` "a refusal 23 hours after the first fails with Bluesky's message" |
+| note: processing ceiling | 30 minutes, at most 16 reads | | docs/research/bluesky-video.md (decisions.md D7) | Bluesky step machine | `tests/integration/bluesky/video-failures.test.ts` "fails after 30 minutes or 16 reads, at the 5-minute pace once 10 minutes have passed" |
+| note: verified email | Bluesky-hosted accounts need a verified email to upload video | | docs/research/bluesky-video.md | Bluesky (`UploadForbidden`) | `src/providers/bluesky/video-errors.test.ts` "explains %s" |
+| note: client duration ceiling | 10 minutes, unverified as a server limit | | docs/research/bluesky-video.md (decisions.md D2) | not enforced | `src/providers/bluesky/capabilities.test.ts` "declares one MP4 H.264/AAC video up to 3 minutes and 300 MB, silent allowed, no images alongside" |
 
 ## X
 

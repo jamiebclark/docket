@@ -382,7 +382,7 @@ export interface AttemptSummary {
 }
 
 export type StepResult = (
-  | { kind: "continue"; state: unknown; notBefore?: Date }
+  | { kind: "continue"; state: unknown; notBefore?: Date; /** Shown as the target's status until the next result (G24). */ wait?: string }
   | { kind: "done"; externalId: string; url?: string }
   | { kind: "retryable_error"; error: string; notBefore?: Date; credentialsExpired?: boolean }
   | { kind: "fatal_error"; error: string; credentialsInvalid?: true }

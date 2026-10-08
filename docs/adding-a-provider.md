@@ -56,6 +56,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G17 | exchangeCode receives state | 4 |
 | G18 | the group's own message in the accounts banner | 4 |
 | G23 | `afterPublish`, `credentialsInvalid` on `ambiguous` | 6, 7 |
+| G24 | `continue` may carry `wait`, shown as `lastError` | 7 |
 
 ## 3. Capabilities and counting rules
 
@@ -245,6 +246,12 @@ live; check before retrying." Only a `fatal_error` the provider itself returns s
 `credentialsInvalid: true`: the account is flagged `needs_reauth` as for a fatal, the target stays `ambiguous`, and `lastError` ends
 "Reconnect <account> to publish again." A provider that never sets `afterPublish` sees no change.
 
+### A wait with a reason (G24)
+
+A `continue` result may carry `wait`: a short message recorded (redacted) as the target's `lastError` while the step waits, so a
+provider wait can show its reason without spending an attempt. Bluesky's upload-limit wait uses it. Inert for providers that never
+set it.
+
 A `retryable_error` may set `credentialsExpired: true` when the platform said the access token has lapsed. The engine then
 refreshes the credentials before the retry (the result is still retryable, and nothing was published).
 
@@ -412,3 +419,21 @@ Facebook video reuses G19–G22 and adds G23, with no composer, schema or engine
 - **Steps.** A Page video is one `videos` request with `file_url`. A Reel runs start, upload (`rupload.facebook.com` with a `file_url` header), upload check, finish, then publish check. Only `finish` has `mayPublish: true`.
 - **After publishing (G23).** The publish check declares `afterPublish: true`, so the engine can only record it `ambiguous`, never `failed`, unless Facebook's own error report says so.
 - **Where to look.** `src/providers/facebook/` (`capabilities.ts`, `requests.ts`, `state.ts`, `steps.ts`, `publish.ts`) and `tests/integration/facebook/`.
+
+### Video steps (the `bluesky` provider)
+
+Bluesky video adds no engine code beyond G24 and shows how a multi-step upload fits the bounded-step rules. See `src/providers/bluesky/`
+(`video-publish.ts`, `video-service.ts`, `video-state.ts`, `video-errors.ts`, `capabilities.ts`) and `tests/integration/bluesky/video*.test.ts`.
+
+- **Service tokens per step.** Each call to a host other than the account's own mints a short-lived service token for that host
+  (audience) and method, and never stores it. The upload calls use the account's PDS as audience (read once from `getSession`'s DID
+  document); the limits and status reads use the video service.
+- **Upload in parts, one part per step.** Parts are read by HTTP `Range` from the media's public URL, so a step never holds the whole
+  file and each stays inside the provider time limit. Progress is kept in the saved state (never a token) so an upload resumes.
+- **Limits check and fallback.** `check_upload_limits` runs first and reserves the daily allowance. A refusal waits (G24); a refused
+  check is skipped and the start's own error is authoritative.
+- **Job polling.** `check_job` reads the status on a widening schedule up to a ceiling, then fails with a plain message. Only
+  `create_post` has `mayPublish: true`; every earlier step is safe to retry.
+- **Error explanations.** Each start error and job failure code maps to a plain sentence, with Bluesky's code and a sanitised message.
+- **Unverified facts** (parts host and auth, limits and status audience, the already-processed shape) each sit in one named constant
+  or function with a conservative fallback.

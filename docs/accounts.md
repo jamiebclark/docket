@@ -87,7 +87,13 @@ password. It is used once to open the session and then thrown away, so every rec
 **Needs reconnecting** means Bluesky refused to renew the session (the app password was revoked, or the session
 expired). Enter an app password again from Accounts. Revoking the app password is done in Bluesky.
 
-The live Bluesky connect is **unverified**.
+Video needs nothing more at connect: there is no new connection step. A Bluesky-hosted account must have a **verified email**
+address to upload video, and Bluesky allows about 25 videos a day.
+
+The live Bluesky connect is **unverified**. Real video publishing is verified with mocks only. Owed live checks (quickstart §7):
+publish a 30 s MP4; confirm the host and token audience for upload, limits and status calls; record `partSizeBytes` and part timing and
+the processing time; publish a 4-minute video with a raised maximum duration; and confirm `Range` requests get a 206 from the public
+media URL.
 
 ## Facebook Pages and Instagram
 
