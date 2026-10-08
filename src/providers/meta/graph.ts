@@ -2,6 +2,8 @@ export interface MetaApp {
   graphBase: string;
   /** Null → no version segment in any URL (a product whose Graph host is unversioned). */
   version: string | null;
+  /** The host a resumable upload address must name (default `rupload.facebook.com`). Checked by the caller. */
+  uploadHost?: string;
 }
 
 export interface GraphError {
@@ -120,6 +122,23 @@ export function graphRequest(app: MetaApp, req: GraphRequestInput): Promise<Grap
     signal: req.signal,
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: params.toString(),
+  });
+}
+
+/**
+ * One POST to an already-checked upload address (the caller runs `checkUploadUrl`).
+ * The token goes only in the Authorization header; there is no body and no query.
+ */
+export function ruploadRequest(input: {
+  url: URL;
+  token: string;
+  headers: Record<string, string>;
+  signal: AbortSignal;
+}): Promise<GraphOutcome> {
+  return send(input.url.toString(), {
+    method: "POST",
+    signal: input.signal,
+    headers: { ...input.headers, authorization: `OAuth ${input.token}` },
   });
 }
 

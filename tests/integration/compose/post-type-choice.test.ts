@@ -10,6 +10,7 @@ afterAll(closeDb);
 async function setup() {
   const env = await postsEnv();
   const instagram = await createMockAccount(env.project.id, {}, { providerKey: "instagram" });
+  const facebook = await createMockAccount(env.project.id, {}, { providerKey: "facebook" });
   const mock = await createMockAccount(env.project.id, {});
   const video = () => createVideoAsset(env.project.id, { width: 1080, height: 1920 });
   const check = async (accountId: string, mediaIds: string[], postType?: "video" | "reel" | null, postId?: string) => {
@@ -21,7 +22,7 @@ async function setup() {
     });
     return res.targets[0]!;
   };
-  return { env, instagram, mock, video, check };
+  return { env, instagram, facebook, mock, video, check };
 }
 
 describe("per-target post type choice", () => {
@@ -38,6 +39,37 @@ describe("per-target post type choice", () => {
     expect(reel.postTypeChoice).toMatchObject({ selected: "reel" });
     expect(reel.requirements?.video.postType?.value).toBe("reel");
     expect(reel.requirements?.video.postType?.label).not.toBe(dflt.requirements?.video.postType?.label);
+  });
+
+  it("defaults one video on Facebook to Page video, and reel gives the Reel summary", async () => {
+    const t = await setup();
+    const v = await t.video();
+    const dflt = await t.check(t.facebook.id, [v.id]);
+    expect(dflt.postType).toBe("video");
+    expect(dflt.postTypeChoice).toMatchObject({ selected: "video", default: "video" });
+    expect(dflt.postTypeChoice!.options.map((o) => o.label)).toEqual(["Page video", "Reel"]);
+    expect(dflt.requirements?.video.postType?.label).toBe("Page video");
+    expect(dflt.requirements?.video.notes).toHaveLength(1);
+
+    const reel = await t.check(t.facebook.id, [v.id], "reel");
+    expect(reel.postType).toBe("reel");
+    expect(reel.requirements?.video.postType).toMatchObject({ value: "reel", label: "Reel" });
+    expect(reel.requirements?.video.videoCodecs).toEqual(["H.264", "HEVC", "VP9", "AV1"].map((label) => expect.objectContaining({ label })));
+    expect(reel.requirements?.video.notes).toHaveLength(3);
+  });
+
+  it("keeps the choice per target beside Instagram", async () => {
+    const t = await setup();
+    const v = await t.video();
+    const res = await posts.checkComposition(t.env.scope, {
+      baseText: "Hello",
+      mediaIds: [v.id],
+      targets: [
+        { accountId: t.facebook.id, postType: "reel" },
+        { accountId: t.instagram.id, postType: "video" },
+      ],
+    });
+    expect(res.targets.map((x) => x.postType)).toEqual(["reel", "video"]);
   });
 
   it("gives no choice for images, two videos or video plus image, and the carousel summary", async () => {

@@ -13,10 +13,11 @@ async function setup() {
   const key = (await createKey(env.scope, ["read", "write_posts"], { rateLimitPerMinute: 1000 })).secret;
   const instagram = await createMockAccount(env.project.id, {}, { providerKey: "instagram" });
   const facebook = await createMockAccount(env.project.id, {}, { providerKey: "facebook" });
+  const mock = await createMockAccount(env.project.id, {});
   const video = await createVideoAsset(env.project.id, { width: 1080, height: 1920 });
   const create = (body: Record<string, unknown>) =>
     api("POST", "/posts", { key, body: { text: "Hello", accountIds: [instagram.id], mediaIds: [video.id], ...body } });
-  return { env, key, instagram, facebook, video, create };
+  return { env, key, instagram, facebook, mock, video, create };
 }
 
 describe("createPost postTypes", () => {
@@ -46,9 +47,26 @@ describe("createPost postTypes", () => {
     expect(r.text).toContain(instagram.id);
   });
 
-  it("refuses a choice for an account whose provider offers none", async () => {
+  it("defaults a Facebook single-video target to video, and accepts reel", async () => {
     const { facebook, create } = await setup();
-    const r = await create({ accountIds: [facebook.id], postTypes: { [facebook.id]: "reel" } });
+    const dflt = await create({ accountIds: [facebook.id] });
+    expect(dflt.status).toBe(201);
+    expect(dflt.json.post.targets[0].postType).toBe("video");
+    const reel = await create({ accountIds: [facebook.id], postTypes: { [facebook.id]: "reel" } });
+    expect(reel.status).toBe(201);
+    expect(reel.json.post.targets[0].postType).toBe("reel");
+  });
+
+  it("refuses story for Facebook, naming video, reel", async () => {
+    const { facebook, create } = await setup();
+    const r = await create({ accountIds: [facebook.id], postTypes: { [facebook.id]: "story" } });
+    expect(r.status).toBe(400);
+    expect(r.text).toContain("video, reel");
+  });
+
+  it("refuses a choice for an account whose provider offers none", async () => {
+    const { mock, create } = await setup();
+    const r = await create({ accountIds: [mock.id], postTypes: { [mock.id]: "reel" } });
     expect(r.status).toBe(400);
     expect(r.text).toContain("offers no post type choice");
   });

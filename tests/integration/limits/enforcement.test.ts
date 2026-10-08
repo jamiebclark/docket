@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { providerPublishLimits } from "../../../src/providers/limits";
 import { providers } from "../../../src/providers/registry";
 import { mediaConstraintsOf } from "../../../src/providers/media";
-import type { ValidationIssue } from "../../../src/providers/types";
+import type { PostType, ValidationIssue } from "../../../src/providers/types";
 import { allowanceUses } from "../../../src/server/db/schema/scheduler";
 import { posts as postsTable, postTargets } from "../../../src/server/db/schema/posts";
 import { runTick } from "../../../src/server/scheduler";
@@ -57,10 +57,10 @@ describe("capability rows: the shared validation core (scheduling gate and publi
 });
 
 /** A post whose only target is due at `dueAt`, with `mediaIds` attached. */
-async function dueTargetWithMedia(projectId: string, accountId: string, text: string, mediaIds: string[], dueAt: Date) {
+async function dueTargetWithMedia(projectId: string, accountId: string, text: string, mediaIds: string[], dueAt: Date, chosenPostType?: PostType) {
   const repos = forSchedulerProject(projectId);
   const { post, targets } = await createDraftPost(projectId, { baseText: text, accountIds: [accountId], mediaIds });
-  const target = await repos.targets.update(targets[0]!.id, { status: "scheduled", scheduleKind: "explicit", scheduledAt: dueAt, nextAttemptAt: dueAt });
+  const target = await repos.targets.update(targets[0]!.id, { status: "scheduled", scheduleKind: "explicit", scheduledAt: dueAt, nextAttemptAt: dueAt, ...(chosenPostType ? { chosenPostType } : {}) });
   await repos.posts.setStatus(post.id, "scheduled");
   return target!;
 }
@@ -128,7 +128,7 @@ describe("video rows: refused by the core, when scheduling and at publish time, 
         expectOutcome(queued[0]!.ok ? [] : (queued[0]!.issues ?? []), { refuse: row.codes });
 
         // At publish time: a first-step target whose media breaks the limit fails on the engine's own check.
-        const target = await dueTargetWithMedia(env.project.id, account.id, "hi", mediaIds, new Date(T0.getTime() - 1000));
+        const target = await dueTargetWithMedia(env.project.id, account.id, "hi", mediaIds, new Date(T0.getTime() - 1000), row.chosenPostType);
         await atTime(T0, () => runTick());
         const after = await forSchedulerProject(env.project.id).targets.get(target.id);
         expect(after).toMatchObject({ status: "failed", externalId: null });
@@ -212,8 +212,11 @@ describe("a creation allowance defers without a platform request or a counted at
         const usedAt = new Date(T0.getTime() - 600 * 1000);
         await testDb().insert(allowanceUses).values({ projectId: env.project.id, socialAccountId: account.id, units: row.count, createdAt: usedAt });
         const { target, post } = await createDueTarget(env.project.id, account.id, { baseText: "hi", dueAt: new Date(T0.getTime() - 1000) });
-        const asset = await createMediaAsset(env.project.id);
+        // Facebook counts only Reels against its allowance, so its target is a Reel; the others count any container.
+        const reel = provider.key === "facebook";
+        const asset = reel ? await createVideoAsset(env.project.id, { width: 1080, height: 1920 }) : await createMediaAsset(env.project.id);
         await forSchedulerProject(env.project.id).posts.setMedia(post.id, [asset.id]);
+        if (reel) await forSchedulerProject(env.project.id).targets.update(target.id, { chosenPostType: "reel" });
         await atTime(T0, () => runTick({ config: { maxItems: 100 } }));
         const repos = forSchedulerProject(env.project.id);
         const after = await repos.targets.get(target.id);

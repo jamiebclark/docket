@@ -824,6 +824,73 @@ Judgement calls from `specs/019-instagram-video/spec.md` (D1–D13) and its plan
 - **No deployment change.** `docker-compose.yml` and `.env.example` do not change (FR-031, P27). Migration `0012` runs at start-up.
 - **Owed.** The four live checks in `docs/meta-setup.md`. Until then Instagram video is verified with mocks only.
 
+## 021 — Facebook Page video (2026-10-07)
+
+Judgement calls from `specs/021-facebook-video/spec.md` (D1–D15) and its plan (`research.md`, P1–P22). External facts come from `docs/research/meta-video.md` (Facebook Pages) and `docs/research/meta.md`. The branch and spec directory are numbered 021 because `020-activity-history` already exists in another session. Real publishing is verified with mocks only; the owed live checks are in `docs/meta-setup.md`.
+
+### Spec decisions
+
+- **D1 — A single Facebook video is a Page video or a Reel, chosen per target** (reuses G19). Post types `video` ("Page video", the `videos` edge) and `reel` ("Reel", the Reels Publishing API). No composer, schema or engine code is specific to Facebook.
+- **D2 — The default is Page video.** Reels accept only 9:16 video of 3–90 s, so a Reel default would refuse most videos and every generated or API post with one. *Reverse:* change the declared default.
+- **D3 — Facebook Reel limits.**
+  - The limits: one video, no images; MP4 or MOV; H.264, HEVC, VP9 or AV1; AAC or silent; 3–90 s; at least 540 × 960; 24–60 fps; aspect 0.556–0.569 (9:16 ±1%, so 1,080 × 1,918 passes and no other shape does).
+  - No size limit is declared, because none is stated. Audio sample rate, channels and bitrate are left to Facebook.
+- **D4 — Facebook Page video limits:** one video, no images, MP4 or MOV, and nothing else. Facebook publishes no others, and Docket's upload limits apply.
+- **D5 — Reels are uploaded by address.** The `rupload.facebook.com` request carries a `file_url` header pointing at the stored original, and no bytes. Byte upload is unowned (`docs/feature-map.md`).
+- **D6 — Page videos are one `videos` request with `file_url`.** No `source` and no chunked upload.
+- **D7 — Reel steps:** start → upload → upload check (repeated) → finish → publish check (repeated). Only finish may publish.
+- **D8 — Polling.** Each check is first due 1 min after its request, then once a minute until 5 min, then every 5 min.
+  - The upload check fails at 30 min (at most 10 checks).
+  - The publish check is ambiguous at 60 min (at most 16 checks).
+- **D9 — After finish, only Facebook's own error report may fail the target.** Every other outcome is published or ambiguous, and unreadable or dropped reads are checked again.
+- **D10 — 30 Reels per Page per rolling 24 h** (reuses G22). Only the start step reserves (1, and 1 per retry). Page video, photo and text posts never use the allowance.
+- **D11 — A Page video is published when Facebook returns its id.** There is no status polling, because it is UNVERIFIED for the `videos` edge. A later processing failure shows on Facebook, not in Docket.
+- **D12 — No optional fields and no native scheduling.** No title, place, thumbnail, collaborators, draft state, `scheduled_publish_time` or link preview.
+- **D13 — The Page token goes only to Meta.** The upload address must be `https` on `rupload.facebook.com` and name the started video id. Otherwise the target fails with no request.
+- **D14 — Changes before finish restart from start.** The abandoned start still counts towards D10. Edits to publishing targets stay blocked as today.
+- **D15 — One video per Facebook post, never with images.** Both are refused, with one message. Unowned (`docs/feature-map.md`).
+
+### Generic changes
+
+- **G23 steps after publishing** (`StepInfo.afterPublish`, `ambiguous.credentialsInvalid`).
+  - *What:* `stepFor` may mark a step that runs after a step with `mayPublish: true` was sent. For such a lease, the engine never records failed on its own. These become **ambiguous**, with " The post may already be live; check before retrying.":
+    - engine-side fatal results before the call (missing media, unreadable credentials, invalid settings);
+    - a `retryable_error` reaching `maxAttempts`;
+    - stale-lease recovery at `maxAttempts`, where the step is re-derived only in that branch.
+  - A provider's own `fatal_error` still fails.
+  - An `ambiguous` result may carry `credentialsInvalid`. The account is then flagged as for a fatal result, and the target stays ambiguous.
+  - *Why:* D9 must hold on paths the provider never sees. Facebook is the first provider with a step after its publishing step.
+  - *Rejected:* `mayPublish: true` on the check, because a killed worker would then be ambiguous instead of resuming, and FR-005 says only finish may publish. *Also rejected:* a lease column, which needs a migration for a rarely used flag.
+  - *Reverse:* remove both members and the four engine branches. Facebook's `check_publish` then fails after 8 engine-side failures, as any other read step does.
+- **Summary notes for any post type** (a fix to G20). `requirementsOf` shows `byPostType[type].notes` for the shown type, not only `carousel`. Instagram's output is unchanged.
+
+### Plan decisions
+
+- **P1 — The base `video` block is the Page video, and `byPostType.reel` holds the Reel limits** (the opposite of Instagram). Badges, two-item posts and unchosen videos then use the permissive limits with no special case.
+- **P2 — Wording.**
+  - Refusals name the type ("for a Facebook Reel") and end "Docket does not crop, trim or convert video yet."
+  - A Reel aspect refusal says "Facebook Reels must be 9:16 (vertical)".
+  - "Post it as a Page video instead." is added when Page video limits accept the file.
+  - `too_many_videos` and `video_with_images` say "A Facebook post can carry one video and no images."
+- **P4 — The allowance wait reuses G22's message,** which already says how many are used ("30 of 30 used in the last 24 hours").
+- **P6 — State stays `v: 1` as a union.** The old photo shape is unchanged, and a Reel shape is added. A Page video saves no state.
+- **P7 — Upload replies.** Any 2xx from rupload continues to the upload check, because the reply body is UNVERIFIED and the check is authoritative. An unreadable 2xx is not retried, because re-sending `file_url` for the same video is of unknown safety.
+- **P9 — Reading `fields=status`.** One function, `readReelStatus`, reads `status.video_status` and the three phase objects. An unknown value is never complete, published or failed. "Published" needs `ready` plus a completed publishing phase or `publish_status=published`, so a bare `ready` ends ambiguous at 60 min until the live check says otherwise.
+- **P10 — Facebook keeps its own pace constants,** equal to Instagram's video pace, so the two can be tuned apart.
+- **P11 — "Check again" is a `continue`,** never a `retryable_error`, so checks do not count towards `maxAttempts` and only the ceilings end them.
+- **P14 — Once `finishedAt` is saved, the step is always the publish check,** whatever the post now holds. Unreadable state on a video post is ambiguous, never failed, and never leads to a second finish.
+- **P15 — Page video omits `published`** (Facebook's default is true). Today's tests assert that `published` is never sent on a publishing request.
+- **P20 — No `docker-compose.yml`, `.env.example` or migration change.**
+
+---
+
+### Implementation outcome
+
+- **Built as planned.** Page video and Reel post types for Facebook, Reel steps start, upload, upload check, finish, publish check, with G23 in the engine.
+- **No deployment change.** `docker-compose.yml`, `.env.example` and migrations do not change (FR-028, P20).
+- **Unowned.** Byte or chunked upload, Page video status checks, optional fields, Facebook-side scheduling, API video upload and generator video are listed in `docs/feature-map.md` (FR-025).
+- **Owed.** The four live checks in `docs/meta-setup.md`. Until then Facebook video is verified with mocks only.
+
 ## 020 — Activity history (2026-10-07)
 
 ### Spec decisions

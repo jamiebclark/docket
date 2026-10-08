@@ -38,6 +38,15 @@ describe("provider registry", () => {
   it("declares consistent media constraints for every provider", () => {
     for (const p of listProviders()) expect(() => mediaConstraintsOf(p.capabilities), p.key).not.toThrow();
   });
+  it("declares Facebook's video choice consistently", () => {
+    const caps = getProvider("facebook").capabilities;
+    const choice = caps.postTypeChoices?.find((c) => c.shape === "single_video");
+    expect(choice?.default).toBe("video");
+    for (const o of choice!.options) expect(caps.postTypes).toContain(o.type);
+    expect(choice!.options.map((o) => o.type)).toEqual(["video", "reel"]);
+    expect(() => assertVideoCapabilities(caps)).not.toThrow();
+    expect(caps.video.byPostType?.reel?.maxDurationSeconds).toBe(90);
+  });
   it("rejects inconsistent video declarations", () => {
     const base = getProvider("mock").capabilities;
     const bad = (video: typeof base.video, over: Partial<typeof base> = {}) =>

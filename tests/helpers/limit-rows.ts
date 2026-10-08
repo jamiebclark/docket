@@ -250,10 +250,12 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
   for (const chosen of types) {
     const postType: PostType = chosen ?? "video";
     const v = videoLimitsFor(caps, postType);
-    const suffix = chosen && chosen !== choice!.default ? ` (${chosen})` : "";
+    // A type with limits of its own is named like a `byPostType` row (`facebook: reel min duration`); one that shares the base is not.
+    const own = chosen !== null && chosen !== choice!.default && Object.keys(caps.video.byPostType?.[chosen] ?? {}).some((k) => k !== "notes");
+    const suffix = chosen && chosen !== choice!.default && !own ? ` (${chosen})` : "";
     const row = (category: string, code: string | readonly string[], videos: VideoAssetOptions[], withImage = false): VideoRow => ({
-      title: `${key}: ${category}${suffix}`,
-      category,
+      title: own ? `${key}: ${chosen} ${category}` : `${key}: ${category}${suffix}`,
+      category: own ? `${chosen} ${category}` : category,
       videos,
       withImage,
       code: typeof code === "string" ? code : code[0]!,
@@ -268,7 +270,7 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
     }
     const otherContainer = CONTAINERS.find((c) => v.containers && !v.containers.includes(c));
     if (otherContainer) rows.push(row("video containers", "video_container_not_allowed", [{ container: otherContainer }]));
-    const otherCodec = ["hevc", "vp9"].find((c) => v.videoCodecs && !v.videoCodecs.includes(c));
+    const otherCodec = ["hevc", "vp9", "mpeg4"].find((c) => v.videoCodecs && !v.videoCodecs.includes(c));
     if (otherCodec) rows.push(row("video codecs", "video_codec_not_allowed", [{ videoCodec: otherCodec }]));
     if (v.audioCodecs && !v.audioCodecs.includes("opus")) rows.push(row("audio codecs", "audio_codec_not_allowed", [{ audioCodec: "opus" }]));
     if (v.silentAllowed === false) rows.push(row("silent video", "audio_required", [{ audioCodec: null }]));
@@ -286,7 +288,7 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
   }
   // Per-type overrides: a post of that type's shape (a carousel is an image plus a video), breaking only the overridden bound.
   for (const [type, over] of Object.entries(caps.video.byPostType ?? {}) as [PostType, NonNullable<ProviderCapabilities["video"]["byPostType"]>[PostType]][]) {
-    if (!over) continue;
+    if (!over || choice?.options.some((o) => o.type === type)) continue;
     const row = (category: string, code: string | readonly string[], videos: VideoAssetOptions[], withImage: boolean): VideoRow => ({
       title: `${key}: ${type} ${category}`,
       category: `${type} ${category}`,

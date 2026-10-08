@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { mediaConstraintsOf, planImage, type MediaConstraints } from "./media";
+import { getProvider } from "./registry";
+import { videoLimitsFor } from "./validation";
+import { assertVideoCapabilities, mediaConstraintsOf, planImage, type MediaConstraints } from "./media";
 import type { ProviderCapabilities } from "./types";
 
 const baseCaps = (media: Partial<ProviderCapabilities["media"]>): ProviderCapabilities => ({
@@ -23,6 +25,15 @@ const instagram: MediaConstraints = mediaConstraintsOf(
 const bluesky = mediaConstraintsOf(
   baseCaps({ allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"], outputMimeType: "image/jpeg", maxBytesPerFile: 2_000_000 }),
 );
+describe("Facebook video declaration", () => {
+  it("passes the video checks and merges Reel limits over the Page video block", () => {
+    const caps = getProvider("facebook").capabilities;
+    expect(() => assertVideoCapabilities(caps)).not.toThrow();
+    expect(videoLimitsFor(caps, "video").maxDurationSeconds).toBeUndefined();
+    expect(videoLimitsFor(caps, "reel")).toMatchObject({ minDurationSeconds: 3, maxDurationSeconds: 90, minWidth: 540, minHeight: 960 });
+  });
+});
+
 const ctx = { index: 1, platform: "Instagram" };
 const img = (o: Partial<{ mimeType: string; width: number; height: number; bytes: number }> = {}) => ({
   mimeType: "image/jpeg",

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { findProvider } from "../../providers/registry";
 import { resolvePostType } from "../../providers/post-type";
 import type { SocialProvider, StepResult } from "../../providers/types";
+import type { AttemptOutcome } from "../dal/attempts";
 import * as clock from "../dal/clock";
 import { writeHeartbeat } from "../dal/heartbeats";
 import {
@@ -22,7 +23,7 @@ import { recoverExpiredLease } from "./recovery";
 import { redact, secretValues } from "./redact";
 import { markInvalidEmitting, refreshForPublish } from "./credentials";
 import { eventForDecision } from "../services/activity/classify";
-import { applyStepResult, recordStepResult } from "./record";
+import { AFTER_PUBLISH_SUFFIX, applyStepResult, recordStepResult } from "./record";
 
 export interface PublishingCounts {
   claimed: number;
@@ -57,6 +58,8 @@ interface Leased {
   provider: SocialProvider;
   step: string;
   mayPublish: boolean;
+  /** The step runs after the publishing step was sent: the engine never fails it on its own (G23). */
+  afterPublish: boolean;
   token: string;
   firstStep: boolean;
   before: Pick<TargetRecord, "status" | "firstStepAt" | "publishStartedAt">;
@@ -97,10 +100,34 @@ export async function runPublishing(opts: {
           };
         };
         const provider = findProvider(account.providerKey);
+        /** The leased step's `afterPublish` flag, derived the way the lease will; any throw or missing shape is "no". */
+        const stepIsAfterPublish = async (): Promise<boolean> => {
+          if (!provider) return false;
+          try {
+            const checked = provider.settingsSchema.safeParse(account.settings ?? {});
+            const parsed = checked.success ? checked.data : (account.settings ?? {});
+            const found = await ctx.contentShape(target);
+            if (!found) return false;
+            const { chosenPostType, ...rest } = found;
+            const kindList = rest.kinds ?? [];
+            const step = provider.stepFor(target.stepState, parsed, {
+              ...rest,
+              postType: resolvePostType(provider.capabilities, kindList.map((kind) => ({ kind })), chosenPostType),
+            });
+            return step.afterPublish === true;
+          } catch {
+            return false;
+          }
+        };
         const attempts: NonNullable<ClaimDecision["attempts"]> = [];
         let patch: TargetPatch = {};
 
-        const recovery = recoverExpiredLease(target, config, tickId);
+        let recovery = recoverExpiredLease(target, config, tickId);
+        if (recovery.kind === "settled" && recovery.outcome === "failed") {
+          // G23: a step after publishing never settles failed; derive it and settle again as ambiguous.
+          const afterPublish = await stepIsAfterPublish();
+          if (afterPublish) recovery = recoverExpiredLease(target, config, tickId, { afterPublish: true });
+        }
         if (recovery.kind !== "none") {
           // The lease expired while a step was in flight (FR-035).
           counts.recovered++;
@@ -112,19 +139,32 @@ export async function runPublishing(opts: {
           patch = recovery.patch;
         }
 
-        if (account.removedAt !== null || account.status !== "active" || !provider) {
+        /** Settles a claim-time refusal: ambiguous once the post may be live, failed otherwise (G23). */
+        const refuse = async (failed: { lastError: string; outcome: AttemptOutcome; error: string }): Promise<ClaimDecision> => {
+          if (await stepIsAfterPublish()) {
+            const message = `${failed.lastError} ${AFTER_PUBLISH_SUFFIX}`;
+            counts.ambiguous++;
+            return finish({ status: "ambiguous", nextAttemptAt: null, lastError: message }, [
+              ...attempts,
+              { step: "engine", outcome: failed.outcome, tickId, error: failed.error },
+            ]);
+          }
           counts.failed++;
-          return finish(
-            { status: "failed", nextAttemptAt: null, lastError: "The account is no longer available for publishing." },
-            [...attempts, { step: "engine", outcome: "account_unavailable", tickId, error: "Account removed, needs reconnecting, or provider unavailable." }],
-          );
+          return finish({ status: "failed", nextAttemptAt: null, lastError: failed.lastError }, [
+            ...attempts,
+            { step: "engine", outcome: failed.outcome, tickId, error: failed.error },
+          ]);
+        };
+
+        if (account.removedAt !== null || account.status !== "active" || !provider) {
+          return refuse({
+            lastError: "The account is no longer available for publishing.",
+            outcome: "account_unavailable",
+            error: "Account removed, needs reconnecting, or provider unavailable.",
+          });
         }
         if (target.firstStepAt && now.getTime() - target.firstStepAt.getTime() > config.maxPublishDurationMs) {
-          counts.failed++;
-          return finish(
-            { status: "failed", nextAttemptAt: null, lastError: "Publishing did not complete." },
-            [...attempts, { step: "engine", outcome: "did_not_complete", tickId, error: "Publishing did not complete." }],
-          );
+          return refuse({ lastError: "Publishing did not complete.", outcome: "did_not_complete", error: "Publishing did not complete." });
         }
 
         const firstStep = target.stepState === null;
@@ -146,11 +186,7 @@ export async function runPublishing(opts: {
         try {
           settings = provider.settingsSchema.parse(account.settings ?? {});
         } catch {
-          counts.failed++;
-          return finish(
-            { status: "failed", nextAttemptAt: null, lastError: "The account settings are invalid." },
-            [...attempts, { step: "engine", outcome: "account_unavailable", tickId, error: "Invalid account settings." }],
-          );
+          return refuse({ lastError: "The account settings are invalid.", outcome: "account_unavailable", error: "Invalid account settings." });
         }
         const shape = await ctx.contentShape(target);
         if (!shape) {
@@ -196,6 +232,7 @@ export async function runPublishing(opts: {
           provider,
           step: info.name,
           mayPublish: info.mayPublish,
+          afterPublish: info.afterPublish === true,
           token,
           firstStep: target.firstStepAt === null,
           before: { status: target.status, firstStepAt: target.firstStepAt, publishStartedAt: target.publishStartedAt },
@@ -415,8 +452,13 @@ async function execute(
       config.providerTimeoutMs,
     );
   } catch (error) {
-    if (error instanceof MediaUnavailable || error instanceof PostGone || error instanceof ContentInvalid || error instanceof CredentialsUnreadable || error instanceof SettingsInvalid) {
+    if (error instanceof PostGone || error instanceof ContentInvalid) {
       result = { kind: "fatal_error", error: error.message };
+    } else if (error instanceof MediaUnavailable || error instanceof CredentialsUnreadable || error instanceof SettingsInvalid) {
+      // After the post was sent, "failed" would be a lie: it may be live (G23).
+      result = lease.afterPublish
+        ? { kind: "ambiguous", error: `${error.message} ${AFTER_PUBLISH_SUFFIX}` }
+        : { kind: "fatal_error", error: error.message };
     } else if (error instanceof MediaNotReady) {
       result = { kind: "retryable_error", error: error.message };
     } else if (!providerCalled) {
@@ -429,10 +471,13 @@ async function execute(
   }
 
   // G7: the platform said these credentials are dead. Fail the target with a reconnect message; no refresh, no retry.
+  // An ambiguous result with the flag keeps its status (the post may be live) and still flags the account.
   const credentialsInvalidReason =
-    result!.kind === "fatal_error" && result!.credentialsInvalid ? redact(result!.error, secrets) : null;
+    (result!.kind === "fatal_error" || result!.kind === "ambiguous") && result!.credentialsInvalid ? redact(result!.error, secrets) : null;
   if (credentialsInvalidReason !== null && result!.kind === "fatal_error") {
     result = { ...result!, error: `Reconnect ${account.displayName} to publish: ${credentialsInvalidReason}` };
+  } else if (credentialsInvalidReason !== null && result!.kind === "ambiguous") {
+    result = { ...result!, error: `${credentialsInvalidReason} Reconnect ${account.displayName} to publish again.` };
   }
 
   const now = await clock.now();
@@ -442,6 +487,7 @@ async function execute(
     now,
     config,
     secrets,
+    afterPublish: lease.afterPublish,
   });
   const lateBySeconds =
     lease.firstStep && target.scheduledAt ? Math.max(0, Math.round((now.getTime() - target.scheduledAt.getTime()) / 1000)) : undefined;
@@ -483,6 +529,7 @@ async function execute(
       break;
     case "retryable_error":
       if (outcome.patch.status === "failed") counts.failed++;
+      else if (outcome.patch.status === "ambiguous") counts.ambiguous++;
       else counts.retried++;
       break;
     case "fatal_error":

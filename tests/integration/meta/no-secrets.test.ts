@@ -7,7 +7,7 @@ vi.hoisted(() => {
 import * as connect from "../../../src/server/services/connect";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb, testDb } from "../../helpers/db";
-import { facebookSetup, PAGE_ID, PAGE_TOKEN } from "../../helpers/facebook-publish";
+import { facebookSetup, facebookVideoSetup, PAGE_ID, PAGE_TOKEN } from "../../helpers/facebook-publish";
 import { IG_ID, instagramVideoSetup } from "../../helpers/instagram-publish";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { sessionFor } from "../../helpers/connect-group";
@@ -157,6 +157,64 @@ describe("Instagram video errors never leak the token", () => {
     const blob = `${JSON.stringify(row)}\n${JSON.stringify(await forSchedulerProject(s.projectId).targets.get(s.targetId))}\n${output()}`;
     expect(blob).not.toContain(PAGE_TOKEN);
     expect(await plaintextColumnsContaining(PAGE_TOKEN)).toEqual([]);
+  });
+});
+
+// 021: Facebook Page video and Reel flows whose replies echo the page token (SC-007).
+describe("Facebook video flows never leak the token", () => {
+  const reels = `/v26.0/${PAGE_ID}/video_reels`;
+  const status = (u: string, p: string, v: string, msg?: string) => ({
+    kind: "ok" as const,
+    body: {
+      status: {
+        video_status: v,
+        uploading_phase: { status: u },
+        processing_phase: { status: p, ...(msg ? { errors: [{ message: msg }] } : {}) },
+        publishing_phase: { status: "not_started" },
+      },
+    },
+  });
+
+  async function assertClean(s: { projectId: string; targetId: string }, output: () => string) {
+    const repos = forSchedulerProject(s.projectId);
+    const blob = [
+      JSON.stringify(await repos.targets.get(s.targetId)),
+      JSON.stringify(await repos.attempts.listForTarget(s.targetId)),
+      JSON.stringify(fake.requests),
+      output(),
+    ].join("\n");
+    expect(blob).not.toContain(PAGE_TOKEN);
+    expect(await plaintextColumnsContaining(PAGE_TOKEN)).toEqual([]);
+  }
+
+  it("a Reel whose replies and processing error echo the token leaves no trace of it", async () => {
+    const output = captureConsole();
+    fake.on("POST", reels, (req) =>
+      req.params.upload_phase === "start"
+        ? { kind: "ok", body: { video_id: "77", upload_url: "https://rupload.facebook.com/video-upload/77", echo: PAGE_TOKEN } }
+        : { kind: "ok", body: { success: true, echo: PAGE_TOKEN } },
+    );
+    fake.on("POST", "/video-upload/77", { kind: "ok", body: { success: true, debug: PAGE_TOKEN } });
+    fake.on("GET", "/v26.0/77", [
+      status("complete", "not_started", "upload_complete"),
+      status("complete", "error", "error", `Error: bad codec, token ${PAGE_TOKEN}`),
+    ]);
+    const s = await facebookVideoSetup(storage, "reel", { postType: "reel", video: { width: 1080, height: 1920 } });
+    const base = Date.now() + 60_000;
+    for (const t of [0, 1, 62, 63, 125, 190]) await atTime(new Date(base + t * 1000), () => s.tick());
+    const row = await s.row();
+    expect(row.status).toBe("failed");
+    expect(row.lastError).toContain("could not process the Reel");
+    await assertClean(s, output);
+  });
+
+  it("a Page video refused with an error that echoes the token leaves no trace of it", async () => {
+    const output = captureConsole();
+    fake.on("POST", `/v26.0/${PAGE_ID}/videos`, { kind: "graph_error", code: 100, message: `Bad video, token ${PAGE_TOKEN}`, status: 400 });
+    const s = await facebookVideoSetup(storage, "video", { video: { width: 1920, height: 1080 } });
+    await s.tick();
+    expect((await s.row()).status).toBe("failed");
+    await assertClean(s, output);
   });
 });
 

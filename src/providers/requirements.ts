@@ -169,7 +169,7 @@ export function requirementsOf(
         : shown === "carousel"
           ? { value: shown, label: postTypeLabel(caps, shown), description: null }
           : { value: shown, label: option?.label ?? postTypeLabel(caps, shown), description: option?.description ?? null },
-      notes: shown === "carousel" ? carouselNotes : [],
+      notes: [...(caps.video.byPostType?.[shown]?.notes ?? [])],
     },
     carousel:
       carouselLimits && carouselLimits.maxVideos > 0

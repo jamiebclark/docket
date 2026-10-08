@@ -27,6 +27,10 @@ export interface GraphRequest {
   params: Record<string, string>;
   /** Whether an access token was sent (header, query or body). */
   hadToken: boolean;
+  /** Header names lower-cased, with `authorization` replaced by `[redacted]`. */
+  headers: Record<string, string>;
+  /** Length of the request body in bytes; 0 when there is none. */
+  bodyBytes: number;
 }
 
 type Script = GraphReply | GraphReply[] | ((req: GraphRequest) => GraphReply);
@@ -120,6 +124,19 @@ async function readParams(url: URL, init: RequestInit | undefined): Promise<{ pa
   return { params, token };
 }
 
+function byteLength(body: RequestInit["body"]): number {
+  if (body === undefined || body === null) return 0;
+  if (typeof body === "string") return new TextEncoder().encode(body).length;
+  if (body instanceof URLSearchParams) return new TextEncoder().encode(body.toString()).length;
+  if (body instanceof ArrayBuffer) return body.byteLength;
+  if (ArrayBuffer.isView(body)) return body.byteLength;
+  if (body instanceof Blob) return body.size;
+  return 0;
+}
+
+/** Unscripted POSTs to the resumable-upload host succeed: the real reply body is not relied on (research P7). */
+const UPLOAD_HOST = "rupload.facebook.com";
+
 export function createFakeGraph(): FakeGraph {
   const routes = new Map<string, { script: Script; used: number }>();
   let fallbackReply: GraphReply = { kind: "graph_error", code: 803, message: "Unknown path", status: 404 };
@@ -146,10 +163,21 @@ export function createFakeGraph(): FakeGraph {
         const url = new URL(request ? request.url : String(input));
         const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
         const { params, token } = await readParams(url, init);
-        const entry: GraphRequest = { method, path: url.pathname, host: url.host, params, hadToken: token };
+        const headers: Record<string, string> = {};
+        for (const [k, v] of new Headers(init?.headers ?? request?.headers)) headers[k.toLowerCase()] = k.toLowerCase() === "authorization" ? "[redacted]" : v;
+        const entry: GraphRequest = {
+          method,
+          path: url.pathname,
+          host: url.host,
+          params,
+          hadToken: token,
+          headers,
+          bodyBytes: byteLength(init?.body),
+        };
         requests.push(entry);
         const route = routes.get(`${method} ${url.pathname}`);
-        let reply = fallbackReply;
+        let reply: GraphReply =
+          method === "POST" && url.host === UPLOAD_HOST ? { kind: "ok", body: { success: true } } : fallbackReply;
         if (route) {
           const { script } = route;
           if (typeof script === "function") reply = script(entry);

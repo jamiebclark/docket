@@ -43,4 +43,21 @@ describe("applyStepResult", () => {
     expect(r.error).toBe("[redacted]");
     expect(r.patch.lastError).toBe("[redacted]");
   });
+  describe("afterPublish", () => {
+    it("retryable at the cap is ambiguous, with the check-first suffix", () => {
+      const r = applyStepResult({ result: { kind: "retryable_error", error: "boom" }, target: { attemptCount: 2, stepState: {} }, now, config, afterPublish: true });
+      expect(r.outcome).toBe("ambiguous");
+      expect(r.patch).toMatchObject({ status: "ambiguous", attemptCount: 3, nextAttemptAt: null });
+      expect(r.error).toBe("boom The post may already be live; check before retrying.");
+      expect(r.patch.lastError).toBe(r.error);
+    });
+    it("retryable below the cap still retries", () => {
+      const r = applyStepResult({ result: { kind: "retryable_error", error: "boom" }, target: { attemptCount: 1, stepState: {} }, now, config, afterPublish: true });
+      expect(r.patch).toMatchObject({ status: "publishing", attemptCount: 2 });
+    });
+    it("a provider fatal still fails", () => {
+      const r = applyStepResult({ result: { kind: "fatal_error", error: "no" }, target: fresh, now, config, afterPublish: true });
+      expect(r.patch.status).toBe("failed");
+    });
+  });
 });

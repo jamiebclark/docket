@@ -62,6 +62,7 @@ const groups: Record<string, string[]> = {
   CredentialField: memberNames(declaration("CredentialField")),
   ConnectCandidate: memberNames(declaration("ConnectCandidate")),
   "StepResult kinds": discriminants(declaration("StepResult"), "kind"),
+  "StepInfo flags": ["afterPublish"],
   "StepResult flags": ["credentialsExpired", "credentialsInvalid", "notBefore"],
   "ConnectStrategy strategies": discriminants(declaration("ConnectStrategy"), "strategy"),
 };
