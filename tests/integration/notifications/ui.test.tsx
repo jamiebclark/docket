@@ -211,7 +211,9 @@ describe("problems callout", () => {
     await recordEvent(p.id, "target_failed");
     const html = (await render()).replaceAll("<!-- -->", "");
     expect(html).toContain('role="status"');
-    expect(html).toContain("2 problems since you last looked");
+    expect(html).toContain("Problems since you last looked");
+    expect(html).toContain("2 problems in Callouts.");
+    expect(html).toContain("View problems");
     expect(html).toContain(`href="/p/${p.slug}/activity?outcome=problems"`);
   });
 
@@ -221,7 +223,7 @@ describe("problems callout", () => {
     await addMember(p.id, u.id);
     const { render } = await callout(p.id, p.slug, u.id);
     for (let i = 0; i < 100; i++) await recordEvent(p.id, "target_failed");
-    expect((await render()).replaceAll("<!-- -->", "")).toContain("More than 99 problems since you last looked");
+    expect((await render()).replaceAll("<!-- -->", "")).toContain("More than 99 problems in Flooded.");
   });
 
   it("is hidden when the project is muted", async () => {

@@ -14,10 +14,11 @@ export async function ProblemsCallout({ scope }: { scope: ProjectScope }) {
   if (unread.count === 0) return null;
   return (
     <Alert tone="warning" role="status" className="mb-4">
+      <p className="font-semibold">Problems since you last looked</p>
       <p>
-        {unread.text} since you last looked.{" "}
-        <Link href={`/p/${scope.project.slug}/activity?outcome=problems`} prefetch={false} className="font-medium underline">
-          See the problems
+        {unread.text} in {scope.project.name}.{" "}
+        <Link href={`/p/${scope.project.slug}/activity?outcome=problems`} prefetch={false} className="underline">
+          View problems
         </Link>
       </p>
     </Alert>
