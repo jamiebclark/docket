@@ -77,6 +77,8 @@ export const TargetSchema = z
     attemptCount: z.number().int(),
     lastError: z.string().nullable(),
     overrideText: z.string().nullable(),
+    /** The effective post type: the chosen one, else the provider's default for this content. */
+    postType: z.string().nullable(),
   })
   .meta({ id: "Target" });
 

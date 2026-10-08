@@ -128,6 +128,19 @@ The pasted token is exchanged for the Pages' tokens and then thrown away; it is 
 Facebook and Instagram both fetch each image from its URL, so media storage must be a publicly readable bucket. See
 [storage.md](storage.md).
 
+## Instagram video: owed live checks
+
+Instagram video needs **no new permission**: `instagram_content_publish` already covers Reels, feed video and carousels.
+Until the owner runs these four checks in one sitting, Instagram video is "verified with mocks only". Report all results together.
+
+1. **Reel.** Publish one video as **Reel**. It should appear only in the Reels tab.
+2. **Feed video.** Publish one video as **Feed video**. It should appear in the feed grid and the Reels tab.
+3. **Mixed carousel.** Publish a carousel of image, video and image. This confirms that a video item created with `media_type`
+   omitted is accepted. If Instagram refuses it, the target fails at `create_item_2` with Instagram's message and nothing is
+   published; report the message (`VIDEO_ITEM_MEDIA_TYPE` in `src/providers/instagram/requests.ts` is a one-line change).
+4. **Large file.** Publish a Reel of roughly 200 to 300 MB. This confirms that Instagram fetches a large file from the bucket by
+   `video_url`, and shows how long processing takes.
+
 ## Threads
 
 Threads has its own app id and secret, separate from the App ID and App Secret above. You can add it to the same Meta app

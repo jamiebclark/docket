@@ -19,7 +19,9 @@ afterEach(() => graph.uninstall());
 const st = (count: number, patch: Partial<InstagramState> = {}): InstagramState => ({ ...initialState(count), ...patch });
 const createdAgo = (ms: number) => new Date(now.getTime() - ms).toISOString();
 
-function ctx(opts: { text?: string; media?: MediaItem[]; state?: unknown; at?: Date }): PublishContext {
+const vid = (n: number): MediaItem => ({ url: `https://media.test/${n}.mp4`, mimeType: "video/mp4", width: 720, height: 1280, bytes: 1000, altText: "", kind: "video" });
+
+function ctx(opts: { text?: string; media?: MediaItem[]; state?: unknown; at?: Date; postType?: "video" | "reel" }): PublishContext {
   const media = opts.media ?? [img(1)];
   const text = opts.text ?? "caption";
   const state = opts.state ?? null;
@@ -27,8 +29,8 @@ function ctx(opts: { text?: string; media?: MediaItem[]; state?: unknown; at?: D
     target: { id: "t1", scheduledAt: now, attempt: 1 },
     account: { id: "a1", externalId: IG, displayName: "IG", settings: {}, credentials: { pageToken: TOKEN } },
     content: { text, media },
-    postType: media.length === 1 ? "image" : "carousel",
-    step: instagramStepFor(state, { text, mediaCount: media.length }),
+    postType: opts.postType ?? (media.length === 1 ? (media[0]!.kind === "video" ? "video" : "image") : "carousel"),
+    step: instagramStepFor(state, { text, mediaCount: media.length, kinds: media.map((m) => m.kind ?? "image"), postType: opts.postType ?? (media[0]?.kind === "video" ? "video" : undefined) }),
     state,
     now: opts.at ?? now,
     signal: new AbortController().signal,
@@ -241,5 +243,143 @@ describe("publish", () => {
     const c = ctx({ state });
     c.step = { name: "create_container", mayPublish: false };
     expect(await advanceInstagram(c)).toMatchObject({ kind: "fatal_error", error: "The post changed while publishing." });
+  });
+});
+
+describe("video (Reels and Feed video)", () => {
+  const reelState = (shareToFeed: boolean, patch: Partial<InstagramState> = {}): InstagramState => ({
+    ...initialState({ mediaType: "REELS", shareToFeed }),
+    container: "r1",
+    createdAt: createdAgo(1000),
+    ...patch,
+  });
+
+  it("creates a Feed video with share_to_feed=true and waits 60 s", async () => {
+    graph.on("POST", p(`/${IG}/media`), { kind: "ok", body: { id: "r1" } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "video" }));
+    expect(graph.requests[0]!.params).toEqual({ media_type: "REELS", video_url: "https://media.test/1.mp4", caption: "caption", share_to_feed: "true", access_token: "[redacted]" });
+    expect(r).toMatchObject({ kind: "continue", state: { mediaType: "REELS", shareToFeed: true, container: "r1" } });
+    expect(r.kind === "continue" && r.notBefore).toEqual(new Date(now.getTime() + 60_000));
+  });
+
+  it("creates a Reel with share_to_feed=false, no caption when text is empty, and never VIDEO", async () => {
+    graph.on("POST", p(`/${IG}/media`), { kind: "ok", body: { id: "r1" } });
+    await advanceInstagram(ctx({ text: "", media: [vid(1)], postType: "reel" }));
+    expect(graph.requests[0]!.params).toEqual({ media_type: "REELS", video_url: "https://media.test/1.mp4", share_to_feed: "false", access_token: "[redacted]" });
+    for (const r of graph.requests) expect(JSON.stringify(r.params)).not.toContain('"VIDEO"');
+  });
+
+  it("reads status_code,status for a video, and exactly status_code for an image", async () => {
+    graph.on("GET", p("/r1"), { kind: "ok", body: { status_code: "IN_PROGRESS" } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "video", state: reelState(true) }));
+    expect(graph.requests[0]!.params.fields).toBe("status_code,status");
+    expect(r.kind === "continue" && r.notBefore).toEqual(new Date(now.getTime() + 60_000));
+    graph.requests.length = 0;
+    graph.on("GET", p("/c1"), { kind: "ok", body: { status_code: "IN_PROGRESS" } });
+    await advanceInstagram(ctx({ state: st(1, { container: "c1", createdAt: createdAgo(1000) }) }));
+    expect(graph.requests[0]!.params.fields).toBe("status_code");
+  });
+
+  it("moves to the 5-minute pace at 5:00", async () => {
+    graph.on("GET", p("/r1"), { kind: "ok", body: { status_code: "IN_PROGRESS" } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "video", state: reelState(true, { createdAt: createdAgo(300_000) }) }));
+    expect(r.kind === "continue" && r.notBefore).toEqual(new Date(now.getTime() + 300_000));
+  });
+
+  it("fails at 60 minutes with the video message", async () => {
+    graph.on("GET", p("/r1"), { kind: "ok", body: { status_code: "IN_PROGRESS" } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "video", state: reelState(true, { createdAt: createdAgo(PROCESSING_CAP_MS) }) }));
+    expect(r).toMatchObject({ kind: "fatal_error", error: expect.stringContaining("within 60 minutes; nothing was published") });
+  });
+
+  it("ERROR carries the detail, cleaned, in the message and the attempt", async () => {
+    graph.on("GET", p("/r1"), { kind: "ok", body: { status_code: "ERROR", status: "Error: bad\u0007 codec." } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "video", state: reelState(true) }));
+    expect(r).toMatchObject({
+      kind: "fatal_error",
+      error: "Instagram could not process the video: Error: bad codec. Check its format, codec, frame rate and bitrate; nothing was published.",
+      summary: { response: { statusDetail: "Error: bad codec." } },
+    });
+  });
+
+  it("ERROR without a detail omits it, and a non-string detail is ignored", async () => {
+    graph.on("GET", p("/r1"), { kind: "ok", body: { status_code: "ERROR", status: { a: 1 } } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "reel", state: reelState(false) }));
+    expect(r).toMatchObject({ kind: "fatal_error", error: "Instagram could not process the video. Check its format, codec, frame rate and bitrate; nothing was published." });
+  });
+
+  it("EXPIRED rebuilds a Reel keeping the plan", async () => {
+    graph.on("GET", p("/r1"), { kind: "ok", body: { status_code: "EXPIRED" } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "reel", state: reelState(false) }));
+    expect(r).toMatchObject({ kind: "continue", state: { mediaType: "REELS", shareToFeed: false, container: null, recreations: 1 } });
+  });
+
+  it("a post type switched mid-publish fails the step check", async () => {
+    const c = ctx({ media: [vid(1)], postType: "video", state: reelState(true, { ready: true, quotaChecked: true }) });
+    expect(await advanceInstagram({ ...c, postType: "reel" })).toMatchObject({ kind: "fatal_error", error: "The post changed while publishing." });
+  });
+});
+
+describe("mixed carousels", () => {
+  const kinds = ["image", "video", "image"] as const;
+  const media = [img(1), vid(2), img(3)];
+  const mixed = (patch: Partial<InstagramState> = {}): InstagramState => ({ ...initialState({ mediaType: "CAROUSEL", kinds: [...kinds] }), ...patch });
+  const prog = (ready: boolean, ago = 1000) => ({ createdAt: createdAgo(ago), checks: 0, ready });
+
+  it("creates a video item through the requests builder, never as a Reel", async () => {
+    graph.on("POST", p(`/${IG}/media`), { kind: "ok", body: { id: "i2" } });
+    const r = await advanceInstagram(ctx({ media, state: mixed({ items: ["i1"], itemProgress: [prog(true)] }) }));
+    expect(graph.requests[0]!.params).toMatchObject({ video_url: "https://media.test/2.mp4", is_carousel_item: "true" });
+    expect(graph.requests[0]!.params.media_type).toBeUndefined();
+    expect(r).toMatchObject({ kind: "continue", state: { items: ["i1", "i2"], itemProgress: [{ ready: true }, { ready: false }] } });
+  });
+
+  it("waits 60 s after the last item when a video is unready", async () => {
+    graph.on("POST", p(`/${IG}/media`), { kind: "ok", body: { id: "i3" } });
+    const r = await advanceInstagram(ctx({ media, state: mixed({ items: ["i1", "i2"], itemProgress: [prog(true), prog(false)] }) }));
+    expect(r.kind === "continue" && r.notBefore).toEqual(new Date(now.getTime() + 60_000));
+  });
+
+  const atCheck = (progress = [prog(true), prog(false), prog(true)]) => ctx({ media, state: mixed({ items: ["i1", "i2", "i3"], itemProgress: progress }) });
+
+  it("check_item polls the item and marks it ready on FINISHED", async () => {
+    graph.on("GET", p("/i2"), { kind: "ok", body: { status_code: "FINISHED" } });
+    const c = atCheck();
+    expect(c.step.name).toBe("check_item_2");
+    const r = await advanceInstagram(c);
+    expect(lastReq().params.fields).toBe("status_code,status");
+    expect(r).toMatchObject({ kind: "continue", state: { itemProgress: [{ ready: true }, { ready: true, checks: 1 }, { ready: true }] } });
+  });
+
+  it("check_item IN_PROGRESS keeps the video pace and stops at the cap", async () => {
+    graph.on("GET", p("/i2"), { kind: "ok", body: { status_code: "IN_PROGRESS" } });
+    const r = await advanceInstagram(atCheck());
+    expect(r.kind === "continue" && r.notBefore).toEqual(new Date(now.getTime() + 60_000));
+    const capped = await advanceInstagram(atCheck([prog(true), prog(false, PROCESSING_CAP_MS), prog(true)]));
+    expect(capped).toMatchObject({ kind: "fatal_error" });
+  });
+
+  it("check_item ERROR names the item and the detail", async () => {
+    graph.on("GET", p("/i2"), { kind: "ok", body: { status_code: "ERROR", status: "Bad codec." } });
+    const r = await advanceInstagram(atCheck());
+    expect(r).toMatchObject({ kind: "fatal_error" });
+    expect(r.kind === "fatal_error" && r.error).toContain("video 2 of the carousel (item 2): Bad codec.");
+  });
+
+  it("check_item EXPIRED rebuilds from item 1, keeping the kinds", async () => {
+    graph.on("GET", p("/i2"), { kind: "ok", body: { status_code: "EXPIRED" } });
+    const r = await advanceInstagram(atCheck());
+    expect(r).toMatchObject({ kind: "continue", state: { items: [], itemProgress: [], kinds: [...kinds], recreations: 1 } });
+  });
+
+  it("the 23 h guard counts from the oldest item container", async () => {
+    const r = await advanceInstagram(
+      ctx({
+        media,
+        state: mixed({ items: ["i1", "i2", "i3"], itemProgress: [prog(true, CONTAINER_SAFE_AGE_MS + 1), prog(true), prog(true)], container: "c1", createdAt: createdAgo(1000), ready: true }),
+      }),
+    );
+    expect(r).toMatchObject({ kind: "continue", state: { items: [], recreations: 1 } });
+    expect(graph.requests).toHaveLength(0);
   });
 });

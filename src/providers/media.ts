@@ -46,6 +46,8 @@ function assertRange(name: string, min: number | undefined, max: number | undefi
 }
 
 /** Pure; throws on an inconsistent video declaration so a bad provider fails at registry load. */
+const POST_TYPE_KEYS = ["text", "image", "carousel", "video", "story", "reel"] as const;
+
 export function assertVideoCapabilities(caps: ProviderCapabilities): void {
   const v: VideoCapabilities = caps.video;
   if (!Number.isInteger(v.maxVideos) || v.maxVideos < 0) {
@@ -60,6 +62,44 @@ export function assertVideoCapabilities(caps: ProviderCapabilities): void {
   }
   if (v.maxVideos > 0 && !caps.postTypes.includes("video")) {
     throw new Error('Inconsistent video constraints: maxVideos is above 0 but postTypes lacks "video".');
+  }
+  if (v.minFrameRate !== undefined && !(v.minFrameRate > 0 && (v.maxFrameRate === undefined || v.minFrameRate <= v.maxFrameRate))) {
+    throw new Error(`Inconsistent video constraints: minFrameRate (${v.minFrameRate}) must be positive and at most maxFrameRate.`);
+  }
+  for (const [key, over] of Object.entries(v.byPostType ?? {})) {
+    if (!(POST_TYPE_KEYS as readonly string[]).includes(key)) {
+      throw new Error(`Inconsistent video constraints: byPostType key "${key}" is not a post type.`);
+    }
+    const merged = { ...v, ...over, byPostType: undefined };
+    assertRange("DurationSeconds", merged.minDurationSeconds, merged.maxDurationSeconds);
+    assertRange("Width", merged.minWidth, merged.maxWidth);
+    assertRange("Height", merged.minHeight, merged.maxHeight);
+    assertRange("AspectRatio", merged.minAspectRatio, merged.maxAspectRatio);
+    if (merged.minFrameRate !== undefined && merged.maxFrameRate !== undefined && merged.minFrameRate > merged.maxFrameRate) {
+      throw new Error(`Inconsistent video constraints: byPostType.${key} has minFrameRate above maxFrameRate.`);
+    }
+  }
+  const shapes = new Set<string>();
+  for (const choice of caps.postTypeChoices ?? []) {
+    if (shapes.has(choice.shape)) {
+      throw new Error(`Inconsistent post type choices: more than one choice for shape "${choice.shape}".`);
+    }
+    shapes.add(choice.shape);
+    if (choice.options.length < 2) {
+      throw new Error(`Inconsistent post type choices: "${choice.shape}" needs at least 2 options.`);
+    }
+    const types = choice.options.map((o) => o.type);
+    if (new Set(types).size !== types.length) {
+      throw new Error(`Inconsistent post type choices: "${choice.shape}" has a duplicate option.`);
+    }
+    for (const t of types) {
+      if (!caps.postTypes.includes(t)) {
+        throw new Error(`Inconsistent post type choices: option "${t}" is not in postTypes.`);
+      }
+    }
+    if (!types.includes(choice.default)) {
+      throw new Error(`Inconsistent post type choices: default "${choice.default}" is not one of the options.`);
+    }
   }
 }
 

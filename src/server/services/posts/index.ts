@@ -15,6 +15,8 @@ import { lockPost, need, withLockedTarget } from "./locked";
 import { errorsOf, gate, issuesFor } from "./gate";
 import { resolvedEvent } from "../activity/classify";
 import { recordTargetEvent } from "../activity/record";
+import type { PostType } from "@/providers/types";
+import { assertPostTypeOffered } from "./content";
 
 export { applyDerivedStatus, derivePostStatus } from "./status";
 export { lockPost, withLockedTarget } from "./locked";
@@ -66,6 +68,7 @@ export interface PostTargetView {
   localTime: string | null;
   slotId: string | null;
   overrideText: string | null;
+  chosenPostType: PostType | null;
   attemptCount: number;
   nextAttemptAt: Date | null;
   lastError: string | null;
@@ -119,6 +122,7 @@ async function targetView(tx: Tx, t: TargetRecord, now: Date): Promise<PostTarge
     localTime: t.scheduledAt ? plannedTime(t.scheduledAt, t.slotId, tx.project.timezone).localTime : null,
     slotId: t.slotId,
     overrideText: t.overrideText,
+    chosenPostType: t.chosenPostType,
     attemptCount: t.attemptCount,
     nextAttemptAt: t.nextAttemptAt,
     lastError: t.lastError,
@@ -191,7 +195,11 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
   return scope.transaction(async (tx) => {
     need(tx, { post: ["edit"] });
     const now = await clock.now();
-    for (const target of parsed.targets) if (!(await tx.accounts.get(target.accountId))) throw new NotFoundError();
+    for (const [i, target] of parsed.targets.entries()) {
+      const account = await tx.accounts.get(target.accountId);
+      if (!account) throw new NotFoundError();
+      if (target.postType != null) assertPostTypeOffered(account.providerKey, target.postType, ["targets", i, "postType"]);
+    }
     if ((await tx.media.lockShared(parsed.mediaIds)).length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
     const post = await tx.posts.insert({
       baseText: parsed.baseText,
@@ -211,6 +219,7 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
         postId: post.id,
         socialAccountId: t.accountId,
         ...(t.overrideText != null ? { overrideText: t.overrideText } : {}),
+        chosenPostType: t.postType ?? null,
       })),
     );
     await applyDerivedStatus(tx, post.id);
@@ -244,6 +253,12 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
     }
     if (patch.targets) {
       const wanted = new Map(patch.targets.map((t) => [t.accountId, t]));
+      for (const [i, want] of patch.targets.entries()) {
+        if (want.postType == null) continue;
+        const account = await tx.accounts.get(want.accountId);
+        if (!account) throw new NotFoundError();
+        assertPostTypeOffered(account.providerKey, want.postType, ["targets", i, "postType"]);
+      }
       for (const t of existing) {
         const want = wanted.get(t.socialAccountId);
         if (!want) {
@@ -251,6 +266,8 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
         } else {
           await tx.targets.update(t.id, {
             overrideText: want.overrideText ?? null,
+            // Absent keeps the stored choice; null clears it.
+            ...(want.postType !== undefined ? { chosenPostType: want.postType } : {}),
             ...(t.status === "cancelled" ? { status: "draft" as const } : {}),
           });
         }
@@ -264,6 +281,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
           postId: id,
           socialAccountId: t.accountId,
           ...(t.overrideText != null ? { overrideText: t.overrideText } : {}),
+          chosenPostType: t.postType ?? null,
         })),
       );
     }

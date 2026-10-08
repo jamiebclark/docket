@@ -1,5 +1,5 @@
 {
-  "id": "5634224e-1fb5-443c-a7f0-90e0e7b92669",
+  "id": "54349e8f-3341-4020-81db-70e36192c75f",
   "prevId": "f7ac5285-f8c9-4ef0-bf12-16afbd9fa604",
   "version": "7",
   "dialect": "postgresql",
@@ -377,341 +377,6 @@
         "social_accounts_refresh_lease_pair": {
           "name": "social_accounts_refresh_lease_pair",
           "value": "(\"social_accounts\".\"refresh_lease_until\" IS NULL) = (\"social_accounts\".\"refresh_lease_owner\" IS NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.activity_events": {
-      "name": "activity_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "seq": {
-          "name": "seq",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "activity_events_seq_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "occurred_at": {
-          "name": "occurred_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "activity_event_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "outcome": {
-          "name": "outcome",
-          "type": "activity_outcome",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "post_id": {
-          "name": "post_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "post_target_id": {
-          "name": "post_target_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "social_account_id": {
-          "name": "social_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider_key": {
-          "name": "provider_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider_keys": {
-          "name": "provider_keys",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "group_key": {
-          "name": "group_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "actor_user_id": {
-          "name": "actor_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "actor_api_key_id": {
-          "name": "actor_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "details": {
-          "name": "details",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "activity_events_project_time_idx": {
-          "name": "activity_events_project_time_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "occurred_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "activity_events_project_outcome_time_idx": {
-          "name": "activity_events_project_outcome_time_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "outcome",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "occurred_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "activity_events_project_account_time_idx": {
-          "name": "activity_events_project_account_time_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "social_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "occurred_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"activity_events\".\"social_account_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "activity_events_project_target_idx": {
-          "name": "activity_events_project_target_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "post_target_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"activity_events\".\"post_target_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "activity_events_project_id_projects_id_fk": {
-          "name": "activity_events_project_id_projects_id_fk",
-          "tableFrom": "activity_events",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "activity_events_actor_user_id_user_id_fk": {
-          "name": "activity_events_actor_user_id_user_id_fk",
-          "tableFrom": "activity_events",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "activity_events_api_key_fk": {
-          "name": "activity_events_api_key_fk",
-          "tableFrom": "activity_events",
-          "tableTo": "api_keys",
-          "columnsFrom": [
-            "project_id",
-            "actor_api_key_id"
-          ],
-          "columnsTo": [
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "activity_events_seq_uq": {
-          "name": "activity_events_seq_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "seq"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "activity_events_kind_outcome": {
-          "name": "activity_events_kind_outcome",
-          "value": "(kind = 'target_published' AND outcome = 'published') OR (kind = 'target_failed' AND outcome = 'failed') OR (kind = 'target_ambiguous' AND outcome = 'ambiguous') OR (kind = 'target_retry_scheduled' AND outcome = 'retrying') OR (kind = 'target_resolved' AND outcome = 'resolved') OR (kind = 'account_needs_reauth' AND outcome = 'needs_reauth') OR (kind = 'account_connect_failed' AND outcome = 'connect_failed')"
-        },
-        "activity_events_message_len": {
-          "name": "activity_events_message_len",
-          "value": "char_length(\"activity_events\".\"message\") BETWEEN 1 AND 500"
-        },
-        "activity_events_details_size": {
-          "name": "activity_events_details_size",
-          "value": "octet_length(\"activity_events\".\"details\"::text) <= 2000"
-        },
-        "activity_events_ms": {
-          "name": "activity_events_ms",
-          "value": "\"activity_events\".\"occurred_at\" = date_trunc('milliseconds', \"activity_events\".\"occurred_at\")"
-        },
-        "activity_events_target_pair": {
-          "name": "activity_events_target_pair",
-          "value": "(\"activity_events\".\"post_id\" IS NULL) = (\"activity_events\".\"post_target_id\" IS NULL)"
-        },
-        "activity_events_target_kinds": {
-          "name": "activity_events_target_kinds",
-          "value": "(\"activity_events\".\"kind\"::text NOT LIKE 'target_%' OR (\"activity_events\".\"post_target_id\" IS NOT NULL AND \"activity_events\".\"social_account_id\" IS NOT NULL AND \"activity_events\".\"provider_key\" IS NOT NULL)) AND (\"activity_events\".\"kind\"::text NOT LIKE 'account_%' OR \"activity_events\".\"post_target_id\" IS NULL)"
-        },
-        "activity_events_needs_reauth_account": {
-          "name": "activity_events_needs_reauth_account",
-          "value": "\"activity_events\".\"kind\" <> 'account_needs_reauth' OR \"activity_events\".\"social_account_id\" IS NOT NULL"
-        },
-        "activity_events_provider_keys": {
-          "name": "activity_events_provider_keys",
-          "value": "cardinality(\"activity_events\".\"provider_keys\") >= 1 AND (\"activity_events\".\"provider_key\" IS NULL OR \"activity_events\".\"provider_keys\" = ARRAY[\"activity_events\".\"provider_key\"])"
-        },
-        "activity_events_group_key_format": {
-          "name": "activity_events_group_key_format",
-          "value": "\"activity_events\".\"group_key\" IS NULL OR \"activity_events\".\"group_key\" ~ '^[a-z0-9-]+$'"
         }
       },
       "isRLSEnabled": false
@@ -4077,6 +3742,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "chosen_post_type": {
+          "name": "chosen_post_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "step_state": {
           "name": "step_state",
           "type": "jsonb",
@@ -4420,6 +4091,10 @@
         "post_targets_occurrence_is_slot": {
           "name": "post_targets_occurrence_is_slot",
           "value": "\"post_targets\".\"slot_occurrence_at\" IS NULL OR \"post_targets\".\"schedule_kind\" = 'slot'"
+        },
+        "post_targets_chosen_post_type_known": {
+          "name": "post_targets_chosen_post_type_known",
+          "value": "\"post_targets\".\"chosen_post_type\" IS NULL OR \"post_targets\".\"chosen_post_type\" IN ('text','image','carousel','video','story','reel')"
         },
         "post_targets_lease_pair": {
           "name": "post_targets_lease_pair",
@@ -4777,6 +4452,123 @@
         "posts_series_pair": {
           "name": "posts_series_pair",
           "value": "(\"posts\".\"series_id\" IS NULL) = (\"posts\".\"series_position\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.allowance_uses": {
+      "name": "allowance_uses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "social_account_id": {
+          "name": "social_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "post_target_id": {
+          "name": "post_target_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "units": {
+          "name": "units",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "allowance_uses_account_created_idx": {
+          "name": "allowance_uses_account_created_idx",
+          "columns": [
+            {
+              "expression": "social_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "allowance_uses_project_id_projects_id_fk": {
+          "name": "allowance_uses_project_id_projects_id_fk",
+          "tableFrom": "allowance_uses",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "allowance_uses_social_account_id_social_accounts_id_fk": {
+          "name": "allowance_uses_social_account_id_social_accounts_id_fk",
+          "tableFrom": "allowance_uses",
+          "tableTo": "social_accounts",
+          "columnsFrom": [
+            "social_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "allowance_uses_post_target_id_post_targets_id_fk": {
+          "name": "allowance_uses_post_target_id_post_targets_id_fk",
+          "tableFrom": "allowance_uses",
+          "tableTo": "post_targets",
+          "columnsFrom": [
+            "post_target_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "allowance_uses_units_positive": {
+          "name": "allowance_uses_units_positive",
+          "value": "\"allowance_uses\".\"units\" > 0"
         }
       },
       "isRLSEnabled": false
@@ -6169,32 +5961,6 @@
       "values": [
         "active",
         "needs_reauth"
-      ]
-    },
-    "public.activity_event_kind": {
-      "name": "activity_event_kind",
-      "schema": "public",
-      "values": [
-        "target_published",
-        "target_failed",
-        "target_ambiguous",
-        "target_retry_scheduled",
-        "target_resolved",
-        "account_needs_reauth",
-        "account_connect_failed"
-      ]
-    },
-    "public.activity_outcome": {
-      "name": "activity_outcome",
-      "schema": "public",
-      "values": [
-        "published",
-        "failed",
-        "ambiguous",
-        "retrying",
-        "resolved",
-        "needs_reauth",
-        "connect_failed"
       ]
     },
     "public.api_idempotency_state": {

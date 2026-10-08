@@ -147,4 +147,53 @@ describe("label helpers", () => {
     expect(bytesLabel(2_000_000)).toBe("2 MB");
     expect(bytesLabel(1_500_000)).toBe("1.5 MB");
   });
+
+  describe("Instagram video (P13)", () => {
+    const ig = findProvider("instagram")!.capabilities;
+
+    it("shows Feed video by default, with Reel limits and a frame-rate range", () => {
+      const v = requirementsOf(ig, { uploadTypes }).video;
+      expect(v.postType).toEqual({ value: "video", label: "Feed video", description: expect.any(String) });
+      expect(v.minFrameRate?.label).toBe("23 fps");
+      expect(v.maxFrameRate?.label).toBe("60 fps");
+      expect(v.maxBytes?.label).toBe("300 MB");
+      expect(v.duration.min?.label).toBe("3 seconds");
+      expect(v.aspectRatio.min?.label).toBe("1:100");
+      expect(v.aspectRatio.max?.label).toBe("10:1");
+    });
+
+    it("follows the chosen type: reel, then carousel", () => {
+      const reel = requirementsOf(ig, { uploadTypes, postType: "reel" }).video;
+      expect(reel.postType).toMatchObject({ value: "reel", label: "Reel", description: "Shown in the Reels tab only." });
+      const car = requirementsOf(ig, { uploadTypes, postType: "carousel" }).video;
+      expect(car.postType).toEqual({ value: "carousel", label: "carousel item", description: null });
+      expect(car.maxVideos).toBe(10);
+      expect(car.withImages).toBe(true);
+      expect(car.aspectRatio.min?.label).toBe("4:5");
+      expect(car.aspectRatio.max?.label).toBe("1.91:1");
+      expect(car.notes).toEqual(["Reels cannot be carousel items."]);
+    });
+
+    it("ignores a type that is not an option and falls back to the default", () => {
+      expect(requirementsOf(ig, { uploadTypes, postType: "image" }).video.postType?.value).toBe("video");
+    });
+
+    it("describes the carousel", () => {
+      expect(requirementsOf(ig, { uploadTypes }).carousel).toMatchObject({
+        maxItems: 10,
+        mixed: true,
+        notes: ["Reels cannot be carousel items."],
+      });
+    });
+
+    it("leaves providers without choices or per-type limits unchanged", () => {
+      for (const key of ["mock", "facebook", "threads", "bluesky", "x"]) {
+        const r = requirementsOf(findProvider(key)!.capabilities, { uploadTypes });
+        expect(r.carousel, key).toBeNull();
+        expect(r.video.postType, key).toBeNull();
+        expect(r.video.notes, key).toEqual([]);
+        expect(r.video.minFrameRate, key).toBeNull();
+      }
+    });
+  });
 });

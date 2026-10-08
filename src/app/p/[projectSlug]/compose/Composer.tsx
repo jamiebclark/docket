@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { RequirementsSummary } from "@/components/compose/RequirementsSummary";
+import type { PostType } from "@/providers/types";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -47,7 +48,7 @@ export interface ComposerInitial {
   postId: string;
   baseText: string;
   mediaIds: string[];
-  targets: { accountId: string; overrideText: string | null }[];
+  targets: { accountId: string; overrideText: string | null; postType?: PostType | null }[];
   editable: boolean;
   reviewBlocked: boolean;
 }
@@ -105,6 +106,10 @@ export function Composer({
   const [overrides, setOverrides] = useState<Record<string, string>>(
     Object.fromEntries((initial?.targets ?? []).filter((t) => t.overrideText).map((t) => [t.accountId, t.overrideText!])),
   );
+  // The per-account "Post as" choice. Kept when the fieldset is hidden, so a carousel and back keeps it (FR-008).
+  const [postTypes, setPostTypes] = useState<Record<string, PostType | null>>(
+    Object.fromEntries((initial?.targets ?? []).filter((t) => t.postType).map((t) => [t.accountId, t.postType ?? null])),
+  );
   const [lastCheck, setCheck] = useState<CheckResult | null>(initialCheck);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -121,8 +126,13 @@ export function Composer({
   const editable = check?.editable ?? initial?.editable ?? true;
   const reviewBlocked = check?.reviewBlocked ?? initial?.reviewBlocked ?? false;
   const targets = useMemo(
-    () => selected.map((accountId) => ({ accountId, overrideText: overrides[accountId] || null })),
-    [selected, overrides],
+    () =>
+      selected.map((accountId) => ({
+        accountId,
+        overrideText: overrides[accountId] || null,
+        ...(postTypes[accountId] ? { postType: postTypes[accountId] } : {}),
+      })),
+    [selected, overrides, postTypes],
   );
 
   useEffect(() => {
@@ -357,13 +367,40 @@ export function Composer({
                       {over ? " · over the limit" : ""}
                     </span>
                   </div>
+                  {t.postTypeChoice ? (
+                    <fieldset className="mt-2 flex flex-col gap-1" disabled={!canSave}>
+                      <legend className="text-xs font-semibold">Post as</legend>
+                      {t.postTypeChoice.options.map((o) => (
+                        <label key={o.type} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                          <input
+                            type="radio"
+                            name={`post-type-${accountId}`}
+                            value={o.type}
+                            checked={t.postTypeChoice!.selected === o.type}
+                            aria-describedby={`${ids}-${accountId}-${o.type}-desc`}
+                            onChange={() => setPostTypes((cur) => ({ ...cur, [accountId]: o.type }))}
+                          />
+                          {o.label}
+                          <span id={`${ids}-${accountId}-${o.type}-desc`} className="text-xs text-muted-foreground">
+                            {o.description}
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  ) : null}
                   <RequirementsSummary providerName={t.providerName} requirements={t.requirements} openInitially={selected.length === 1} />
                   <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
                   {media.length > 0 ? (
-                    <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Images, in order">
+                    <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Media, in order">
                       {media.map((m, n) => (
                         <li key={m.id}>
-                          Image {n + 1}: {m.altText ? "has alt text" : <span className="font-medium">no alt text</span>}
+                          {m.kind === "video" ? (
+                            `Video ${n + 1}`
+                          ) : (
+                            <>
+                              Image {n + 1}: {m.altText ? "has alt text" : <span className="font-medium">no alt text</span>}
+                            </>
+                          )}
                         </li>
                       ))}
                     </ol>

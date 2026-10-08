@@ -2,14 +2,26 @@ import { docsUrl } from "@/lib/docs";
 import { graphRequest, DEFAULT_GRAPH_BASE, type GraphOutcome, type MetaApp } from "../meta/graph";
 import { graphVersion } from "../meta/config";
 import { readPageToken } from "../meta/credentials";
-import { classifyGraphError, graphStepError, graphSummary } from "../meta/errors";
+import { classifyGraphError, graphStepError, graphSummary, scrub } from "../meta/errors";
 import type { AttemptSummary, PublishContext, StepResult } from "../types";
 import { QUOTA_RETRY_MS, readQuota } from "./quota";
-import { checkIntervalMs, FIRST_CHECK_DELAY_MS, CONTAINER_SAFE_AGE_MS, initialState, MAX_RECREATIONS, PROCESSING_CAP_MS, type InstagramState } from "./state";
-import { instagramStepFor, validState } from "./steps";
+import { IMAGE_STATUS_FIELDS, itemParams, reelContainerParams, VIDEO_STATUS_FIELDS } from "./requests";
+import {
+  checkIntervalMs,
+  FIRST_CHECK_DELAY_MS,
+  CONTAINER_SAFE_AGE_MS,
+  initialState,
+  MAX_RECREATIONS,
+  PROCESSING_CAP_MS,
+  VIDEO_FIRST_CHECK_DELAY_MS,
+  videoCheckDelayMs,
+  type InstagramState,
+} from "./state";
+import { instagramStepFor, planOf, validState } from "./steps";
 
 const PLATFORM = "Instagram";
 const URL_HINT = ` Images must be at a public URL (see ${docsUrl("storage")}).`;
+const VIDEO_URL_HINT = ` Media must be at a public URL (see ${docsUrl("storage")}).`;
 const RETRY_HINT = " Retry the post to create the media again.";
 
 const fatal = (error: string, summary?: AttemptSummary): StepResult => ({ kind: "fatal_error", error, ...(summary ? { summary } : {}) });
@@ -32,11 +44,18 @@ function summarize(
   };
 }
 
-/** A fresh state for a container that must be created again, or null when the cap is reached. */
+/** What Instagram said about a failed video, read defensively: a string, no control characters, at most 300 characters. */
+function statusDetail(body: unknown): string {
+  const v = (body as { status?: unknown } | null)?.status;
+  if (typeof v !== "string") return "";
+  return v.replace(/[\u0000-\u001f\u007f]+/g, "").trim().slice(0, 300).trim();
+}
+
+/** A fresh state for a container that must be created again, keeping the plan, or null when the cap is reached. */
 function recreated(s: InstagramState): InstagramState | null {
   if (s.recreations >= MAX_RECREATIONS) return null;
   return {
-    ...initialState(s.mediaType === "CAROUSEL" ? 2 : 1),
+    ...initialState({ mediaType: s.mediaType, shareToFeed: s.shareToFeed, kinds: s.kinds }),
     recreations: s.recreations + 1,
   };
 }
@@ -57,10 +76,13 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
   if (!token) return { kind: "fatal_error", error: "The stored token is unreadable.", credentialsInvalid: true };
 
   const { text, media } = ctx.content;
-  const expected = instagramStepFor(ctx.state, { text, mediaCount: media.length });
-  if (expected.name !== ctx.step.name || expected.name === "invalid") return fatal("The post changed while publishing.");
+  const kinds = media.map((m) => m.kind ?? "image");
+  const expected = instagramStepFor(ctx.state, { text, mediaCount: media.length, kinds, postType: ctx.postType });
+  const plan = planOf({ mediaCount: media.length, kinds, postType: ctx.postType });
+  if (!plan || expected.name !== ctx.step.name || expected.name === "invalid") return fatal("The post changed while publishing.");
 
-  const state = validState(ctx.state, media.length) ?? initialState(media.length);
+  const state = validState(ctx.state, plan) ?? initialState(plan);
+  const hasVideo = kinds.includes("video");
   const graph = app ?? { graphBase: DEFAULT_GRAPH_BASE, version: graphVersion() };
   const ig = ctx.account.externalId;
   const name = ctx.step.name;
@@ -84,20 +106,25 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
       const index = name === "create_container" ? 1 : Number(name.slice("create_item_".length));
       const item = media[index - 1];
       if (!item) return fatal("The post changed while publishing.");
-      params.image_url = item.url;
-      if (name !== "create_container") {
-        params.is_carousel_item = "true";
-        request.imageIndex = index;
-      } else if (text.length > 0) {
-        params.caption = text;
+      if (plan.mediaType === "REELS") {
+        Object.assign(params, reelContainerParams(item, text, plan.shareToFeed === true));
+        request.shareToFeed = plan.shareToFeed === true;
+      } else if (name !== "create_container") {
+        Object.assign(params, itemParams(kinds[index - 1]!, item));
+        request.itemIndex = index;
+        request.itemKind = kinds[index - 1];
+        if (kinds[index - 1] !== "video") request.imageIndex = index;
+      } else {
+        params.image_url = item.url;
+        if (text.length > 0) params.caption = text;
+        if (item.altText.trim().length > 0) params.alt_text = item.altText;
       }
-      if (item.altText.trim().length > 0) params.alt_text = item.altText;
     }
     const outcome = await call("POST", `/${ig}/media`, params);
     const failed = failure(outcome, request);
     if (failed) {
       if (failed.kind === "fatal_error" && !failed.credentialsInvalid && /fetch|download|retriev|url/i.test(failed.error)) {
-        return { ...failed, error: failed.error + URL_HINT };
+        return { ...failed, error: failed.error + (hasVideo ? VIDEO_URL_HINT : URL_HINT) };
       }
       return failed;
     }
@@ -106,14 +133,74 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
     const summary = summarize(name, state, outcome, id ? { containerId: id } : {}, request);
     if (!id) return { kind: "retryable_error", error: "Instagram did not return a media id; trying again.", summary };
     if (name.startsWith("create_item_")) {
-      return { kind: "continue", state: { ...state, items: [...state.items, id] } satisfies InstagramState, summary };
+      const index = Number(name.slice("create_item_".length));
+      const isVideo = kinds[index - 1] === "video";
+      const next: InstagramState = { ...state, items: [...state.items, id] };
+      if (!hasVideo) return { kind: "continue", state: next, summary };
+      next.itemProgress = [...(state.itemProgress ?? []), { createdAt: now.toISOString(), checks: 0, ready: !isVideo }];
+      const last = index === kinds.length;
+      const wait = last && next.itemProgress.some((p) => !p.ready);
+      return { kind: "continue", state: next, ...(wait ? { notBefore: new Date(now.getTime() + VIDEO_FIRST_CHECK_DELAY_MS) } : {}), summary };
     }
     return {
       kind: "continue",
       state: { ...state, container: id, createdAt: now.toISOString(), checks: 0, ready: false, quotaChecked: false } satisfies InstagramState,
-      notBefore: new Date(now.getTime() + FIRST_CHECK_DELAY_MS),
+      notBefore: new Date(now.getTime() + (hasVideo ? VIDEO_FIRST_CHECK_DELAY_MS : FIRST_CHECK_DELAY_MS)),
       summary,
     };
+  }
+
+  // --- check_item_<k> (a video item, polled before the carousel is created) -----------------
+  if (name.startsWith("check_item_")) {
+    const index = Number(name.slice("check_item_".length));
+    const itemId = state.items[index - 1];
+    const progress = state.itemProgress?.[index - 1];
+    if (!itemId || !progress) return fatal("The post changed while publishing.");
+    const request = { itemIndex: index, itemKind: "video", containerId: itemId };
+    const outcome = await call("GET", `/${itemId}`, { fields: VIDEO_STATUS_FIELDS });
+    const failed = failure(outcome, request);
+    if (failed) return failed;
+    if (outcome.kind !== "ok") return fatal("Unexpected Instagram response.");
+    const code = (outcome.body as { status_code?: unknown } | null)?.status_code;
+    const detail = scrub(statusDetail(outcome.body), [token]);
+    const summary = (statusCode: string) =>
+      summarize(name, state, outcome, { statusCode, checks: progress.checks, recreations: state.recreations, ...(detail ? { statusDetail: detail } : {}) }, request);
+    const withProgress = (p: { createdAt: string; checks: number; ready: boolean }): InstagramState => ({
+      ...state,
+      itemProgress: (state.itemProgress ?? []).map((q, i) => (i === index - 1 ? p : q)),
+    });
+    switch (code) {
+      case "FINISHED":
+        return { kind: "continue", state: withProgress({ ...progress, ready: true, checks: progress.checks + 1 }), summary: summary("FINISHED") };
+      case "IN_PROGRESS": {
+        const age = now.getTime() - Date.parse(progress.createdAt);
+        if (age >= PROCESSING_CAP_MS) {
+          return fatal(
+            "Instagram did not finish processing the video within 60 minutes; nothing was published. Retry the post to try again.",
+            summary("IN_PROGRESS"),
+          );
+        }
+        return {
+          kind: "continue",
+          state: withProgress({ ...progress, checks: progress.checks + 1 }),
+          notBefore: new Date(now.getTime() + videoCheckDelayMs(age)),
+          summary: summary("IN_PROGRESS"),
+        };
+      }
+      case "ERROR": {
+        const why = detail ? `: ${detail.replace(/\.+$/, "")}` : "";
+        return fatal(
+          `Instagram could not process video ${index} of the carousel (item ${index})${why}. Check its format, codec, frame rate and bitrate; nothing was published.`,
+          summary("ERROR"),
+        );
+      }
+      case "EXPIRED":
+        return recreate(state, "EXPIRED");
+      case "PUBLISHED":
+        return { kind: "ambiguous", error: "Instagram reports this media as already published.", summary: summary("PUBLISHED") };
+      default:
+        return { kind: "retryable_error", error: "Instagram returned an unknown media status.", summary: summary("unknown") };
+    }
   }
 
   const container = state.container;
@@ -121,30 +208,47 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
 
   // --- check_status -------------------------------------------------------------------------
   if (name === "check_status") {
-    const outcome = await call("GET", `/${container}`, { fields: "status_code" });
+    const outcome = await call("GET", `/${container}`, { fields: hasVideo ? VIDEO_STATUS_FIELDS : IMAGE_STATUS_FIELDS });
     const failed = failure(outcome, { containerId: container });
     if (failed) return failed;
     if (outcome.kind !== "ok") return fatal("Unexpected Instagram response.");
     const code = (outcome.body as { status_code?: unknown } | null)?.status_code;
+    const detail = hasVideo ? scrub(statusDetail(outcome.body), [token]) : "";
     const summary = (statusCode: string) =>
-      summarize(name, state, outcome, { statusCode, checks: state.checks, recreations: state.recreations }, { containerId: container });
+      summarize(
+        name,
+        state,
+        outcome,
+        { statusCode, checks: state.checks, recreations: state.recreations, ...(detail ? { statusDetail: detail } : {}) },
+        { containerId: container, ...(plan.mediaType === "REELS" ? { shareToFeed: plan.shareToFeed === true } : {}) },
+      );
     switch (code) {
       case "FINISHED":
         return { kind: "continue", state: { ...state, ready: true, checks: state.checks + 1 } satisfies InstagramState, summary: summary("FINISHED") };
       case "IN_PROGRESS": {
         const created = state.createdAt ? Date.parse(state.createdAt) : now.getTime();
         if (now.getTime() - created >= PROCESSING_CAP_MS) {
-          return fatal("Instagram did not finish processing the media.", summary("IN_PROGRESS"));
+          return fatal(
+            hasVideo
+              ? "Instagram did not finish processing the video within 60 minutes; nothing was published. Retry the post to try again."
+              : "Instagram did not finish processing the media.",
+            summary("IN_PROGRESS"),
+          );
         }
         return {
           kind: "continue",
           state: { ...state, checks: state.checks + 1 } satisfies InstagramState,
-          notBefore: new Date(now.getTime() + checkIntervalMs(state.checks)),
+          notBefore: new Date(now.getTime() + (hasVideo ? videoCheckDelayMs(now.getTime() - created) : checkIntervalMs(state.checks))),
           summary: summary("IN_PROGRESS"),
         };
       }
-      case "ERROR":
-        return fatal("Instagram could not process the media (status ERROR).", summary("ERROR"));
+      case "ERROR": {
+        if (!hasVideo) return fatal("Instagram could not process the media (status ERROR).", summary("ERROR"));
+        const why = detail ? `: ${detail.replace(/\.+$/, "")}` : "";
+        const what = plan.mediaType === "REELS" ? "the video" : "the carousel";
+        const check = plan.mediaType === "REELS" ? "Check its format" : "Check each video's format";
+        return fatal(`Instagram could not process ${what}${why}. ${check}, codec, frame rate and bitrate; nothing was published.`, summary("ERROR"));
+      }
       case "EXPIRED":
         return recreate(state, "EXPIRED");
       case "PUBLISHED":
@@ -156,7 +260,11 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
 
   // --- check_quota --------------------------------------------------------------------------
   if (name === "check_quota") {
-    const created = state.createdAt ? Date.parse(state.createdAt) : now.getTime();
+    // The oldest container counts: a carousel's video items were created before the carousel itself.
+    const created = Math.min(
+      state.createdAt ? Date.parse(state.createdAt) : now.getTime(),
+      ...(state.itemProgress ?? []).map((p) => Date.parse(p.createdAt)),
+    );
     if (now.getTime() - created >= CONTAINER_SAFE_AGE_MS) return recreate(state, "AGED");
     const outcome = await call("GET", `/${ig}/content_publishing_limit`, { fields: "quota_usage,config" });
     if (outcome.kind === "graph_error" && classifyGraphError(outcome.error) === "invalid_token") {

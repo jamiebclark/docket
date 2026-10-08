@@ -50,13 +50,11 @@ export function fitOf(asset: MediaRow, provider: SocialProvider): PlatformFit {
   };
 }
 
-/** A video is never converted: it fits, or it is refused with the validator's own sentences. */
+/** A video is never converted: it fits, or it is refused with the provider's own sentences, for the type a single video gets. */
 function videoFitOf(asset: MediaRow, provider: SocialProvider): PlatformFit {
   const base = { providerKey: provider.key, providerName: provider.displayName, steps: [], convertedTo: null };
-  const details = validateAgainstCapabilities(
-    { text: "x", media: [plannedItem(asset, { kind: "original" })] },
-    provider.capabilities,
-  )
+  const details = provider
+    .validate({ text: "x", media: [plannedItem(asset, { kind: "original" })] }, provider.capabilities)
     .filter((i) => i.severity === "error" && i.field?.startsWith("media") && !ALT_CODES.has(i.code))
     .map((i) => i.message.replace(/^Video 1\b/, "This video"));
   return { ...base, state: details.length > 0 ? "refused" : "fits", details };

@@ -13,7 +13,7 @@ import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../hel
 beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
-const statements = readFileSync(resolve(__dirname, "../../../drizzle/0013_backfill_activity_events.sql"), "utf8")
+const statements = readFileSync(resolve(__dirname, "../../../drizzle/0014_backfill_activity_events.sql"), "utf8")
   .split("--> statement-breakpoint")
   .map((s) => s.trim())
   .filter(Boolean);

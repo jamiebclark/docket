@@ -1,5 +1,6 @@
+import { resolvePostType } from "./post-type";
 import { countHashtags, countMentions, countText, countingUnit } from "./text";
-import type { MediaItem, PostContent, PostType, ProviderCapabilities, ValidationIssue } from "./types";
+import type { MediaItem, PostContent, PostType, ProviderCapabilities, ValidationIssue, VideoCapabilities } from "./types";
 import {
   CONTAINER_LABEL,
   audioCodecLabel,
@@ -12,16 +13,21 @@ import {
 
 const isVideo = (item: MediaItem) => item.kind === "video";
 
-export function inferPostType(content: PostContent): "text" | "image" | "carousel" | "video" {
-  if (content.media.length === 0) return "text";
-  if (content.media.some(isVideo)) return "video";
-  return content.media.length === 1 ? "image" : "carousel";
+export function inferPostType(content: PostContent): PostType {
+  return resolvePostType(null, content.media, null);
+}
+
+/** The video limits for one post type: `caps.video` with `byPostType[type]` merged over it. */
+export function videoLimitsFor(caps: ProviderCapabilities, type: PostType): VideoCapabilities {
+  const { byPostType, ...base } = caps.video;
+  const { notes: _notes, ...over } = byPostType?.[type] ?? {};
+  return { ...base, ...over };
 }
 
 const EPS = 1e-9;
 
 /** Each declared bound of one ready video, in the contract's order. */
-function videoIssues(item: MediaItem, i: number, caps: ProviderCapabilities["video"]): ValidationIssue[] {
+function videoIssues(item: MediaItem, i: number, caps: VideoCapabilities): ValidationIssue[] {
   const out: ValidationIssue[] = [];
   const field = `media.${i}` as const;
   const label = `Video ${i + 1}`;
@@ -101,6 +107,14 @@ function videoIssues(item: MediaItem, i: number, caps: ProviderCapabilities["vid
       caps.maxFrameRate,
     );
   }
+  if (caps.minFrameRate !== undefined && f.frameRate !== null && f.frameRate < caps.minFrameRate - EPS) {
+    err(
+      "video_frame_rate_too_low",
+      `${label} is ${fpsLabel(f.frameRate)}; the minimum is ${fpsLabel(caps.minFrameRate)}.`,
+      f.frameRate,
+      caps.minFrameRate,
+    );
+  }
   return out;
 }
 
@@ -166,7 +180,7 @@ export function validateAgainstCapabilities(
     }
   }
 
-  const postType: PostType = inferPostType(content);
+  const postType: PostType = content.postType ?? resolvePostType(caps, content.media, null);
   if (mediaCount === 0 && !caps.textOnlyAllowed && (hasText || !issues.some((i) => i.code === "empty_post"))) {
     issues.push({
       severity: "error",
@@ -207,18 +221,19 @@ export function validateAgainstCapabilities(
     });
   }
 
-  if (videos.length > 0 && caps.video.maxVideos > 0) {
-    if (videos.length > caps.video.maxVideos) {
+  const vLimits = videoLimitsFor(caps, postType);
+  if (videos.length > 0 && vLimits.maxVideos > 0) {
+    if (videos.length > vLimits.maxVideos) {
       issues.push({
         severity: "error",
         code: "too_many_videos",
-        message: `The post has ${videos.length} videos; the limit is ${caps.video.maxVideos}.`,
+        message: `The post has ${videos.length} videos; the limit is ${vLimits.maxVideos}.`,
         field: "media",
         count: videos.length,
-        limit: caps.video.maxVideos,
+        limit: vLimits.maxVideos,
       });
     }
-    if (imageCount > 0 && !caps.video.withImages) {
+    if (imageCount > 0 && !vLimits.withImages) {
       issues.push({
         severity: "error",
         code: "video_with_images",
@@ -254,7 +269,7 @@ export function validateAgainstCapabilities(
           field,
         });
       } else {
-        issues.push(...videoIssues(item, i, caps.video));
+        issues.push(...videoIssues(item, i, vLimits));
       }
       return;
     }

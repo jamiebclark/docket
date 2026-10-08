@@ -3,6 +3,7 @@ import { providerPublishLimits } from "../../../src/providers/limits";
 import { providers } from "../../../src/providers/registry";
 import { mediaConstraintsOf } from "../../../src/providers/media";
 import type { ValidationIssue } from "../../../src/providers/types";
+import { allowanceUses } from "../../../src/server/db/schema/scheduler";
 import { posts as postsTable, postTargets } from "../../../src/server/db/schema/posts";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
@@ -16,7 +17,7 @@ import { fakeSession } from "../../helpers/auth";
 import { forProject } from "../../../src/server/dal/scope";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDraftPost, createDueTarget, createMediaAsset, createMockAccount, createSlots, parkAllDueTargets } from "../../helpers/scheduling";
-import { coreRows, limitRows, planWith, plannerRows, textRows, videoRows, type Expectation } from "../../helpers/limit-rows";
+import { allowanceRows, coreRows, limitRows, planWith, plannerRows, textRows, videoRowContent, videoRows, type Expectation } from "../../helpers/limit-rows";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 
 /** Any request to a platform fails the test: every row below must be refused or deferred before one is made. */
@@ -94,11 +95,13 @@ describe("text rows: refused when scheduling and again at publish time, with no 
   }
 });
 
-describe("video rows: refused when scheduling, and the provider's advance is never called (FR-039, SC-008)", () => {
+describe("video rows: refused by the core, when scheduling and at publish time, and the provider's advance is never called (FR-039, SC-002, SC-008)", () => {
   for (const provider of providers) {
     for (const row of videoRows(provider)) {
       it(row.title, async () => {
         const advance = vi.spyOn(provider, "advance");
+        expectOutcome(validateResolvedContent(provider, videoRowContent(provider, row)), { refuse: row.codes });
+
         const env = await createProjectWithMembers();
         const scope = await forProject(fakeSession(env.owner.id), env.project.slug);
         const account = await createMockAccount(env.project.id, {}, { providerKey: provider.key });
@@ -107,10 +110,30 @@ describe("video rows: refused when scheduling, and the provider's advance is nev
         if (row.withImage) mediaIds.push((await createMediaAsset(env.project.id, { mimeType: provider.capabilities.media.allowedMimeTypes[0] })).id);
         for (const facts of row.videos) mediaIds.push((await createVideoAsset(env.project.id, facts)).id);
 
-        const draft = await posts.createDraft(scope, { baseText: "hi", targets: [{ accountId: account.id }], mediaIds });
+        // A draft cannot hold more than 10 items at all (the schema refuses it), so an 11-item row stops at the core.
+        if (mediaIds.length > 10) {
+          await expect(posts.createDraft(scope, { baseText: "hi", targets: [{ accountId: account.id }], mediaIds })).rejects.toThrow();
+          advance.mockRestore();
+          return;
+        }
+
+        // Before scheduling.
+        const draft = await posts.createDraft(scope, {
+          baseText: "hi",
+          targets: [{ accountId: account.id, ...(row.chosenPostType ? { postType: row.chosenPostType } : {}) }],
+          mediaIds,
+        });
         const queued = await atTime(BEFORE, () => posts.addToQueue(scope, draft.post.id, {}));
         expect(queued[0]).toMatchObject({ ok: false, code: "validation" });
-        expectOutcome(queued[0]!.ok ? [] : (queued[0]!.issues ?? []), { refuse: [row.code] });
+        expectOutcome(queued[0]!.ok ? [] : (queued[0]!.issues ?? []), { refuse: row.codes });
+
+        // At publish time: a first-step target whose media breaks the limit fails on the engine's own check.
+        const target = await dueTargetWithMedia(env.project.id, account.id, "hi", mediaIds, new Date(T0.getTime() - 1000));
+        await atTime(T0, () => runTick());
+        const after = await forSchedulerProject(env.project.id).targets.get(target.id);
+        expect(after).toMatchObject({ status: "failed", externalId: null });
+        const attempts = await forSchedulerProject(env.project.id).attempts.listForTarget(target.id);
+        expect(attempts.map((a) => [a.step, a.outcome])).toEqual([["engine-validate", "fatal_error"]]);
         expect(advance).not.toHaveBeenCalled();
         advance.mockRestore();
       });
@@ -176,6 +199,29 @@ describe("publish limits defer without a platform request or a counted attempt (
         expect(after!.nextAttemptAt!.getTime()).toBe(startedAt.getTime() + limit.windowSeconds * 1000);
         expect((await repos.attempts.listForTarget(target.id)).map((a) => a.outcome)).toEqual(["deferred"]);
       }, 60_000);
+    }
+  }
+});
+
+describe("a creation allowance defers without a platform request or a counted attempt (FR-019)", () => {
+  for (const provider of providers) {
+    for (const row of allowanceRows(provider)) {
+      it(row.title, async () => {
+        const env = await createProjectWithMembers();
+        const account = await createMockAccount(env.project.id, {}, { providerKey: provider.key });
+        const usedAt = new Date(T0.getTime() - 600 * 1000);
+        await testDb().insert(allowanceUses).values({ projectId: env.project.id, socialAccountId: account.id, units: row.count, createdAt: usedAt });
+        const { target, post } = await createDueTarget(env.project.id, account.id, { baseText: "hi", dueAt: new Date(T0.getTime() - 1000) });
+        const asset = await createMediaAsset(env.project.id);
+        await forSchedulerProject(env.project.id).posts.setMedia(post.id, [asset.id]);
+        await atTime(T0, () => runTick({ config: { maxItems: 100 } }));
+        const repos = forSchedulerProject(env.project.id);
+        const after = await repos.targets.get(target.id);
+        expect(after).toMatchObject({ status: "scheduled", attemptCount: 0 });
+        expect(after!.nextAttemptAt!.getTime()).toBe(usedAt.getTime() + row.windowSeconds * 1000 + 1000);
+        expect(after!.lastError).toContain(row.name);
+        expect((await repos.attempts.listForTarget(target.id)).map((a) => a.outcome)).toEqual(["deferred"]);
+      });
     }
   }
 });

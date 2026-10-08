@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inferPostType, validateAgainstCapabilities } from "./validation";
+import { inferPostType, validateAgainstCapabilities, videoLimitsFor } from "./validation";
 import type { MediaItem, ProviderCapabilities } from "./types";
 
 const caps: ProviderCapabilities = {
@@ -116,8 +116,9 @@ const vid = (over: Partial<MediaItem> = {}, facts: Partial<NonNullable<MediaItem
 });
 
 describe("video validation", () => {
-  it("infers a video post type", () => {
-    expect(inferPostType({ text: "", media: [img(), vid()] })).toBe("video");
+  it("infers a video post type for one video, and a carousel for a mix", () => {
+    expect(inferPostType({ text: "", media: [vid()] })).toBe("video");
+    expect(inferPostType({ text: "", media: [img(), vid()] })).toBe("carousel");
   });
   it("accepts a clip inside every bound", () => {
     expect(codes("x", [vid()], videoCaps)).toEqual([]);
@@ -191,5 +192,35 @@ describe("video validation", () => {
       ["media_failed", "media.1"],
     ]);
     expect(issues[1]!.message).toBe("Video 2 failed: Docket could not read this video. Remove it to continue.");
+  });
+});
+
+describe("per-type video limits and minimum frame rate", () => {
+  const layered: ProviderCapabilities = {
+    ...videoCaps,
+    video: {
+      ...videoCaps.video,
+      minFrameRate: 23,
+      byPostType: { carousel: { maxDurationSeconds: 10, notes: ["Short clips only."] } },
+    },
+    postTypes: ["text", "image", "carousel", "video"],
+  };
+  it("merges the override over the base block and drops byPostType and notes", () => {
+    const merged = videoLimitsFor(layered, "carousel");
+    expect(merged.maxDurationSeconds).toBe(10);
+    expect(merged.maxBytes).toBe(1000);
+    expect(merged).not.toHaveProperty("byPostType");
+    expect(merged).not.toHaveProperty("notes");
+    expect(videoLimitsFor(layered, "video").maxDurationSeconds).toBe(60);
+  });
+  it("checks the minimum frame rate inclusively and skips an unknown rate", () => {
+    expect(codes("x", [vid({}, { frameRate: 22.9 })], layered)).toEqual(["video_frame_rate_too_low"]);
+    expect(codes("x", [vid({}, { frameRate: 23 })], layered)).toEqual([]);
+    expect(codes("x", [vid({}, { frameRate: null })], layered)).toEqual([]);
+  });
+  it("uses the override of the resolved type", () => {
+    const long = vid({}, { durationSeconds: 20 });
+    expect(codes("x", [long], layered)).toEqual([]);
+    expect(validateAgainstCapabilities({ text: "x", media: [long], postType: "carousel" }, layered).map((i) => i.code)).toEqual(["video_too_long"]);
   });
 });
