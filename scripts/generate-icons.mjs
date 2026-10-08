@@ -43,6 +43,7 @@ const ICONS = {
   info: "info",
   circleCheck: "circle-check",
   circleAlert: "circle-alert",
+  activity: "activity",
 };
 
 /** Provider key → Simple Icons slug. The mock provider has no brand; it uses the "flask" UI icon. */

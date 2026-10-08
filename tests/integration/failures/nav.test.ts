@@ -24,6 +24,7 @@ describe("Failures nav entry", () => {
   it("comes after Review and shows the ambiguous count only when above zero", () => {
     const slugs = NAV_SECTIONS.map((s) => s.slug);
     expect(slugs.indexOf("failures")).toBe(slugs.indexOf("review") + 1);
+    expect(slugs.indexOf("activity")).toBe(slugs.indexOf("failures") + 1);
     expect(renderToStaticMarkup(createElement(LeftNav, { projectSlug: "x", failuresCount: 2 }))).toContain("Failures (2)");
     const zero = renderToStaticMarkup(createElement(LeftNav, { projectSlug: "x", failuresCount: 0 }));
     expect(zero).toContain(">Failures<");

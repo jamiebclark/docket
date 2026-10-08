@@ -29,6 +29,18 @@ const render = async (slug: string, search: Record<string, string> = {}) =>
   renderToStaticMarkup(await FailuresPage({ params: Promise.resolve({ projectSlug: slug }), searchParams: Promise.resolve(search) }));
 
 describe("failures page markup (FR-013)", () => {
+  it("shows one entry for ?target= with a way back and an anchor id", async () => {
+    const env = await postsEnv();
+    const one = await outcomeTarget(env, "fatal", "target me");
+    await outcomeTarget(env, "ambiguous", "not me");
+    actAs(env.owner);
+    const html = await render(env.project.slug, { target: one.targetId });
+    expect(html).toContain(`id="target-${one.targetId}"`);
+    expect(html).toContain("Show all failures");
+    expect(html).toContain("target me");
+    expect(html).not.toContain("not me");
+  });
+
   it("renders a labelled, accessible table with both groups in order", async () => {
     const env = await postsEnv();
     await outcomeTarget(env, "fatal", "the failed one");

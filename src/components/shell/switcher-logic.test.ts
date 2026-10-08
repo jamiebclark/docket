@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALL_ACTIVITY_HREF,
   CREATE_PROJECT_HREF,
   filterSwitcherItems,
   moveHighlight,
@@ -15,7 +16,7 @@ const projects = [
 describe("filterSwitcherItems", () => {
   it("returns every project followed by Create project for an empty filter", () => {
     const items = filterSwitcherItems(projects, "");
-    expect(items.map((i) => i.kind)).toEqual(["project", "project", "project", "create"]);
+    expect(items.map((i) => i.kind)).toEqual(["project", "project", "project", "all-activity", "create"]);
     expect(items.at(-1)).toMatchObject({ kind: "create", href: CREATE_PROJECT_HREF });
   });
 
@@ -29,12 +30,20 @@ describe("filterSwitcherItems", () => {
 
   it("trims the filter and keeps Create project last even with no matches", () => {
     const items = filterSwitcherItems(projects, "  zzz ");
-    expect(items).toHaveLength(1);
-    expect(items[0]?.kind).toBe("create");
+    expect(items.map((i) => i.kind)).toEqual(["all-activity", "create"]);
+    expect(items.at(-1)?.kind).toBe("create");
   });
 
-  it("offers only Create project when the user has no projects", () => {
+  it("offers All activity before Create project", () => {
+    expect(filterSwitcherItems(projects, "").slice(-2)).toEqual([
+      { kind: "all-activity", label: "All activity", href: ALL_ACTIVITY_HREF },
+      { kind: "create", label: "Create project", href: CREATE_PROJECT_HREF },
+    ]);
+  });
+
+  it("offers only the two links when the user has no projects", () => {
     expect(filterSwitcherItems([], "")).toEqual([
+      { kind: "all-activity", label: "All activity", href: ALL_ACTIVITY_HREF },
       { kind: "create", label: "Create project", href: CREATE_PROJECT_HREF },
     ]);
   });
@@ -59,7 +68,8 @@ describe("targetForHighlight", () => {
   it("returns the project path for a project and /p/new for Create project", () => {
     const items = filterSwitcherItems(projects, "");
     expect(targetForHighlight(items, 1)).toBe("/p/beta-co");
-    expect(targetForHighlight(items, 3)).toBe("/p/new");
+    expect(targetForHighlight(items, 3)).toBe("/activity");
+    expect(targetForHighlight(items, 4)).toBe("/p/new");
   });
   it("returns null when the index is out of range", () => {
     expect(targetForHighlight([], 0)).toBeNull();

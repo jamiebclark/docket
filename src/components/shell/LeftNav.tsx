@@ -13,6 +13,7 @@ export const NAV_SECTIONS = [
   { slug: "compose", label: "Compose", group: "Publish", icon: "compose" },
   { slug: "review", label: "Review", group: "Publish", icon: "review" },
   { slug: "failures", label: "Failures", group: "Publish", icon: "failures" },
+  { slug: "activity", label: "Activity", group: "Publish", icon: "activity" },
   { slug: "generate", label: "Generate", group: "Create", icon: "generate" },
   { slug: "jobs", label: "Jobs", group: "Create", icon: "jobs" },
   { slug: "media", label: "Media", group: "Create", icon: "media" },

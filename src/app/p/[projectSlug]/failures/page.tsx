@@ -147,7 +147,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
     if (error instanceof NotFoundError) notFound();
     throw error;
   }
-  const query = failuresQuerySchema.parse({ status: first(raw.status), account: first(raw.account), page: first(raw.page) });
+  const query = failuresQuerySchema.parse({ status: first(raw.status), account: first(raw.account), target: first(raw.target), page: first(raw.page) });
   let list: FailureList | null = null;
   try {
     list = await listFailures(scope, query);
@@ -182,7 +182,13 @@ export default async function FailuresPage({ params, searchParams }: Props) {
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap items-end gap-4">
-        <FilterTabs label="Filter failures by status" tabs={tabs} />
+        {query.target ? (
+          <Link href={`/p/${projectSlug}/failures`} className="text-sm underline">
+            Show all failures
+          </Link>
+        ) : (
+          <FilterTabs label="Filter failures by status" tabs={tabs} />
+        )}
         {list ? (
           <form method="get" action={`/p/${projectSlug}/failures`} className="flex items-end gap-2">
             {query.status !== "all" ? <input type="hidden" name="status" value={query.status} /> : null}
@@ -256,7 +262,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
                         : "Failed"
                       : null;
                   return (
-                    <tbody key={row.targetId}>
+                    <tbody key={row.targetId} id={`target-${row.targetId}`}>
                       {heading ? (
                         <tr className="bg-muted">
                           <th scope="rowgroup" colSpan={7} className="px-2 py-1 text-left font-semibold">

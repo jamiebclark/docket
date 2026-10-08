@@ -131,7 +131,13 @@ export function ProjectSwitcher({
               onClick={() => go(i)}
               className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm ${
                 i === highlight ? "bg-accent/70 text-accent-foreground" : ""
-              } ${item.kind === "create" ? "mt-1 border-t border-border font-medium text-primary" : "font-medium"}`}
+              } ${
+                item.kind === "create"
+                  ? "mt-1 border-t border-border font-medium text-primary"
+                  : item.kind === "all-activity"
+                    ? "mt-1 border-t border-border font-medium"
+                    : "font-medium"
+              }`}
             >
               {item.label}
               {item.kind === "project" && <span className="font-mono text-xs font-normal text-muted-foreground">{item.slug}</span>}
