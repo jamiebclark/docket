@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mediaConstraintsOf } from "../../providers/media";
 import { listProviders } from "../../providers/registry";
 import type { MediaRow } from "../dal/media";
+import { fitText } from "../../components/media/fit-ui";
 import { fitOf } from "./media-fit";
 import { planFor } from "./media-variants";
 
@@ -94,32 +95,41 @@ describe("fitOf for video", () => {
       videoCodec: "h264",
       audioCodec: "aac",
       container: "mp4",
+      indexAtFront: true,
+      factsVersion: 2,
       ...over,
     }) as MediaRow;
 
   it("fits the mock for a short H.264 clip", () => {
     expect(fitOf(video(), by("mock"))).toMatchObject({ state: "fits", details: [], steps: [], convertedTo: null });
   });
-  it("refuses a long video on the mock, with the sentence in 'This video' wording", () => {
+  it("adapts a long video on the mock by cutting it, in 'This video' wording", () => {
     const fit = fitOf(video({ durationMs: 222_000 }), by("mock"));
-    expect(fit).toMatchObject({ state: "refused", details: ["This video is 3:42 long; the limit is 1 minute."] });
+    expect(fit.state).toBe("adapted");
+    expect(fit.steps).toEqual(["cut to 1:00"]);
+    expect(fit.details[0]).toMatch(/^This video will be cut/);
+  });
+  it("adapts a file whose index is at the end by rewrapping, and says so in the badge words", () => {
+    const fit = fitOf(video({ indexAtFront: false }), by("mock"));
+    expect(fit.state).toBe("adapted");
+    expect(fitText(fit)).toMatch(/will be adapted \(/);
+  });
+  it("is checking while the facts are not yet read", () => {
+    expect(fitOf(video({ processingState: "processing" }), by("mock")).state).toBe("checking");
   });
   it("refuses every provider that does not accept video", () => {
     for (const p of listProviders().filter((x) => x.capabilities.video.maxVideos === 0)) {
       expect(fitOf(video(), p), p.key).toMatchObject({ state: "refused", details: ["This account does not accept video yet."] });
     }
   });
-  it("fits Instagram as a Feed video, and refuses with the rewritten sentence, never converting", () => {
+  it("fits Instagram as a Feed video, and adapts one that is too long, never converting", () => {
     expect(fitOf(video(), by("instagram"))).toMatchObject({ state: "fits", details: [], steps: [], convertedTo: null });
     const fit = fitOf(video({ durationMs: 960_000 }), by("instagram"));
-    expect(fit.state).toBe("refused");
-    expect(fit.details).toEqual([
-      "This video is 16 minutes long; the limit is 15 minutes for an Instagram Feed video. Docket does not crop, trim or convert video yet.",
-    ]);
-    expect(fitOf(video({ frameRate: 15 }), by("instagram")).details[0]).toMatch(/^This video is 15 fps; the minimum is 23 fps for an Instagram Feed video/);
+    expect(fit.state).toBe("adapted");
+    expect(fit.convertedTo).toBeNull();
   });
-  it("fits Facebook as a Page video, even a long one, and is never converted", () => {
-    for (const asset of [video(), video({ durationMs: 999_000 }), video({ container: "mov" })]) {
+  it("fits Facebook as a Page video, even a long one", () => {
+    for (const asset of [video(), video({ durationMs: 999_000 })]) {
       expect(fitOf(asset, by("facebook"))).toMatchObject({ state: "fits", details: [], steps: [], convertedTo: null });
     }
   });

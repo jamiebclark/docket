@@ -21,7 +21,17 @@ export const INSTAGRAM_REEL_VIDEO = {
   maxAspectRatio: 10,
   minFrameRate: 23,
   maxFrameRate: 60,
+  // Same table: "Video bitrate VBR, 25 Mbps max", "Audio bitrate 128 kbps", "48 kHz max sample rate, 1 or 2 channels",
+  // "moov atom at the front of the file".
+  maxVideoBitrate: 25_000_000,
+  audioBitrate: 128_000,
+  maxAudioSampleRate: 48_000,
+  maxAudioChannels: 2,
+  indexAtFront: true,
 } as const satisfies VideoCapabilities;
+
+// "9:16 recommended to avoid cropping or blank space". Not for carousel items, whose range excludes it.
+const INSTAGRAM_RECOMMENDED = { recommendedAspectRatio: 9 / 16 } as const;
 
 export const instagramCapabilities: ProviderCapabilities = {
   text: {
@@ -46,6 +56,8 @@ export const instagramCapabilities: ProviderCapabilities = {
   video: {
     ...INSTAGRAM_REEL_VIDEO,
     byPostType: {
+      video: INSTAGRAM_RECOMMENDED,
+      reel: INSTAGRAM_RECOMMENDED,
       // docs/research/meta-video.md "Carousel with video": a mix of images and videos, up to 10 items.
       // No carousel video spec is published, so the conservative image aspect range applies (UNVERIFIED).
       carousel: {

@@ -24,7 +24,7 @@ export function validateInstagram(content: PostContent, caps: ProviderCapabiliti
     if (issue.code === "text_only_not_allowed") {
       issues.push({ ...issue, code: "media_required", message: "Instagram posts need at least one image or video." });
     } else if (issue.code.startsWith("video_") && issue.code !== "video_not_accepted") {
-      const message = `${issue.message.replace(/\.$/, "")} for an Instagram ${typeLabel}. Docket does not crop, trim or convert video yet.`;
+      const message = `${issue.message.replace(/\.$/, "")} for an Instagram ${typeLabel}.`;
       issues.push({ ...issue, message });
     } else {
       issues.push(issue);

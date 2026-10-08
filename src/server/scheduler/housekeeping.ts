@@ -4,7 +4,9 @@ import { purgeExpiredIdempotencyKeys } from "../dal/idempotency";
 import { pruneAllowanceUsesBefore } from "../dal/scheduler";
 import { crossProject } from "../dal/scope";
 import { listExpiredUploads, markUploadExpired } from "../dal/uploads-housekeeping";
+import { listCollectableVideoVersions, reposForProject } from "../dal/video-housekeeping";
 import { getEnv } from "../env";
+import { wantedVideoKeys } from "../services/video-versions";
 import { getStorage } from "../storage";
 
 export const HOUSEKEEPING_BATCH = 500;
@@ -14,14 +16,19 @@ const ALLOWANCE_RETENTION_MS = 7 * 86_400_000;
 export const EXPIRE_UPLOADS_BATCH = 20;
 const ABORT_TIMEOUT_MS = 5000;
 
+export const COLLECT_VIDEO_BATCH = 20;
+/** A version or preview nobody has asked for in this long is checked against what the posts plan today. */
+const VIDEO_VERSION_GRACE_MS = 24 * 3_600_000;
+
 export interface HousekeepingCounts {
   idempotencyPurged: number;
   uploadsExpired: number;
   allowanceUsesPruned: number;
+  videoVersionsRemoved: number;
 }
 
 export function emptyHousekeepingCounts(): HousekeepingCounts {
-  return { idempotencyPurged: 0, uploadsExpired: 0, allowanceUsesPruned: 0 };
+  return { idempotencyPurged: 0, uploadsExpired: 0, allowanceUsesPruned: 0, videoVersionsRemoved: 0 };
 }
 
 /**
@@ -47,6 +54,43 @@ export async function expireUploads(now = new Date()): Promise<number> {
   return expired;
 }
 
+/**
+ * Removes video versions and previews no post plans any more, at most one small batch per tick (P17, FR-033). A row still
+ * wanted is marked checked; otherwise its row goes, then its object. `building` rows are never touched. Needs no ffmpeg.
+ */
+export async function collectVideoVersions(now = new Date()): Promise<number> {
+  const rows = await crossProject("housekeeping: collect video versions", () =>
+    listCollectableVideoVersions(new Date(now.getTime() - VIDEO_VERSION_GRACE_MS), COLLECT_VIDEO_BATCH),
+  );
+  const storage = getStorage();
+  const wantedByAsset = new Map<string, Set<string>>();
+  let removed = 0;
+  for (const row of rows) {
+    const repos = reposForProject(row.projectId);
+    let wanted = wantedByAsset.get(row.mediaAssetId);
+    if (!wanted) {
+      wanted = await crossProject("housekeeping: collect video versions", () =>
+        wantedVideoKeys({ ...repos, project: { id: row.projectId } }, row.mediaAssetId),
+      );
+      wantedByAsset.set(row.mediaAssetId, wanted);
+    }
+    if (wanted.has(`${row.kind}:${row.key}`)) {
+      await crossProject("housekeeping: collect video versions", () => repos.videoVersions.markChecked([row.id], now));
+      continue;
+    }
+    await crossProject("housekeeping: collect video versions", () => repos.videoVersions.delete(row.id));
+    removed++;
+    if (row.storageKey && storage) {
+      const key = row.storageKey;
+      await Promise.race([
+        storage.delete(key),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ABORT_TIMEOUT_MS).unref()),
+      ]).catch(() => console.error(`housekeeping: could not delete ${key}`));
+    }
+  }
+  return removed;
+}
+
 /** Deletes allowance reservations older than 7 days, in batches (the rolling window is at most that long). */
 export async function pruneAllowanceUses(now = new Date()): Promise<number> {
   const before = new Date(now.getTime() - ALLOWANCE_RETENTION_MS);
@@ -65,5 +109,6 @@ export async function runHousekeeping(): Promise<HousekeepingCounts> {
   );
   const uploadsExpired = await expireUploads();
   const allowanceUsesPruned = await pruneAllowanceUses(await now());
-  return { idempotencyPurged, uploadsExpired, allowanceUsesPruned };
+  const videoVersionsRemoved = await collectVideoVersions(await now());
+  return { idempotencyPurged, uploadsExpired, allowanceUsesPruned, videoVersionsRemoved };
 }

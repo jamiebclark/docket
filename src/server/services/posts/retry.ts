@@ -9,6 +9,7 @@ import type { TargetRecord } from "../../dal/targets";
 import { resolvedEvent } from "../activity/classify";
 import { recordTargetEvent } from "../activity/record";
 import { allocateNextFree, nearQueuedWarnings, plannedTime, type Warning } from "../queue";
+import { syncVideoVersions } from "../video-versions";
 import { gate } from "./gate";
 import { withLockedTarget } from "./locked";
 import { explicitSchedulePatch } from "./schedule-patch";
@@ -95,6 +96,7 @@ export async function retryLockedTarget(
       stepState: null,
       firstStepAt: null,
       publishStartedAt: null,
+      videoWaitSince: null,
       lastError: null,
     },
     { statuses: ["failed"] },
@@ -144,7 +146,7 @@ async function recordRetried(
 
 const lost = () => new ConflictError("This post is no longer failed.", { reason: "not_failed" });
 
-const RESETS = { attemptCount: 0, stepState: null, firstStepAt: null, publishStartedAt: null, lastError: null } as const;
+const RESETS = { attemptCount: 0, stepState: null, firstStepAt: null, publishStartedAt: null, videoWaitSince: null, lastError: null } as const;
 
 async function requeueTarget(
   tx: Tx,
@@ -238,11 +240,18 @@ export async function retryTarget(
 ): Promise<RetryResult> {
   const id = uuid.parse(targetId);
   const parsed = retryInputSchema.parse(input ?? { mode: "now" });
-  return withLockedTarget(
+  let postId: string | null = null;
+  const result = await withLockedTarget(
     scope,
     id,
     { post: ["schedule"] },
-    (tx, _post, target, now) => retryLockedTarget(tx, target, now, parsed),
+    (tx, post, target, now) => {
+      postId = post.id;
+      return retryLockedTarget(tx, target, now, parsed);
+    },
     opts,
   );
+  // A failed or vanished adapted video is queued again (FR-025).
+  if (postId) await syncVideoVersions(scope, postId, { requeueFailed: true, targetIds: [id] });
+  return result;
 }

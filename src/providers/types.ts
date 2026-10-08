@@ -63,6 +63,18 @@ export interface VideoCapabilities {
   maxFrameRate?: number;
   /** Lowest frame rate, inclusive. A video whose frame rate is unknown is not refused on it. */
   minFrameRate?: number;
+  /** Bits per second, decimal (25 Mbps = 25_000_000). */
+  maxVideoBitrate?: number;
+  /** Bits per second to encode audio at; not a refusal limit. Default 128_000 when re-encoding. */
+  audioBitrate?: number;
+  /** Hz. Default 48_000 when re-encoding. */
+  maxAudioSampleRate?: number;
+  /** Default 2 when re-encoding. */
+  maxAudioChannels?: number;
+  /** width ÷ height; the shape used when reframing. Must lie inside the merged aspect range. */
+  recommendedAspectRatio?: number;
+  /** The file's index (moov) must precede the media data. */
+  indexAtFront?: boolean;
   /** Limits for one post type, merged over this block by `videoLimitsFor`. */
   byPostType?: Partial<Record<PostType, VideoLimitOverrides>>;
 }
@@ -73,6 +85,16 @@ export interface VideoFacts {
   frameRate: number | null;
   videoCodec: string;
   audioCodec: string | null;
+  /** The facts below are absent on items built by older code paths; the planner treats absent as unknown. */
+  videoBitrate?: number | null;
+  audioBitrate?: number | null;
+  audioSampleRate?: number | null;
+  audioChannels?: number | null;
+  indexAtFront?: boolean | null;
+  /** 1 = recorded before the formatter (a rescan is pending); 2 = current. */
+  factsVersion?: 1 | 2;
+  /** Three rescans failed; the planner refuses. */
+  factsUnreadable?: boolean;
 }
 
 export interface ProviderCapabilities {
@@ -289,6 +311,15 @@ export interface ValidationIssue {
     | "video_aspect_out_of_range"
     | "video_frame_rate_too_high"
     | "video_frame_rate_too_low"
+    | "video_facts_unreadable"
+    | "video_checking"
+    | "video_will_cut"
+    | "video_will_crop"
+    | "video_will_pad"
+    | "video_will_resize"
+    | "video_will_change_frame_rate"
+    | "video_will_reencode"
+    | "video_will_rewrap"
     | "too_many_items"
     | "media_processing"
     | "media_failed"

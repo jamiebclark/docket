@@ -27,6 +27,26 @@ describe("parseProbe", () => {
     expect(r.frameRate).toBe(29.97);
   });
 
+  it("reads bitrates, sample rate and channels (P9)", () => {
+    const r = ok(
+      sample(
+        [video({ bit_rate: "4000000" }), { ...audio, bit_rate: "128000", sample_rate: "48000", channels: 2 }],
+        { bit_rate: "4200000" },
+      ),
+    );
+    expect(r).toMatchObject({ videoBitrate: 4_000_000, formatBitrate: 4_200_000, audioBitrate: 128_000, audioSampleRate: 48_000, audioChannels: 2 });
+  });
+
+  it("turns missing, N/A and unparseable numbers into null", () => {
+    const r = ok(sample([video({ bit_rate: "N/A" }), { ...audio, bit_rate: "abc", sample_rate: "0", channels: 0 }], { bit_rate: "N/A" }));
+    expect(r).toMatchObject({ videoBitrate: null, formatBitrate: null, audioBitrate: null, audioSampleRate: null, audioChannels: null });
+    expect(ok(sample([video({ bit_rate: "" })])).videoBitrate).toBeNull();
+  });
+
+  it("has no audio facts for a silent clip", () => {
+    expect(ok(sample([video({ bit_rate: 1000 })]))).toMatchObject({ videoBitrate: 1000, audioBitrate: null, audioSampleRate: null, audioChannels: null });
+  });
+
   it("prefers avg_frame_rate, falls back to r_frame_rate, then null", () => {
     expect(ok(sample([video({ avg_frame_rate: "24/1", r_frame_rate: "48/1" })])).frameRate).toBe(24);
     expect(ok(sample([video({ avg_frame_rate: "0/0" })])).frameRate).toBe(30);

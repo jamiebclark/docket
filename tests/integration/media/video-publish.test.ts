@@ -104,21 +104,22 @@ requireFfmpeg()("publishing a video through the mock provider", () => {
     expect(attempts[0]).toMatchObject({ outcome: "done" });
   });
 
-  it("refuses an out-of-limits video at scheduling", async () => {
-    const { env, assetId } = await uploadVideo(fx.long(70));
+  // Since the formatter (024), a video that is too long is cut to fit; one shorter than the minimum cannot be fixed.
+  it("refuses a video that cannot be adapted at scheduling", async () => {
+    const { env, assetId } = await uploadVideo(fx.long(0.5));
     const { draft } = await queueVideoPost(env, assetId);
     const queued = await atTime(BEFORE, () => posts.addToQueue(env.scope, draft.post.id, {}));
     expect(queued[0]).toMatchObject({ ok: false, code: "validation" });
-    expect(queued[0]!.ok === false && queued[0]!.issues?.some((i) => i.code === "video_too_long")).toBe(true);
+    expect(queued[0]!.ok === false && queued[0]!.issues?.some((i) => i.code === "video_too_short")).toBe(true);
   });
 
-  it("fails at publish time when the video no longer fits", async () => {
+  it("fails at publish time when the video can no longer be adapted", async () => {
     const { env, assetId } = await uploadVideo(fx.landscape);
     const { draft } = await queueVideoPost(env, assetId);
     const queued = await atTime(BEFORE, () => posts.addToQueue(env.scope, draft.post.id, {}));
     expect(queued.every((t) => t.ok)).toBe(true);
-    await crossProject("test: stretch the video", async () =>
-      await getDb().update(mediaAssets).set({ durationMs: 120_000 }).where(eq(mediaAssets.id, assetId)),
+    await crossProject("test: shorten the video below the minimum", async () =>
+      await getDb().update(mediaAssets).set({ durationMs: 500 }).where(eq(mediaAssets.id, assetId)),
     );
     for (let i = 0; i < 3; i++) await atTime(new Date(SLOT.getTime() + i * 5000), () => runTick());
     const detail = await posts.getPost(env.scope, draft.post.id);

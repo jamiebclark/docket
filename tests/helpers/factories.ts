@@ -263,6 +263,13 @@ export interface VideoAssetOptions {
   height?: number;
   byteSize?: number;
   error?: string;
+  videoBitrate?: number | null;
+  audioBitrate?: number | null;
+  audioSampleRate?: number | null;
+  audioChannels?: number | null;
+  indexAtFront?: boolean | null;
+  factsVersion?: 1 | 2;
+  factsAttempts?: number;
 }
 
 /** A video row with the given facts, no ffmpeg and no stored object: for limits, validation and gate tests. */
@@ -271,6 +278,7 @@ export async function createVideoAsset(projectId: string, o: VideoAssetOptions =
   const container = o.container ?? "mp4";
   const key = `test/${unique()}.${container}`;
   const ready = state === "ready";
+  const silentAudio = o.audioCodec === null;
   return forSchedulerProject(projectId).media.insert({
     storageKey: key,
     publicUrl: `http://localhost:3000/media/${key}`,
@@ -289,6 +297,13 @@ export async function createVideoAsset(projectId: string, o: VideoAssetOptions =
           videoCodec: o.videoCodec ?? "h264",
           audioCodec: o.audioCodec === undefined ? "aac" : o.audioCodec,
           container,
+          videoBitrate: o.videoBitrate === undefined ? 2_000_000 : o.videoBitrate,
+          audioBitrate: silentAudio ? null : o.audioBitrate === undefined ? 128_000 : o.audioBitrate,
+          audioSampleRate: silentAudio ? null : o.audioSampleRate === undefined ? 44_100 : o.audioSampleRate,
+          audioChannels: silentAudio ? null : o.audioChannels === undefined ? 2 : o.audioChannels,
+          indexAtFront: o.indexAtFront === undefined ? true : o.indexAtFront,
+          factsVersion: o.factsVersion ?? 2,
+          factsAttempts: o.factsAttempts ?? 0,
         }
       : {}),
   });

@@ -103,6 +103,12 @@ describe("mediaKeys", () => {
     }
     expect(k.variant("abc", "webp")).toBe("projects/proj/media/asset/v/abc.webp");
   });
+
+  it("keeps adapted videos and previews under their own prefixes", () => {
+    const k = mediaKeys("proj", "asset");
+    expect(k.videoVersion("abc")).toBe("projects/proj/media/asset/vv/abc.mp4");
+    expect(k.videoPreview("abc")).toBe("projects/proj/media/asset/vp/abc.mp4");
+  });
 });
 
 interface Seen {

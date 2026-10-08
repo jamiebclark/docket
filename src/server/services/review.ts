@@ -10,6 +10,7 @@ import { REVIEW_QUEUE_PAGE_SIZE, type PostRecord } from "../dal/posts";
 import type { ProjectScope, SchedulingPolicy } from "../dal/scope";
 import type { TargetRecord } from "../dal/targets";
 import { prepareVariants } from "./media-variants";
+import { syncVideoVersions } from "./video-versions";
 import { applyDerivedStatus, gate, lockPost, queueTargetsInTx, type TargetResult } from "./posts";
 import { variantGroupsForPost } from "./posts/variant-groups";
 import { loadTargetContent, validateTargetContent } from "./posts/validate";
@@ -154,7 +155,11 @@ export async function approvePost(scope: ProjectScope, postId: string, input?: u
   const id = z.uuid().parse(postId);
   const { edits } = approveSchema.parse(input ?? {});
   need(scope, { post: ["edit", "schedule"] });
-  return serialized(id, () => approveSerialized(scope, id, edits));
+  return serialized(id, async () => {
+    const result = await approveSerialized(scope, id, edits);
+    if (result.ok && result.queued.length > 0) await syncVideoVersions(scope, id, { requeueFailed: true });
+    return result;
+  });
 }
 
 async function approveSerialized(

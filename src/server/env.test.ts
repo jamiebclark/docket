@@ -231,6 +231,7 @@ describe("parseEnv media storage", () => {
       uploadTransport: "direct",
       uploadExpiryHours: 24,
       maxOpenUploads: 10,
+      videoEncodeConcurrency: 1,
     });
   });
 

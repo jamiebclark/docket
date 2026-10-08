@@ -115,6 +115,7 @@ jobs:
           docker run --rm --user 1001 --entrypoint ffprobe docket:ci -version
           docker run --rm --user 1001 --entrypoint sh docket:ci -c 'ffmpeg -hide_banner -encoders | grep -q libx264'
           docker run --rm --user 1001 --entrypoint node docket:ci scripts/video-smoke.mjs
+          docker run --rm --cpus=2 --user 1001 --entrypoint node docket:ci scripts/video-smoke.mjs --formatter
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

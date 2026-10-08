@@ -10,7 +10,13 @@ spec is written.
   sets the post type from the image count. Instagram crops every carousel image to the first image's shape, and the
   composer warns about it (`carousel_crop`). On Facebook this is a multi-photo post, not Facebook's link-ad "carousel".
 - **Per-platform image fitting.** The media planner (`src/server/media/variants.ts`) converts, resizes and compresses
-  each image for each target before publishing. A video formatter would follow the same pattern.
+  each image for each target before publishing.
+- **Per-target video formatter (024).** The worker adapts a video to each target's declared limits (cut, crop or pad, resize, frame rate,
+  re-encode, or a rewrap) and builds previews. The composer has a video edit dialog (trim, fit, focal point, fill colour). A provider that
+  declares video limits gets it. Not yet owned by any spec: burned-in captions, smart crop that follows subjects, a cover frame chosen per
+  platform, per-target edits, video upload or edit fields in the public API, generator video input, HDR tone mapping, enlarging small
+  videos, joining or splitting clips, speed or filter effects, audio replacement and adding a silent track. Bluesky video and TikTok
+  get the formatter by declaring their limits.
 - **Video groundwork (018).** MP4 and MOV upload to the media library (and the picker) by resumable multipart upload
   straight to the bucket, ffprobe facts, metadata stripping and a poster frame in the worker, per-provider `video`
   capabilities with composer warnings, and ffmpeg in the image. Instagram publishes video as of 019, Facebook as of 021 and Threads as of 023; no other provider does yet, and generation ignores videos.

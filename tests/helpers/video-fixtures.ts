@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 
+export { requireFfmpeg } from "./ffmpeg";
+
 /** Test-time clip generators (research P23). Every generator asserts its own precondition with ffprobe. */
 
 export const LOCATION_TAG = "+48.8584+002.2945/";
@@ -27,6 +29,10 @@ export interface VideoFixtures {
   dir: string;
   landscape: string;
   portrait: string;
+  square: string;
+  highFps: string;
+  /** `moov` after `mdat`: the index is not at the front. */
+  indexAtEnd: string;
   silent: string;
   mov: string;
   rotated: string;
@@ -69,6 +75,17 @@ export function createVideoFixtures(): VideoFixtures {
   lavfi(landscape);
   const portrait = f("portrait.mp4");
   lavfi(portrait, { size: "180x320" });
+  const square = f("square.mp4");
+  lavfi(square, { size: "240x240" });
+  const highFps = f("highfps.mp4");
+  ffmpeg([
+    "-f", "lavfi", "-i", "testsrc=size=320x180:rate=60:duration=2",
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast", "-c:a", "aac", highFps,
+  ]);
+  // Plain mp4 output puts `moov` last; `-movflags +faststart` would move it to the front.
+  const indexAtEnd = f("index-at-end.mp4");
+  lavfi(indexAtEnd, { extra: ["-movflags", "-faststart"] });
   const silent = f("silent.mp4");
   lavfi(silent, { audio: false });
   const mov = f("clip.mov");
@@ -111,7 +128,7 @@ export function createVideoFixtures(): VideoFixtures {
   writeFileSync(corrupt, Buffer.concat([ftyp("isom"), randomBytes(4096)]));
 
   return {
-    dir, landscape, portrait, silent, mov, rotated, located, corrupt, audioOnly,
+    dir, landscape, portrait, square, highFps, indexAtEnd, silent, mov, rotated, located, corrupt, audioOnly,
     long(seconds = 600) {
       const out = f(`long-${seconds}.mp4`);
       lavfi(out, { seconds, audio: false });

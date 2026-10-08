@@ -22,6 +22,11 @@ export const FACEBOOK_REEL_VIDEO = {
   maxAspectRatio: 0.569,
   minFrameRate: 24,
   maxFrameRate: 60,
+  // Same table: "AAC, 48 kHz, stereo", "128 kbps+"; 9:16 is the only shape, so it is also the recommended one.
+  audioBitrate: 128_000,
+  maxAudioSampleRate: 48_000,
+  maxAudioChannels: 2,
+  recommendedAspectRatio: 9 / 16,
 } as const satisfies VideoLimitOverrides;
 
 export const FACEBOOK_REELS_PER_DAY = 30; // "30 API-published posts within a 24-hour moving period"

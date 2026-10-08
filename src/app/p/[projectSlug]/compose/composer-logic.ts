@@ -1,3 +1,4 @@
+import type { VideoEdit } from "@/lib/video/edit";
 import type { PostType } from "@/providers/types";
 import type { CompositionCheck, TargetCheck } from "@/server/services/posts";
 
@@ -12,6 +13,8 @@ export interface CheckInput {
   postId?: string;
   baseText: string;
   mediaIds: string[];
+  /** One edit per attached video, by media id; a default edit clears a stored one. */
+  videoEdits?: Record<string, VideoEdit>;
   targets: { accountId: string; overrideText?: string | null; postType?: PostType | null }[];
 }
 

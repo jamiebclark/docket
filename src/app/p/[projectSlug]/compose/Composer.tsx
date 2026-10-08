@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { RequirementsSummary } from "@/components/compose/RequirementsSummary";
+import { VideoTargetPreview } from "@/components/compose/VideoTargetPreview";
+import { VideoEditButton } from "@/components/compose/VideoEditButton";
+import { cutNotes } from "@/components/compose/video-edit-ui";
+import { DEFAULT_VIDEO_EDIT, type VideoEdit } from "@/lib/video/edit";
 import type { PostType } from "@/providers/types";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/Button";
@@ -48,6 +52,7 @@ export interface ComposerInitial {
   postId: string;
   baseText: string;
   mediaIds: string[];
+  videoEdits?: Record<string, VideoEdit>;
   targets: { accountId: string; overrideText: string | null; postType?: PostType | null }[];
   editable: boolean;
   reviewBlocked: boolean;
@@ -99,6 +104,12 @@ export function Composer({
   const [baseText, setBaseText] = useState(initial?.baseText ?? "");
   const [media, setMedia] = useState<MediaView[]>(initialMedia);
   const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
+  const [editsById, setEditsById] = useState<Record<string, VideoEdit>>(initial?.videoEdits ?? {});
+  // One entry per attached video (a default edit too, so resetting one clears the stored row); removed videos drop out.
+  const videoEdits = useMemo(
+    () => Object.fromEntries(media.filter((m) => m.kind === "video").map((m) => [m.id, editsById[m.id] ?? DEFAULT_VIDEO_EDIT])),
+    [media, editsById],
+  );
   const [selected, setSelected] = useState<string[]>(
     initial?.targets.map((t) => t.accountId).filter((id) => accounts.some((a) => a.id === id)) ?? [],
   );
@@ -144,14 +155,14 @@ export function Composer({
     if (targets.length === 0) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      const result = await fetchCheck(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, targets }, controller.signal);
+      const result = await fetchCheck(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, videoEdits, targets }, controller.signal);
       if (result && !controller.signal.aborted) setCheck(result);
     }, DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [slug, postId, baseText, mediaIds, targets, initialCheck, mediaVersion]);
+  }, [slug, postId, baseText, mediaIds, videoEdits, targets, initialCheck, mediaVersion]);
 
   // Polls attached media that is not ready yet (P15); stops when none is.
   const waitingKey = waitingIds.join(",");
@@ -208,7 +219,7 @@ export function Composer({
 
   async function save(): Promise<string | null> {
     setSaving(true);
-    const res = await saveDraftAction(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, targets });
+    const res = await saveDraftAction(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, videoEdits, targets });
     setSaving(false);
     if (!res.ok) {
       setMessage(res.message);
@@ -292,6 +303,25 @@ export function Composer({
           <fieldset className={section}>
             <legend className={legend}>Media</legend>
             <MediaPicker slug={slug} enabled={mediaEnabled} canEdit={canSave} value={media} accountIds={selected} onChange={setMedia} />
+            {media.some((m) => m.kind === "video") ? (
+              <ul className="mt-2 flex flex-col gap-1.5" aria-label="Video edits">
+                {media.map((m, n) =>
+                  m.kind === "video" ? (
+                    <li key={m.id} className="flex items-center gap-2 text-sm">
+                      <span>{m.originalFilename ?? `Video ${n + 1}`}</span>
+                      <VideoEditButton
+                        media={m}
+                        label={m.originalFilename ?? `Video ${n + 1}`}
+                        edit={videoEdits[m.id] ?? DEFAULT_VIDEO_EDIT}
+                        disabled={!canSave}
+                        cutNotes={cutNotes(check?.targets ?? [], n)}
+                        onSave={(next) => setEditsById((cur) => ({ ...cur, [m.id]: next }))}
+                      />
+                    </li>
+                  ) : null,
+                )}
+              </ul>
+            ) : null}
           </fieldset>
 
           {selected.length > 0 ? (
@@ -389,6 +419,12 @@ export function Composer({
                     </fieldset>
                   ) : null}
                   <RequirementsSummary providerName={t.providerName} requirements={t.requirements} openInitially={selected.length === 1} />
+                  <VideoTargetPreview
+                    slug={slug}
+                    videos={t.videos}
+                    requestInput={{ ...(postId ? { postId } : {}), baseText, mediaIds, videoEdits, targets }}
+                    disabled={!canSave}
+                  />
                   <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
                   {media.length > 0 ? (
                     <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Media, in order">

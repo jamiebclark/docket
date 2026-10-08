@@ -7,19 +7,43 @@ import { countText, countingRuleName } from "@/providers/text";
 import type { PostType, ValidationIssue } from "@/providers/types";
 import { choiceFor, resolvePostType } from "@/providers/post-type";
 import type { PostTypeOption } from "@/providers/types";
+import { durationLabel, videoStepWords } from "@/providers/video-labels";
 import { videoFieldsOf } from "../../media/item";
+import { previewRequestFor, viewOf } from "../video-previews";
+import { itemOf, planVideoFor } from "../media-variants";
 import { postInputSchema } from "@/lib/validation/scheduling";
 import * as clock from "../../dal/clock";
 import { ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
 import { nearQueuedWarnings, type Warning } from "../queue";
 import { resolveLocalDateTime } from "../queue/occurrences";
-import { assertPostTypeOffered } from "./content";
+import { assertPostTypeOffered, checkVideoEdits } from "./content";
 import { validateTargetContent } from "./validate";
 
 const STARTED = ["publishing", "published", "ambiguous"] as const;
 
 const checkSchema = postInputSchema.extend({ postId: z.uuid().optional() });
+
+/** What Docket will do with one video for one target (contracts/video-composer.md "Check response"). */
+export interface VideoTargetView {
+  mediaId: string;
+  /** Position in the post. */
+  index: number;
+  plan: "as_is" | "adapted" | "rewrap" | "refused" | "checking";
+  /** Badge words, empty unless adapted or rewrapped. */
+  steps: string[];
+  /** The planner's sentences. */
+  notes: string[];
+  /** Refusal sentences. */
+  reasons: string[];
+  /** Planned output, e.g. "1:30" and "1080×1920". */
+  output: { durationLabel: string; sizeLabel: string } | null;
+  /** The original for a file that goes as stored; the worker's render for an adapted one; none when refused or still being read. */
+  preview:
+    | { kind: "original"; url: string; posterUrl: string | null }
+    | { kind: "render"; key: string; state: "none" | "queued" | "building" | "ready" | "failed"; url: string | null; error: string | null }
+    | null;
+}
 
 export interface TargetCheck {
   accountId: string;
@@ -34,6 +58,8 @@ export interface TargetCheck {
   /** Present exactly when the provider offers a choice for this content (one video on Instagram). */
   postTypeChoice: { options: PostTypeOption[]; selected: PostType; default: PostType } | null;
   issues: ValidationIssue[];
+  /** One entry per video on the post, in post order; empty when there is none. */
+  videos: VideoTargetView[];
   canSchedule: boolean;
   /** What the account accepts; `null` exactly when `limit` is `null` (provider not registered). Present with no text and no media. */
   requirements: RequirementsSummary | null;
@@ -60,6 +86,7 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
   if (rows.size !== ids.length) throw new NotFoundError();
   const assets = parsed.mediaIds.map((id) => rows.get(id)!);
 
+  const videoEdits = checkVideoEdits(assets, parsed.videoEdits);
   const stored = new Map<string, PostType | null>();
   let editable = true;
   let reviewBlocked = false;
@@ -83,11 +110,38 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
     const effectiveText = target.overrideText ? target.overrideText : parsed.baseText;
     const media = assets.map((a) => ({ url: a.publicUrl, mimeType: a.mimeType, width: a.width, height: a.height, bytes: a.byteSize, altText: a.altText, ...videoFieldsOf(a) }));
     const issues =
-      (await validateTargetContent(scope, account, { text: effectiveText, assets, referenced: assets.length, chosenPostType: chosen }, { preview: true })) ?? [];
+      (await validateTargetContent(scope, account, { text: effectiveText, assets, referenced: assets.length, chosenPostType: chosen, videoEdits }, { preview: true })) ?? [];
     const caps = provider?.capabilities ?? null;
     const resolved = resolvePostType(caps, media, chosen);
     const choice = choiceFor(caps, media);
     const rule = provider?.capabilities.text.countingRule ?? null;
+    const videos: VideoTargetView[] = [];
+    if (provider) {
+      for (const [index, asset] of assets.entries()) {
+        if (asset.kind !== "video") continue;
+        const plan = planVideoFor(asset, provider.capabilities, resolved, index, provider.displayName, videoEdits.get(asset.id));
+        const original = { kind: "original" as const, url: asset.publicUrl, posterUrl: asset.thumbnailUrl ?? null };
+        const base = { mediaId: asset.id, index, steps: [], notes: [], reasons: [], output: null };
+        if (!plan) videos.push({ ...base, plan: "checking", preview: null });
+        else if (plan.kind === "original") videos.push({ ...base, plan: "as_is", preview: original });
+        else if (plan.kind === "checking") videos.push({ ...base, plan: "checking", notes: plan.notes.map((n) => n.message), preview: null });
+        else if (plan.kind === "refuse") videos.push({ ...base, plan: "refused", reasons: plan.issues.map((n) => n.message), preview: null });
+        else {
+          const { output } = plan;
+          const wanted = previewRequestFor(asset.id, plan, itemOf(asset).video?.frameRate ?? null);
+          const [row] = wanted ? await scope.videoVersions.getPreviewsByKeys([wanted.key]) : [];
+          const render = wanted ? { kind: "render" as const, ...(row ? viewOf(row) : { key: wanted.key, state: "none" as const, url: null, error: null }) } : null;
+          videos.push({
+            ...base,
+            plan: plan.mode === "rewrap" ? "rewrap" : "adapted",
+            steps: videoStepWords(plan),
+            notes: plan.notes.map((n) => n.message),
+            output: { durationLabel: durationLabel(output.durationSeconds), sizeLabel: `${output.width}×${output.height}` },
+            preview: plan.mode === "rewrap" ? original : render,
+          });
+        }
+      }
+    }
     targets.push({
       accountId: account.id,
       displayName: account.displayName,
@@ -99,6 +153,7 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
       postType: provider ? resolved : null,
       postTypeChoice: choice ? { options: [...choice.options], selected: resolved, default: choice.default } : null,
       issues,
+      videos,
       canSchedule: !!provider && account.status === "active" && !issues.some((i) => i.severity === "error"),
       requirements: provider ? requirementsOf(provider.capabilities, { uploadTypes: UPLOAD_MIME_TYPES, postType: resolved }) : null,
     });

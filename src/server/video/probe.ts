@@ -12,6 +12,14 @@ export interface ProbeResult {
   frameRate: number | null;
   videoCodec: string;
   audioCodec: string | null;
+  /** Bits per second; null when ffprobe does not report one. */
+  videoBitrate: number | null;
+  /** The container's overall bit rate. */
+  formatBitrate: number | null;
+  audioBitrate: number | null;
+  /** Hz; null with no audio. */
+  audioSampleRate: number | null;
+  audioChannels: number | null;
   formatNames: string[];
   formatTags: Record<string, string>;
   streamTags: Record<string, string>[];
@@ -22,6 +30,9 @@ export type ProbeError = { error: "unreadable" | "no_video" };
 interface RawStream {
   codec_type?: string;
   codec_name?: string;
+  bit_rate?: string | number;
+  sample_rate?: string | number;
+  channels?: number;
   width?: number;
   height?: number;
   avg_frame_rate?: string;
@@ -33,7 +44,7 @@ interface RawStream {
 }
 interface RawProbe {
   streams?: RawStream[];
-  format?: { format_name?: string; duration?: string | number; tags?: Record<string, string> };
+  format?: { format_name?: string; duration?: string | number; bit_rate?: string | number; tags?: Record<string, string> };
 }
 
 function parseRate(value: string | undefined): number | null {
@@ -42,6 +53,12 @@ function parseRate(value: string | undefined): number | null {
   if (n === undefined || !Number.isFinite(n)) return null;
   const rate = d === undefined ? n : d && Number.isFinite(d) ? n / d : NaN;
   return Number.isFinite(rate) && rate > 0 ? Math.round(rate * 1000) / 1000 : null;
+}
+
+/** ffprobe prints numbers as strings and "N/A" for unknown; anything not a positive whole number is null. */
+function positiveInt(value: unknown): number | null {
+  const n = typeof value === "string" ? Number(value.trim() === "" ? NaN : value) : value;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.round(n) : null;
 }
 
 function normaliseRotation(degrees: number): 0 | 90 | 180 | 270 {
@@ -83,6 +100,11 @@ export function parseProbe(json: unknown): ProbeResult | ProbeError {
     frameRate: parseRate(video.avg_frame_rate) ?? parseRate(video.r_frame_rate),
     videoCodec: video.codec_name,
     audioCodec: audio?.codec_name ?? null,
+    videoBitrate: positiveInt(video.bit_rate),
+    formatBitrate: positiveInt(raw.format?.bit_rate),
+    audioBitrate: audio ? positiveInt(audio.bit_rate) : null,
+    audioSampleRate: audio ? positiveInt(audio.sample_rate) : null,
+    audioChannels: audio ? positiveInt(audio.channels) : null,
     formatNames: (raw.format?.format_name ?? "").split(",").filter(Boolean),
     formatTags: raw.format?.tags ?? {},
     streamTags: streams.map((s) => s.tags ?? {}),

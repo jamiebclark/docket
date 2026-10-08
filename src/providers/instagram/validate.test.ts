@@ -81,7 +81,7 @@ describe("validateInstagram video", () => {
 
   it("names the post type and says Docket does not adjust video", () => {
     const reel = runT([vid({ durationSeconds: 960 })], "reel").find((i) => i.code === "video_too_long");
-    expect(reel?.message).toContain("for an Instagram Reel. Docket does not crop, trim or convert video yet.");
+    expect(reel?.message).toContain("for an Instagram Reel.");
     const feed = runT([vid({ durationSeconds: 960 })]).find((i) => i.code === "video_too_long");
     expect(feed?.message).toContain("for an Instagram Feed video.");
   });

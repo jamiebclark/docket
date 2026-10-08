@@ -12,12 +12,15 @@ import { validateResolvedContent } from "../../../src/server/services/posts/vali
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
+import { DEFAULT_VIDEO_EDIT } from "../../../src/lib/video/edit";
+import { videoLimitsFor } from "../../../src/providers/validation";
+import { planVideo } from "../../../src/providers/video-plan";
 import { createProjectWithMembers, createVideoAsset } from "../../helpers/factories";
 import { fakeSession } from "../../helpers/auth";
 import { forProject } from "../../../src/server/dal/scope";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDraftPost, createDueTarget, createMediaAsset, createMockAccount, createSlots, parkAllDueTargets } from "../../helpers/scheduling";
-import { allowanceRows, coreRows, limitRows, planWith, plannerRows, textRows, videoRowContent, videoRows, type Expectation } from "../../helpers/limit-rows";
+import { allowanceRows, coreRows, limitRows, planWith, plannerRows, textRows, videoItem, videoRowContent, videoRows, type Expectation } from "../../helpers/limit-rows";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 
 /** Any request to a platform fails the test: every row below must be refused or deferred before one is made. */
@@ -97,7 +100,7 @@ describe("text rows: refused when scheduling and again at publish time, with no 
 
 describe("video rows: refused by the core, when scheduling and at publish time, and the provider's advance is never called (FR-039, SC-002, SC-008)", () => {
   for (const provider of providers) {
-    for (const row of videoRows(provider)) {
+    for (const row of videoRows(provider).filter((r) => !r.adapt)) {
       it(row.title, async () => {
         const advance = vi.spyOn(provider, "advance");
         expectOutcome(validateResolvedContent(provider, videoRowContent(provider, row)), { refuse: row.codes });
@@ -136,6 +139,43 @@ describe("video rows: refused by the core, when scheduling and at publish time, 
         expect(attempts.map((a) => [a.step, a.outcome])).toEqual([["engine-validate", "fatal_error"]]);
         expect(advance).not.toHaveBeenCalled();
         advance.mockRestore();
+      });
+    }
+  }
+});
+
+describe("video adapt rows: the formatter adapts what it can, and the gate lets it through (SC-001, P25)", () => {
+  for (const provider of providers) {
+    for (const row of videoRows(provider).filter((r) => r.adapt)) {
+      it(row.title, async () => {
+        const src = videoItem(row.videos[0]);
+        const plan = planVideo(
+          { width: src.width!, height: src.height!, bytes: src.bytes, facts: src.video! },
+          videoLimitsFor(provider.capabilities, row.postType),
+          DEFAULT_VIDEO_EDIT,
+          { index: row.withImage ? 1 : 0, platform: provider.displayName },
+        );
+        expect(plan.kind, JSON.stringify(plan)).toBe("derive");
+        if (plan.kind === "derive") expect(
+            // A re-encode is its own step only when nothing else (a pad, a resize) already explains it.
+            plan.steps.some((st) => row.adapt!.includes(st)) || (row.adapt!.includes("reencode") && plan.mode === "encode"),
+            `steps ${plan.steps}`,
+          ).toBe(true);
+
+        const env = await createProjectWithMembers();
+        const scope = await forProject(fakeSession(env.owner.id), env.project.slug);
+        const account = await createMockAccount(env.project.id, {}, { providerKey: provider.key });
+        await createSlots(env.project.id, account.id, [{ weekday: 1, localTime: "09:00" }]);
+        const mediaIds: string[] = [];
+        if (row.withImage) mediaIds.push((await createMediaAsset(env.project.id, { mimeType: provider.capabilities.media.allowedMimeTypes[0] })).id);
+        for (const facts of row.videos) mediaIds.push((await createVideoAsset(env.project.id, facts)).id);
+        const draft = await posts.createDraft(scope, {
+          baseText: "hi",
+          targets: [{ accountId: account.id, ...(row.chosenPostType ? { postType: row.chosenPostType } : {}) }],
+          mediaIds,
+        });
+        const queued = await atTime(BEFORE, () => posts.addToQueue(scope, draft.post.id, {}));
+        expect(queued[0], JSON.stringify(queued[0])).toMatchObject({ ok: true });
       });
     }
   }

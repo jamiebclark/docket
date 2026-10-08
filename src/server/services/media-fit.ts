@@ -5,16 +5,18 @@ import type { SocialProvider } from "../../providers/types";
 import { validateAgainstCapabilities } from "../../providers/validation";
 import type { MediaRow } from "../dal/media";
 import type { ProjectScope } from "../dal/scope";
-import { planFor, plannedItem } from "./media-variants";
+import { resolvePostType } from "../../providers/post-type";
+import { videoStepWords } from "../../providers/video-labels";
+import { itemOf, planFor, planVideoFor, plannedItem } from "./media-variants";
 
-export type FitState = "fits" | "converted" | "refused";
+export type FitState = "fits" | "converted" | "adapted" | "checking" | "refused";
 
 export interface PlatformFit {
   providerKey: string;
   providerName: string;
   state: FitState;
-  /** Empty unless `state` is "converted". */
-  steps: ImageStep[];
+  /** Empty unless `state` is "converted" (image steps) or "adapted" (the formatter's step words). */
+  steps: (ImageStep | string)[];
   /** The planner's own sentences, written with the label "This image". Empty when the image fits. */
   details: string[];
   /** The output type label (e.g. "JPEG") when `steps` include "convert". */
@@ -50,14 +52,28 @@ export function fitOf(asset: MediaRow, provider: SocialProvider): PlatformFit {
   };
 }
 
-/** A video is never converted: it fits, or it is refused with the provider's own sentences, for the type a single video gets. */
+/** A video is planned like an image: it fits, is adapted by the formatter, is still being read, or is refused with the planner's sentences. */
 function videoFitOf(asset: MediaRow, provider: SocialProvider): PlatformFit {
-  const base = { providerKey: provider.key, providerName: provider.displayName, steps: [], convertedTo: null };
-  const details = provider
-    .validate({ text: "x", media: [plannedItem(asset, { kind: "original" })] }, provider.capabilities)
-    .filter((i) => i.severity === "error" && i.field?.startsWith("media") && !ALT_CODES.has(i.code))
-    .map((i) => i.message.replace(/^Video 1\b/, "This video"));
-  return { ...base, state: details.length > 0 ? "refused" : "fits", details };
+  const base = { providerKey: provider.key, providerName: provider.displayName, convertedTo: null };
+  const postType = resolvePostType(provider.capabilities, [itemOf(asset)], null);
+  const plan = planVideoFor(asset, provider.capabilities, postType, 0, provider.displayName);
+  const say = (m: string) => m.replace(/^Video 1\b/, "This video");
+  if (plan === null) return { ...base, state: "checking", steps: [], details: [] };
+  switch (plan.kind) {
+    case "checking":
+      return { ...base, state: "checking", steps: [], details: plan.notes.map((n) => say(n.message)) };
+    case "refuse":
+      return { ...base, state: "refused", steps: [], details: plan.issues.map((i) => say(i.message)) };
+    case "derive":
+      return { ...base, state: "adapted", steps: videoStepWords(plan), details: plan.notes.map((n) => say(n.message)) };
+    case "original": {
+      const details = provider
+        .validate({ text: "x", media: [plannedItem(asset, { kind: "original" })] }, provider.capabilities)
+        .filter((i) => i.severity === "error" && i.field?.startsWith("media") && !ALT_CODES.has(i.code))
+        .map((i) => say(i.message));
+      return { ...base, state: details.length > 0 ? "refused" : "fits", steps: [], details };
+    }
+  }
 }
 
 export type FitSelection = { accountIds: string[] } | { active: true };

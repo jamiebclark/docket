@@ -7,6 +7,7 @@ import { waitForSchema } from "./server/scheduler/schema-wait";
 import { validateConfiguration } from "./server/startup/validate";
 import { markWorkerProcess } from "./server/video/guard";
 import { runMediaLoop } from "./server/video/loop";
+import { runVideoVersionLoop } from "./server/video/versions-loop";
 
 async function main(): Promise<void> {
   markWorkerProcess();
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
         signal: controller.signal,
       }),
       runMediaLoop({ signal: controller.signal }),
+      runVideoVersionLoop({ signal: controller.signal, concurrency: getEnv().media.videoEncodeConcurrency }),
     ]);
   }
   await closeDb();

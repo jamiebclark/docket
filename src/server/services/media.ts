@@ -410,7 +410,8 @@ export async function deleteMedia(scope: ProjectScope, assetId: string): Promise
     await tx.media.detachFromPosts(id, drafts);
     await tx.media.softDelete(id, new Date());
     const variants = await tx.media.deleteVariants(id);
-    doomed.push(asset.storageKey, ...(asset.sourceStorageKey ? [asset.sourceStorageKey] : []), ...(asset.thumbnailStorageKey ? [asset.thumbnailStorageKey] : []), ...variants.map((v) => v.storageKey));
+    const videoKeys = await tx.videoVersions.deleteForAsset(id);
+    doomed.push(asset.storageKey, ...(asset.sourceStorageKey ? [asset.sourceStorageKey] : []), ...(asset.thumbnailStorageKey ? [asset.thumbnailStorageKey] : []), ...variants.map((v) => v.storageKey), ...videoKeys);
     return { affected: refs.map(toRef) };
   });
   const storage = getStorage();

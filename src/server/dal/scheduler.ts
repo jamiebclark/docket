@@ -1,7 +1,12 @@
 import { and, asc, count, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { allowanceUses, mediaAssets, postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
-import type { PostType, StepContent } from "../../providers/types";
+import { resolvePostType } from "../../providers/post-type";
+import type { PostType, SocialProvider, StepContent } from "../../providers/types";
+import { videoRecipeKey } from "../media/hash";
+import { itemOf, planVideoFor } from "../services/media-variants";
+import { createPostsRepo } from "./posts";
+import { createVideoVersionsRepo } from "./video-versions";
 import { createActivityRepo, type NewActivityEvent } from "./activity";
 import { createAttemptsRepo, type AttemptEntry } from "./attempts";
 import { createSchedulingRepos, crossProject } from "./scope";
@@ -24,6 +29,13 @@ export interface ClaimDecision {
   activity?: NewActivityEvent;
 }
 
+/** What the claim-time video gate found for a target's post (contracts/video-publishing.md). */
+export type VideoGate =
+  | { kind: "none" }
+  | { kind: "ready" }
+  | { kind: "waiting"; platform: string }
+  | { kind: "failed"; reason: string; platform: string };
+
 export interface ClaimContext {
   now: Date;
   /** Targets of the account whose `publish_started_at` is later than `since` (limit counting, D8). */
@@ -33,6 +45,14 @@ export interface ClaimContext {
    * pinned by `project_id`. `null` when the post row is gone.
    */
   contentShape(target: { id: string; projectId: string; postId: string }): Promise<ContentShape | null>;
+  /**
+   * Whether every video on the post that needs adapting for this provider has a ready version. Queues a missing row; makes
+   * no storage, tool or provider call. A video that needs no adapting (or none at all) is `none`.
+   */
+  videoGate(
+    target: { id: string; projectId: string; postId: string; chosenPostType: PostType | null },
+    provider: SocialProvider,
+  ): Promise<VideoGate>;
   /** Creation-allowance reservations for the account since `since`, oldest first. */
   allowanceUsed(accountId: string, projectId: string, since: Date): Promise<{ at: Date; units: number }[]>;
   /** Records a reservation stamped with the claim's clock; commits with the lease patch. */
@@ -142,6 +162,40 @@ export function claimDueTargets(opts: ClaimDueOptions): Promise<ClaimedTarget[]>
             kinds,
             chosenPostType: head.chosenPostType,
           };
+        },
+        async videoGate(target, provider) {
+          const assets = await exec
+            .select({ asset: mediaAssets })
+            .from(postMedia)
+            .innerJoin(mediaAssets, and(eq(mediaAssets.id, postMedia.mediaAssetId), eq(mediaAssets.projectId, postMedia.projectId)))
+            .where(and(eq(postMedia.projectId, target.projectId), eq(postMedia.postId, target.postId), isNull(mediaAssets.deletedAt)))
+            .orderBy(asc(postMedia.position))
+            .then((rows) => rows.map((r) => r.asset));
+          if (!assets.some((a) => a.kind === "video")) return { kind: "none" };
+          const postType = resolvePostType(provider.capabilities, assets.map((a) => itemOf(a)), target.chosenPostType);
+          const edits = await createPostsRepo(exec, target.projectId).listVideoEdits(target.postId);
+          const needed: { assetId: string; key: string; plan: Extract<NonNullable<ReturnType<typeof planVideoFor>>, { kind: "derive" }> }[] = [];
+          let checking = false;
+          for (const [i, asset] of assets.entries()) {
+            const plan = planVideoFor(asset, provider.capabilities, postType, i, provider.displayName, edits.get(asset.id));
+            if (plan?.kind === "checking") checking = true;
+            if (plan?.kind === "derive") needed.push({ assetId: asset.id, key: videoRecipeKey("full", plan.recipe), plan });
+          }
+          const platform = provider.displayName;
+          if (needed.length === 0) return checking ? { kind: "waiting", platform } : { kind: "none" };
+          const repo = createVideoVersionsRepo(exec, target.projectId);
+          const rows = await repo.getByKeys(needed.map((n) => ({ assetId: n.assetId, kind: "full" as const, key: n.key })));
+          const rowOf = (n: { assetId: string; key: string }) => rows.find((r) => r.mediaAssetId === n.assetId && r.kind === "full" && r.key === n.key);
+          const missing = needed.filter((n) => !rowOf(n));
+          if (missing.length > 0) {
+            await repo.ensureQueued(
+              missing.map((n) => ({ assetId: n.assetId, kind: "full" as const, key: n.key, recipe: n.plan.recipe, steps: n.plan.steps, dueAt: opts.now })),
+            );
+          }
+          const failed = needed.map(rowOf).find((r) => r?.state === "failed");
+          if (failed) return { kind: "failed", reason: failed.error ?? "Docket could not adapt the video.", platform };
+          if (checking || missing.length > 0 || needed.some((n) => rowOf(n)?.state !== "ready")) return { kind: "waiting", platform };
+          return { kind: "ready" };
         },
         async allowanceUsed(accountId, projectId, since) {
           const used = await exec

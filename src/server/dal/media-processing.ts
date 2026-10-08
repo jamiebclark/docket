@@ -14,11 +14,37 @@ export interface ReadyFacts {
   frameRate: number | null;
   videoCodec: string;
   audioCodec: string | null;
+  videoBitrate: number | null;
+  audioBitrate: number | null;
+  audioSampleRate: number | null;
+  audioChannels: number | null;
+  indexAtFront: boolean | null;
   thumbnailStorageKey: string;
   thumbnailUrl: string;
 }
 
+/** The facts a rescan records; the stored file is never rewritten. */
+export interface RescanFacts {
+  videoBitrate: number | null;
+  audioBitrate: number | null;
+  audioSampleRate: number | null;
+  audioChannels: number | null;
+  indexAtFront: boolean | null;
+}
+
+/** Failed rescans after which the planner stops waiting and refuses (P9). */
+export const MAX_RESCAN_ATTEMPTS = 3;
+
 export interface MediaProcessingRepo {
+  /**
+   * One ready, live video whose facts predate the formatter (`facts_version = 1`, fewer than 3 attempts), leased for 120 s
+   * with the attempt counted. Videos already used by a post go first. It reuses the processing lease columns, idle on a ready row.
+   */
+  claimRescan(now: Date): Promise<(MediaAssetRow & { processingLeaseToken: string }) | null>;
+  /** Records the facts, sets `facts_version = 2` and clears the lease. False when the lease was lost. */
+  finishRescan(id: string, token: string, facts: RescanFacts): Promise<boolean>;
+  /** A failed rescan only gives the lease back; the attempt is already counted. */
+  releaseRescan(id: string, token: string): Promise<boolean>;
   /** One queued video (or one whose lease expired), leased for 120 s with the attempt counted. Null when none. */
   claimNext(now: Date): Promise<(MediaAssetRow & { processingLeaseToken: string }) | null>;
   /** False when the lease was lost or the row was deleted. */
@@ -60,6 +86,53 @@ export function createMediaProcessingRepo(db: Database): MediaProcessingRepo {
         .where(eq(mediaAssets.id, next))
         .returning();
       return (row as (MediaAssetRow & { processingLeaseToken: string }) | undefined) ?? null;
+    },
+    async claimRescan(now) {
+      const next = sql`(
+        SELECT ${mediaAssets.id} FROM ${mediaAssets}
+        WHERE ${mediaAssets.kind} = 'video' AND ${mediaAssets.processingState} = 'ready'
+          AND ${mediaAssets.deletedAt} IS NULL
+          AND ${mediaAssets.factsVersion} < 2 AND ${mediaAssets.factsAttempts} < ${MAX_RESCAN_ATTEMPTS}
+          AND (${mediaAssets.processingLeaseUntil} IS NULL OR ${mediaAssets.processingLeaseUntil} < ${now})
+        ORDER BY (${mediaAssets.firstUsedAt} IS NULL), ${mediaAssets.createdAt}
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )`;
+      const [row] = await db
+        .update(mediaAssets)
+        .set({
+          factsAttempts: sql`${mediaAssets.factsAttempts} + 1`,
+          processingLeaseUntil: leaseUntil(now),
+          processingLeaseToken: sql`gen_random_uuid()`,
+        })
+        .where(eq(mediaAssets.id, next))
+        .returning();
+      return (row as (MediaAssetRow & { processingLeaseToken: string }) | undefined) ?? null;
+    },
+    async finishRescan(id, token, f) {
+      const rows = await db
+        .update(mediaAssets)
+        .set({
+          videoBitrate: f.videoBitrate,
+          audioBitrate: f.audioBitrate,
+          audioSampleRate: f.audioSampleRate,
+          audioChannels: f.audioChannels,
+          indexAtFront: f.indexAtFront,
+          factsVersion: 2,
+          processingLeaseUntil: null,
+          processingLeaseToken: null,
+        })
+        .where(held(id, token))
+        .returning({ id: mediaAssets.id });
+      return rows.length > 0;
+    },
+    async releaseRescan(id, token) {
+      const rows = await db
+        .update(mediaAssets)
+        .set({ processingLeaseUntil: null, processingLeaseToken: null })
+        .where(held(id, token))
+        .returning({ id: mediaAssets.id });
+      return rows.length > 0;
     },
     async renewLease(id, token, now) {
       const rows = await db
@@ -109,6 +182,12 @@ export function createMediaProcessingRepo(db: Database): MediaProcessingRepo {
           frameRate: f.frameRate,
           videoCodec: f.videoCodec,
           audioCodec: f.audioCodec,
+          videoBitrate: f.videoBitrate,
+          audioBitrate: f.audioBitrate,
+          audioSampleRate: f.audioSampleRate,
+          audioChannels: f.audioChannels,
+          indexAtFront: f.indexAtFront,
+          factsVersion: 2,
           thumbnailStorageKey: f.thumbnailStorageKey,
           thumbnailUrl: f.thumbnailUrl,
         })

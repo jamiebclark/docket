@@ -4,8 +4,9 @@ import { byteLabel, durationLabel } from "@/components/media/upload/upload-ui";
 import { sniffMedia } from "@/lib/media/sniff";
 import { makeThumbnail } from "../media/process";
 import { cleanFile, ToolFailure } from "./clean";
+import { indexAtFront } from "./boxes";
 import { posterFile } from "./poster";
-import { probeFile } from "./probe";
+import { probeFile, type ProbeResult } from "./probe";
 import { ToolMissingError } from "./spawn";
 
 export interface VideoLimits {
@@ -20,6 +21,12 @@ export interface VideoProcessed {
   frameRate: number | null;
   videoCodec: string;
   audioCodec: string | null;
+  videoBitrate: number | null;
+  audioBitrate: number | null;
+  audioSampleRate: number | null;
+  audioChannels: number | null;
+  /** From the stored (cleaned) file's top-level boxes; null when unreadable. */
+  indexAtFront: boolean | null;
   /** Displayed size, rotation applied. */
   width: number;
   height: number;
@@ -33,6 +40,13 @@ const NOT_MP4_OR_MOV = "This is not an MP4 or MOV video.";
 const NO_VIDEO = "This file has no video.";
 const UNREADABLE = "Docket could not read this video.";
 export const COULD_NOT_PROCESS = "Docket could not process this video.";
+
+/** The format's bit rate minus the audio's, when the video stream reports none (P5). */
+export function derivedVideoBitrate(p: ProbeResult): number | null {
+  if (p.formatBitrate === null) return null;
+  const rest = p.formatBitrate - (p.audioBitrate ?? 0);
+  return rest > 0 ? rest : null;
+}
 
 const fail = (reason: string, log?: string): ProcessVideoResult => ({ ok: false, reason, ...(log ? { log } : {}) });
 
@@ -88,6 +102,12 @@ export async function processVideoFile(
         frameRate: probe.frameRate,
         videoCodec: probe.videoCodec,
         audioCodec: probe.audioCodec,
+        // The bitrates are the source's; the clean step copies streams, so they carry over.
+        videoBitrate: probe.videoBitrate ?? derivedVideoBitrate(probe),
+        audioBitrate: probe.audioBitrate,
+        audioSampleRate: probe.audioSampleRate,
+        audioChannels: probe.audioChannels,
+        indexAtFront: await indexAtFront(cleanPath),
         width: probe.width,
         height: probe.height,
       },

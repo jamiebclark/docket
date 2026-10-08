@@ -48,7 +48,7 @@ describe("atSchema", () => {
 
 describe("postInputSchema", () => {
   it("applies defaults to an empty draft", () => {
-    expect(postInputSchema.parse({})).toEqual({ baseText: "", mediaIds: [], targets: [] });
+    expect(postInputSchema.parse({})).toEqual({ baseText: "", mediaIds: [], videoEdits: {}, targets: [] });
   });
   it("accepts targets with an optional override", () => {
     const r = postInputSchema.safeParse({ baseText: "hi", targets: [{ accountId: id, overrideText: null }] });

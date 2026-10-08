@@ -258,4 +258,13 @@ describe("label helpers", () => {
       }
     });
   });
+
+  describe("video.adapts / video.cannot", () => {
+    it("are empty where video is not accepted and name what the formatter does where it is", () => {
+      const none = requirementsOf(findProvider("bluesky")!.capabilities, { uploadTypes });
+      if (none.video.maxVideos === 0) expect([none.video.adapts, none.video.cannot]).toEqual([[], []]);
+      const mock = requirementsOf(findProvider("mock")!.capabilities, { uploadTypes });
+      expect(mock.video.adapts).toContain("cut to 1 minute");
+    });
+  });
 });

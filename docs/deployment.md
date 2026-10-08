@@ -97,6 +97,17 @@ The walkthrough above uses the mock provider. To post to real accounts, do these
 6. **Restart:** `docker compose up -d`.
 7. **Invite members and connect accounts** from each project's Accounts screen. Bluesky needs only an app password. Who can connect what, and how to post for accounts other people own: [accounts.md](./accounts.md).
 
+### What changed for the video formatter (024)
+
+- **The worker now encodes video.** Adapting a video to a target uses about one to two CPU cores per encode, memory for ffmpeg, and temporary disk
+  of about the source plus twice the output (up to about 3 GiB for a 1 GiB video). The CI docker job measures a 30 s preview at `--cpus=2`.
+- **`docker-compose.yml`: no change required.** If the container's writable layer is small, the optional edit below (the `/tmp` volume on the
+  `worker` service) still applies.
+- **`.env.example`: one new optional setting**, `VIDEO_ENCODE_CONCURRENCY` (integer 1-4, default 1): how many videos the worker adapts at once.
+  Add it to your `.env` only if you want more than one.
+- **Adapting video needs the `worker` service.** In-process mode (the HTTP tick or `RUN_WORKER_IN_PROCESS`) publishes videos that fit as is.
+  Adapted targets fail after two hours with a message saying so.
+
 ### What changed for video (018)
 
 - **The image is larger** because it now includes ffmpeg (from Debian bookworm). CI logs the exact size of every build.
