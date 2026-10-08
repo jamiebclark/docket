@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ProblemsCallout } from "@/components/notifications/ProblemsCallout";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterTabs } from "@/components/ui/FilterTabs";
@@ -77,6 +78,7 @@ export default async function PostsPage({ params, searchParams }: Props) {
 
   return (
     <section>
+      <ProblemsCallout scope={scope} />
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Posts</h1>
         {scope.can({ post: ["edit"] }) ? (

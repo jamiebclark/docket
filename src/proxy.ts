@@ -83,6 +83,8 @@ export function proxy(request: NextRequest) {
   // Next reads the nonce from the request's CSP header while rendering.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  // The path the person asked for, set here so a client-supplied value is always overwritten (read by the problems-view marker).
+  requestHeaders.set("x-docket-path", `${pathname}${search}`);
   requestHeaders.set("Content-Security-Policy", csp);
   const response = applySecurity(NextResponse.next({ request: { headers: requestHeaders } }), headers);
   const slug = lastProjectSlugFor(pathname);

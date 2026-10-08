@@ -14,11 +14,11 @@ export function ActivitySummary({ summary, filter, basePath }: { summary: Summar
   return (
     <p aria-live="polite" className="text-sm">
       <span className="font-medium">{summary.label}:</span>{" "}
-      <Link href={href("successes")} className="underline">
+      <Link href={href("successes")} prefetch={false} className="underline">
         {summary.successes} successes
       </Link>
       {" · "}
-      <Link href={href("problems")} className="underline">
+      <Link href={href("problems")} prefetch={false} className="underline">
         {summary.problems} problems
       </Link>
       {filter.outcomes ? <span className={hintStyles}> (counts ignore the outcome filter)</span> : null}

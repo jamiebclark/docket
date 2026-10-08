@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { ActivityFilters } from "@/components/activity/ActivityFilters";
 import { ActivityList } from "@/components/activity/ActivityList";
 import { ActivitySummary } from "@/components/activity/ActivitySummary";
+import { ensureProblemsViewMarked } from "@/components/notifications/request";
 import { SignedInHeader } from "@/components/shell/SignedInHeader";
 import { Alert } from "@/components/ui/Alert";
 import { buttonStyles } from "@/components/ui/Button";
@@ -30,6 +31,7 @@ function hrefWith(page: ActivityPage, key: "before" | "after", cursor: string | 
 }
 
 export default async function AllActivityPage({ searchParams }: Props) {
+  await ensureProblemsViewMarked();
   const session = await getSession();
   if (!session) redirect("/login?next=/activity");
   const raw = await searchParams;
