@@ -16,6 +16,7 @@ import { NotificationBellClient } from "../../../src/components/notifications/No
 import { NotificationList } from "../../../src/components/notifications/NotificationList";
 import ProjectSettingsPage from "../../../src/app/p/[projectSlug]/settings/page";
 import { SignedInHeader } from "../../../src/components/shell/SignedInHeader";
+import { focusAfterMark } from "../../../src/components/notifications/focus";
 import { unreadDisplay, unreadLabel } from "../../../src/lib/notifications/text";
 import type { NotificationItem } from "../../../src/lib/notifications/types";
 import { actAs, RedirectSignal } from "../../helpers/actions";
@@ -256,5 +257,16 @@ describe("problems callout", () => {
     expect(await render()).toContain("1 problem");
     await (await forProject({ user: { id: u.id } }, p.slug)).notifications.write({ markRead: false, muted: true });
     expect(await render()).toBe("");
+  });
+});
+
+describe("panel focus after marking", () => {
+  it("moves focus to the heading only when the mark succeeded", () => {
+    const heading = { focus: vi.fn() };
+    focusAfterMark(false, heading);
+    expect(heading.focus).not.toHaveBeenCalled();
+    focusAfterMark(true, heading);
+    expect(heading.focus).toHaveBeenCalledTimes(1);
+    expect(() => focusAfterMark(true, null)).not.toThrow();
   });
 });

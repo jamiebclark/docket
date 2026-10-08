@@ -7,6 +7,7 @@ import { NotificationList } from "@/components/notifications/NotificationList";
 import { Alert } from "@/components/ui/Alert";
 import { Button, buttonStyles } from "@/components/ui/Button";
 import type { ActionResult } from "@/lib/action-result";
+import { focusAfterMark } from "./focus";
 import { CHANGED_EVENT } from "./poll";
 import { unreadDisplay, unreadLabel } from "@/lib/notifications/text";
 import type { NotificationPanel as PanelData, UnreadSummary } from "@/lib/notifications/types";
@@ -48,6 +49,7 @@ export function NotificationPanel({ onSummary }: { onSummary: (summary: UnreadSu
     if (!result) return;
     onSummary({ count: result.count, display: unreadDisplay(result.count), label: unreadLabel(result.count) });
     window.dispatchEvent(new Event(CHANGED_EVENT));
+    focusAfterMark(true, heading.current);
   }, [result, onSummary]);
 
   const settings = (
