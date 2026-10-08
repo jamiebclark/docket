@@ -48,6 +48,27 @@ function assertRange(name: string, min: number | undefined, max: number | undefi
 /** Pure; throws on an inconsistent video declaration so a bad provider fails at registry load. */
 const POST_TYPE_KEYS = ["text", "image", "carousel", "video", "story", "reel"] as const;
 
+const POSITIVE_VIDEO_NUMBERS = ["maxVideoBitrate", "audioBitrate", "maxAudioSampleRate", "maxAudioChannels", "recommendedAspectRatio"] as const;
+
+/** The planner's declared numbers: positive and finite; the recommended shape inside the merged aspect range. */
+function assertVideoNumbers(where: string, v: VideoCapabilities): void {
+  for (const key of POSITIVE_VIDEO_NUMBERS) {
+    const n = v[key];
+    if (n !== undefined && !(Number.isFinite(n) && n > 0)) {
+      throw new Error(`Inconsistent video constraints: ${where} ${key} (${n}) must be positive and finite.`);
+    }
+  }
+  if (v.maxAudioChannels !== undefined && !Number.isInteger(v.maxAudioChannels)) {
+    throw new Error(`Inconsistent video constraints: ${where} maxAudioChannels (${v.maxAudioChannels}) must be an integer.`);
+  }
+  const r = v.recommendedAspectRatio;
+  if (r !== undefined) {
+    if ((v.minAspectRatio !== undefined && r < v.minAspectRatio - 1e-9) || (v.maxAspectRatio !== undefined && r > v.maxAspectRatio + 1e-9)) {
+      throw new Error(`Inconsistent video constraints: ${where} recommendedAspectRatio (${r}) lies outside the aspect range.`);
+    }
+  }
+}
+
 export function assertVideoCapabilities(caps: ProviderCapabilities): void {
   const v: VideoCapabilities = caps.video;
   if (!Number.isInteger(v.maxVideos) || v.maxVideos < 0) {
@@ -66,6 +87,7 @@ export function assertVideoCapabilities(caps: ProviderCapabilities): void {
   if (v.minFrameRate !== undefined && !(v.minFrameRate > 0 && (v.maxFrameRate === undefined || v.minFrameRate <= v.maxFrameRate))) {
     throw new Error(`Inconsistent video constraints: minFrameRate (${v.minFrameRate}) must be positive and at most maxFrameRate.`);
   }
+  assertVideoNumbers("video", v);
   for (const [key, over] of Object.entries(v.byPostType ?? {})) {
     if (!(POST_TYPE_KEYS as readonly string[]).includes(key)) {
       throw new Error(`Inconsistent video constraints: byPostType key "${key}" is not a post type.`);
@@ -78,6 +100,7 @@ export function assertVideoCapabilities(caps: ProviderCapabilities): void {
     if (merged.minFrameRate !== undefined && merged.maxFrameRate !== undefined && merged.minFrameRate > merged.maxFrameRate) {
       throw new Error(`Inconsistent video constraints: byPostType.${key} has minFrameRate above maxFrameRate.`);
     }
+    assertVideoNumbers(`byPostType.${key}`, merged);
   }
   const shapes = new Set<string>();
   for (const choice of caps.postTypeChoices ?? []) {

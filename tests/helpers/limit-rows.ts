@@ -2,6 +2,7 @@ import { providerPublishLimits } from "../../src/providers/limits";
 import { mediaConstraintsOf, planImage, type ImagePlan, type MediaConstraints, type PlannedAsset } from "../../src/providers/media";
 import type { MediaItem, PostType, ProviderCapabilities, PublishLimit, SocialProvider } from "../../src/providers/types";
 import { videoLimitsFor } from "../../src/providers/validation";
+import type { VideoStep } from "../../src/providers/video-plan";
 import type { VideoAssetOptions } from "./factories";
 import { UPLOAD_MIME_TYPES } from "../../src/server/services/media";
 import { validateResolvedContent } from "../../src/server/services/posts/validate";
@@ -13,7 +14,7 @@ import { validateResolvedContent } from "../../src/server/services/posts/validat
  * Every title is `<providerKey>: <category>` (publish limits add the value: `<providerKey>: publish limit <value>`).
  */
 
-export type Suite = "core" | "text" | "planner" | "limits" | "video";
+export type Suite = "core" | "text" | "planner" | "limits" | "video" | "adapt";
 
 export const image = (over: Partial<MediaItem> = {}): MediaItem => ({
   url: "http://localhost:3000/media/x.jpg",
@@ -197,6 +198,8 @@ export interface VideoRow {
   chosenPostType?: PostType;
   /** The type the post resolves to, so the row is checked against that type's limits. */
   postType: PostType;
+  /** Set on a row the formatter adapts instead of refusing (P25): the plan must be `derive` with one of these steps. */
+  adapt?: readonly VideoStep[];
 }
 
 const CONTAINERS = ["mp4", "mov"] as const;
@@ -218,6 +221,12 @@ export function videoItem(o: VideoAssetOptions = {}): MediaItem {
       frameRate: o.frameRate === undefined ? 30 : o.frameRate,
       videoCodec: o.videoCodec ?? "h264",
       audioCodec: o.audioCodec === undefined ? "aac" : o.audioCodec,
+      videoBitrate: o.videoBitrate === undefined ? 2_000_000 : o.videoBitrate,
+      audioBitrate: o.audioCodec === null ? null : o.audioBitrate === undefined ? 128_000 : o.audioBitrate,
+      audioSampleRate: o.audioCodec === null ? null : o.audioSampleRate === undefined ? 44_100 : o.audioSampleRate,
+      audioChannels: o.audioCodec === null ? null : o.audioChannels === undefined ? 2 : o.audioChannels,
+      indexAtFront: o.indexAtFront === undefined ? true : o.indexAtFront,
+      factsVersion: 2,
     },
   };
 }
@@ -251,8 +260,14 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
     const postType: PostType = chosen ?? "video";
     const v = videoLimitsFor(caps, postType);
     // A type with limits of its own is named like a `byPostType` row (`facebook: reel min duration`); one that shares the base is not.
-    const own = chosen !== null && chosen !== choice!.default && Object.keys(caps.video.byPostType?.[chosen] ?? {}).some((k) => k !== "notes");
+    const own = chosen !== null && chosen !== choice!.default && Object.keys(caps.video.byPostType?.[chosen] ?? {}).some((k) => k !== "notes" && k !== "recommendedAspectRatio");
     const suffix = chosen && chosen !== choice!.default && !own ? ` (${chosen})` : "";
+    const adapt = (category: string, step: VideoStep | readonly VideoStep[], videos: VideoAssetOptions[], withImage = false): VideoRow => ({
+      ...row(category, "", videos, withImage),
+      code: "",
+      codes: [],
+      adapt: typeof step === "string" ? [step] : step,
+    });
     const row = (category: string, code: string | readonly string[], videos: VideoAssetOptions[], withImage = false): VideoRow => ({
       title: own ? `${key}: ${chosen} ${category}` : `${key}: ${category}${suffix}`,
       category: own ? `${chosen} ${category}` : category,
@@ -269,22 +284,33 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
       if (v.withImages === false && caps.media.maxImages > 0) rows.push(row("video with images", "video_with_images", [{}], true));
     }
     const otherContainer = CONTAINERS.find((c) => v.containers && !v.containers.includes(c));
-    if (otherContainer) rows.push(row("video containers", "video_container_not_allowed", [{ container: otherContainer }]));
+    if (otherContainer) rows.push(adapt("video containers", "rewrap", [{ container: otherContainer }]));
     const otherCodec = ["hevc", "vp9", "mpeg4"].find((c) => v.videoCodecs && !v.videoCodecs.includes(c));
-    if (otherCodec) rows.push(row("video codecs", "video_codec_not_allowed", [{ videoCodec: otherCodec }]));
-    if (v.audioCodecs && !v.audioCodecs.includes("opus")) rows.push(row("audio codecs", "audio_codec_not_allowed", [{ audioCodec: "opus" }]));
+    if (otherCodec) rows.push(adapt("video codecs", "reencode", [{ videoCodec: otherCodec }]));
+    if (v.audioCodecs && !v.audioCodecs.includes("opus")) rows.push(adapt("audio codecs", "reencode", [{ audioCodec: "opus" }]));
     if (v.silentAllowed === false) rows.push(row("silent video", "audio_required", [{ audioCodec: null }]));
-    if (v.maxBytes !== undefined) rows.push(row("video bytes", "video_too_large", [{ byteSize: v.maxBytes + 1 }]));
+    if (v.maxBytes !== undefined) rows.push(adapt("video bytes", "reencode", [{ byteSize: v.maxBytes + 1 }]));
     if (v.minDurationSeconds !== undefined) rows.push(row("min duration", "video_too_short", [{ durationSeconds: Math.max(0, v.minDurationSeconds - 0.5) }]));
-    if (v.maxDurationSeconds !== undefined) rows.push(row("max duration", "video_too_long", [{ durationSeconds: v.maxDurationSeconds + 1 }]));
+    if (v.maxDurationSeconds !== undefined) rows.push(adapt("max duration", "cut", [{ durationSeconds: v.maxDurationSeconds + 1 }]));
     if (v.minWidth !== undefined) rows.push(row("video min width", "video_too_small", [{ width: v.minWidth - 1 }]));
-    if (v.maxWidth !== undefined) rows.push(row("video max width", "video_too_big", [{ width: v.maxWidth + 1 }]));
-    if (v.minHeight !== undefined) rows.push(row("video min height", "video_too_small", [{ height: v.minHeight - 1 }]));
-    if (v.maxHeight !== undefined) rows.push(row("video max height", "video_too_big", [{ height: v.maxHeight + 1 }]));
-    if (v.minAspectRatio !== undefined) rows.push(row("video min aspect", "video_aspect_out_of_range", [{ width: Math.floor(v.minAspectRatio * 1000) - 1, height: 1000 }]));
-    if (v.maxAspectRatio !== undefined) rows.push(row("video max aspect", "video_aspect_out_of_range", [{ width: Math.ceil(v.maxAspectRatio * 1000) + 1, height: 1000 }]));
-    if (v.minFrameRate !== undefined) rows.push(row("min frame rate", "video_frame_rate_too_low", [{ frameRate: v.minFrameRate - 1 }]));
-    if (v.maxFrameRate !== undefined) rows.push(row("max frame rate", "video_frame_rate_too_high", [{ frameRate: v.maxFrameRate + 1 }]));
+    if (v.maxWidth !== undefined) rows.push(adapt("video max width", "resize", [{ width: v.maxWidth + 1 }]));
+    if (v.minHeight !== undefined) {
+      // The width keeps the video inside the aspect range, so padding cannot rescue it: it is refused, never enlarged.
+      const lo = v.minAspectRatio ?? 0;
+      const hi = v.maxAspectRatio ?? Number.POSITIVE_INFINITY;
+      rows.push(row("video min height", "video_too_small", [{ height: v.minHeight - 1, width: Math.floor((v.minHeight - 1) * Math.min(hi, Math.max(lo, 1))) }]));
+    }
+    if (v.maxHeight !== undefined) rows.push(adapt("video max height", "resize", [{ height: v.maxHeight + 1 }]));
+    if (v.minAspectRatio !== undefined) rows.push(adapt("video min aspect", "pad", [{ width: Math.floor(v.minAspectRatio * 1000) - 1, height: 1000 }]));
+    if (v.maxAspectRatio !== undefined) rows.push(adapt("video max aspect", "pad", [{ width: Math.ceil(v.maxAspectRatio * 1000) + 1, height: 1000 }]));
+    if (v.minFrameRate !== undefined) rows.push(adapt("min frame rate", "frame_rate", [{ frameRate: v.minFrameRate - 1 }]));
+    if (v.maxFrameRate !== undefined) rows.push(adapt("max frame rate", "frame_rate", [{ frameRate: v.maxFrameRate + 1 }]));
+    // Bitrate, sample rate, channels and index position are adapted too (P24). `audioBitrate` is an encode target and
+    // `recommendedAspectRatio` only changes a shape when asked, so neither has a refusing fact: video-plan.test.ts proves them.
+    if (v.maxVideoBitrate !== undefined) rows.push(adapt("video max bitrate", "reencode", [{ videoBitrate: v.maxVideoBitrate + 1 }]));
+    if (v.maxAudioSampleRate !== undefined) rows.push(adapt("audio max sample rate", "reencode", [{ audioSampleRate: v.maxAudioSampleRate + 1 }]));
+    if (v.maxAudioChannels !== undefined) rows.push(adapt("audio max channels", "reencode", [{ audioChannels: v.maxAudioChannels + 1 }]));
+    if (v.indexAtFront === true) rows.push(adapt("index at front", "rewrap", [{ indexAtFront: false }]));
   }
   // Per-type overrides: a post of that type's shape (a carousel is an image plus a video), breaking only the overridden bound.
   for (const [type, over] of Object.entries(caps.video.byPostType ?? {}) as [PostType, NonNullable<ProviderCapabilities["video"]["byPostType"]>[PostType]][]) {
@@ -298,12 +324,18 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
       codes: typeof code === "string" ? [code] : code,
       postType: type,
     });
+    const adaptOver = (category: string, step: VideoStep, videos: VideoAssetOptions[]): VideoRow => ({
+      ...row(category, "", videos, true),
+      code: "",
+      codes: [],
+      adapt: [step],
+    });
     if (over.maxVideos !== undefined) rows.push(row("videos", ["too_many_videos", "too_many_items"], Array.from({ length: over.maxVideos + 1 }, () => ({})), false));
-    if (over.minAspectRatio !== undefined) rows.push(row("video min aspect", "video_aspect_out_of_range", [{ width: Math.floor(over.minAspectRatio * 1000) - 1, height: 1000 }], true));
-    if (over.maxAspectRatio !== undefined) rows.push(row("video max aspect", "video_aspect_out_of_range", [{ width: Math.ceil(over.maxAspectRatio * 1000) + 1, height: 1000 }], true));
-    if (over.maxBytes !== undefined) rows.push(row("video bytes", "video_too_large", [{ byteSize: over.maxBytes + 1 }], true));
-    if (over.maxDurationSeconds !== undefined) rows.push(row("max duration", "video_too_long", [{ durationSeconds: over.maxDurationSeconds + 1 }], true));
-    if (over.minFrameRate !== undefined) rows.push(row("min frame rate", "video_frame_rate_too_low", [{ frameRate: over.minFrameRate - 1 }], true));
+    if (over.minAspectRatio !== undefined) rows.push(adaptOver("video min aspect", "pad", [{ width: Math.floor(over.minAspectRatio * 1000) - 1, height: 1000 }]));
+    if (over.maxAspectRatio !== undefined) rows.push(adaptOver("video max aspect", "pad", [{ width: Math.ceil(over.maxAspectRatio * 1000) + 1, height: 1000 }]));
+    if (over.maxBytes !== undefined) rows.push(adaptOver("video bytes", "reencode", [{ byteSize: over.maxBytes + 1 }]));
+    if (over.maxDurationSeconds !== undefined) rows.push(adaptOver("max duration", "cut", [{ durationSeconds: over.maxDurationSeconds + 1 }]));
+    if (over.minFrameRate !== undefined) rows.push(adaptOver("min frame rate", "frame_rate", [{ frameRate: over.minFrameRate - 1 }]));
   }
   return rows;
 }
@@ -351,6 +383,6 @@ export function generatedTitles(provider: SocialProvider): { suite: Suite; title
     ...plannerRows(provider, noop).map((r) => ({ suite: "planner" as const, title: r.title })),
     ...limitRows(provider).map((r) => ({ suite: "limits" as const, title: r.title })),
     ...allowanceRows(provider).map((r) => ({ suite: "limits" as const, title: r.title })),
-    ...videoRows(provider).map((r) => ({ suite: "video" as const, title: r.title })),
+    ...videoRows(provider).map((r) => ({ suite: r.adapt ? ("adapt" as const) : ("video" as const), title: r.title })),
   ];
 }

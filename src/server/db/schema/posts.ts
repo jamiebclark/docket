@@ -4,6 +4,7 @@ import {
   check,
   foreignKey,
   index,
+  doublePrecision,
   integer,
   jsonb,
   pgEnum,
@@ -137,6 +138,46 @@ export const postMedia = pgTable(
   ],
 );
 
+/** One trim-and-fit edit of one video in one post. No row means the default edit. */
+export const postVideoEdits = pgTable(
+  "post_video_edits",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    mediaAssetId: uuid("media_asset_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "cascade" }),
+    trimStartMs: integer("trim_start_ms").notNull().default(0),
+    trimEndMs: integer("trim_end_ms"),
+    fit: text("fit").notNull().default("pad_blur"),
+    padColor: text("pad_color").notNull().default("#000000"),
+    focalX: doublePrecision("focal_x").notNull().default(0.5),
+    focalY: doublePrecision("focal_y").notNull().default(0.5),
+    recommendedShape: boolean("recommended_shape").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.postId, t.mediaAssetId] }),
+    index("post_video_edits_project_post_idx").on(t.projectId, t.postId),
+    check("post_video_edits_trim_start_valid", sql`${t.trimStartMs} >= 0 AND ${t.trimStartMs} % 100 = 0`),
+    check(
+      "post_video_edits_trim_end_valid",
+      sql`${t.trimEndMs} IS NULL OR (${t.trimEndMs} > ${t.trimStartMs} + 999 AND ${t.trimEndMs} % 100 = 0)`,
+    ),
+    check("post_video_edits_fit_valid", sql`${t.fit} IN ('pad_blur','pad_color','crop')`),
+    check("post_video_edits_pad_color_valid", sql`${t.padColor} ~ '^#[0-9a-f]{6}$'`),
+    check("post_video_edits_focal_x_valid", sql`${t.focalX} BETWEEN 0 AND 1`),
+    check("post_video_edits_focal_y_valid", sql`${t.focalY} BETWEEN 0 AND 1`),
+  ],
+);
+
 /** One post going to one account: the unit the scheduler works on. */
 export const postTargets = pgTable(
   "post_targets",
@@ -164,6 +205,7 @@ export const postTargets = pgTable(
     inFlightMayPublish: boolean("in_flight_may_publish"),
     firstStepAt: timestamp("first_step_at", { withTimezone: true }),
     publishStartedAt: timestamp("publish_started_at", { withTimezone: true }),
+    videoWaitSince: timestamp("video_wait_since", { withTimezone: true }),
     attemptCount: integer("attempt_count").default(0).notNull(),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     leaseUntil: timestamp("lease_until", { withTimezone: true }),
@@ -224,6 +266,7 @@ export const postTargets = pgTable(
   ],
 );
 
+export type PostVideoEditRow = typeof postVideoEdits.$inferSelect;
 export type PostRow = typeof posts.$inferSelect;
 export type PostTargetRow = typeof postTargets.$inferSelect;
 export type PostStatus = PostRow["status"];

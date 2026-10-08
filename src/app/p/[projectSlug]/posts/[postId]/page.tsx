@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as posts from "@/server/services/posts";
+import { preparingVideoLabel } from "@/server/services/posts/view";
 import { AnnounceProvider } from "@/components/ui/Announce";
 import { TargetResolution } from "@/components/targets/TargetResolution";
 import { safeExternalHref } from "@/lib/safe-redirect";
@@ -111,6 +112,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
             <dt className="font-medium">Status</dt>
             <dd>
               <StatusBadge status={t.status} />
+              {t.preparingVideo ? <span className="ml-2">{preparingVideoLabel(t.providerName)}…</span> : null}
               {t.inProgress ? <span className="ml-2">Publishing now…</span> : null}
             </dd>
             {t.scheduledAt ? (

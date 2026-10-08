@@ -28,6 +28,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
   const initialMedia = (await Promise.all(detail.mediaIds.map((id) => media.getMedia(scope, id).catch(() => null)))).filter(
     (m) => m !== null,
   );
+  const videoEdits = Object.fromEntries(await scope.posts.listVideoEdits(detail.post.id));
   const live = detail.targets.filter((t) => t.status !== "cancelled");
   return (
     <Composer
@@ -50,6 +51,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
         postId: detail.post.id,
         baseText: detail.post.baseText,
         mediaIds: detail.mediaIds,
+        videoEdits,
         targets: live.map((t) => ({ accountId: t.accountId, overrideText: t.overrideText, postType: t.chosenPostType ?? null })),
         editable: !detail.targets.some((t) => ["publishing", "published", "ambiguous"].includes(t.status)),
         reviewBlocked: detail.post.reviewState === "needs_review",

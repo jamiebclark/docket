@@ -39,6 +39,8 @@ export function mediaKeys(projectId: string, assetId: string) {
     thumbnail: `${base}/thumb.webp`,
     variant: (hash: string, ext: Ext) => `${base}/v/${hash}.${ext}`,
     video: (ext: VideoExt) => `${base}/original.${ext}`,
+    videoVersion: (key: string) => `${base}/vv/${key}.mp4`,
+    videoPreview: (key: string) => `${base}/vp/${key}.mp4`,
   };
 }
 

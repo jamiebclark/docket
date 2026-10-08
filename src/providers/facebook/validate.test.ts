@@ -48,20 +48,20 @@ describe("validateFacebook", () => {
 
     it("words a Reel aspect refusal and suggests a Page video when one would take the file", () => {
       const m = msg(runT([vid({}, { width: 1920, height: 1080 })], "reel"), "video_aspect_out_of_range");
-      expect(m).toContain("Facebook Reels must be 9:16 (vertical). Docket does not crop video yet.");
+      expect(m).toContain("Facebook Reels must be 9:16 (vertical).");
       expect(m).toMatch(/^Video 1 is [^;]+; Facebook Reels/);
       expect(m?.endsWith(" Post it as a Page video instead.")).toBe(true);
     });
 
     it("words an audio refusal like the other Reel video rules", () => {
       const m = msg(runT([vid({ audioCodec: "mp3" as never })], "reel"), "audio_codec_not_allowed");
-      expect(m).toContain("for a Facebook Reel. Docket does not crop, trim or convert video yet.");
+      expect(m).toContain("for a Facebook Reel.");
       expect(m?.endsWith(" Post it as a Page video instead.")).toBe(true);
     });
 
     it("names the type for other video rules, with the suggestion present and absent", () => {
       const short = msg(runT([vid({ durationSeconds: 2 })], "reel"), "video_too_short");
-      expect(short).toContain("for a Facebook Reel. Docket does not crop, trim or convert video yet.");
+      expect(short).toContain("for a Facebook Reel.");
       expect(short?.endsWith(" Post it as a Page video instead.")).toBe(true);
       // Refused by the Page video route too (a container it does not allow): no suggestion.
       const wide = runT([vid({ container: "avi" as never })], "reel");

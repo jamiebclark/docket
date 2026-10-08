@@ -31,6 +31,7 @@ const target = (over: Partial<CheckResult["targets"][number]> = {}): CheckResult
   postType: "text",
   postTypeChoice: null,
   issues: [],
+  videos: [],
   canSchedule: true,
   requirements: requirementsOf(findProvider("bluesky")!.capabilities, { uploadTypes: UPLOAD_MIME_TYPES }),
   ...over,

@@ -65,6 +65,10 @@ export interface RequirementsSummary {
     /** The type these limits are for; null when the provider declares no choice and no per-type limits. */
     postType: { value: PostType; label: string; description: string | null } | null;
     notes: string[];
+    /** What the formatter will change to make a video fit, in the planner's step words; `[]` when nothing is checked. */
+    adapts: string[];
+    /** What no adaptation can fix, so the video is refused. */
+    cannot: string[];
   };
   /** Null when the provider has no carousel post type or does not accept video. */
   carousel: {
@@ -115,6 +119,25 @@ function shownTypeOf(caps: ProviderCapabilities, postType: PostType | undefined)
   const options = choiceFor(caps, [{ kind: "video" }])?.options ?? [];
   if (postType === "carousel" || (postType !== undefined && options.some((o) => o.type === postType))) return postType!;
   return resolvePostType(caps, [{ kind: "video" }], null);
+}
+
+/** Server-side wording for what the formatter adapts and what it cannot, from the same limits the planner reads. */
+function videoAdaptation(v: ReturnType<typeof videoLimitsFor>): { adapts: string[]; cannot: string[] } {
+  if (v.maxVideos === 0) return { adapts: [], cannot: [] };
+  const adapts: string[] = [];
+  const cannot: string[] = [];
+  if (v.maxDurationSeconds !== undefined) adapts.push(`cut to ${durationLabel(v.maxDurationSeconds)}`);
+  if (v.minAspectRatio !== undefined || v.maxAspectRatio !== undefined) adapts.push("cropped or padded to an accepted shape");
+  if (v.maxWidth !== undefined || v.maxHeight !== undefined) adapts.push("resized down");
+  if (v.minFrameRate !== undefined || v.maxFrameRate !== undefined) adapts.push("frame rate changed");
+  if (v.containers?.length || v.videoCodecs?.length || v.audioCodecs?.length || v.maxBytes !== undefined || v.maxVideoBitrate !== undefined) {
+    adapts.push("rewrapped or re-encoded");
+  }
+  if (v.minDurationSeconds !== undefined) cannot.push(`shorter than ${durationLabel(v.minDurationSeconds)}`);
+  if (v.minWidth !== undefined || v.minHeight !== undefined) cannot.push("smaller than the minimum size");
+  if (v.maxBytes !== undefined) cannot.push(`cannot be made smaller than ${videoBytesLabel(v.maxBytes)}`);
+  if (v.silentAllowed === false) cannot.push("has no audio");
+  return { adapts, cannot };
 }
 
 export function requirementsOf(
@@ -170,6 +193,7 @@ export function requirementsOf(
           ? { value: shown, label: postTypeLabel(caps, shown), description: null }
           : { value: shown, label: option?.label ?? postTypeLabel(caps, shown), description: option?.description ?? null },
       notes: [...(caps.video.byPostType?.[shown]?.notes ?? [])],
+      ...videoAdaptation(v),
     },
     carousel:
       carouselLimits && carouselLimits.maxVideos > 0

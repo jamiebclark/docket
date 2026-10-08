@@ -1,12 +1,15 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   doublePrecision,
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
@@ -52,6 +55,13 @@ export const mediaAssets = pgTable(
     videoCodec: text("video_codec"),
     audioCodec: text("audio_codec"),
     container: text("container"),
+    videoBitrate: bigint("video_bitrate", { mode: "number" }),
+    audioBitrate: bigint("audio_bitrate", { mode: "number" }),
+    audioSampleRate: integer("audio_sample_rate"),
+    audioChannels: smallint("audio_channels"),
+    indexAtFront: boolean("index_at_front"),
+    factsVersion: smallint("facts_version").notNull().default(2),
+    factsAttempts: smallint("facts_attempts").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
@@ -79,6 +89,11 @@ export const mediaAssets = pgTable(
       "media_assets_video_ready_facts",
       sql`${t.kind} <> 'video' OR ${t.processingState} <> 'ready' OR (${t.durationMs} IS NOT NULL AND ${t.videoCodec} IS NOT NULL AND ${t.container} IS NOT NULL AND ${t.width} IS NOT NULL AND ${t.height} IS NOT NULL)`,
     ),
+    check("media_assets_facts_version_valid", sql`${t.factsVersion} IN (1, 2)`),
+    check("media_assets_video_bitrate_pos", sql`${t.videoBitrate} IS NULL OR ${t.videoBitrate} > 0`),
+    check("media_assets_audio_bitrate_pos", sql`${t.audioBitrate} IS NULL OR ${t.audioBitrate} > 0`),
+    check("media_assets_audio_sample_rate_pos", sql`${t.audioSampleRate} IS NULL OR ${t.audioSampleRate} > 0`),
+    check("media_assets_audio_channels_pos", sql`${t.audioChannels} IS NULL OR ${t.audioChannels} > 0`),
     check("media_assets_step_matches_state", sql`(${t.processingState} = 'processing') = (${t.processingStep} IS NOT NULL)`),
     check("media_assets_error_matches_state", sql`(${t.processingState} = 'failed') = (${t.processingError} IS NOT NULL)`),
     index("media_assets_processing_idx")
@@ -176,3 +191,68 @@ export const mediaUploads = pgTable(
 );
 
 export type MediaUploadRow = typeof mediaUploads.$inferSelect;
+
+/** One adapted video file or preview, shared by every target whose plan gives the same key. */
+export const videoVersions = pgTable(
+  "video_versions",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    mediaAssetId: uuid("media_asset_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    recipe: jsonb("recipe").notNull(),
+    steps: text("steps").array().notNull(),
+    state: text("state").notNull().default("queued"),
+    attempts: smallint("attempts").notNull().default(0),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    leaseToken: uuid("lease_token"),
+    error: text("error"),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    storageKey: text("storage_key"),
+    publicUrl: text("public_url"),
+    container: text("container"),
+    width: integer("width"),
+    height: integer("height"),
+    durationMs: integer("duration_ms"),
+    frameRate: doublePrecision("frame_rate"),
+    videoCodec: text("video_codec"),
+    audioCodec: text("audio_codec"),
+    videoBitrate: bigint("video_bitrate", { mode: "number" }),
+    byteSize: bigint("byte_size", { mode: "number" }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [
+    unique("video_versions_asset_kind_key_uq").on(t.mediaAssetId, t.kind, t.key),
+    unique("video_versions_storage_key_uq").on(t.projectId, t.storageKey),
+    check("video_versions_kind_valid", sql`${t.kind} IN ('full','preview')`),
+    check("video_versions_state_valid", sql`${t.state} IN ('queued','building','ready','failed')`),
+    check("video_versions_container_valid", sql`${t.container} IN ('mp4','mov')`),
+    check("video_versions_lease_pair", sql`(${t.leaseUntil} IS NULL) = (${t.leaseToken} IS NULL)`),
+    check("video_versions_error_matches_state", sql`(${t.state} = 'failed') = (${t.error} IS NOT NULL)`),
+    check(
+      "video_versions_ready_facts",
+      sql`${t.state} <> 'ready' OR (${t.storageKey} IS NOT NULL AND ${t.publicUrl} IS NOT NULL AND ${t.container} IS NOT NULL AND ${t.width} IS NOT NULL AND ${t.height} IS NOT NULL AND ${t.durationMs} IS NOT NULL AND ${t.frameRate} IS NOT NULL AND ${t.videoCodec} IS NOT NULL AND ${t.videoBitrate} IS NOT NULL AND ${t.byteSize} IS NOT NULL)`,
+    ),
+    index("video_versions_claim_idx")
+      .on(t.dueAt, t.createdAt)
+      .where(sql`${t.state} IN ('queued','building')`),
+    index("video_versions_project_asset_idx").on(t.projectId, t.mediaAssetId),
+    index("video_versions_collect_idx")
+      .on(t.checkedAt)
+      .where(sql`${t.state} <> 'building'`),
+  ],
+);
+
+export type VideoVersionRow = typeof videoVersions.$inferSelect;

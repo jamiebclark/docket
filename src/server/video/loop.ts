@@ -9,6 +9,7 @@ import { getStorage, mediaKeys } from "../storage";
 import type { Storage } from "../storage";
 import { VIDEO_MAX_SIDE } from "@/lib/media/types";
 import { COULD_NOT_PROCESS, processVideoFile } from "./process";
+import { rescanNext } from "./rescan";
 
 export const MAX_ATTEMPTS = 3;
 const HEARTBEAT_MS = 30_000;
@@ -87,6 +88,11 @@ export async function processNext({ signal }: { signal: AbortSignal }): Promise<
         frameRate: f.frameRate,
         videoCodec: f.videoCodec,
         audioCodec: f.audioCodec,
+        videoBitrate: f.videoBitrate,
+        audioBitrate: f.audioBitrate,
+        audioSampleRate: f.audioSampleRate,
+        audioChannels: f.audioChannels,
+        indexAtFront: f.indexAtFront,
         thumbnailStorageKey: keys.thumbnail,
         thumbnailUrl: storage.publicUrl(keys.thumbnail),
       }),
@@ -124,6 +130,8 @@ export async function runMediaLoop({ signal, idleMs = 2000 }: { signal: AbortSig
     let worked = false;
     try {
       worked = await processNext({ signal });
+      // Idle: read the details of videos stored before the formatter (P9).
+      if (!worked) worked = await rescanNext({ signal });
     } catch (err) {
       console.error(`Docket media: loop error: ${err instanceof Error ? err.message : "unknown"}`);
     }

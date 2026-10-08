@@ -217,16 +217,16 @@ describe("checkComposition with video", () => {
     expect(cleared.issues.map((i) => i.code)).not.toContain("media_processing");
   });
 
-  it("blocks a long video on the mock and on an account that takes no video (US3 AS4)", async () => {
+  it("adapts a long video on the mock and still blocks it on an account that takes no video (US3 AS4)", async () => {
     const t = await setup();
     const mock = await t.account("mock");
     const none = await t.account("no-video-like");
     const long = await createVideoAsset(t.env.project.id, { durationSeconds: 222 });
     const onMock = await check(t, mock.id, [long.id]);
-    expect(onMock.canSchedule).toBe(false);
-    expect(onMock.issues).toContainEqual(
-      expect.objectContaining({ code: "video_too_long", message: "Video 1 is 3:42 long; the limit is 1 minute." }),
-    );
+    // Was a refusal ("Video 1 is 3:42 long; the limit is 1 minute."); the formatter now cuts it.
+    expect(onMock.canSchedule).toBe(true);
+    expect(onMock.issues.map((i) => i.code)).not.toContain("video_too_long");
+    expect(onMock.issues).toContainEqual(expect.objectContaining({ severity: "info", message: expect.stringContaining("cut to the first 1:00") }));
     const onNone = await check(t, none.id, [long.id]);
     expect(onNone.canSchedule).toBe(false);
     expect(onNone.issues.map((i) => i.code)).toContain("video_not_accepted");

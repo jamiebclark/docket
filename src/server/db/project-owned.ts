@@ -16,6 +16,8 @@ export const projectOwnedTables = [
   { table: "media_assets", scopeColumn: "project_id" },
   { table: "media_variants", scopeColumn: "project_id" },
   { table: "media_uploads", scopeColumn: "project_id" },
+  { table: "video_versions", scopeColumn: "project_id" },
+  { table: "post_video_edits", scopeColumn: "project_id" },
   { table: "posts", scopeColumn: "project_id" },
   { table: "post_media", scopeColumn: "project_id" },
   { table: "post_targets", scopeColumn: "project_id" },

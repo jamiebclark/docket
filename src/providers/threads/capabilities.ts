@@ -8,8 +8,8 @@ export const THREADS_MAX_BYTES_PER_FILE = 8_000_000;
 
 export const THREADS_MAX_ITEMS = 20; // carousel: 2 to 20 items, images and videos together
 
-// docs/research/meta-video.md "Threads". Decimal gigabyte (D2). Bitrates, sample rate, channels, scan, GOP,
-// chroma, edit lists and moov placement are not declared: Docket does not probe them.
+// docs/research/meta-video.md "Threads". Decimal gigabyte (D2). Scan, GOP, chroma and edit lists are not declared:
+// Docket does not probe them. Bitrate, audio and index position come from the same table.
 export const THREADS_VIDEO = {
   maxVideos: 1,
   withImages: false,
@@ -24,6 +24,11 @@ export const THREADS_VIDEO = {
   maxAspectRatio: 10,
   minFrameRate: 23,
   maxFrameRate: 60,
+  maxVideoBitrate: 100_000_000, // "Video bitrate VBR, 100 Mbps max"
+  audioBitrate: 128_000, // "Audio bitrate 128 kbps"
+  maxAudioSampleRate: 48_000, // "AAC, 48 kHz max, 1 or 2 channels"
+  maxAudioChannels: 2,
+  indexAtFront: true, // "moov atom at front"
 } as const satisfies VideoCapabilities;
 
 export const threadsCapabilities: ProviderCapabilities = {
@@ -43,7 +48,7 @@ export const threadsCapabilities: ProviderCapabilities = {
   video: {
     ...THREADS_VIDEO,
     byPostType: {
-      video: { notes: ["9:16 (vertical) is recommended."] },
+      video: { recommendedAspectRatio: 9 / 16, notes: ["9:16 (vertical) is recommended."] },
       carousel: {
         maxVideos: THREADS_MAX_ITEMS,
         withImages: true,

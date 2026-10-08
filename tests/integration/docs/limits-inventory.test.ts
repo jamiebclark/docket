@@ -13,6 +13,7 @@ const ENFORCEMENT = "tests/integration/limits/enforcement.test.ts";
 function suitesFor(enforcedIn: string): Suite[] | undefined {
   if (enforcedIn === "validateResolvedContent") return ["core", "text", "video"];
   if (enforcedIn === "media planner") return ["planner"];
+  if (enforcedIn === "video planner") return ["adapt"];
   if (/^(engine deferral|account limit)/.test(enforcedIn)) return ["limits"];
   return undefined;
 }
@@ -93,6 +94,12 @@ function declared(provider: SocialProvider): Map<string, string[]> {
       ["video max aspect", v.maxAspectRatio?.toString()],
       ["min frame rate", v.minFrameRate?.toString()],
       ["max frame rate", v.maxFrameRate?.toString()],
+      ["video max bitrate", v.maxVideoBitrate?.toString()],
+      ["audio bitrate", v.audioBitrate?.toString()],
+      ["audio max sample rate", v.maxAudioSampleRate?.toString()],
+      ["audio max channels", v.maxAudioChannels?.toString()],
+      ["video recommended aspect", v.recommendedAspectRatio?.toString()],
+      ["index at front", v.indexAtFront === undefined ? undefined : yesNo(v.indexAtFront)],
     ];
     for (const [k, v] of listed(video, "")) if (v !== undefined && k !== "videos") m.set(k, [v]);
     // One prefixed row per field a post type overrides: `carousel videos`, `carousel video min aspect` …

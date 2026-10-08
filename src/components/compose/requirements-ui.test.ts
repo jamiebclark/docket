@@ -82,8 +82,17 @@ describe("videoLine and the video rows", () => {
       "Video: 1 video per post, MP4, MOV, H.264, up to 50 MB, 1 second – 1 minute, aspect 9:16 – 16:9, up to 60 fps, not with images",
     );
     expect(row(r, "Video containers")).toBe("MP4, MOV");
-    expect(row(r, "Video width")).toBe("no limit Docket checks");
+    expect(row(r, "Video width")).toBe("at most 1920 px"); // was "no limit Docket checks": the mock now declares a max width (D7)
     expect(row(r, "Video frame rate")).toBe("up to 60 fps");
+  });
+});
+
+describe("adapt and refuse rows", () => {
+  it("render the summary's own words and are absent when empty", () => {
+    const r = requirementsOf(findProvider("mock")!.capabilities, { uploadTypes: [] });
+    expect(row({ ...r, video: { ...r.video, adapts: ["cut to 1 minute"], cannot: [] } }, "Docket will adapt")).toBe("cut to 1 minute");
+    expect(row({ ...r, video: { ...r.video, adapts: [], cannot: ["has no audio"] } }, "Docket will refuse")).toBe("has no audio");
+    expect(row({ ...r, video: { ...r.video, adapts: [], cannot: [] } }, "Docket will adapt")).toBeUndefined();
   });
 });
 

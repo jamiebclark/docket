@@ -36,6 +36,12 @@ export type NewMedia = Pick<typeof mediaAssets.$inferInsert, "storageKey" | "pub
       | "videoCodec"
       | "audioCodec"
       | "container"
+      | "videoBitrate"
+      | "audioBitrate"
+      | "audioSampleRate"
+      | "audioChannels"
+      | "indexAtFront"
+      | "factsVersion"
     >
   >;
 export type VariantRow = MediaVariantRow;

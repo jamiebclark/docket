@@ -4,7 +4,7 @@ import { resolvePostType } from "../../providers/post-type";
 import type { SocialProvider, StepResult } from "../../providers/types";
 import type { AttemptOutcome } from "../dal/attempts";
 import * as clock from "../dal/clock";
-import { writeHeartbeat } from "../dal/heartbeats";
+import { readHeartbeats, writeHeartbeat } from "../dal/heartbeats";
 import {
   claimDueTargets,
   forSchedulerProject,
@@ -36,6 +36,7 @@ export interface PublishingCounts {
   recovered: number;
   staleResults: number;
   released: number;
+  waitingForVideo: number;
 }
 
 export const emptyPublishingCounts = (): PublishingCounts => ({
@@ -49,7 +50,13 @@ export const emptyPublishingCounts = (): PublishingCounts => ({
   recovered: 0,
   staleResults: 0,
   released: 0,
+  waitingForVideo: 0,
 });
+
+/** How long a due target waits for its adapted video before it fails (P13). */
+const VIDEO_WAIT_LIMIT_MS = 2 * 60 * 60 * 1000;
+const VIDEO_WAIT_RETRY_MS = 60_000;
+const VIDEO_WORKER_FRESH_MS = 10 * 60 * 1000;
 
 const UNLEASED = { leaseOwner: null, leaseUntil: null, inFlightStep: null, inFlightMayPublish: null } as const;
 
@@ -169,6 +176,34 @@ export async function runPublishing(opts: {
 
         const firstStep = target.stepState === null;
         if (firstStep) {
+          const gate = await ctx.videoGate(target, provider);
+          let videoFailure: string | null = null;
+          if (gate.kind === "failed") {
+            videoFailure = `The video could not be adapted for ${gate.platform}: ${gate.reason}`;
+          } else if (gate.kind === "waiting") {
+            const since = target.videoWaitSince ?? now;
+            if (now.getTime() - since.getTime() <= VIDEO_WAIT_LIMIT_MS) {
+              // No lease, no attempt row and no event: the version is still being built (US5).
+              counts.waitingForVideo++;
+              return {
+                patch: { ...UNLEASED, ...patch, nextAttemptAt: new Date(now.getTime() + VIDEO_WAIT_RETRY_MS), videoWaitSince: since },
+              };
+            }
+            const beat = (await readHeartbeats()).find((h) => h.section === "video");
+            const alive = beat !== undefined && now.getTime() - beat.lastSuccessAt.getTime() < VIDEO_WORKER_FRESH_MS;
+            videoFailure = `The video could not be adapted for ${gate.platform}: ${
+              alive ? "it took too long." : "video adapting needs the worker process, which is not running."
+            }`;
+          }
+          if (videoFailure) {
+            counts.failed++;
+            return finish({ status: "failed", nextAttemptAt: null, videoWaitSince: null, lastError: videoFailure }, [
+              ...attempts,
+              { step: "engine-video", outcome: "fatal_error", tickId, error: videoFailure },
+            ]);
+          }
+        }
+        if (firstStep) {
           // Both the provider default and the account's own limit apply (D8).
           const deferUntil = await deferralTime(effectiveLimits(providerPublishLimits(provider), account), now, (since) =>
             ctx.startedSince(account.id, since, target.id), // a target's own earlier start never counts against it
@@ -245,6 +280,7 @@ export async function runPublishing(opts: {
           inFlightStep: info.name,
           inFlightMayPublish: info.mayPublish,
           firstStepAt: target.firstStepAt ?? now,
+          ...(firstStep ? { videoWaitSince: null } : {}),
           // A start is the most recent lease of a first step, so the attempt that may publish is what counts.
           publishStartedAt: firstStep ? now : target.publishStartedAt,
         };
@@ -380,6 +416,7 @@ async function execute(
       const resolved = await withinBudget(resolvePublishMedia(repos, target.id, provider), budget).catch((e: unknown) => {
         throw e instanceof MediaNotReady ? e : new MediaNotReady("Preparing media failed; will retry.");
       });
+      if (!resolved.ok && "notReady" in resolved) return release("Preparing video again.");
       if (!resolved.ok) throw new MediaUnavailable(resolved.error);
       media = resolved.media;
     }

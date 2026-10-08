@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import * as posts from "@/server/services/posts";
+import * as videoPreviews from "@/server/services/video-previews";
 import { runAction } from "../run-action";
 
 type Queued = Awaited<ReturnType<typeof posts.addToQueue>>;
@@ -65,4 +66,14 @@ export async function publishNowAction(
   });
   if (result.ok) refresh();
   return result;
+}
+
+/** Queues the ≤ 640 px preview of every video the composer state would adapt (never awaited by scheduling or publishing). */
+export async function requestVideoPreviewsAction(slug: string, input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof videoPreviews.requestVideoPreviews>>>> {
+  return runAction(slug, (scope) => videoPreviews.requestVideoPreviews(scope, input));
+}
+
+/** Polled while a preview is queued or building. */
+export async function videoPreviewStatusAction(slug: string, input: { keys: string[] }): Promise<ActionResult<Awaited<ReturnType<typeof videoPreviews.videoPreviewStatus>>>> {
+  return runAction(slug, (scope) => videoPreviews.videoPreviewStatus(scope, input));
 }

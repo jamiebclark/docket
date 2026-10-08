@@ -105,11 +105,13 @@ only when declared:
 - `containers` (`"mp4"`, `"mov"`), `videoCodecs` and `audioCodecs` (ffprobe codec names such as `h264` and `aac`), `silentAllowed` (default true);
 - `maxBytes`, `minDurationSeconds`, `maxDurationSeconds`;
 - `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, measured on the displayed frame;
-- `minAspectRatio`, `maxAspectRatio` (width ÷ height), `minFrameRate`, `maxFrameRate`.
+- `minAspectRatio`, `maxAspectRatio` (width ÷ height), `minFrameRate`, `maxFrameRate`;
+- for the formatter, which adapts a video to fit: `maxVideoBitrate` (bits per second, decimal), `audioBitrate` (the bitrate it encodes audio at, not a refusal limit), `maxAudioSampleRate` (Hz), `maxAudioChannels`, `recommendedAspectRatio` (width ÷ height; the shape used when reframing, and it must lie inside the aspect range) and `indexAtFront` (the file's index must precede the media data).
 
 `maxVideos` above 0 needs `"video"` in `postTypes`, and `withImages` needs `maxImages` above 0; `assertVideoCapabilities` in `src/providers/media.ts`
-rejects an inconsistent declaration when the registry loads. `StepContent.videoCount` carries the number of videos in a post to `validate`. Videos are never adapted: they are sent as stored or refused, so the badges say
-"fits" or "will be refused", never "converted". Add a row for every declared video category to `docs/limits.md`.
+rejects an inconsistent declaration when the registry loads. `StepContent.videoCount` carries the number of videos in a post to `validate`. Declaring video limits is all a provider needs for the formatter (024): the worker cuts, crops or pads, resizes, lowers the
+frame rate and re-encodes a video to fit them, and the badges say "adapted" for what it fixes. A limit it cannot fix (too short,
+too small, counts, mixing, silence) is still refused. Add a row for every declared video category to `docs/limits.md`.
 
 ### Post type choices, per-type video limits and the frame-rate floor (G19–G21)
 

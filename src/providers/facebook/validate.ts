@@ -27,8 +27,8 @@ export function validateFacebook(content: PostContent, caps: ProviderCapabilitie
     if (!isVideoRule(issue.code) || issue.code === "video_not_accepted") return issue;
     const message =
       issue.code === "video_aspect_out_of_range" && type === "reel"
-        ? `${issue.message.split(";")[0]}; Facebook Reels must be 9:16 (vertical). Docket does not crop video yet.`
-        : `${issue.message.replace(/\.$/, "")} for a Facebook ${typeLabel}. Docket does not crop, trim or convert video yet.`;
+        ? `${issue.message.split(";")[0]}; Facebook Reels must be 9:16 (vertical).`
+        : `${issue.message.replace(/\.$/, "")} for a Facebook ${typeLabel}.`;
     return { ...issue, message: suggest && issue.severity === "error" ? message + SUGGESTION : message };
   });
 }

@@ -1145,3 +1145,20 @@ Judgement calls from `specs/024-video-target-formatter/spec.md` (D1–D18) and i
 - **P24 — Mock limits.** The mock declares a full small set (8 Mbps, 128 kbps, 48 kHz, 2 channels, index at front, 1,920 px, 9:16 recommended). Test factories default the new facts to fitting values, so existing as-is tests keep their outcome.
 - **P25 — Generated enforcement rows change meaning.** Rows for limits the formatter now adapts (too long, too big, aspect, frame rate, codecs, container, bytes, bitrate, audio, index) become "adapted" rows proved by the video planner. Rows for what it cannot fix (too short, too small, counts, mixing, silence) stay refusals. This goes beyond FR-042's "wording only" for these generated rows, and SC-001 requires it.
 - **P26 — SC-007 is measured in the docker CI job** with `--cpus=2` and recorded here in the implementation outcome.
+
+### 024 — Implementation outcome
+
+**What shipped.** A per-target video formatter: a pure planner (`src/providers/video-plan.ts`) picks as is, rewrap, re-encode or refuse for each target; the worker builds and reads back versions and previews (`src/server/video/`); the scheduler waits for versions at claim time; housekeeping removes stale versions; the composer has a video edit dialog (trim, fit, focal point, fill colour), previews and "adapted" badges. Existing providers declare the new limits; a new provider gets the formatter by declaring them.
+
+**Judgement calls.**
+- **P3 — canvas ceiling.** A padded canvas's long side is at most the larger of the source's long side and 1,920 px (1080×1920 for a 1080p clip padded to 9:16).
+- **P25 — enforcement rows.** Generated rows for limits the formatter now adapts become "adapted" rows; rows for what it cannot fix stay refusals. This goes beyond FR-042's "wording only", and SC-001 requires it.
+
+**Existing-test expectations changed.**
+- `tests/integration/facebook/reel-refused.test.ts`: a 16:9 Reel is now adapted rather than refused, so the test uses a 2 s 9:16 Reel (too short, which cannot be fixed) and checks the "for a Facebook Reel" wording.
+- `tests/integration/threads/video-fit.test.ts`: the fixture gained the new facts (bitrates, sample rate, channels, index position, facts version 2); a 120 fps video is now "adapted" (frame rate lowered) rather than "refused"; "never converted" no longer asserts empty `steps`.
+- Earlier phases changed the unit expectations in `src/providers/*.test.ts`, `composer` and `requirements-ui` tests for the new wording and states.
+
+**What ran where.** Locally: `pnpm lint` (0 errors, 18 pre-existing-style warnings), `pnpm typecheck`, `pnpm db:check`, `pnpm build` all passed; `pnpm test` ran 4,235 passing. This machine has **no ffmpeg**, so the ffmpeg suites and `scripts/video-smoke.ts --formatter` did **not** run here; they are owed to CI (docker job, which now runs the `--formatter` smoke at `--cpus=2`). Timing-sensitive suites (`activity/performance`, `notifications/performance`, `retry-failed-targets` cap, `retry-all-cap`, `jobs/budget`) fail on timeouts or thresholds only when the full run loads the machine; alone, all but `activity/performance` (1.0-1.2 s against a 1 s limit, unrelated to video) passed.
+
+**SC-007** (30 s preview at `--cpus=2` within 60 s) is not yet measured; see T061.

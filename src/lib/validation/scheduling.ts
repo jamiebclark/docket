@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { videoEditSchema } from "../video/edit";
 
 /** ISO weekday: 1 = Monday … 7 = Sunday. */
 export const weekdaySchema = z
@@ -50,6 +51,8 @@ export const postTargetInputSchema = z.object({
 export const postInputSchema = z.object({
   baseText: baseTextSchema.default(""),
   mediaIds: z.array(z.uuid()).max(POST_MEDIA_MAX, { error: "Too many images" }).default([]),
+  /** One edit per video on the post, keyed by media id; a video without one uses the default edit. */
+  videoEdits: z.record(z.uuid(), videoEditSchema).default({}),
   targets: z
     .array(postTargetInputSchema)
     .max(50, { error: "Too many accounts" })

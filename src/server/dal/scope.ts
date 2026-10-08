@@ -22,6 +22,7 @@ import { ForbiddenError, InvalidApiKeyError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
 import { createJobItemsRepo, createJobsRepo, type JobItemsRepo, type JobsRepo } from "./jobs";
 import { createMediaRepo, type MediaRepo } from "./media";
+import { createVideoVersionsRepo, type VideoVersionsRepo } from "./video-versions";
 import { createUploadsRepo, type UploadsRepo } from "./uploads";
 import { createPostsRepo, type PostsRepo } from "./posts";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
@@ -111,6 +112,7 @@ export interface ProjectScope {
   readonly accounts: AccountsRepo;
   readonly slots: SlotsRepo;
   readonly media: MediaRepo;
+  readonly videoVersions: VideoVersionsRepo;
   readonly uploads: UploadsRepo;
   readonly posts: PostsRepo;
   readonly targets: TargetsRepo;
@@ -179,6 +181,7 @@ export function createSchedulingRepos(exec: Database, projectId: string) {
     accounts: createAccountsRepo(exec, projectId),
     slots: createSlotsRepo(exec, projectId),
     media: createMediaRepo(exec, projectId),
+    videoVersions: createVideoVersionsRepo(exec, projectId),
     posts: createPostsRepo(exec, projectId),
     targets: createTargetsRepo(exec, projectId),
     attempts: createAttemptsRepo(exec, projectId),

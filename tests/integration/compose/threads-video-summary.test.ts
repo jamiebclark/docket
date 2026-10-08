@@ -32,17 +32,19 @@ describe("composer check for one video and a Threads account", () => {
     expect(t.canSchedule).toBe(true);
   });
 
-  it("refuses a 6-minute video with the duration message, and addToQueue fails with validation", async () => {
+  it("cuts a 6-minute video to the 5-minute limit instead of refusing it, and addToQueue gets past validation", async () => {
     const { env, account } = await setup();
     const v = await createVideoAsset(env.project.id, { width: 1080, height: 1920, durationSeconds: 360 });
     const res = await posts.checkComposition(env.scope, { baseText: "Hello", mediaIds: [v.id], targets: [{ accountId: account.id }] });
     const t = res.targets[0]!;
-    expect(t.canSchedule).toBe(false);
-    const issue = t.issues.find((i) => i.code === "video_too_long");
-    expect(issue?.message).toContain("6 minutes long; the limit is 5 minutes for Threads");
+    // Was a refusal ("6 minutes long; the limit is 5 minutes for Threads"); the formatter now cuts it.
+    expect(t.canSchedule).toBe(true);
+    expect(t.issues.find((i) => i.code === "video_too_long")).toBeUndefined();
+    expect(t.issues.some((i) => i.severity === "info" && i.message.includes("cut to the first 5:00"))).toBe(true);
 
     const draft = await posts.createDraft(env.scope, { baseText: "Hello", mediaIds: [v.id], targets: [{ accountId: account.id }] });
     const queued = await posts.addToQueue(env.scope, draft.post.id);
-    expect(queued[0]).toMatchObject({ ok: false, code: "validation" });
+    // It passes validation; this account simply has no posting slots.
+    expect(queued[0]).toMatchObject({ ok: false, code: "no_active_slots" });
   });
 });

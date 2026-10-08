@@ -20,22 +20,26 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | images | 10 |  | UNVERIFIED (not documented by Meta, checked 2026-10-07) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: images" |
 | bytes per file | 10000000 |  | docs/research/meta.md ("Limits verification, 2026-10-07": files cannot exceed 10MB) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: bytes per file" |
 | formats | image/jpeg, image/png |  | docs/research/meta.md (documented `.jpeg, .bmp, .png, .gif, .tiff`; WebP not listed, so an uploaded WebP is converted to JPEG; BMP, GIF and TIFF cannot be uploaded to Docket) | media planner | `tests/integration/limits/enforcement.test.ts` "facebook: formats" |
+| reel audio bitrate | 128000 |  | docs/research/meta-video.md ("Reels Publishing API" specs table); the encode target, not a refusal limit | video planner | `src/providers/video-plan.test.ts` "audio bitrate is the encode target, never a refusal" |
+| reel audio max sample rate | 48000 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel audio max sample rate" |
+| reel audio max channels | 2 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel audio max channels" |
+| reel video recommended aspect | 0.5625 |  | docs/research/meta-video.md ("Reels Publishing API" specs table: 9:16) | video planner | `src/providers/video-plan.test.ts` "recommended shape: only when asked, or when forced by the range" |
 | media required | no |  | docs/research/meta.md (text-only Page posts documented) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: media required" |
 | text only | yes |  | docs/research/meta.md (text-only Page posts documented) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: text only" |
 | videos | 1 |  | docs/research/meta-video.md ("Regular Page video"); a Page video and a Reel take one video, more items make a carousel | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
 | video with images | no |  | single video only | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
 | video containers | mp4, mov |  | docs/research/meta-video.md ("Regular Page video": no format limits published); both containers Docket accepts, so none can be refused | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
-| reel video codecs | h264, hevc, vp9, av1 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel video codecs" |
-| reel audio codecs | aac |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel audio codecs" |
+| reel video codecs | h264, hevc, vp9, av1 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel video codecs" |
+| reel audio codecs | aac |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel audio codecs" |
 | reel silent video | yes |  | docs/research/meta-video.md ("Reels Publishing API" specs table); a silent video is accepted, so none can be refused | validateResolvedContent | `src/providers/validation.test.ts` "accepts a silent video unless the provider forbids it" |
 | reel min duration | 3 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel min duration" |
-| reel max duration | 90 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel max duration" |
+| reel max duration | 90 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel max duration" |
 | reel video min width | 540 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel video min width" |
 | reel video min height | 960 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel video min height" |
-| reel video min aspect | 0.556 |  | docs/research/meta-video.md ("Reels Publishing API" specs table; aspect 9:16 ±1%) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel video min aspect" |
-| reel video max aspect | 0.569 |  | docs/research/meta-video.md ("Reels Publishing API" specs table; aspect 9:16 ±1%) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel video max aspect" |
-| reel min frame rate | 24 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel min frame rate" |
-| reel max frame rate | 60 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "facebook: reel max frame rate" |
+| reel video min aspect | 0.556 |  | docs/research/meta-video.md ("Reels Publishing API" specs table; aspect 9:16 ±1%) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel video min aspect" |
+| reel video max aspect | 0.569 |  | docs/research/meta-video.md ("Reels Publishing API" specs table; aspect 9:16 ±1%) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel video max aspect" |
+| reel min frame rate | 24 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel min frame rate" |
+| reel max frame rate | 60 |  | docs/research/meta-video.md ("Reels Publishing API" specs table) | video planner | `tests/integration/limits/enforcement.test.ts` "facebook: reel max frame rate" |
 | creation allowance | 30 / 86400 s |  | docs/research/meta-video.md ("Reels Publishing API": 30 API-published posts in a 24-hour moving period); counts Reels Docket created, for this account only | engine deferral | `tests/integration/limits/enforcement.test.ts` "facebook: creation allowance" |
 | publish limit | none |  | docs/research/meta.md ("Rate limits, 2026-10-04"): no documented posts-per-day cap for Pages; Graph calls are limited per Page (4800 × engaged users / 24 h). The account-level limit still applies | account limit (engine deferral) | `tests/integration/limits/enforcement.test.ts` "facebook: publish limit none" |
 | note: page video limits | Meta publishes no size, length or codec limits for a Page video |  | docs/research/meta-video.md ("Regular Page video"); Docket checks only the container and sends the file as is, so Facebook may still refuse it | Facebook step machine | `tests/integration/facebook/reel-failures.test.ts` "a processing error fails with the causes" |
@@ -58,26 +62,33 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | min aspect | 0.8 |  | docs/research/meta.md (4:5) | media planner | `tests/integration/limits/enforcement.test.ts` "instagram: min aspect" |
 | max aspect | 1.91 |  | docs/research/meta.md (1.91:1) | media planner | `tests/integration/limits/enforcement.test.ts` "instagram: max aspect" |
 | alt text length | 1000 |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: alt text length" |
+| video max bitrate | 25000000 |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: video max bitrate" |
+| audio bitrate | 128000 |  | docs/research/meta-video.md ("Reel specs"); the encode target, not a refusal limit | video planner | `src/providers/video-plan.test.ts` "audio bitrate is the encode target, never a refusal" |
+| audio max sample rate | 48000 |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: audio max sample rate" |
+| audio max channels | 2 |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: audio max channels" |
+| index at front | yes |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: index at front" |
+| video video recommended aspect | 0.5625 |  | docs/research/meta-video.md ("Reel specs": 9:16 recommended) | video planner | `src/providers/video-plan.test.ts` "recommended shape: only when asked, or when forced by the range" |
+| reel video recommended aspect | 0.5625 |  | docs/research/meta-video.md ("Reel specs": 9:16 recommended) | video planner | `src/providers/video-plan.test.ts` "recommended shape: only when asked, or when forced by the range" |
 | media required | yes |  | docs/research/meta.md (no text-only posts) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: media required" |
 | text only | no |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: text only" |
 | videos | 1 |  | docs/research/meta-video.md ("Single video = Reels only"); Feed video and Reel take one video, more items make a carousel | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
 | video with images | no |  | single video only; a mix of video and images is a carousel | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
 | video containers | mp4, mov |  | docs/research/meta-video.md ("Reel specs"); both containers Docket accepts, so none can be refused | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
-| video codecs | h264, hevc |  | docs/research/meta-video.md ("Reel specs"); VP9 and others are refused | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: video codecs" |
-| audio codecs | aac |  | docs/research/meta-video.md ("Reel specs") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: audio codecs" |
+| video codecs | h264, hevc |  | docs/research/meta-video.md ("Reel specs"); VP9 and others are refused | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: video codecs" |
+| audio codecs | aac |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: audio codecs" |
 | silent video | yes |  | docs/research/meta-video.md ("Reel specs"; no audio requirement stated, D5); a silent video is accepted, so none can be refused | validateResolvedContent | `src/providers/validation.test.ts` "accepts a silent video unless the provider forbids it" |
-| video bytes | 300000000 |  | docs/research/meta-video.md ("Reel specs": 300 MB, decimal, D5) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: video bytes" |
+| video bytes | 300000000 |  | docs/research/meta-video.md ("Reel specs": 300 MB, decimal, D5) | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: video bytes" |
 | min duration | 3 |  | docs/research/meta-video.md ("Reel specs") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: min duration" |
-| max duration | 900 |  | docs/research/meta-video.md ("Reel specs") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: max duration" |
-| video max width | 1920 |  | docs/research/meta-video.md ("Reel specs") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: video max width" |
-| video min aspect | 0.01 |  | docs/research/meta-video.md ("Reel specs": 1:100) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: video min aspect" |
-| video max aspect | 10 |  | docs/research/meta-video.md ("Reel specs": 10:1) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: video max aspect" |
-| min frame rate | 23 |  | docs/research/meta-video.md ("Reel specs") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: min frame rate" |
-| max frame rate | 60 |  | docs/research/meta-video.md ("Reel specs") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: max frame rate" |
+| max duration | 900 |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: max duration" |
+| video max width | 1920 |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: video max width" |
+| video min aspect | 0.01 |  | docs/research/meta-video.md ("Reel specs": 1:100) | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: video min aspect" |
+| video max aspect | 10 |  | docs/research/meta-video.md ("Reel specs": 10:1) | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: video max aspect" |
+| min frame rate | 23 |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: min frame rate" |
+| max frame rate | 60 |  | docs/research/meta-video.md ("Reel specs") | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: max frame rate" |
 | carousel videos | 10 |  | docs/research/meta-video.md ("Carousel with video") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: carousel videos" |
 | carousel video with images | yes |  | docs/research/meta-video.md ("Carousel with video": a mix of the two); a mix is accepted, so none can be refused | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
-| carousel video min aspect | 0.8 |  | docs/research/meta-video.md ("Carousel with video"); conservative approach, UNVERIFIED (no carousel video spec) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: carousel video min aspect" |
-| carousel video max aspect | 1.91 |  | docs/research/meta-video.md ("Carousel with video"); conservative approach, UNVERIFIED (no carousel video spec) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "instagram: carousel video max aspect" |
+| carousel video min aspect | 0.8 |  | docs/research/meta-video.md ("Carousel with video"); conservative approach, UNVERIFIED (no carousel video spec) | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: carousel video min aspect" |
+| carousel video max aspect | 1.91 |  | docs/research/meta-video.md ("Carousel with video"); conservative approach, UNVERIFIED (no carousel video spec) | video planner | `tests/integration/limits/enforcement.test.ts` "instagram: carousel video max aspect" |
 | creation allowance | 400 / 86400 s |  | docs/research/meta-video.md ("Rate limits"); a rolling count of containers Docket created, seen only for this account in Docket (019 research D10) | engine deferral | `tests/integration/limits/enforcement.test.ts` "instagram: creation allowance" |
 | publish limit | 50 / 86400 s |  | docs/research/meta.md (CONTRADICTORY 50 vs 100; 50 is the `content_publishing_limit` value; the run-time quota is also read) | engine deferral | `tests/integration/limits/enforcement.test.ts` "instagram: publish limit 50 / 86400 s" |
 | note: video processing ceiling | 60 min |  | docs/research/meta-video.md ("Container status and polling"); 5 min is guidance, not a hard stop (019 research D9) | Instagram step machine | `tests/integration/instagram/reels.test.ts` "moves to the 5-minute pace after 5 minutes, and fails at 60 minutes within 16 reads" |
@@ -96,21 +107,27 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | min aspect | 0.1 |  | docs/research/meta.md (aspect ≤10:1) | media planner | `tests/integration/limits/enforcement.test.ts` "threads: min aspect" |
 | max aspect | 10 |  | docs/research/meta.md (aspect ≤10:1) | media planner | `tests/integration/limits/enforcement.test.ts` "threads: max aspect" |
 | alt text length | 1000 |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: alt text length" |
+| video max bitrate | 100000000 |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: video max bitrate" |
+| audio bitrate | 128000 |  | docs/research/meta-video.md ("Threads"); the encode target, not a refusal limit | video planner | `src/providers/video-plan.test.ts` "audio bitrate is the encode target, never a refusal" |
+| audio max sample rate | 48000 |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: audio max sample rate" |
+| audio max channels | 2 |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: audio max channels" |
+| index at front | yes |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: index at front" |
+| video video recommended aspect | 0.5625 |  | docs/research/meta-video.md ("Threads": 9:16 recommended) | video planner | `src/providers/video-plan.test.ts` "recommended shape: only when asked, or when forced by the range" |
 | media required | no |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: media required" |
 | text only | yes |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: text only" |
 | videos | 1 |  | docs/research/meta-video.md ("Threads"); one video is a VIDEO post, more are carousel items | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
 | video with images | no |  | docs/research/meta-video.md ("Threads"); a single video cannot be combined with images | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
 | video containers | mp4, mov |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
-| video codecs | h264, hevc |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video codecs" |
-| audio codecs | aac |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: audio codecs" |
+| video codecs | h264, hevc |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: video codecs" |
+| audio codecs | aac |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: audio codecs" |
 | silent video | yes |  | docs/research/meta-video.md ("Threads"); silence is accepted (D2) | validateResolvedContent | `src/providers/validation.test.ts` "accepts a silent video unless the provider forbids it" |
-| video bytes | 1000000000 |  | docs/research/meta-video.md ("Threads"); 1 GB read as decimal (D2) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video bytes" |
-| max duration | 300 |  | docs/research/meta-video.md ("Threads"); 5 minutes | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: max duration" |
-| video max width | 1920 |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video max width" |
-| video min aspect | 0.01 |  | docs/research/meta-video.md ("Threads"); 1:100 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video min aspect" |
-| video max aspect | 10 |  | docs/research/meta-video.md ("Threads"); 10:1 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video max aspect" |
-| min frame rate | 23 |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: min frame rate" |
-| max frame rate | 60 |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: max frame rate" |
+| video bytes | 1000000000 |  | docs/research/meta-video.md ("Threads"); 1 GB read as decimal (D2) | video planner | `tests/integration/limits/enforcement.test.ts` "threads: video bytes" |
+| max duration | 300 |  | docs/research/meta-video.md ("Threads"); 5 minutes | video planner | `tests/integration/limits/enforcement.test.ts` "threads: max duration" |
+| video max width | 1920 |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: video max width" |
+| video min aspect | 0.01 |  | docs/research/meta-video.md ("Threads"); 1:100 | video planner | `tests/integration/limits/enforcement.test.ts` "threads: video min aspect" |
+| video max aspect | 10 |  | docs/research/meta-video.md ("Threads"); 10:1 | video planner | `tests/integration/limits/enforcement.test.ts` "threads: video max aspect" |
+| min frame rate | 23 |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: min frame rate" |
+| max frame rate | 60 |  | docs/research/meta-video.md ("Threads") | video planner | `tests/integration/limits/enforcement.test.ts` "threads: max frame rate" |
 | carousel videos | 20 |  | docs/research/meta-video.md ("Threads"); images and videos count together toward the 2 to 20 items | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: carousel videos" |
 | carousel video with images | yes |  | docs/research/meta-video.md ("Threads"); a carousel may mix images and videos | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
 | note: carousel items | 2 to 20, images and videos together |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `src/providers/threads/video-validate.test.ts` "holds 20 mixed items and refuses 21 with too_many_items" |
@@ -158,20 +175,28 @@ X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce 
 | images | 4 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: images" |
 | bytes per file | 5000000 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: bytes per file" |
 | formats | image/jpeg, image/png |  | test double | media planner | `tests/integration/limits/enforcement.test.ts` "mock: formats" |
+| video max bitrate | 8000000 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: video max bitrate" |
+| audio bitrate | 128000 |  | test double; the encode target, not a refusal limit | video planner | `src/providers/video-plan.test.ts` "audio bitrate is the encode target, never a refusal" |
+| audio max sample rate | 48000 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: audio max sample rate" |
+| audio max channels | 2 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: audio max channels" |
+| index at front | yes |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: index at front" |
+| video max width | 1920 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: video max width" |
+| video max height | 1920 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: video max height" |
+| video recommended aspect | 0.5625 |  | test double | video planner | `src/providers/video-plan.test.ts` "recommended shape: only when asked, or when forced by the range" |
 | media required | no |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: media required" |
 | text only | yes |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: text only" |
 | videos | 1 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: videos" |
 | video with images | no |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video with images" |
 | video containers | mp4, mov |  | test double (both containers Docket accepts, so none can be refused) | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
-| video codecs | h264 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video codecs" |
-| audio codecs | aac |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: audio codecs" |
+| video codecs | h264 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: video codecs" |
+| audio codecs | aac |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: audio codecs" |
 | silent video | yes |  | test double (a silent video is accepted, so none can be refused) | validateResolvedContent | `src/providers/validation.test.ts` "accepts a silent video unless the provider forbids it" |
-| video bytes | 50000000 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video bytes" |
+| video bytes | 50000000 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: video bytes" |
 | min duration | 1 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: min duration" |
-| max duration | 60 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: max duration" |
-| video min aspect | 0.5625 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video min aspect" |
-| video max aspect | 1.7777777777777777 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: video max aspect" |
-| max frame rate | 60 |  | test double | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "mock: max frame rate" |
+| max duration | 60 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: max duration" |
+| video min aspect | 0.5625 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: video min aspect" |
+| video max aspect | 1.7777777777777777 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: video max aspect" |
+| max frame rate | 60 |  | test double | video planner | `tests/integration/limits/enforcement.test.ts` "mock: max frame rate" |
 | publish limit | none |  | test double; the account-level limit still applies | account limit (engine deferral) | `tests/integration/limits/enforcement.test.ts` "mock: publish limit none" |
 
 ## Audit notes (T032)

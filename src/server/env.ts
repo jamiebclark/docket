@@ -290,6 +290,7 @@ const base = z.object({
     MEDIA_UPLOAD_TRANSPORT: oneOf(["direct", "via_app"], "direct"),
     MEDIA_UPLOAD_EXPIRY_HOURS: int(1, 168, 24),
     MEDIA_MAX_OPEN_UPLOADS: int(1, 50, 10),
+    VIDEO_ENCODE_CONCURRENCY: int(1, 4, 1),
     MOCK_PROVIDER_ENABLED: bool(() => process.env.NODE_ENV !== "production"),
     MIGRATE_ON_START: z
       .string()
@@ -338,6 +339,7 @@ const schema = base.transform((e) => ({
       uploadTransport: e.MEDIA_UPLOAD_TRANSPORT,
       uploadExpiryHours: e.MEDIA_UPLOAD_EXPIRY_HOURS,
       maxOpenUploads: e.MEDIA_MAX_OPEN_UPLOADS,
+      videoEncodeConcurrency: e.VIDEO_ENCODE_CONCURRENCY,
     },
     DATABASE_URL_DIRECT: e.DATABASE_URL_DIRECT || e.DATABASE_URL,
     BOOTSTRAP_ADMIN_NAME: e.BOOTSTRAP_ADMIN_NAME || "Admin",

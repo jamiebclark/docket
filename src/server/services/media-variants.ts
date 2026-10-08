@@ -1,9 +1,13 @@
+import { DEFAULT_VIDEO_EDIT, type VideoEdit } from "../../lib/video/edit";
 import { mediaConstraintsOf, planImage, type ImagePlan, type MediaConstraints } from "../../providers/media";
+import { resolvePostType } from "../../providers/post-type";
 import { findProvider } from "../../providers/registry";
-import type { MediaItem, ProviderCapabilities, SocialProvider, ValidationIssue } from "../../providers/types";
+import type { MediaItem, PostType, ProviderCapabilities, SocialProvider, ValidationIssue } from "../../providers/types";
+import { videoLimitsFor } from "../../providers/validation";
+import { planVideo, type VideoPlan } from "../../providers/video-plan";
 import type { MediaRow, VariantRow } from "../dal/media";
 import type { createSchedulingRepos } from "../dal/scope";
-import { constraintsHash } from "../media/hash";
+import { constraintsHash, videoRecipeKey } from "../media/hash";
 import { videoFieldsOf } from "../media/item";
 import { generateVariant } from "../media/variants";
 import { getStorage, mediaKeys } from "../storage";
@@ -42,7 +46,49 @@ export function plannedItem(asset: MediaRow, plan: Exclude<ImagePlan, { kind: "r
   return { ...itemOf(asset), mimeType, width, height, bytes: Math.min(asset.byteSize, maxBytes) };
 }
 
-const itemOf = (asset: MediaRow, v?: VariantRow): MediaItem => ({
+/** The planner's verdict for one stored video against one target's limits for `postType`, or null when it cannot be planned yet. */
+export function planVideoFor(
+  asset: MediaRow,
+  caps: ProviderCapabilities,
+  postType: PostType,
+  index: number,
+  platform: string,
+  edit: VideoEdit = DEFAULT_VIDEO_EDIT,
+  typeLabel?: string,
+): VideoPlan | null {
+  const item = itemOf(asset);
+  if (asset.kind !== "video" || item.status !== "ready" || !item.video || !asset.width || !asset.height) return null;
+  return planVideo(
+    { width: asset.width, height: asset.height, bytes: asset.byteSize, facts: item.video },
+    videoLimitsFor(caps, postType),
+    edit,
+    { index, platform, ...(typeLabel ? { typeLabel } : {}) },
+  );
+}
+
+/** The item the provider's checks see for a derived video: what the formatter will produce. */
+function plannedVideoItem(asset: MediaRow, plan: Extract<VideoPlan, { kind: "derive" }>): MediaItem {
+  const base = itemOf(asset);
+  const o = plan.output;
+  return {
+    ...base,
+    mimeType: o.container === "mov" ? "video/quicktime" : "video/mp4",
+    width: o.width,
+    height: o.height,
+    bytes: o.maxBytes === null ? asset.byteSize : Math.min(asset.byteSize, o.maxBytes),
+    video: {
+      container: o.container,
+      durationSeconds: o.durationSeconds,
+      frameRate: o.frameRate,
+      videoCodec: o.videoCodec,
+      audioCodec: o.audioCodec,
+      indexAtFront: plan.recipe.indexAtFront ? true : (base.video?.indexAtFront ?? null),
+      factsVersion: 2,
+    },
+  };
+}
+
+export const itemOf = (asset: MediaRow, v?: VariantRow): MediaItem => ({
   url: v?.publicUrl ?? asset.publicUrl,
   mimeType: v?.mimeType ?? asset.mimeType,
   width: v?.width ?? asset.width,
@@ -202,13 +248,22 @@ export async function adaptedMediaFor(
   platform: string,
   assets: readonly MediaRow[],
   /** `preview`: no variant exists yet (an unsaved composition), so the planned output stands in for it. */
-  opts: { preview?: boolean } = {},
+  opts: { preview?: boolean; postType?: PostType; videoEdits?: ReadonlyMap<string, VideoEdit> } = {},
 ): Promise<{ media: MediaItem[]; issues: ValidationIssue[] }> {
   const c = mediaConstraintsOf(caps);
   const hash = constraintsHash(c);
   const media: MediaItem[] = [];
   const issues: ValidationIssue[] = [];
   for (const [i, asset] of assets.entries()) {
+    if (asset.kind === "video") {
+      // A video is never waited for here: the gate checks what the formatter will make, and the tick waits for the file.
+      const vp = planVideoFor(asset, caps, opts.postType ?? "video", i, platform, opts.videoEdits?.get(asset.id));
+      if (vp?.kind === "derive") media.push(plannedVideoItem(asset, vp));
+      else media.push(itemOf(asset));
+      if (vp?.kind === "refuse") issues.push(...vp.issues);
+      else if (vp) issues.push(...(vp.kind === "derive" ? vp.notes : vp.kind === "checking" ? vp.notes : []));
+      continue;
+    }
     const plan = planFor(asset, c, i, platform);
     if (plan.kind === "original") media.push(itemOf(asset));
     else if (plan.kind === "refuse") {
@@ -238,10 +293,10 @@ export async function adaptedMediaFor(
 
 /** Scheduler, outside any transaction: resolve media, check the objects exist, regenerate what vanished. */
 export async function resolvePublishMedia(
-  repos: PrepareRepos & { projectId: string },
+  repos: PrepareRepos & Pick<Repos, "videoVersions"> & { projectId: string },
   targetId: string,
   provider: SocialProvider,
-): Promise<{ ok: true; media: MediaItem[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; media: MediaItem[] } | { ok: false; error: string } | { ok: false; notReady: true }> {
   const target = await repos.targets.get(targetId);
   if (!target) return { ok: false, error: "The post is no longer available." };
   const { ids, rows } = await orderedAssets(repos, target.postId);
@@ -253,11 +308,56 @@ export async function resolvePublishMedia(
   const c = mediaConstraintsOf(provider.capabilities);
   const hash = constraintsHash(c);
   const media: MediaItem[] = [];
+  const postType = resolvePostType(
+    provider.capabilities,
+    ids.map((id) => itemOf(rows.get(id)!)),
+    target.chosenPostType ?? null,
+  );
+  const videoEdits = await repos.posts.listVideoEdits(target.postId);
   for (const [i, id] of ids.entries()) {
     const asset = rows.get(id)!;
     const noun = asset.kind === "video" ? "Video" : "Image";
     const unavailable = { ok: false as const, error: `${noun} ${i + 1} is no longer available.` };
     if (storage && !(await storage.exists(asset.storageKey).catch(() => true))) return unavailable;
+    if (asset.kind === "video") {
+      // A video is never built here: a ready version is published, anything else waits for the worker (D9).
+      const vp = planVideoFor(asset, provider.capabilities, postType, i, provider.displayName, videoEdits.get(asset.id));
+      // A refused video goes through as stored: the G15 re-check in `execute()` refuses it with the planner's own words.
+      if (!vp || vp.kind === "original" || vp.kind === "refuse") {
+        media.push(itemOf(asset));
+        continue;
+      }
+      if (vp.kind === "checking") return { ok: false, notReady: true };
+      const [row] = await repos.videoVersions.getByKeys([{ assetId: asset.id, kind: "full", key: videoRecipeKey("full", vp.recipe) }]);
+      if (!row || row.state !== "ready" || !row.storageKey || !row.publicUrl) return { ok: false, notReady: true };
+      if (storage && !(await storage.exists(row.storageKey).catch(() => true))) {
+        await repos.videoVersions.requeue(row.id);
+        return { ok: false, notReady: true };
+      }
+      const base = itemOf(asset);
+      media.push({
+        ...base,
+        url: row.publicUrl,
+        mimeType: row.container === "mov" ? "video/quicktime" : "video/mp4",
+        width: row.width ?? base.width,
+        height: row.height ?? base.height,
+        bytes: row.byteSize ?? base.bytes,
+        ...(base.video && row.durationMs !== null && row.videoCodec
+          ? {
+              video: {
+                ...base.video,
+                container: row.container === "mov" ? ("mov" as const) : ("mp4" as const),
+                durationSeconds: row.durationMs / 1000,
+                frameRate: row.frameRate,
+                videoCodec: row.videoCodec,
+                audioCodec: row.audioCodec,
+                indexAtFront: true,
+              },
+            }
+          : {}),
+      });
+      continue;
+    }
     const plan = planFor(asset, c, i, provider.displayName);
     if (plan.kind === "original") {
       media.push(itemOf(asset));

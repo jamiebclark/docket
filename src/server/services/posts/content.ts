@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { assertEditFits, VideoEditError, type VideoEdit } from "../../../lib/video/edit";
 import { offeredPostTypes } from "../../../providers/post-type";
 import { findProvider } from "../../../providers/registry";
 import type { MediaItem, PostContent, PostType } from "../../../providers/types";
 import { inferPostType } from "../../../providers/validation";
+import type { MediaRow } from "../../dal/media";
 import type { ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
 
@@ -49,4 +51,32 @@ export async function assertPostTypesForAccounts(
     const message = account ? postTypeRefusal(account.providerKey, value) : null;
     if (message) throw issue(message);
   }
+}
+
+/**
+ * Checks the submitted edits against the post's media: each key must be a video on the post and each trim must fit that video.
+ * Throws a `ZodError` at `videoEdits.<id>` (or `videoEdits.<id>.<field>`); returns the edits with a full-length end normalised to null.
+ * A video not yet probed has no length to check against, so only its shape is checked.
+ */
+export function checkVideoEdits(
+  assets: readonly Pick<MediaRow, "id" | "kind" | "durationMs">[],
+  edits: Readonly<Record<string, VideoEdit>>,
+): Map<string, VideoEdit> {
+  const byId = new Map(assets.map((a) => [a.id, a]));
+  const out = new Map<string, VideoEdit>();
+  for (const [id, edit] of Object.entries(edits)) {
+    const asset = byId.get(id);
+    if (!asset || asset.kind !== "video") {
+      throw new z.ZodError([{ code: "custom", path: ["videoEdits", id], message: "This video is not on the post." }]);
+    }
+    try {
+      out.set(id, asset.durationMs === null ? edit : assertEditFits(edit, asset.durationMs));
+    } catch (err) {
+      if (err instanceof VideoEditError) {
+        throw new z.ZodError([{ code: "custom", path: ["videoEdits", id, err.field], message: err.message }]);
+      }
+      throw err;
+    }
+  }
+  return out;
 }

@@ -21,6 +21,12 @@ const video = (over: Partial<MediaRow> = {}): MediaRow =>
     videoCodec: "h264",
     audioCodec: "aac",
     container: "mp4",
+    videoBitrate: 4_000_000,
+    audioBitrate: 128_000,
+    audioSampleRate: 44_100,
+    audioChannels: 2,
+    indexAtFront: true,
+    factsVersion: 2,
     ...over,
   }) as MediaRow;
 
@@ -29,11 +35,10 @@ describe("Threads video fit badge (FR-019)", () => {
     expect(fitOf(video(), threads)).toMatchObject({ providerKey: "threads", state: "fits", details: [], steps: [], convertedTo: null });
   });
 
-  it("refuses a 120 fps video in 'This video' wording", () => {
+  it("adapts a 120 fps video by lowering the frame rate (024: no longer refused)", () => {
     const fit = fitOf(video({ frameRate: 120 }), threads);
-    expect(fit.state).toBe("refused");
-    expect(fit.details).toHaveLength(1);
-    expect(fit.details[0]).toMatch(/^This video is 120 fps; the limit is 60 fps/);
+    expect(fit.state).toBe("adapted");
+    expect(fit.convertedTo).toBeNull();
   });
 
   it("never produces converted, whatever the video", () => {
@@ -41,7 +46,6 @@ describe("Threads video fit badge (FR-019)", () => {
     for (const asset of assets) {
       const fit = fitOf(asset, threads);
       expect(fit.state).not.toBe("converted");
-      expect(fit.steps).toEqual([]);
       expect(fit.convertedTo).toBeNull();
     }
   });

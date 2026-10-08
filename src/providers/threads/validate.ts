@@ -37,7 +37,7 @@ export function validateThreads(content: PostContent, caps: ProviderCapabilities
   for (const issue of validateAgainstCapabilities(content, caps)) {
     if ((issue.code === "mime_not_allowed" || issue.code === "file_too_large") && adaptable(issue.field)) continue;
     if (isVideoRule(issue.code) && issue.code !== "video_not_accepted") {
-      issues.push({ ...issue, message: `${issue.message.replace(/\.$/, "")} for Threads. Docket does not crop, trim or convert video yet.` });
+      issues.push({ ...issue, message: `${issue.message.replace(/\.$/, "")} for Threads.` });
       continue;
     }
     issues.push(issue);

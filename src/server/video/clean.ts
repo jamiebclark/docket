@@ -31,6 +31,8 @@ async function remux(src: string, dst: string, container: "mp4" | "mov", rotatio
     "-i", src,
     "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-map_metadata", "-1", "-map_chapters", "-1",
     ...(mode === "tag" ? ["-metadata:s:v:0", `rotate=${(360 - rotation) % 360}`] : []),
+    // The index goes first, so any stored original can go to a platform that wants it there (D18).
+    "-movflags", "+faststart",
     "-f", container, dst,
   ];
   const r = await runTool("ffmpeg", args, { timeoutMs: cleanTimeoutMs(bytes), signal });

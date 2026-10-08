@@ -122,6 +122,8 @@ export function detailRows(r: RequirementsSummary): DetailRow[] {
               ? `at least ${video.minFrameRate.label}`
               : NONE,
     });
+    if (video.adapts.length > 0) rows.push({ term: "Docket will adapt", detail: video.adapts.join("; ") });
+    if (video.cannot.length > 0) rows.push({ term: "Docket will refuse", detail: video.cannot.join("; ") });
     for (const note of video.notes) rows.push({ term: "Note", detail: note });
   }
   if (r.carousel) {

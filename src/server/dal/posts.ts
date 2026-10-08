@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { postMedia, postStatus, postTargets, posts, type PostRow, type PostTargetStatus } from "../db/schema";
+import { isDefaultEdit, type VideoEdit } from "../../lib/video/edit";
+import { postMedia, postStatus, postTargets, postVideoEdits, posts, type PostRow, type PostTargetStatus } from "../db/schema";
 
 export type PostRecord = PostRow;
 export type NewPost = Partial<
@@ -79,6 +80,13 @@ export interface PostsRepo {
   /** Replaces the post's media in order (delete, then insert). Call inside a transaction. */
   setMedia(id: string, mediaAssetIds: readonly string[]): Promise<void>;
   listMediaIds(id: string): Promise<string[]>;
+  /** The stored edit of each video that has one; a video without an entry uses the default edit. */
+  listVideoEdits(id: string): Promise<Map<string, VideoEdit>>;
+  /**
+   * Replaces the stored edits of the listed videos: an entry equal to the default deletes its row. Videos not listed keep theirs.
+   * Call inside a transaction.
+   */
+  setVideoEdits(id: string, edits: ReadonlyMap<string, VideoEdit>): Promise<void>;
   /** Written only by `applyDerivedStatus`. */
   setStatus(id: string, status: PostRecord["status"]): Promise<void>;
   softDelete(id: string, at: Date): Promise<void>;
@@ -242,6 +250,19 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
     },
     async setMedia(id, mediaAssetIds) {
       await db.delete(postMedia).where(and(eq(postMedia.projectId, projectId), eq(postMedia.postId, id)));
+      // An edit belongs to a video on the post: removing the video removes its edit.
+      // (Listed ids, not `NOT IN`: the scope check reads a negated predicate as not pinning the project.)
+      const kept = new Set(mediaAssetIds);
+      const had = await db
+        .select({ id: postVideoEdits.mediaAssetId })
+        .from(postVideoEdits)
+        .where(and(eq(postVideoEdits.projectId, projectId), eq(postVideoEdits.postId, id)));
+      const stale = had.map((r) => r.id).filter((k) => !kept.has(k));
+      if (stale.length > 0) {
+        await db
+          .delete(postVideoEdits)
+          .where(and(eq(postVideoEdits.projectId, projectId), eq(postVideoEdits.postId, id), inArray(postVideoEdits.mediaAssetId, stale)));
+      }
       if (mediaAssetIds.length === 0) return;
       await db.insert(postMedia).values(
         mediaAssetIds.map((mediaAssetId, position) => ({
@@ -251,6 +272,40 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
           position,
         })),
       );
+    },
+    async listVideoEdits(id) {
+      const rows = await db
+        .select()
+        .from(postVideoEdits)
+        .where(and(eq(postVideoEdits.projectId, projectId), eq(postVideoEdits.postId, id)));
+      return new Map(
+        rows.map((r) => [
+          r.mediaAssetId,
+          {
+            trimStartMs: r.trimStartMs,
+            trimEndMs: r.trimEndMs,
+            fit: r.fit as VideoEdit["fit"],
+            padColor: r.padColor,
+            focalX: r.focalX,
+            focalY: r.focalY,
+            recommendedShape: r.recommendedShape,
+          },
+        ]),
+      );
+    },
+    async setVideoEdits(id, edits) {
+      for (const [mediaAssetId, edit] of edits) {
+        const key = and(eq(postVideoEdits.projectId, projectId), eq(postVideoEdits.postId, id), eq(postVideoEdits.mediaAssetId, mediaAssetId));
+        if (isDefaultEdit(edit)) {
+          await db.delete(postVideoEdits).where(key);
+          continue;
+        }
+        const values = { ...edit };
+        await db
+          .insert(postVideoEdits)
+          .values({ projectId, postId: id, mediaAssetId, ...values })
+          .onConflictDoUpdate({ target: [postVideoEdits.postId, postVideoEdits.mediaAssetId], set: values });
+      }
     },
     async listMediaIds(id) {
       const rows = await db

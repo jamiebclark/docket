@@ -6,6 +6,7 @@ import { NotFoundError, PolicyNotAllowedError, ConflictError } from "../../dal/e
 import type { ApprovalPolicy, ProjectScope, SchedulingPolicy } from "../../dal/scope";
 import * as clock from "../../dal/clock";
 import { prepareVariants } from "../media-variants";
+import { syncVideoVersions } from "../video-versions";
 import { applyDerivedStatus, gate, lockPost, queueTargetsInTx, type TargetResult } from "../posts";
 import type { PlannedTime } from "../queue";
 
@@ -84,7 +85,7 @@ export async function applyApprovalPolicy(
   } catch {
     // Reported per target by the gate.
   }
-  return scope.transaction(async (tx) => {
+  const applied = await scope.transaction(async (tx) => {
     const post = await lockPost(tx, postId);
     await opts.guard?.(tx);
     if (post.reviewState !== "needs_review") throw new ConflictError("This post was already reviewed.");
@@ -123,4 +124,6 @@ export async function applyApprovalPolicy(
     }
     return { decision, queued };
   });
+  if (applied.queued.length > 0) await syncVideoVersions(scope, postId, { requeueFailed: true });
+  return applied;
 }

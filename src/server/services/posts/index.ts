@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ValidationIssue } from "@/providers/types";
+import { videoEditSchema } from "@/lib/video/edit";
 import { atSchema, baseTextSchema, externalUrlSchema, POST_MEDIA_MAX, postInputSchema, postTargetInputSchema } from "@/lib/validation/scheduling";
 import * as clock from "../../dal/clock";
 import { ConflictError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
@@ -10,13 +11,14 @@ import { explicitSchedulePatch } from "./schedule-patch";
 import { allocateNextFree, nearQueuedWarnings, peekNextFree, plannedTime, type PlannedTime, type Warning } from "../queue";
 import { cancelTargetRow, hasLiveLease, resetEmptyReview } from "./cancel";
 import { prepareVariants } from "../media-variants";
+import { syncVideoVersions } from "../video-versions";
 import { applyDerivedStatus } from "./status";
 import { lockPost, need, withLockedTarget } from "./locked";
 import { errorsOf, gate, issuesFor } from "./gate";
 import { resolvedEvent } from "../activity/classify";
 import { recordTargetEvent } from "../activity/record";
 import type { PostType } from "@/providers/types";
-import { assertPostTypeOffered } from "./content";
+import { assertPostTypeOffered, checkVideoEdits } from "./content";
 
 export { applyDerivedStatus, derivePostStatus } from "./status";
 export { lockPost, withLockedTarget } from "./locked";
@@ -76,6 +78,8 @@ export interface PostTargetView {
   externalUrl: string | null;
   publishedAt: Date | null;
   inProgress: boolean;
+  /** Scheduled and due, waiting for the adapted video to be built. */
+  preparingVideo: boolean;
 }
 
 export interface PostDetail {
@@ -103,6 +107,8 @@ const patchSchema = z.object({
   baseText: baseTextSchema.optional(),
   // No `.default`: an absent key must stay absent, or an edit of the text alone would clear media and targets.
   mediaIds: z.array(uuid).max(POST_MEDIA_MAX, { error: "Too many images" }).optional(),
+  /** Absent keeps the stored edits; an entry equal to the default deletes its row. */
+  videoEdits: z.record(uuid, videoEditSchema).optional(),
   generationMetadata: z.record(z.string(), z.unknown()).nullable().optional(),
   targets: z
     .array(postTargetInputSchema)
@@ -130,6 +136,7 @@ async function targetView(tx: Tx, t: TargetRecord, now: Date): Promise<PostTarge
     externalUrl: t.externalUrl,
     publishedAt: t.publishedAt,
     inProgress: hasLiveLease(t, now),
+    preparingVideo: t.status === "scheduled" && t.videoWaitSince !== null,
   };
 }
 
@@ -200,7 +207,9 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
       if (!account) throw new NotFoundError();
       if (target.postType != null) assertPostTypeOffered(account.providerKey, target.postType, ["targets", i, "postType"]);
     }
-    if ((await tx.media.lockShared(parsed.mediaIds)).length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
+    const locked = await tx.media.lockShared(parsed.mediaIds);
+    if (locked.length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
+    const videoEdits = checkVideoEdits(locked, parsed.videoEdits);
     const post = await tx.posts.insert({
       baseText: parsed.baseText,
       ...actorColumns(tx),
@@ -213,6 +222,7 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
       ...(parsed.seriesId ? { seriesId: parsed.seriesId, seriesPosition: parsed.seriesPosition ?? 0 } : {}),
     });
     await tx.posts.setMedia(post.id, parsed.mediaIds);
+    await tx.posts.setVideoEdits(post.id, videoEdits);
     await tx.media.markUsed(parsed.mediaIds, now);
     await tx.targets.insertMany(
       parsed.targets.map((t) => ({
@@ -232,7 +242,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
   const patch = patchSchema.parse(patchInput);
   need(scope, { post: ["edit"] });
   if (patch.mediaIds) await prepareForScheduling(scope, id, { mediaIds: patch.mediaIds });
-  return scope.transaction(async (tx) => {
+  const updated = await scope.transaction(async (tx) => {
     need(tx, { post: ["edit"] });
     await lockPost(tx, id);
     const now = await clock.now();
@@ -250,6 +260,10 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
       if ((await tx.media.lockShared(patch.mediaIds)).length !== new Set(patch.mediaIds).size) throw new NotFoundError();
       await tx.posts.setMedia(id, patch.mediaIds);
       await tx.media.markUsed(patch.mediaIds, now);
+    }
+    if (patch.videoEdits) {
+      const ids = await tx.posts.listMediaIds(id);
+      await tx.posts.setVideoEdits(id, checkVideoEdits(await tx.media.getMany(ids), patch.videoEdits));
     }
     if (patch.targets) {
       const wanted = new Map(patch.targets.map((t) => [t.accountId, t]));
@@ -296,6 +310,9 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
     await applyDerivedStatus(tx, id);
     return detail(tx, id);
   });
+  // A changed text, media, edit or target set may change the wanted versions; the old ones are collected when no longer wanted.
+  await syncVideoVersions(scope, id);
+  return updated;
 }
 
 const variantEditsSchema = z.object({
@@ -435,13 +452,15 @@ export async function addToQueue(
   const opts = queueSchema.parse(input);
   need(scope, { post: ["schedule"] });
   await prepareForScheduling(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
-  return scope.transaction(async (tx) => {
+  const result = await scope.transaction(async (tx) => {
     need(tx, { post: ["schedule"] });
     const post = await lockPost(tx, id);
     const all = await tx.targets.listForPost(id);
     const chosen = pickTargets(all, opts.targetIds).filter((t) => opts.targetIds || t.status === "draft" || t.status === "cancelled");
     return queueTargetsInTx(tx, post, chosen, opts.expected ? { expected: opts.expected } : undefined);
   });
+  await syncVideoVersions(scope, id, { requeueFailed: true, ...(opts.targetIds ? { targetIds: opts.targetIds } : {}) });
+  return result;
 }
 
 /**
@@ -487,6 +506,7 @@ export async function queueTargetsInTx(
       stepState: null,
       firstStepAt: null,
       publishStartedAt: null,
+      videoWaitSince: null,
     });
     const expected = opts.expected?.[t.id];
     out.push({
@@ -544,6 +564,7 @@ async function scheduleExplicit(
         stepState: null,
         firstStepAt: null,
         publishStartedAt: null,
+        videoWaitSince: null,
       },
       { statuses: ["draft", "cancelled", "scheduled"] },
     );
@@ -572,10 +593,12 @@ export async function scheduleAt(
   const opts = selectSchema.extend({ at: atSchema }).parse(input);
   need(scope, { post: ["schedule"] });
   await prepareForScheduling(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
-  return scope.transaction((tx) => {
+  const result = await scope.transaction((tx) => {
     need(tx, { post: ["schedule"] });
     return scheduleExplicit(tx, id, opts.targetIds, "explicit", () => new Date(opts.at));
   });
+  await syncVideoVersions(scope, id, { requeueFailed: true, ...(opts.targetIds ? { targetIds: opts.targetIds } : {}) });
+  return result;
 }
 
 export async function publishNow(
@@ -587,10 +610,12 @@ export async function publishNow(
   const opts = selectSchema.parse(input);
   need(scope, { post: ["schedule"] });
   await prepareForScheduling(scope, id, opts.targetIds ? { targetIds: opts.targetIds } : undefined);
-  return scope.transaction((tx) => {
+  const result = await scope.transaction((tx) => {
     need(tx, { post: ["schedule"] });
     return scheduleExplicit(tx, id, opts.targetIds, "now", (now) => now);
   });
+  await syncVideoVersions(scope, id, { requeueFailed: true, ...(opts.targetIds ? { targetIds: opts.targetIds } : {}) });
+  return result;
 }
 
 // ---------------------------------------------------------------- single-target actions
@@ -691,6 +716,7 @@ export async function resolveAmbiguous(
         attemptCount: 0,
         lastError: null,
         stepState: null,
+        videoWaitSince: null,
         inFlightStep: null,
         inFlightMayPublish: null,
         firstStepAt: null,

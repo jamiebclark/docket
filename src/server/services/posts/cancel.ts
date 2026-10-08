@@ -8,6 +8,7 @@ const CLEARED = {
   slotId: null,
   nextAttemptAt: null,
   stepState: null,
+  videoWaitSince: null,
   inFlightStep: null,
   inFlightMayPublish: null,
   leaseOwner: null,

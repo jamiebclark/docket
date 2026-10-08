@@ -261,3 +261,15 @@ public bucket ([storage.md](storage.md)).
 - *Connection refused or name not found:* check the hosts entry, that `pnpm dev:https` is running, and the port in the
   address. If Threads refuses the port, use 443 as described above.
 - *Signed out after changing the address:* the sign-in cookie belongs to the host. Sign in again at the new address.
+
+## Video formatter: owed live checks
+
+The formatter needs **no new permission** and no `docker-compose.yml` change. It is verified with mocks only. Until the owner runs these checks in one
+sitting, adapted video is "verified with mocks only". Report all results together.
+
+1. **Instagram.** Publish an adapted Reel and an adapted Feed video (cut and padded).
+2. **Facebook.** Publish an adapted Reel (a 16:9 source padded to 9:16 and cut to 90 s).
+3. **Threads.** Publish an adapted video (a frame rate above 60 fps lowered).
+4. **Crop.** Publish a cropped version with a focal point off-centre.
+5. **Trim.** Publish a trimmed version (start and end set).
+6. **Rewrap.** Publish one rewrap (a MOV, or an MP4 whose index is at the end) to Instagram.

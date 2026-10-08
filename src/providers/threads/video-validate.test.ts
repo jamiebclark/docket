@@ -28,7 +28,7 @@ describe("validateThreads video", () => {
   it("refuses a video over 5 minutes with Threads wording", () => {
     expect(codes([vid({ durationSeconds: 360 })])).toEqual(["video_too_long"]);
     expect(msg([vid({ durationSeconds: 360 })], "video_too_long")).toContain(
-      "6 minutes long; the limit is 5 minutes for Threads. Docket does not crop, trim or convert video yet.",
+      "6 minutes long; the limit is 5 minutes for Threads.",
     );
   });
 

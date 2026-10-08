@@ -25,10 +25,15 @@ export interface PostViewTarget {
   publishedAt: Date | null;
   lastError: string | null;
   inProgress: boolean;
+  /** True while the target waits for its adapted video: "Preparing video for <platform>". */
+  preparingVideo: boolean;
   attemptCount: number;
   actions: FailureActions;
   attempts: AttemptView[];
 }
+
+/** The status line shown beside the badge while a target waits for its adapted video. */
+export const preparingVideoLabel = (providerName: string) => `Preparing video for ${providerName}`;
 
 export type PostViewMedia = { id: string; deleted: true } | { id: string; deleted: false; thumbnailUrl: string; altText: string };
 
@@ -65,6 +70,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
         publishedAt: t.publishedAt,
         lastError: t.lastError,
         inProgress: hasLiveLease(t, now),
+        preparingVideo: t.status === "scheduled" && t.videoWaitSince !== null,
         attemptCount: t.attemptCount,
         actions: targetActions(canSchedule, t.status, account ?? null),
         attempts: await toAttemptViews(scope, await scope.attempts.listForTarget(t.id)),

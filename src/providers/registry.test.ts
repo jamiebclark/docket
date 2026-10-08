@@ -59,6 +59,23 @@ describe("provider registry", () => {
     bad({ maxVideos: 1 }, { postTypes: ["text", "image"] });
     expect(() => assertVideoCapabilities({ ...base, video: { maxVideos: 0 } })).not.toThrow();
   });
+  it("rejects bad formatter numbers and a recommended shape outside the range", () => {
+    const base = getProvider("mock").capabilities;
+    const bad = (video: typeof base.video) => expect(() => assertVideoCapabilities({ ...base, video })).toThrow(/Inconsistent video constraints/);
+    bad({ maxVideos: 1, maxVideoBitrate: 0 });
+    bad({ maxVideos: 1, audioBitrate: -1 });
+    bad({ maxVideos: 1, maxAudioSampleRate: Number.POSITIVE_INFINITY });
+    bad({ maxVideos: 1, maxAudioChannels: 1.5 });
+    bad({ maxVideos: 1, recommendedAspectRatio: Number.NaN });
+    bad({ maxVideos: 1, minAspectRatio: 0.5, maxAspectRatio: 2, recommendedAspectRatio: 3 });
+    bad({ maxVideos: 1, minAspectRatio: 0.5, maxAspectRatio: 2, byPostType: { reel: { recommendedAspectRatio: 0.4 } } });
+    expect(() =>
+      assertVideoCapabilities({
+        ...base,
+        video: { maxVideos: 1, minAspectRatio: 0.5, maxAspectRatio: 2, recommendedAspectRatio: 9 / 16, maxVideoBitrate: 1, maxAudioChannels: 2 },
+      }),
+    ).not.toThrow();
+  });
   it("rejects bad post type choices and per-type limits", () => {
     const base = getProvider("mock").capabilities;
     const opt = (type: "video" | "reel" | "story") => ({ type, label: type, description: type });

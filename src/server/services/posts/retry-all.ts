@@ -4,6 +4,7 @@ import { retryAllMessage, SKIP_REASONS, type RetryAllSkipReason, type SkipCounts
 import type { AccountRecord } from "../../dal/accounts";
 import { ConflictError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
+import { syncVideoVersions } from "../video-versions";
 import { need, withLockedTarget } from "./locked";
 import { retryBlockedKey, retryLockedTarget } from "./retry";
 
@@ -128,7 +129,9 @@ export async function retryAllFailed(scope: ProjectScope, input: unknown): Promi
 /** One target, one transaction: its post's locks and nothing else (research D1). */
 async function retryOne(scope: ProjectScope, targetId: string, mode: "now" | "requeue"): Promise<Step> {
   try {
-    return await withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, _post, target, now): Promise<Step> => {
+    let postId: string | null = null;
+    const step = await withLockedTarget(scope, targetId, { post: ["schedule"] }, async (tx, post, target, now): Promise<Step> => {
+      postId = post.id;
       if (target.status !== "failed") return { kind: "skip", reason: "no_longer_failed" };
       const key = blockedKeyFor((await tx.accounts.get(target.socialAccountId)) ?? undefined);
       if (key) return { kind: "skip", reason: key };
@@ -137,6 +140,8 @@ async function retryOne(scope: ProjectScope, targetId: string, mode: "now" | "re
       if (r.reason === "no_active_slots" || r.reason === "no_free_occurrence") return { kind: "skip", reason: "no_free_slot", exhausted: true };
       return { kind: "skip", reason: "cannot_publish" };
     });
+    if (postId && step.kind === "retried") await syncVideoVersions(scope, postId, { requeueFailed: true, targetIds: [targetId] });
+    return step;
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof ConflictError) return { kind: "skip", reason: "no_longer_failed" };
     throw e;

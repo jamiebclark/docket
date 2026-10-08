@@ -1,4 +1,4 @@
-// Spec US5 (G15): a video that does not fit a Reel is refused by the engine's re-check, with no Graph or rupload request.
+// Spec US5 (G15): a video that does not fit a Reel, and that the formatter cannot fix (024: a too-short one; a wrong shape is now adapted), is refused by the engine's re-check, with no Graph or rupload request.
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runTick } from "../../../src/server/scheduler";
 import { setStorageForTests } from "../../../src/server/storage";
@@ -25,11 +25,11 @@ afterAll(async () => {
 
 describe("a Reel that breaks a Reel limit is refused at publish time", () => {
   it("fails with the Reel wording and makes no Graph or rupload request", async () => {
-    const { row } = await facebookVideoSetup(storage, "landscape reel", { postType: "reel", video: { width: 1920, height: 1080 } });
+    const { row } = await facebookVideoSetup(storage, "short reel", { postType: "reel", video: { width: 1080, height: 1920, durationSeconds: 2 } });
     await atTime(new Date(Date.now() + 60_000), () => runTick({ config: {} }));
     const after = await row();
     expect(after.status).toBe("failed");
-    expect(after.lastError).toContain("Facebook Reels must be 9:16 (vertical)");
+    expect(after.lastError).toContain("for a Facebook Reel");
     expect(graph.requests).toEqual([]);
   });
 });
