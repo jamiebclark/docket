@@ -184,6 +184,10 @@ text/UI pairs in both themes.
 - **Banners** span the full width between header and body
   (`alertStyles(tone, true)`).
 
+### Notification bell (header)
+
+`NotificationBell` sits in the signed-in header between the project switcher and the user menu, always rendered. The count badge hides at zero and caps at "99+"; the accessible name is the label ("3 unread problems"). The client part refreshes every 60 s while the tab is visible and announces politely only when the count rises. Its panel (`NotificationPanel`) lists up to 10 recent problems with `NotificationList`, moves focus to "Recent problems" on open and returns it to the bell on Escape. Without JavaScript the bell is a link to `/notifications`.
+
 ### Page anatomy
 
 1. `PageHeader` — `title`, optional `description`, `actions` (primary last).
@@ -253,6 +257,9 @@ full width, size `lg`.
 | `Icon` | `name`, `size` | The one UI icon set: Lucide (ISC), 24-px grid, 1.75 stroke, `currentColor`, always `aria-hidden` beside a text label. Names say what they mean (`failures`, `arrowLeft`). Add one by adding a line to `ICONS` in `scripts/generate-icons.mjs` and running `pnpm icons`; never hand-draw paths, and never use emoji or Unicode symbols (← ✓ ⚠) as icons. |
 | `ProviderIcon` | `providerKey`, `size` | Platform mark (Simple Icons, CC0) on a tile in the brand colour; the mock provider gets a neutral "flask" tile. Decorative — show the platform name as text. Used on account cards, the Accounts page and composer previews. |
 | `AccountPicker` | `legend`, `hint`, `accounts` (with `unavailableReason`), `value`, `onChange`, `idPrefix`, `showStatus` | Many-of-many account choice as checkbox cards (mark, name, platform, status, reason). "n of m selected" and Select all / Clear; a filter box past 8 accounts. Used by Compose, Generate and Jobs. |
+| `RelativeTime` | `value`, `timeZone`, `now` | "12 min ago" text; the absolute time and zone are the tooltip and screen-reader text. Pure: `now` is a prop. Used by the bell panel and the notifications list. |
+| `NotificationList` | `items`, `now` | Rows of outcome badge, project, platform/account, message and `RelativeTime`; unread rows carry a "New" badge. Shared by the panel and `/notifications`. |
+| `ProblemsCallout` | `scope` | "Problems since you last looked" line on a project's home and Posts; shows only when the count is above zero. |
 | `Logo`, `LogoMark`, `AuthShell` | — | §2, §6. |
 
 ### Choosing a control for one-of-many
