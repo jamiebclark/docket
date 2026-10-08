@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { NotificationToggle } from "@/components/notifications/NotificationToggle";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import { SignedInHeader } from "@/components/shell/SignedInHeader";
-import { buttonStyles } from "@/components/ui/Button";
+import { Button, buttonStyles } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -14,6 +14,7 @@ import { getSession } from "@/server/auth/session";
 import { forMyProjects } from "@/server/dal";
 import { myProjectStates, recentPanel } from "@/server/services/notifications";
 import { mutedConfirmation } from "@/lib/notifications/text";
+import { markAllRead } from "./actions";
 
 export const metadata: Metadata = { title: "Notifications" };
 export const dynamic = "force-dynamic";
@@ -28,6 +29,8 @@ export default async function NotificationsPage({ searchParams }: Props) {
   const panel = await recentPanel(set, now);
   const states = await myProjectStates(set);
   const raw = await searchParams;
+  const marked = raw.marked === "1";
+  const busy = typeof raw.busy === "string" ? raw.busy.split(",").filter(Boolean) : [];
   const changed = typeof raw.changed === "string" ? states.find((s) => s.slug === raw.changed) : undefined;
 
   return (
@@ -50,12 +53,32 @@ export default async function NotificationsPage({ searchParams }: Props) {
         ) : (
           <div className="flex flex-col gap-6">
             {changed ? <Alert tone="success">{mutedConfirmation(changed.name, changed.on)}</Alert> : null}
+            {marked ? (
+              <Alert tone="success">
+                {busy.length > 0 ? `Marked as read. Could not mark ${busy.join(", ")} as read; try again.` : "Marked as read."}
+              </Alert>
+            ) : null}
             <Card
               title="Recent problems"
               actions={
-                <Link href="/activity?outcome=problems" prefetch={false} className={buttonStyles({ variant: "secondary", size: "sm" })}>
-                  View all problems
-                </Link>
+                <div className="flex items-center gap-2">
+                  {panel.unread.count > 0 ? (
+                    <form
+                      action={async (formData: FormData) => {
+                        "use server";
+                        await markAllRead(null, formData);
+                      }}
+                    >
+                      <input type="hidden" name="returnTo" value="/notifications" />
+                      <Button type="submit" variant="secondary" size="sm">
+                        Mark all as read
+                      </Button>
+                    </form>
+                  ) : null}
+                  <Link href="/activity?outcome=problems" prefetch={false} className={buttonStyles({ variant: "secondary", size: "sm" })}>
+                    View all problems
+                  </Link>
+                </div>
               }
             >
               {panel.state === "all_muted" ? (

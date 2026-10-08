@@ -127,6 +127,27 @@ describe("/notifications page and header", () => {
   });
 });
 
+describe("/notifications mark all as read", () => {
+  it("renders the form with its hidden returnTo only when something is unread, and the confirmations", async () => {
+    const p = await createProject({ name: "Markable" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    const render = async (q: Record<string, string> = {}) =>
+      (await renderAsync(await NotificationsPage({ searchParams: Promise.resolve(q) }))).replaceAll("<!-- -->", "");
+    expect(await render()).not.toContain("Mark all as read");
+    await recordEvent(p.id, "target_failed");
+    const html = await render();
+    expect(html).toContain("Mark all as read");
+    expect(html).toContain('name="returnTo" value="/notifications"');
+    expect(html).not.toContain("Marked as read.");
+    expect(await render({ marked: "1" })).toContain("Marked as read.");
+    const busy = await render({ marked: "1", busy: "Acme,Beta" });
+    expect(busy).toContain("Could not mark Acme, Beta as read; try again.");
+  });
+});
+
 describe("per-project notification controls", () => {
   it("names each project's button and shows the confirmation for ?changed", async () => {
     const p = await createProject({ name: "Togglable" });
