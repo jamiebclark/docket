@@ -1,12 +1,13 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { roles, type Role } from "../auth/access";
 import { getDb } from "../db/client";
 import { runForProjectSet } from "../db/cross-project";
-import { member, projects } from "../db/schema";
-import { createActivityReader, type ActivityRepo } from "./activity";
+import { member, notificationStates, projects } from "../db/schema";
+import { createActivityReader, type ActivityRecord, type ActivityRepo } from "./activity";
 import { createApiKeysRepo } from "./api-keys";
 import { NotFoundError } from "./errors";
 import { createMembersRepo } from "./members";
+import { createNotificationsRepo, createNotificationsSetReader } from "./notifications";
 import { crossProject, type SessionLike } from "./scope";
 
 export interface MyProject {
@@ -15,6 +16,8 @@ export interface MyProject {
   name: string;
   timeZone: string;
   role: Role;
+  /** The caller's own state for this project; null when there is no row (treated as notifications on). */
+  notifications: { muted: boolean; seenSeq: string } | null;
 }
 
 /** The caller's current projects and what may be read across them: the only cross-project reader (research P11). */
@@ -27,6 +30,17 @@ export interface ProjectSetScope {
   /** Names of one project's members, for actor labels. */
   memberNames(projectId: string): Promise<Map<string, string>>;
   apiKeyName(projectId: string, keyId: string): Promise<string | null>;
+  /** Problem notifications over the set (022). Every statement runs in the project-set section. */
+  readonly notifications: {
+    /** Unread attention events over the projects with notifications on, capped at 100. */
+    countUnread(): Promise<number>;
+    /** The newest attention events over the projects with notifications on. */
+    recent(limit: number): Promise<ActivityRecord[]>;
+    /** Projects (muted or not) with something newer than the position: the ones worth locking. */
+    projectsWithUnread(): Promise<string[]>;
+    /** One locked transaction for one project; an id outside the set throws NotFoundError before any SQL. */
+    write(projectId: string, change: { markRead: boolean; muted?: boolean }): Promise<"changed" | "unchanged" | "not_member">;
+  };
 }
 
 const REASON = "activity: my projects";
@@ -44,20 +58,31 @@ export async function forMyProjects(session: SessionLike | null): Promise<Projec
         name: projects.name,
         timeZone: projects.timezone,
         role: member.role,
+        muted: notificationStates.muted,
+        seenSeq: notificationStates.seenSeq,
       })
       .from(member)
       .innerJoin(projects, eq(projects.id, member.organizationId))
+      .leftJoin(
+        notificationStates,
+        and(eq(notificationStates.projectId, member.organizationId), eq(notificationStates.userId, member.userId)),
+      )
       .where(eq(member.userId, userId))
       .orderBy(projects.name),
   );
   const mine: MyProject[] = rows.flatMap((r) => {
     const role = r.role as Role;
-    return role in roles && roles[role].authorize({ post: ["view"] }).success ? [{ ...r, role }] : [];
+    if (!(role in roles && roles[role].authorize({ post: ["view"] }).success)) return [];
+    const { muted, seenSeq, ...rest } = r;
+    return [{ ...rest, role, notifications: muted === null || seenSeq === null ? null : { muted, seenSeq: seenSeq.toString() } }];
   });
   const projectIds = mine.map((p) => p.id);
   const reader = createActivityReader(db, projectIds, { memberUserId: userId });
   const inSet = <T>(fn: () => Promise<T>) => runForProjectSet({ reason: REASON, projectIds }, fn);
   const allowed = new Set(projectIds);
+  // Muted projects are left out of the count and the panel; the SQL re-checks the mute itself.
+  const unmutedIds = mine.filter((p) => p.notifications?.muted === false || p.notifications === null).map((p) => p.id);
+  const unmutedReader = createActivityReader(db, unmutedIds, { memberUserId: userId });
   const check = (projectId: string) => {
     if (!allowed.has(projectId)) throw new NotFoundError();
   };
@@ -68,6 +93,15 @@ export async function forMyProjects(session: SessionLike | null): Promise<Projec
     activity: {
       list: (q) => inSet(() => reader.list(q)),
       summary: (q) => inSet(() => reader.summary(q)),
+    },
+    notifications: {
+      countUnread: () => inSet(() => createNotificationsSetReader(db, unmutedIds, userId).countUnread()),
+      recent: (limit) => inSet(() => unmutedReader.listAttention({ projectIds: unmutedIds, userId, limit })),
+      projectsWithUnread: () => inSet(() => createNotificationsSetReader(db, projectIds, userId).projectsWithUnread()),
+      async write(projectId, change) {
+        check(projectId);
+        return inSet(() => createNotificationsRepo(db, projectId, userId).write(change));
+      },
     },
     async memberNames(projectId) {
       check(projectId);

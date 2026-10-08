@@ -28,6 +28,7 @@ import { createSlotsRepo, type SlotsRepo } from "./slots";
 import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
 import { createMembersRepo, type MembersRepo } from "./members";
+import { createNotificationsRepo, type NotificationsRepo } from "./notifications";
 import { createGenerationFailuresRepo, type GenerationFailuresRepo } from "./generation-failures";
 import { createSeriesRepo, type SeriesRepo } from "./series";
 import { createVoiceProfilesRepo, createVoiceVersionsRepo, type VoiceProfilesRepo, type VoiceVersionsRepo } from "./voice";
@@ -125,6 +126,8 @@ export interface ProjectScope {
   readonly apiKeys: ApiKeysRepo;
   readonly idempotency: IdempotencyRepo;
   readonly webhooks: WebhooksRepo;
+  /** The caller's own reading position and mute setting; job-runner and API-key scopes throw `ForbiddenError`. */
+  readonly notifications: NotificationsRepo;
   readonly projects: {
     get(): Promise<ProjectRecord | null>;
     setDefaultVoiceProfile(profileId: string | null): Promise<void>;
@@ -184,6 +187,14 @@ export function createSchedulingRepos(exec: Database, projectId: string) {
   };
 }
 
+/** API keys and the job runner belong to projects, not people: they have no notifications. */
+function forbiddenNotifications(): NotificationsRepo {
+  const deny = async (): Promise<never> => {
+    throw new ForbiddenError();
+  };
+  return { get: deny, unreadCount: deny, createAtCurrentPosition: deny, write: deny };
+}
+
 function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind: "member" }): ProjectScope {
   const scope: ProjectScope = {
     ...data,
@@ -206,6 +217,10 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     jobItems: createJobItemsRepo(exec, data.project.id),
     apiKeys: createApiKeysRepo(exec, data.project.id),
     idempotency: createIdempotencyRepo(exec, data.project.id),
+    notifications:
+      actor.kind === "member"
+        ? createNotificationsRepo(exec, data.project.id, data.membership.userId)
+        : forbiddenNotifications(),
     ...createSchedulingRepos(exec, data.project.id),
     projects: {
       get: () => getProject(data.project.id, exec),
