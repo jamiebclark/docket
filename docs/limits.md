@@ -98,7 +98,24 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | alt text length | 1000 |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: alt text length" |
 | media required | no |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: media required" |
 | text only | yes |  | docs/research/meta.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: text only" |
-| videos | 0 |  | not accepted in Docket yet (018 D4); researched limits arrive with entries 3, 4, 5 and 7 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: videos" |
+| videos | 1 |  | docs/research/meta-video.md ("Threads"); one video is a VIDEO post, more are carousel items | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
+| video with images | no |  | docs/research/meta-video.md ("Threads"); a single video cannot be combined with images | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
+| video containers | mp4, mov |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
+| video codecs | h264, hevc |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video codecs" |
+| audio codecs | aac |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: audio codecs" |
+| silent video | yes |  | docs/research/meta-video.md ("Threads"); silence is accepted (D2) | validateResolvedContent | `src/providers/validation.test.ts` "accepts a silent video unless the provider forbids it" |
+| video bytes | 1000000000 |  | docs/research/meta-video.md ("Threads"); 1 GB read as decimal (D2) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video bytes" |
+| max duration | 300 |  | docs/research/meta-video.md ("Threads"); 5 minutes | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: max duration" |
+| video max width | 1920 |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video max width" |
+| video min aspect | 0.01 |  | docs/research/meta-video.md ("Threads"); 1:100 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video min aspect" |
+| video max aspect | 10 |  | docs/research/meta-video.md ("Threads"); 10:1 | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: video max aspect" |
+| min frame rate | 23 |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: min frame rate" |
+| max frame rate | 60 |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: max frame rate" |
+| carousel videos | 20 |  | docs/research/meta-video.md ("Threads"); images and videos count together toward the 2 to 20 items | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "threads: carousel videos" |
+| carousel video with images | yes |  | docs/research/meta-video.md ("Threads"); a carousel may mix images and videos | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
+| note: carousel items | 2 to 20, images and videos together |  | docs/research/meta-video.md ("Threads") | validateResolvedContent | `src/providers/threads/video-validate.test.ts` "holds 20 mixed items and refuses 21 with too_many_items" |
+| note: video processing ceiling | 60 min |  | Docket choice; 5 minutes is guidance, not a hard stop (D6) | Threads step machine | `tests/integration/threads/video-failures.test.ts` "a single video moves to the 5-minute pace after 5 minutes and fails at 60 minutes within 17 reads" |
+| note: video items checked before the carousel | each video item reads FINISHED before `create_carousel` |  | conservative choice, not documented by Meta (D5) | Threads step machine | `tests/integration/threads/video-carousel.test.ts` "reads the second item only after the first finishes" |
 | publish limit | 250 / 86400 s |  | docs/research/meta.md (250 posts / 24 h) | engine deferral | `tests/integration/limits/enforcement.test.ts` "threads: publish limit 250 / 86400 s" |
 | note: carousel minimum | 2 |  | docs/research/meta.md; one image publishes as an image post (D15) | post type inference | `tests/integration/threads/publish-e2e.test.ts` "publishes one image through IN_PROGRESS then FINISHED" |
 

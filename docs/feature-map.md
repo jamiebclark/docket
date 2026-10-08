@@ -13,7 +13,7 @@ spec is written.
   each image for each target before publishing. A video formatter would follow the same pattern.
 - **Video groundwork (018).** MP4 and MOV upload to the media library (and the picker) by resumable multipart upload
   straight to the bucket, ffprobe facts, metadata stripping and a poster frame in the worker, per-provider `video`
-  capabilities with composer warnings, and ffmpeg in the image. Instagram publishes video as of 019 and Facebook as of 021; no other provider does yet, and generation ignores videos.
+  capabilities with composer warnings, and ffmpeg in the image. Instagram publishes video as of 019, Facebook as of 021 and Threads as of 023; no other provider does yet, and generation ignores videos.
   Not yet owned by any spec: API video upload, a generator that uses posters, and resuming an upload after a page reload.
 - **Instagram video (019).** Reels, Feed video (a Reel shared to the feed, chosen per post in the composer) and
   carousels that mix images and videos, with per-type limits, video status polling and a daily container allowance.
@@ -24,6 +24,11 @@ spec is written.
   upload and status checks that resume across ticks, and a 30-posts-per-24-hours Reel allowance. Verified with mocks
   only until the live checks in `docs/meta-setup.md` are done. Not yet owned by any spec: multiple videos or video
   with images in one Facebook post, cover frames and the optional Reel fields, and resumable upload for very large files.
+- **Threads video (023).** A single video post and carousels that mix images and videos (up to 20 items at the provider; Docket's
+  10-item post cap still applies), with video status checks before the carousel, a 60-minute ceiling and plain error
+  explanations. Verified with mocks only until the live checks in `docs/meta-setup.md` are done. Not yet owned by any spec:
+  resumable or byte upload for Threads, a cover or thumbnail for Threads video, posts of more than 10 items, API video upload
+  and generator video.
 
 ## Video (other platforms not built)
 
@@ -49,7 +54,7 @@ The build prompt left video out of scope but kept room for it. `PostType` alread
 |---|---|---|
 | **Facebook Page Reels** (Built, 021) | Yes, through the Reels Publishing API: `POST /{page-id}/video_reels` with `upload_phase=start`, upload to `rupload.facebook.com`, then `finish` with `video_state=PUBLISHED` | Three-step upload, then polling. Separate from the image flow |
 | **Facebook Page video** (Built, 021) | Yes (Page `/videos`) | Built: one `videos` request with `file_url`, chosen per target as Page video or Reel. Not yet owned: byte or chunked upload, Page video status checks, optional fields (title, place, thumbnail, collaborators, draft), Facebook-side scheduling, API video upload, generator video |
-| **Threads video** | Yes (`media_type=VIDEO`, also in carousels) | Same container-and-poll pattern as Instagram |
+| **Threads video** (Built, 023) | Yes (`media_type=VIDEO`, also in carousels) | Same container-and-poll pattern as Instagram |
 | **Bluesky video** | Yes (`app.bsky.embed.video`: MP4 up to 300 MB, about 25 videos a day; the maximum duration is not documented officially) | Upload to the video service, then poll the job |
 | **TikTok** | Yes, through the Content Posting API (video and photo posts). Until the app passes TikTok's audit (its length is not published), every post is forced private (`SELF_ONLY`) whatever privacy you ask for. Photo posts can only be pulled from a URL on a domain the deployer has verified with TikTok. Videos can be uploaded directly | A new provider and OAuth app, plus the audit. TikTok also requires its own posting UI elements (privacy picker, interaction toggles), so the composer needs TikTok-specific fields |
 
@@ -73,7 +78,7 @@ follows subjects would be a later, optional step.
 
 1. Groundwork (video in the media library, `ffprobe`, worker transcoding).
 2. Instagram Reels and feed video, which reuse the existing container flow (built in 019).
-3. Facebook Reels and Page video (built in 021) and Threads video.
+3. Facebook Reels and Page video (built in 021) and Threads video (built in 023).
 4. Video formatter (crop and fit for each target).
 5. Bluesky video.
 6. TikTok: start the developer app and audit early, because the audit takes weeks.

@@ -1,15 +1,31 @@
 import { docsUrl } from "@/lib/docs";
 import { graphRequest, type GraphOutcome } from "../meta/graph";
-import { classifyGraphError, graphStepError, graphSummary, scrub } from "../meta/errors";
+import { classifyGraphError, graphStepError, graphSummary } from "../meta/errors";
 import type { AttemptSummary, PublishContext, StepResult } from "../types";
 import { threadsApp } from "./config";
 import { readThreadsCredentials } from "./credentials";
 import { QUOTA_RETRY_MS, readQuota } from "./quota";
-import { CHECK_INTERVAL_MS, CONTAINER_SAFE_AGE_MS, FIRST_CHECK_DELAY_MS, initialState, MAX_RECREATIONS, PROCESSING_CAP_MS, type ThreadsState } from "./state";
+import {
+  CHECK_INTERVAL_MS,
+  CONTAINER_SAFE_AGE_MS,
+  FIRST_CHECK_DELAY_MS,
+  initialState,
+  MAX_RECREATIONS,
+  planOf,
+  PROCESSING_CAP_MS,
+  VIDEO_FIRST_CHECK_DELAY_MS,
+  VIDEO_PROCESSING_CAP_MS,
+  videoCheckDelayMs,
+  type ThreadsPlan,
+  type ThreadsState,
+} from "./state";
+import { itemParams, readStatus, STATUS_FIELDS, videoContainerParams } from "./requests";
 import { threadsStepFor, validState } from "./steps";
+import { VIDEO_CEILING_TEXT, videoErrorText } from "./video-errors";
 
 const PLATFORM = "Threads";
 const URL_HINT = ` Images must be at a public URL (see ${docsUrl("storage")}).`;
+const VIDEO_URL_HINT = ` Media must be at a public URL (see ${docsUrl("storage")}).`;
 const RETRY_HINT = " Retry the post to create it again.";
 
 const fatal = (error: string, summary?: AttemptSummary): StepResult => ({ kind: "fatal_error", error, ...(summary ? { summary } : {}) });
@@ -32,13 +48,15 @@ function summarize(
   };
 }
 
+const firstUnready = (progress: readonly { ready: boolean }[]) => progress.findIndex((p) => !p.ready);
+
 /** A fresh state for a container that must be created again, or null when the cap is reached. */
-function recreated(s: ThreadsState, count: number): ThreadsState | null {
+function recreated(s: ThreadsState, count: number | ThreadsPlan): ThreadsState | null {
   if (s.recreations >= MAX_RECREATIONS) return null;
   return { ...initialState(count), recreations: s.recreations + 1 };
 }
 
-function recreate(s: ThreadsState, count: number, why: string): StepResult {
+function recreate(s: ThreadsState, count: number | ThreadsPlan, why: string): StepResult {
   const next = recreated(s, count);
   if (!next) {
     return fatal(`Threads media expired before it could be published (tried ${MAX_RECREATIONS + 1} times). Retry the post.`, {
@@ -56,10 +74,13 @@ export async function advanceThreads(ctx: PublishContext): Promise<StepResult> {
 
   const { text, media } = ctx.content;
   const count = media.length;
-  const expected = threadsStepFor(ctx.state, { text, mediaCount: count });
+  const kinds = media.map((m) => m.kind ?? "image");
+  const expected = threadsStepFor(ctx.state, { text, mediaCount: count, kinds });
   if (expected.name !== ctx.step.name || expected.name === "invalid") return fatal("The post changed while publishing.");
 
-  const state = validState(ctx.state, count) ?? initialState(count);
+  const plan = planOf(count, kinds)!;
+  const isVideo = plan.mediaType === "VIDEO" || plan.kinds !== undefined;
+  const state = validState(ctx.state, plan) ?? initialState(plan);
   const graph = threadsApp();
   const user = ctx.account.externalId;
   const name = ctx.step.name;
@@ -79,6 +100,10 @@ export async function advanceThreads(ctx: PublishContext): Promise<StepResult> {
       params.media_type = "CAROUSEL";
       params.children = state.items.join(",");
       if (text.length > 0) params.text = text;
+    } else if (name === "create_container" && state.mediaType === "VIDEO") {
+      const item = media[0];
+      if (!item) return fatal("The post changed while publishing.");
+      Object.assign(params, videoContainerParams(item, text));
     } else if (name === "create_container" && state.mediaType === "TEXT") {
       params.media_type = "TEXT";
       params.text = text;
@@ -86,21 +111,23 @@ export async function advanceThreads(ctx: PublishContext): Promise<StepResult> {
       const index = name === "create_container" ? 1 : Number(name.slice("create_item_".length));
       const item = media[index - 1];
       if (!item) return fatal("The post changed while publishing.");
-      params.media_type = "IMAGE";
-      params.image_url = item.url;
       if (name !== "create_container") {
-        params.is_carousel_item = "true";
+        const kind = kinds[index - 1] ?? "image";
+        Object.assign(params, itemParams(kind, item));
         request.imageIndex = index;
-      } else if (text.length > 0) {
-        params.text = text;
+        if (kind === "video") request.itemKind = "video";
+      } else {
+        params.media_type = "IMAGE";
+        params.image_url = item.url;
+        if (text.length > 0) params.text = text;
+        if (item.altText.trim().length > 0) params.alt_text = item.altText;
       }
-      if (item.altText.trim().length > 0) params.alt_text = item.altText;
     }
     const outcome = await call("POST", `/${user}/threads`, params);
     const failed = failure(outcome, request);
     if (failed) {
       if (failed.kind === "fatal_error" && !failed.credentialsInvalid && /fetch|download|retriev|url/i.test(failed.error)) {
-        return { ...failed, error: failed.error + URL_HINT };
+        return { ...failed, error: failed.error + (kinds.includes("video") ? VIDEO_URL_HINT : URL_HINT) };
       }
       return failed;
     }
@@ -109,7 +136,19 @@ export async function advanceThreads(ctx: PublishContext): Promise<StepResult> {
     const summary = summarize(name, state, outcome, id ? { containerId: id } : {}, request);
     if (!id) return { kind: "retryable_error", error: "Threads did not return a container id; trying again.", summary };
     if (name.startsWith("create_item_")) {
-      return { kind: "continue", state: { ...state, items: [...state.items, id] } satisfies ThreadsState, summary };
+      const index = Number(name.slice("create_item_".length));
+      const items = [...state.items, id];
+      if (!state.kinds) return { kind: "continue", state: { ...state, items } satisfies ThreadsState, summary };
+      const video = state.kinds[index - 1] === "video";
+      const itemProgress = [...(state.itemProgress ?? []), { createdAt: now.toISOString(), checks: 0, ready: !video }];
+      const next = { ...state, items, itemProgress } satisfies ThreadsState;
+      const first = items.length === count ? firstUnready(itemProgress) : -1;
+      return {
+        kind: "continue",
+        state: next,
+        ...(first >= 0 ? { notBefore: new Date(Date.parse(itemProgress[first]!.createdAt) + VIDEO_FIRST_CHECK_DELAY_MS) } : {}),
+        summary,
+      };
     }
     return {
       kind: "continue",
@@ -119,40 +158,103 @@ export async function advanceThreads(ctx: PublishContext): Promise<StepResult> {
     };
   }
 
+  // --- check_item_<k> -----------------------------------------------------------------------
+  if (name.startsWith("check_item_")) {
+    const position = Number(name.slice("check_item_".length));
+    const itemId = state.items[position - 1];
+    const progress = state.itemProgress?.[position - 1];
+    if (!itemId || !progress) return fatal("The post changed while publishing.");
+    const request = { containerId: itemId, itemIndex: position, itemKind: "video" };
+    const outcome = await call("GET", `/${itemId}`, { fields: STATUS_FIELDS });
+    const failed = failure(outcome, request);
+    if (failed) return failed;
+    if (outcome.kind !== "ok") return fatal("Unexpected Threads response.");
+    const { status: code, errorMessage } = readStatus(outcome.body, [token]);
+    const summary = (statusCode: string) =>
+      summarize(
+        name,
+        state,
+        outcome,
+        { statusCode, checks: progress.checks, recreations: state.recreations, ...(errorMessage ? { errorMessage } : {}) },
+        request,
+      );
+    const withProgress = (p: typeof progress): ThreadsState => ({
+      ...state,
+      itemProgress: (state.itemProgress ?? []).map((q, i) => (i === position - 1 ? p : q)),
+    });
+    switch (code) {
+      case "FINISHED": {
+        const next = withProgress({ ...progress, ready: true, checks: progress.checks + 1 });
+        const first = firstUnready(next.itemProgress ?? []);
+        return {
+          kind: "continue",
+          state: next,
+          ...(first >= 0 ? { notBefore: new Date(Date.parse(next.itemProgress![first]!.createdAt) + VIDEO_FIRST_CHECK_DELAY_MS) } : {}),
+          summary: summary("FINISHED"),
+        };
+      }
+      case "IN_PROGRESS": {
+        const age = now.getTime() - Date.parse(progress.createdAt);
+        if (age >= VIDEO_PROCESSING_CAP_MS) return fatal(VIDEO_CEILING_TEXT, summary("IN_PROGRESS"));
+        return {
+          kind: "continue",
+          state: withProgress({ ...progress, checks: progress.checks + 1 }),
+          notBefore: new Date(now.getTime() + videoCheckDelayMs(age)),
+          summary: summary("IN_PROGRESS"),
+        };
+      }
+      case "ERROR":
+        return fatal(videoErrorText({ kind: "item", position }, errorMessage), summary("ERROR"));
+      case "EXPIRED":
+        return recreate(state, plan, "EXPIRED");
+      case "PUBLISHED":
+        return { kind: "ambiguous", error: "Threads reports this post as already published.", summary: summary("PUBLISHED") };
+      default:
+        return { kind: "retryable_error", error: "Threads returned an unknown container status.", summary: summary("unknown") };
+    }
+  }
+
   const container = state.container;
   if (!container) return fatal("The post changed while publishing.");
 
   // --- check_status -------------------------------------------------------------------------
   if (name === "check_status") {
-    const outcome = await call("GET", `/${container}`, { fields: "status,error_message" });
+    const outcome = await call("GET", `/${container}`, { fields: STATUS_FIELDS });
     const failed = failure(outcome, { containerId: container });
     if (failed) return failed;
     if (outcome.kind !== "ok") return fatal("Unexpected Threads response.");
-    const body = outcome.body as { status?: unknown; error_message?: unknown } | null;
-    const code = body?.status;
+    const { status: code, errorMessage } = readStatus(outcome.body, [token]);
     const summary = (statusCode: string) =>
-      summarize(name, state, outcome, { statusCode, checks: state.checks, recreations: state.recreations }, { containerId: container });
+      summarize(
+        name,
+        state,
+        outcome,
+        { statusCode, checks: state.checks, recreations: state.recreations, ...(errorMessage ? { errorMessage } : {}) },
+        { containerId: container },
+      );
     switch (code) {
       case "FINISHED":
         return { kind: "continue", state: { ...state, ready: true, checks: state.checks + 1 } satisfies ThreadsState, summary: summary("FINISHED") };
       case "IN_PROGRESS": {
         const created = state.createdAt ? Date.parse(state.createdAt) : now.getTime();
-        if (now.getTime() - created >= PROCESSING_CAP_MS) {
-          return fatal("Threads did not finish processing the post.", summary("IN_PROGRESS"));
+        const age = now.getTime() - created;
+        if (isVideo ? age >= VIDEO_PROCESSING_CAP_MS : age >= PROCESSING_CAP_MS) {
+          return fatal(isVideo ? VIDEO_CEILING_TEXT : "Threads did not finish processing the post.", summary("IN_PROGRESS"));
         }
         return {
           kind: "continue",
           state: { ...state, checks: state.checks + 1 } satisfies ThreadsState,
-          notBefore: new Date(now.getTime() + CHECK_INTERVAL_MS),
+          notBefore: new Date(now.getTime() + (isVideo ? videoCheckDelayMs(age) : CHECK_INTERVAL_MS)),
           summary: summary("IN_PROGRESS"),
         };
       }
       case "ERROR": {
-        const reason = typeof body?.error_message === "string" ? scrub(body.error_message, [token]).trim() : "";
+        if (isVideo) return fatal(videoErrorText(plan.mediaType === "VIDEO" ? { kind: "single" } : { kind: "carousel" }, errorMessage), summary("ERROR"));
+        const reason = errorMessage;
         return fatal(`Threads could not process the post${reason ? `: ${reason}` : " (status ERROR)"}.`.replace(/\.\.$/, "."), summary("ERROR"));
       }
       case "EXPIRED":
-        return recreate(state, count, "EXPIRED");
+        return recreate(state, plan, "EXPIRED");
       case "PUBLISHED":
         return { kind: "ambiguous", error: "Threads reports this post as already published.", summary: summary("PUBLISHED") };
       default:
@@ -162,8 +264,11 @@ export async function advanceThreads(ctx: PublishContext): Promise<StepResult> {
 
   // --- check_quota --------------------------------------------------------------------------
   if (name === "check_quota") {
-    const created = state.createdAt ? Date.parse(state.createdAt) : now.getTime();
-    if (now.getTime() - created >= CONTAINER_SAFE_AGE_MS) return recreate(state, count, "AGED");
+    const created = Math.min(
+      state.createdAt ? Date.parse(state.createdAt) : now.getTime(),
+      ...(state.itemProgress ?? []).map((p) => Date.parse(p.createdAt)),
+    );
+    if (now.getTime() - created >= CONTAINER_SAFE_AGE_MS) return recreate(state, plan, "AGED");
     const outcome = await call("GET", `/${user}/threads_publishing_limit`, { fields: "quota_usage,config" });
     if (outcome.kind === "graph_error" && classifyGraphError(outcome.error) === "invalid_token") {
       return failure(outcome, {})!;

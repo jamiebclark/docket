@@ -366,6 +366,12 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
 - **Publish-only ambiguity.** Only `publish` has `mayPublish: true`. A network failure or timeout after it was sent is `ambiguous`
   and is never retried; everything earlier is `retryable_error`. A status of `PUBLISHED` found while checking is also treated as
   ambiguous rather than published again.
+- **Video.** A single video is one container with `media_type=VIDEO` and `video_url`; a carousel may mix video items with image
+  items (`is_carousel_item=true`, no text, no alt text). Video items are status-checked before the parent is created, because it
+  is unverified whether Threads waits on its own. Video reads run on their own pace: 30 s after creation, then once a minute until
+  5 minutes, then every 5 minutes, and the target fails at the 60-minute ceiling. A refused video is explained in plain words
+  (`FAILED_DOWNLOADING_VIDEO`, `FAILED_PROCESSING_VIDEO`, `INVALID_DURATION`, `INVALID_FRAME_RATE`, `INVALID_BIT_RATE`,
+  `INVALID_ASPEC_RATIO`, matched as whole tokens); any other message is shown as sent, with secrets removed.
 - **Framework hooks it uses:** a custom counting rule (G9), a redirect requirement and callback hint (G10, G12), account notes
   (G13) and a held refresh (G11). Its tests are mocked HTTP only, and the DB clock is advanced rather than sleeping.
 

@@ -9,7 +9,7 @@ import { testDb } from "./db";
 import type { FakeGraph, GraphReply } from "./fake-graph";
 import { jpeg } from "./images";
 import { createDueTarget } from "./scheduling";
-import { createProjectWithMembers } from "./factories";
+import { createProjectWithMembers, createVideoAsset } from "./factories";
 import type { MemoryStorage } from "./storage";
 
 export const THREADS_USER_ID = "17841400000000001";
@@ -117,4 +117,43 @@ export function scriptThreads(fake: FakeGraph, userId = THREADS_USER_ID) {
     },
   };
   return api;
+}
+
+/**
+ * `threadsSetup`'s project, account and due target, carrying ready videos instead of images: `kinds` lists the post's
+ * items in order (default one video). Videos come from `createVideoAsset` facts (1,080 × 1,920, 30 s, H.264/AAC); the
+ * images are 400 × 300 JPEGs. `video` overrides the video facts.
+ */
+export async function threadsVideoSetup(
+  storage: MemoryStorage,
+  text: string,
+  kinds: readonly ("image" | "video")[] = ["video"],
+  opts: { video?: Parameters<typeof createVideoAsset>[1]; setup?: ThreadsSetupOptions } = {},
+) {
+  const base = await threadsSetup(storage, { ...opts.setup, text, imageCount: 0 });
+  const { projectId, postId } = base;
+  const repos = createSchedulingRepos(testDb(), projectId);
+  const ids: string[] = [];
+  for (let i = 0; i < kinds.length; i++) {
+    if (kinds[i] === "video") {
+      const video = await createVideoAsset(projectId, { width: 1080, height: 1920, durationSeconds: 30, ...opts.video });
+      await storage.put(video.storageKey, Buffer.from("not really a video"), "video/mp4"); // the engine checks the object exists
+      ids.push(video.id);
+    } else {
+      const body = await jpeg(400 + i, 300);
+      const key = `projects/${projectId}/media/${i}/original`;
+      await storage.put(key, body, "image/jpeg");
+      const asset = await repos.media.insert({
+        storageKey: key,
+        publicUrl: storage.publicUrl(key),
+        mimeType: "image/jpeg",
+        byteSize: body.length,
+        width: 400 + i,
+        height: 300,
+      });
+      ids.push(asset.id);
+    }
+  }
+  await repos.posts.setMedia(postId, ids);
+  return { ...base, mediaIds: ids };
 }

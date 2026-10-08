@@ -959,6 +959,60 @@ Judgement calls from `specs/021-facebook-video/spec.md` (D1–D15) and its plan 
 - **Migrations renumbered on merging main.** Main gained `0012_sudden_scarlet_spider` (019, Instagram video) while this branch was open. The activity schema is regenerated as `0013_foamy_colleen_wing.sql`, byte-for-byte the reviewed SQL, and the backfill is `0014_backfill_activity_events.sql`.
 - **All-projects list: limit before joining.** CI measured 1.3 s for the unfiltered all-projects first page at 200,000 events, against the 1 s budget. Each per-project branch had joined posts, targets, accounts and members over all of its rows before sorting. Now each branch takes its `limit + 1` events off the `(project_id, occurred_at, seq)` index first and joins only those. The joined tables are pinned through `projects.id = $n` so the scope harness still sees every table pinned. The summary is one `UNION ALL` query instead of one per project, and actor names load in parallel. Measured on a loaded development machine: the list went from 1,720 ms to under 340 ms.
 
+## 023 — Threads video (2026-10-08)
+
+Judgement calls from `specs/023-threads-video/spec.md` (D1–D12) and its plan (`research.md`, P1–P21). External facts come from `docs/research/meta-video.md` (Threads) and `docs/research/meta.md`. The branch and spec directory are numbered 023 because `022-problem-notifications` already exists in another session. Real publishing is verified with mocks only; the owed live checks are in `docs/meta-setup.md`.
+
+### Spec decisions
+
+- **D1 — A single Threads video is a `VIDEO` post; there is no "Post as" choice.** One container with `media_type=VIDEO`, `video_url` and the text. Post types become text, image, carousel and video.
+- **D2 — Threads video limits.** MP4 or MOV; H.264 or HEVC; AAC or silent; at most 1,000,000,000 bytes (decimal); at most 300 s, with no minimum; at most 1,920 px wide; aspect 0.01–10; 23–60 fps. Bitrates, sample rate, channels, scan, GOP, chroma, edit lists and moov placement are left to Threads, whose refusal is explained (D7).
+- **D3 — Carousel video items.** 2–20 items in any mix, all videos included, with the same limits as a single video. Items are created with `is_carousel_item=true`, `media_type=VIDEO` and `video_url`, with no text and no alt text.
+- **D4 — No alt text for video,** sent or checked. Image items keep theirs.
+- **D5 — Video items are checked before the carousel is created.** It is UNVERIFIED whether Threads waits on its own. `ERROR` fails, naming the item; `EXPIRED` recreates the whole post. *Reverse:* drop the item checks once a live check shows Threads waits.
+- **D6 — Video pace.** The first read is 30 s after creation, then once a minute until 5 min, then every 5 min. The target fails at 60 min after at most 17 reads. Image and text pace and the 5-minute cap are unchanged.
+- **D7 — Plain explanations** for `FAILED_DOWNLOADING_VIDEO`, `FAILED_PROCESSING_VIDEO`, `INVALID_DURATION`, `INVALID_FRAME_RATE`, `INVALID_BIT_RATE` and `INVALID_ASPEC_RATIO` (Threads' spelling). Any other message is shown as sent, with secrets removed.
+- **D8 — `video_url` is the public address of the stored original.** There is no byte, chunked or resumable upload (UNVERIFIED for Threads).
+- **D9 — Outcomes unchanged.** Only `publish` may publish. Everything before it is retryable or fatal, never ambiguous. `PUBLISHED` while checking is ambiguous.
+- **D10 — A changed post restarts from the first create step.** The state records the post kind, each item's kind, each video item's creation time and whether it is finished.
+- **D11 — No new rate or creation limit.** 250 posts per 24 h. A carousel counts once. No container cap is documented.
+- **D12 — One set of video limits** for the summary and the badges. The badge is "fits" or "will be refused", never "will be converted".
+
+### Generic changes
+
+These are fixes to existing helpers, inert for every provider before this entry.
+
+- **"Post as" only with a choice** (a fix to G20). `requirementsOf` sets `video.postType` only when the provider declares `postTypeChoices`; a `byPostType` entry alone no longer turns it on. Instagram and Facebook are unchanged. *Why:* Threads declares carousel limits but has no choice, and would otherwise show "Post as: video".
+- **Gigabyte labels.** `videoBytesLabel` prints GB from 1,000,000,000 bytes ("1 GB", "1.05 GB"). Smaller values are unchanged.
+- **Enforcement rows for a carousel override.** `videoRows` skips the single-video `videos` and `video with images` rows when `byPostType.carousel` is declared, as it already did with a choice. Such posts resolve to a carousel, which the override allows. The two `docs/limits.md` rows cite the shared validator test, as Instagram's do.
+
+### Plan decisions
+
+- **P1 — The base `video` block is the single video** (1 video, no images). `byPostType.carousel` allows 20 videos mixed with images and gives the summary its carousel line. `byPostType.video` carries only the "9:16 recommended" note.
+- **P4 — `validateThreads`.**
+  - The image planner skips video items; it used to refuse a narrow video as `image_too_small`.
+  - Video refusals end "for Threads. Docket does not crop, trim or convert video yet."
+  - `too_many_items` is raised only for mixed posts over 20, so image-only results are unchanged.
+- **P5 — Docket's 10-item post cap (`POST_MEDIA_MAX`) stays.** It already stops image carousels at 10 for every provider. Threads still declares its real 20, and 20-item carousels are proved at provider level. Raising the cap is unowned (`docs/feature-map.md`). This deviates from US2 #5 end to end.
+- **P8 — State stays `v: 1`.** `mediaType` gains `VIDEO`, plus optional `kinds` and `itemProgress`, so in-flight image targets resume unchanged.
+- **P10 — Threads keeps its own video pace constants,** equal in shape to Instagram's, so the two can be tuned apart.
+- **P11 — Item reads fall due 30 s after each item's own creation.** After an `IN_PROGRESS` read, the next is due at the video pace. A finished item is never read again.
+- **P12 — Every status read records `errorMessage`** (sanitised, at most 300 characters, token scrubbed) when Threads sends one, image reads included. The field is additive; image messages and outcomes are unchanged.
+- **P13 — Error codes are matched as whole tokens, case-sensitively,** in one function. Figures come from the declaration. *Reverse:* if the live check shows another `error_message` form, only that function changes.
+- **P14 — A refused create on a post with video says "Media must be at a public URL".** Image posts keep "Images must …".
+- **P15 — The 23-hour guard measures from the oldest container,** video items included.
+- **P19 — New test files only.** Existing Threads suites stay byte-for-byte unchanged.
+- **P21 — No `docker-compose.yml`, `.env.example`, migration or dependency change.**
+
+### Implementation outcome
+
+- Built as planned: the `VIDEO` container, video carousel items checked before the parent, the video pace with its 60-minute ceiling, plain error explanations, and the shared limits for summary and badges.
+- Three generic fixes landed (inert for other providers): "Post as" only with a declared choice (P2), gigabyte labels (P3), and no single-video enforcement rows when a carousel override is declared (P6).
+- P5: the 10-item post cap (`POST_MEDIA_MAX`) was kept, so no post reaches Threads' 20 items from the composer.
+- P12: `errorMessage` is now recorded on image status reads as well as video reads.
+- No compose, env, migration or dependency edit was needed (FR-025, P21).
+- Live checks are owed by the operator (`docs/meta-setup.md`, "Threads video: owed live checks").
+
 ## 022 — Problem notifications (2026-10-08)
 
 ### Spec decisions
