@@ -46,6 +46,10 @@ export const postTargetInputSchema = z.object({
   /** Absent keeps the stored choice; null clears it. */
   postType: z.enum(POST_TYPES, { error: "Choose a post type" }).nullish(),
   overrideText: z.string().max(POST_TEXT_MAX, { error: "The override text is too long" }).nullish(),
+  /** The provider's posting values (G25), parsed by the provider's own schema in the service. Absent keeps the stored value; null clears it. */
+  posting: z.unknown().optional(),
+  /** The fingerprint the person agreed to (G27). Only a member's save records it. */
+  consent: z.object({ fingerprint: z.string().max(80) }).nullish(),
 });
 
 export const postInputSchema = z.object({

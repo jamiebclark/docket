@@ -5,6 +5,7 @@ import { ForbiddenError, NotFoundError } from "../dal/errors";
 import type { ProjectScope } from "../dal/scope";
 import { listAccounts } from "./accounts";
 import { hasLiveLease } from "./posts/cancel";
+import { targetNoteFor } from "./posts/notes";
 import type { TargetStatus } from "../dal/targets";
 import { listEmptySlots, plannedTime } from "./queue";
 
@@ -20,6 +21,8 @@ export type CalendarItem =
       localTime: string;
       excerpt: string;
       movable: boolean;
+      /** The provider's short label for this target, or null. */
+      note?: string | null;
     }
   | { kind: "empty"; accountId: string; slotId: string; at: string; localTime: string };
 
@@ -115,6 +118,7 @@ export async function getCalendar(scope: ProjectScope, input: unknown = {}): Pro
     scope.can({ slot: ["view"] }) ? listEmptySlots(scope, { accountId, from: fromD, to: toD }) : Promise.resolve([]),
   ]);
 
+  const providerKeys = new Map(accounts.map((a) => [a.id, a.providerKey]));
   const items: CalendarItem[] = [];
   for (const { target: t, baseText } of rows) {
     const at = t.scheduledAt ?? t.publishedAt;
@@ -130,6 +134,7 @@ export async function getCalendar(scope: ProjectScope, input: unknown = {}): Pro
       localTime: plannedTime(at, t.slotId, tz).localTime,
       excerpt: Array.from(baseText).slice(0, 80).join(""),
       movable: t.status === "scheduled" && !hasLiveLease(t, now),
+      note: targetNoteFor(providerKeys.get(t.socialAccountId) ?? "", t.postingFields),
     });
   }
   for (const e of empties) {

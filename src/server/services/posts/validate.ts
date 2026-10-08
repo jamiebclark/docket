@@ -6,6 +6,7 @@ import type { AccountRecord } from "../../dal/accounts";
 import type { MediaRow } from "../../dal/media";
 import type { ProjectScope } from "../../dal/scope";
 import type { TargetRecord } from "../../dal/targets";
+import { consentIssueFor, parsedDetails, parsedPostingValues } from "./consent";
 import { adaptedMediaFor, itemOf } from "../media-variants";
 
 export interface TargetContent {
@@ -18,6 +19,12 @@ export interface TargetContent {
   chosenPostType?: PostType | null;
   /** The post's video edits by media id; a video without one uses the default edit. */
   videoEdits?: ReadonlyMap<string, VideoEdit>;
+  /** The target's stored posting values (G25); null or absent = never set. */
+  postingFields?: unknown | null;
+  /** The consent to judge: the stored record at the gate and the engine, the composer's fingerprint and live details in the check. */
+  consent?: { fingerprint: string; details: unknown | null } | null;
+  /** Live account details for the posting panel; absent = the consent's stored details. */
+  postingDetails?: unknown | null;
 }
 
 type Tx = Pick<ProjectScope, "targets" | "posts" | "media">;
@@ -35,11 +42,32 @@ export async function loadTargetContent(tx: Tx, target: TargetRecord): Promise<T
     referenced: ids.length,
     chosenPostType: target.chosenPostType,
     videoEdits: await tx.posts.listVideoEdits(target.postId),
+    postingFields: target.postingFields ?? null,
+    consent: target.consentFingerprint ? { fingerprint: target.consentFingerprint, details: target.consentDetails ?? null } : null,
   };
 }
 
 const FIELD_RANK = (field: string): number =>
-  field === "text" ? 0 : field === "postType" ? 1 : field === "media" ? 2 : 3 + Number(field.split(".")[1] ?? 0);
+  field === "text"
+    ? 0
+    : field === "postType"
+      ? 1
+      : field === "posting" || field.startsWith("posting.") || field === "consent"
+        ? 2
+        : field === "media"
+          ? 3
+          : 4 + Number(field.split(".")[1] ?? 0);
+
+/** What the provider's `validate` sees of the posting panel, or nothing for a provider without one (G25). */
+export function postingContentOf(provider: SocialProvider, content: TargetContent): Pick<PostContent, "posting"> {
+  if (!provider.posting) return {};
+  return {
+    posting: {
+      values: parsedPostingValues(provider, content.postingFields),
+      details: content.postingDetails !== undefined ? content.postingDetails : parsedDetails(provider, content.consent?.details),
+    },
+  };
+}
 
 /**
  * Provider validation of already-resolved content. The single core of every content check
@@ -71,12 +99,13 @@ export async function validateTargetContent(
   // An image the planner already refused (or could not adapt) would only repeat itself as a provider error.
   const planned = new Set(planIssues.filter((i) => i.severity === "error").map((i) => i.field));
   const postType = resolvePostType(provider.capabilities, media, content.chosenPostType ?? null);
-  const providerIssues = validateResolvedContent(provider, { text: content.text, media, postType }).filter((i) => !planned.has(i.field));
+  const providerIssues = validateResolvedContent(provider, { text: content.text, media, postType, ...postingContentOf(provider, content) }).filter((i) => !planned.has(i.field));
   const unavailable: ValidationIssue[] =
     content.referenced > content.assets.length
       ? [{ severity: "error", code: "media_unavailable", message: "An image on this post has been deleted.", field: "media" }]
       : [];
-  const merged = [...providerIssues, ...unavailable, ...planIssues];
+  const consent = consentIssueFor(provider, content);
+  const merged = [...providerIssues, ...(consent ? [consent] : []), ...unavailable, ...planIssues];
   return merged
     .map((issue, i) => ({ issue, i }))
     .sort((a, b) => FIELD_RANK(a.issue.field) - FIELD_RANK(b.issue.field) || a.i - b.i)

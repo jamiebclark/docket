@@ -19,6 +19,7 @@ import { resolvedEvent } from "../activity/classify";
 import { recordTargetEvent } from "../activity/record";
 import type { PostType } from "@/providers/types";
 import { assertPostTypeOffered, checkVideoEdits } from "./content";
+import { liveDetailsFor, postingColumn, settleConsent } from "./posting";
 
 export { applyDerivedStatus, derivePostStatus } from "./status";
 export { lockPost, withLockedTarget } from "./locked";
@@ -199,13 +200,16 @@ function pickTargets(all: TargetRecord[], ids: string[] | undefined): TargetReco
 export async function createDraft(scope: ProjectScope, input: unknown): Promise<PostDetail> {
   const parsed = createSchema.parse(input);
   need(scope, { post: ["edit"] });
+  const details = await liveDetailsFor(scope, parsed.targets);
   return scope.transaction(async (tx) => {
     need(tx, { post: ["edit"] });
     const now = await clock.now();
+    const postingCols = new Map<string, { postingFields?: unknown }>();
     for (const [i, target] of parsed.targets.entries()) {
       const account = await tx.accounts.get(target.accountId);
       if (!account) throw new NotFoundError();
       if (target.postType != null) assertPostTypeOffered(account.providerKey, target.postType, ["targets", i, "postType"]);
+      postingCols.set(target.accountId, postingColumn(account.providerKey, target.posting, i));
     }
     const locked = await tx.media.lockShared(parsed.mediaIds);
     if (locked.length !== new Set(parsed.mediaIds).size) throw new NotFoundError();
@@ -230,8 +234,10 @@ export async function createDraft(scope: ProjectScope, input: unknown): Promise<
         socialAccountId: t.accountId,
         ...(t.overrideText != null ? { overrideText: t.overrideText } : {}),
         chosenPostType: t.postType ?? null,
+        ...postingCols.get(t.accountId),
       })),
     );
+    await settleConsent(tx, post.id, new Map(parsed.targets.map((t) => [t.accountId, t])), details);
     await applyDerivedStatus(tx, post.id);
     return detail(tx, post.id);
   });
@@ -242,6 +248,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
   const patch = patchSchema.parse(patchInput);
   need(scope, { post: ["edit"] });
   if (patch.mediaIds) await prepareForScheduling(scope, id, { mediaIds: patch.mediaIds });
+  const details = await liveDetailsFor(scope, patch.targets ?? []);
   const updated = await scope.transaction(async (tx) => {
     need(tx, { post: ["edit"] });
     await lockPost(tx, id);
@@ -267,11 +274,12 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
     }
     if (patch.targets) {
       const wanted = new Map(patch.targets.map((t) => [t.accountId, t]));
+      const postingCols = new Map<string, { postingFields?: unknown }>();
       for (const [i, want] of patch.targets.entries()) {
-        if (want.postType == null) continue;
         const account = await tx.accounts.get(want.accountId);
         if (!account) throw new NotFoundError();
-        assertPostTypeOffered(account.providerKey, want.postType, ["targets", i, "postType"]);
+        if (want.postType != null) assertPostTypeOffered(account.providerKey, want.postType, ["targets", i, "postType"]);
+        postingCols.set(want.accountId, postingColumn(account.providerKey, want.posting, i));
       }
       for (const t of existing) {
         const want = wanted.get(t.socialAccountId);
@@ -282,6 +290,7 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
             overrideText: want.overrideText ?? null,
             // Absent keeps the stored choice; null clears it.
             ...(want.postType !== undefined ? { chosenPostType: want.postType } : {}),
+            ...postingCols.get(t.socialAccountId),
             ...(t.status === "cancelled" ? { status: "draft" as const } : {}),
           });
         }
@@ -296,9 +305,11 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
           socialAccountId: t.accountId,
           ...(t.overrideText != null ? { overrideText: t.overrideText } : {}),
           chosenPostType: t.postType ?? null,
+          ...postingCols.get(t.accountId),
         })),
       );
     }
+    await settleConsent(tx, id, new Map((patch.targets ?? []).map((t) => [t.accountId, t])), details);
     // A scheduled target must stay publishable: refuse the whole edit if any would now fail.
     const problems: Record<string, ValidationIssue[]> = {};
     for (const t of await tx.targets.listForPost(id)) {

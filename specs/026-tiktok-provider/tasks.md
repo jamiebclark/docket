@@ -25,18 +25,18 @@
 
 **⚠️ CRITICAL**: no story can start until this phase is done. Every hook must be inert for existing providers (contracts/generic-hooks.md).
 
-- [ ] T004 Add the G25–G28 and G13 types in `src/providers/types.ts`: `PostingDeclaration`/`PostingFieldView`, `PostContent.posting`, issue `field`, `AccountDetailsReader`, `ConsentDeclaration`, `exchangeCode` `callbackParams`, `accountNotes` `now`; all optional (contracts/generic-hooks.md)
-- [ ] T005 [P] Pass the callback query as `callbackParams` to `exchangeCode` in `src/server/services/connect.ts` (G28) and `now` to `accountNotes` in `src/server/services/accounts.ts` (G13)
-- [ ] T006 [P] Add `posting` and `consent` to `postTargetInputSchema` in `src/lib/validation/scheduling.ts`
-- [ ] T007 Store posting values and consent in `createDraft`/`updatePost` in `src/server/services/posts/index.ts`; load `TargetContent.posting`/`consent` and add `FIELD_RANK` in `src/server/services/posts/validate.ts`; pass `PostContent.posting` to the engine in `src/server/scheduler/publishing.ts`
-- [ ] T008 [P] Create `src/server/services/posts/notes.ts` (`targetNoteFor`); add `note` to `PostViewTarget` in `src/server/services/posts/view.ts`, `targets[].note` in `src/server/services/posts/list.ts`, `CalendarItem.note` in `src/server/services/calendar.ts`; add `notes` to `src/providers/requirements.ts` and render in `src/components/compose/RequirementsSummary.tsx`
-- [ ] T009 Create `src/server/services/account-details.ts` (`readAccountDetails`: project scope and permission first, renew via `refreshForPublish`, 60 s in-process cache, server only) (G26)
-- [ ] T010 Create `src/server/services/posts/consent.ts` (SHA-256 fingerprint over text, media ids, video edits, posting values, details; status; record on save only when server fingerprint matches; gate issue; engine refusal) and wire the gate and the engine's first-step refusal before credentials in `src/server/scheduler/publishing.ts` (G27)
-- [ ] T011 Fill `TargetCheck.posting`, `note` and summary notes, and read details before the save transaction, in `src/server/services/posts/compose.ts`
-- [ ] T012 [P] Test inertness of every hook with existing providers: `tests/integration/compose/posting-hooks-inert.test.ts` (null `posting`/`note`, ignored `callbackParams`/`now`, unchanged engine outcomes)
-- [ ] T013 [P] Unit and integration tests for G26 with a throwaway provider declaring a reader (cache reuse within 60 s, refresh first, no secrets to the composer): `src/server/services/account-details.test.ts`
-- [ ] T014 [P] Test G27 with a throwaway provider, then the gate paths (queue, schedule, publish now, approval, retry) and engine refusal: `tests/integration/posts/consent.test.ts`
-- [ ] T015 Run `pnpm typecheck` and the existing compose, connect, accounts and scheduler suites; fix regressions
+- [x] T004 Add the G25–G28 and G13 types in `src/providers/types.ts`: `PostingDeclaration`/`PostingFieldView`, `PostContent.posting`, issue `field`, `AccountDetailsReader`, `ConsentDeclaration`, `exchangeCode` `callbackParams`, `accountNotes` `now`; all optional (contracts/generic-hooks.md)
+- [x] T005 [P] Pass the callback query as `callbackParams` to `exchangeCode` in `src/server/services/connect.ts` (G28) and `now` to `accountNotes` in `src/server/services/accounts.ts` (G13)
+- [x] T006 [P] Add `posting` and `consent` to `postTargetInputSchema` in `src/lib/validation/scheduling.ts`
+- [x] T007 Store posting values and consent in `createDraft`/`updatePost` in `src/server/services/posts/index.ts`; load `TargetContent.posting`/`consent` and add `FIELD_RANK` in `src/server/services/posts/validate.ts`; pass `PostContent.posting` to the engine in `src/server/scheduler/publishing.ts`
+- [x] T008 [P] Create `src/server/services/posts/notes.ts` (`targetNoteFor`); add `note` to `PostViewTarget` in `src/server/services/posts/view.ts`, `targets[].note` in `src/server/services/posts/list.ts`, `CalendarItem.note` in `src/server/services/calendar.ts`; add `notes` to `src/providers/requirements.ts` and render in `src/components/compose/RequirementsSummary.tsx`
+- [x] T009 Create `src/server/services/account-details.ts` (`readAccountDetails`: project scope and permission first, renew via `refreshForPublish`, 60 s in-process cache, server only) (G26)
+- [x] T010 Create `src/server/services/posts/consent.ts` (SHA-256 fingerprint over text, media ids, video edits, posting values, details; status; record on save only when server fingerprint matches; gate issue; engine refusal) and wire the gate and the engine's first-step refusal before credentials in `src/server/scheduler/publishing.ts` (G27)
+- [x] T011 Fill `TargetCheck.posting`, `note` and summary notes, and read details before the save transaction, in `src/server/services/posts/compose.ts`
+- [x] T012 [P] Test inertness of every hook with existing providers: `tests/integration/compose/posting-hooks-inert.test.ts` (null `posting`/`note`, ignored `callbackParams`/`now`, unchanged engine outcomes)
+- [x] T013 [P] Unit and integration tests for G26 with a throwaway provider declaring a reader (cache reuse within 60 s, refresh first, no secrets to the composer): `src/server/services/account-details.test.ts`
+- [x] T014 [P] Test G27 with a throwaway provider, then the gate paths (queue, schedule, publish now, approval, retry) and engine refusal: `tests/integration/posts/consent.test.ts`
+- [x] T015 Run `pnpm typecheck` and the existing compose, connect, accounts and scheduler suites; fix regressions
 
 **Checkpoint**: generic hooks in place, all existing suites green.
 

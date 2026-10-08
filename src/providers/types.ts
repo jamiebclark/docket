@@ -231,6 +231,8 @@ export interface OAuthConnectGroup {
     redirectUri: string;
     /** The attempt's raw state, already validated, bound to this user and session, and consumed (G17). For per-attempt derivations such as a PKCE verifier; never store or echo it. */
     state: string;
+    /** A fresh copy of the callback's query (G28). Never echo it. */
+    callbackParams?: URLSearchParams;
     now: Date;
     signal: AbortSignal;
   }): Promise<CandidatesResult>;
@@ -271,6 +273,8 @@ export interface PostContent {
   media: readonly MediaItem[];
   /** The target's resolved post type. Absent = `resolvePostType(caps, media, null)`. */
   postType?: PostType;
+  /** The target's posting values and account details (G25). Absent for a provider without `posting`. */
+  posting?: { values: unknown | null; details: unknown | null };
 }
 
 export interface ValidationIssue {
@@ -325,7 +329,7 @@ export interface ValidationIssue {
     | "media_failed"
     | (string & {});
   message: string;
-  field: "text" | "media" | "postType" | `media.${number}`;
+  field: "text" | "media" | "postType" | "consent" | `media.${number}` | "posting" | `posting.${string}`;
   count?: number;
   limit?: number;
 }
@@ -394,6 +398,65 @@ export type RefreshResult =
   | { ok: true; credentials: unknown; expiresAt: Date | null; displayName?: string }
   | { ok: false; reason: string; transient?: boolean; retryAt?: Date };
 
+export interface PostingOptionView {
+  value: string;
+  label: string;
+  disabled?: { reason: string };
+}
+
+export type PostingFieldView = {
+  /** `[a-z][a-zA-Z0-9]*`, unique; issues use `posting.<key>`. */
+  key: string;
+  label: string;
+  help?: string;
+  disabled?: { reason: string };
+} & (
+  | { kind: "choice"; value: string | null; options: PostingOptionView[]; required: boolean; placeholder: string }
+  | { kind: "toggle"; value: boolean }
+  | { kind: "text"; value: string; maxLength: number; countingRule: TextCountingRule; optional: true }
+  | { kind: "fixed"; value: string; display: string; explanation: string; doc?: string }
+);
+
+/** Per-target posting fields (G25). */
+export interface PostingDeclaration<Values = unknown, Details = unknown> {
+  /** Parses stored or submitted values; a failure means "not set". */
+  valuesSchema: z.ZodType<Values>;
+  /** Pure, total. The fields to show, in order. `details` is null while loading or after a failed read. */
+  view(input: { values: Values | null; details: Details | null; postType: PostType }): PostingFieldView[];
+  /** Pure. A heading line for the panel, e.g. "Posting to Ada". */
+  heading?(details: Details | null): string | null;
+  /** Pure. An optional notice above the fields. */
+  notice?(): { text: string; doc?: string } | null;
+  /** Pure. Short label shown beside the target's status everywhere. */
+  targetNote?(values: Values | null): string | null;
+  /** Pure. Extra lines for the requirements summary. */
+  summaryNotes?(): string[];
+  /** Pure. A line shown under the preview. */
+  afterPreview?: string;
+}
+
+export type AccountDetailsResult<D> =
+  | { ok: true; details: D }
+  /** `message` is plain text, secrets scrubbed, at most 300 chars. */
+  | { ok: false; message: string; credentialsExpired?: boolean; transient: boolean };
+
+/** Live, non-secret account details for the composer (G26). */
+export interface AccountDetailsReader<Settings = unknown, D = unknown> {
+  schema: z.ZodType<D>;
+  read(input: {
+    account: { id: string; externalId: string; settings: Settings };
+    credentials: unknown;
+    now: Date;
+    signal: AbortSignal;
+  }): Promise<AccountDetailsResult<D>>;
+}
+
+/** Explicit consent before posting (G27). Requires `posting`. */
+export interface ConsentDeclaration<Values = unknown> {
+  /** Pure. The declaration shown beside "I agree". */
+  declaration(values: Values | null): string;
+}
+
 export interface SocialProvider<Settings = unknown, State = unknown> {
   /** Lowercase `[a-z0-9-]+`, unique, stored in `social_accounts.provider_key`. */
   key: string;
@@ -425,5 +488,8 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   stepFor(state: State | null, settings: Settings, content: StepContent): StepInfo;
   advance(ctx: PublishContext): Promise<StepResult>;
   /** Pure. Non-secret notes shown on the account card. Never receives credentials. A throw or a non-array → []. */
-  accountNotes?(input: { settings: Settings; credentialsExpireAt: Date | null }): string[];
+  accountNotes?(input: { settings: Settings; credentialsExpireAt: Date | null; now?: Date }): string[];
+  posting?: PostingDeclaration;
+  accountDetails?: AccountDetailsReader<Settings>;
+  consent?: ConsentDeclaration;
 }

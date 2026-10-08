@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ForbiddenError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
 import type { ProjectScope } from "../../dal/scope";
+import { targetNoteFor } from "./notes";
 import type { TargetRecord } from "../../dal/targets";
 
 export const POSTS_PAGE_SIZE = 25;
@@ -20,7 +21,7 @@ export interface PostListItem {
   needsDecision: boolean;
   /** Next scheduled time for live posts, else the latest published time. */
   relevantAt: Date | null;
-  targets: { id: string; accountId: string; accountName: string; status: TargetRecord["status"] }[];
+  targets: { id: string; accountId: string; accountName: string; status: TargetRecord["status"]; note: string | null }[];
 }
 
 export interface PostList {
@@ -47,7 +48,7 @@ export async function listPosts(scope: ProjectScope, input: unknown = {}): Promi
     limit: POSTS_PAGE_SIZE,
     offset: (q.page - 1) * POSTS_PAGE_SIZE,
   });
-  const names = new Map((await scope.accounts.list()).map((a) => [a.id, a.displayName]));
+  const accounts = new Map((await scope.accounts.list()).map((a) => [a.id, a]));
   return {
     items: rows.map((r) => ({
       id: r.post.id,
@@ -58,8 +59,9 @@ export async function listPosts(scope: ProjectScope, input: unknown = {}): Promi
       targets: r.targets.map((t) => ({
         id: t.id,
         accountId: t.socialAccountId,
-        accountName: names.get(t.socialAccountId) ?? "Removed account",
+        accountName: accounts.get(t.socialAccountId)?.displayName ?? "Removed account",
         status: t.status,
+        note: accounts.has(t.socialAccountId) ? targetNoteFor(accounts.get(t.socialAccountId)!.providerKey, t.postingFields) : null,
       })),
     })),
     total,

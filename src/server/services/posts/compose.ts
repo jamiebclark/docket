@@ -4,7 +4,7 @@ import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { requirementsOf, type RequirementsSummary } from "@/providers/requirements";
 import { findProvider } from "@/providers/registry";
 import { countText, countingRuleName } from "@/providers/text";
-import type { PostType, ValidationIssue } from "@/providers/types";
+import type { PostType, PostingFieldView, ValidationIssue } from "@/providers/types";
 import { choiceFor, resolvePostType } from "@/providers/post-type";
 import type { PostTypeOption } from "@/providers/types";
 import { durationLabel, videoStepWords } from "@/providers/video-labels";
@@ -18,11 +18,26 @@ import type { ProjectScope } from "../../dal/scope";
 import { nearQueuedWarnings, type Warning } from "../queue";
 import { resolveLocalDateTime } from "../queue/occurrences";
 import { assertPostTypeOffered, checkVideoEdits } from "./content";
-import { validateTargetContent } from "./validate";
+import { fingerprintOf, parsedPostingValues } from "./consent";
+import { targetNoteFor } from "./notes";
+import { readAccountDetails } from "../account-details";
+import { validateTargetContent, type TargetContent } from "./validate";
 
 const STARTED = ["publishing", "published", "ambiguous"] as const;
 
-const checkSchema = postInputSchema.extend({ postId: z.uuid().optional() });
+/** `refreshDetails` bypasses the account-details cache; only the composer's Retry sends it. */
+const checkSchema = postInputSchema.extend({ postId: z.uuid().optional(), refreshDetails: z.boolean().optional() });
+
+/** The posting panel of one target (G25–G27). */
+export interface PostingPanelView {
+  heading: string | null;
+  notice: { text: string; doc?: string } | null;
+  details: "ready" | "error";
+  detailsError: string | null;
+  fields: PostingFieldView[];
+  afterPreview: string | null;
+  consent: { declaration: string; fingerprint: string; agreed: boolean } | null;
+}
 
 /** What Docket will do with one video for one target (contracts/video-composer.md "Check response"). */
 export interface VideoTargetView {
@@ -63,6 +78,10 @@ export interface TargetCheck {
   canSchedule: boolean;
   /** What the account accepts; `null` exactly when `limit` is `null` (provider not registered). Present with no text and no media. */
   requirements: RequirementsSummary | null;
+  /** Null exactly when the provider declares no `posting`. */
+  posting?: PostingPanelView | null;
+  /** The provider's short label for this target, e.g. "Private on TikTok". */
+  note?: string | null;
 }
 
 export interface CompositionCheck {
@@ -88,6 +107,7 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
 
   const videoEdits = checkVideoEdits(assets, parsed.videoEdits);
   const stored = new Map<string, PostType | null>();
+  const storedPosting = new Map<string, unknown>();
   let editable = true;
   let reviewBlocked = false;
   if (parsed.postId) {
@@ -95,7 +115,10 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
     if (!post) throw new NotFoundError();
     reviewBlocked = post.reviewState === "needs_review";
     const existing = await scope.targets.listForPost(post.id);
-    for (const t of existing) stored.set(t.socialAccountId, t.chosenPostType);
+    for (const t of existing) {
+      stored.set(t.socialAccountId, t.chosenPostType);
+      storedPosting.set(t.socialAccountId, t.postingFields);
+    }
     editable = !existing.some((t) => (STARTED as readonly string[]).includes(t.status));
   }
 
@@ -109,10 +132,43 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
     const provider = findProvider(account.providerKey);
     const effectiveText = target.overrideText ? target.overrideText : parsed.baseText;
     const media = assets.map((a) => ({ url: a.publicUrl, mimeType: a.mimeType, width: a.width, height: a.height, bytes: a.byteSize, altText: a.altText, ...videoFieldsOf(a) }));
-    const issues =
-      (await validateTargetContent(scope, account, { text: effectiveText, assets, referenced: assets.length, chosenPostType: chosen, videoEdits }, { preview: true })) ?? [];
     const caps = provider?.capabilities ?? null;
     const resolved = resolvePostType(caps, media, chosen);
+    // G25–G27: values (input, else stored), live details (cached), and the fingerprint of the unsaved state.
+    let panel: PostingPanelView | null = null;
+    let values: unknown | null = null;
+    let postingIssues: ValidationIssue[] | null = null;
+    const content: TargetContent = { text: effectiveText, assets, referenced: assets.length, chosenPostType: chosen, videoEdits };
+    if (provider?.posting) {
+      values = parsedPostingValues(provider, target.posting !== undefined ? target.posting : (storedPosting.get(account.id) ?? null));
+      let details: unknown | null = null;
+      let detailsError: string | null = null;
+      if (provider.accountDetails) {
+        const read = await readAccountDetails(scope, account.id, parsed.refreshDetails ? { fresh: true } : {});
+        if (read.ok) details = read.details;
+        else detailsError = read.message;
+      }
+      content.postingFields = values;
+      content.postingDetails = details;
+      content.consent = target.consent?.fingerprint ? { fingerprint: target.consent.fingerprint, details } : null;
+      const fingerprint = provider.consent && !detailsError ? fingerprintOf(provider, content, details) : "";
+      panel = {
+        heading: provider.posting.heading?.(details) ?? null,
+        notice: provider.posting.notice?.() ?? null,
+        details: detailsError ? "error" : "ready",
+        detailsError,
+        fields: provider.posting.view({ values, details, postType: resolved }),
+        afterPreview: provider.posting.afterPreview ?? null,
+        consent: provider.consent
+          ? { declaration: provider.consent.declaration(values), fingerprint, agreed: !!fingerprint && target.consent?.fingerprint === fingerprint }
+          : null,
+      };
+      if (detailsError) {
+        postingIssues = [{ severity: "error", code: "details_unavailable", message: detailsError, field: "posting" }];
+      }
+    }
+    let issues = (await validateTargetContent(scope, account, content, { preview: true })) ?? [];
+    if (postingIssues) issues = [...issues.filter((i) => i.field !== "consent"), ...postingIssues];
     const choice = choiceFor(caps, media);
     const rule = provider?.capabilities.text.countingRule ?? null;
     const videos: VideoTargetView[] = [];
@@ -155,7 +211,15 @@ export async function checkComposition(scope: ProjectScope, input: unknown): Pro
       issues,
       videos,
       canSchedule: !!provider && account.status === "active" && !issues.some((i) => i.severity === "error"),
-      requirements: provider ? requirementsOf(provider.capabilities, { uploadTypes: UPLOAD_MIME_TYPES, postType: resolved }) : null,
+      requirements: provider
+        ? requirementsOf(provider.capabilities, {
+            uploadTypes: UPLOAD_MIME_TYPES,
+            postType: resolved,
+            notes: provider.posting?.summaryNotes?.() ?? [],
+          })
+        : null,
+      posting: panel,
+      note: provider?.posting ? targetNoteFor(account.providerKey, values) : null,
     });
   }
   return { targets, editable, reviewBlocked };

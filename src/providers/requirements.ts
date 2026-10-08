@@ -25,6 +25,8 @@ export interface Range {
 
 /** What one account accepts, read from its capabilities. Pure and JSON-safe: it travels in the check response. `null` = no limit Docket checks. */
 export interface RequirementsSummary {
+  /** Extra lines from the provider's posting declaration (G25); absent or empty for a provider without one. */
+  notes?: string[];
   text: {
     maxLength: number;
     countingRule: string;
@@ -142,7 +144,7 @@ function videoAdaptation(v: ReturnType<typeof videoLimitsFor>): { adapts: string
 
 export function requirementsOf(
   caps: ProviderCapabilities,
-  ctx: { uploadTypes: readonly string[]; postType?: PostType },
+  ctx: { uploadTypes: readonly string[]; postType?: PostType; notes?: readonly string[] },
 ): RequirementsSummary {
   const m = caps.media;
   const shown = shownTypeOf(caps, ctx.postType);
@@ -155,6 +157,7 @@ export function requirementsOf(
   const accepts = m.maxImages > 0;
   const output = m.outputMimeType ?? m.allowedMimeTypes[0];
   return {
+    ...(ctx.notes && ctx.notes.length > 0 ? { notes: [...ctx.notes] } : {}),
     text: {
       maxLength: caps.text.maxLength,
       countingRule: countingRuleName(caps.text.countingRule),

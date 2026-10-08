@@ -366,6 +366,7 @@ export async function handleOAuthCallback(
       code,
       redirectUri: redirectUriFor(),
       state,
+      callbackParams: new URLSearchParams(params),
       now,
       signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
     });
