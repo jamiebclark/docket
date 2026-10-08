@@ -264,7 +264,7 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
       postType,
     });
     // With a choice, a second video or an image makes a carousel, so these two are carousel rows below.
-    if (!choice) {
+    if (!choice && !caps.video.byPostType?.carousel) {
       rows.push(row("videos", "too_many_videos", Array.from({ length: v.maxVideos + 1 }, () => ({}))));
       if (v.withImages === false && caps.media.maxImages > 0) rows.push(row("video with images", "video_with_images", [{}], true));
     }

@@ -124,7 +124,7 @@ export function requirementsOf(
   const m = caps.media;
   const shown = shownTypeOf(caps, ctx.postType);
   const v = videoLimitsFor(caps, shown);
-  const hasChoice = (caps.postTypeChoices?.length ?? 0) > 0 || Object.keys(caps.video.byPostType ?? {}).length > 0;
+  const hasChoice = (caps.postTypeChoices?.length ?? 0) > 0;
   const option = caps.postTypeChoices?.flatMap((c) => c.options).find((o) => o.type === shown);
   // Only a provider that declares carousel video limits has a carousel part.
   const carouselLimits = caps.postTypes.includes("carousel") && caps.video.byPostType?.carousel ? videoLimitsFor(caps, "carousel") : null;

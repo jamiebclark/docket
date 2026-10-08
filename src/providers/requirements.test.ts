@@ -98,6 +98,32 @@ describe("requirementsOf", () => {
     }
   });
 
+  it("describes Threads' video limits from its declaration (data-model §7)", () => {
+    const r = requirementsOf(findProvider("threads")!.capabilities, { uploadTypes });
+    const v = r.video;
+    expect(v.postType).toBeNull();
+    expect(v.maxVideos).toBe(1);
+    expect(v.withImages).toBe(false);
+    expect(v.containers.map((c) => c.label)).toEqual(["MP4", "MOV"]);
+    expect(v.videoCodecs.map((c) => c.label)).toEqual(["H.264", "HEVC"]);
+    expect(v.audioCodecs.map((c) => c.label)).toEqual(["AAC"]);
+    expect(v.maxBytes?.label).toBe("1 GB");
+    expect(v.duration.max?.label).toBe("5 minutes");
+    expect(v.width.max?.label).toBe("1920 px");
+    expect(v.aspectRatio.min?.label).toBe("1:100");
+    expect(v.aspectRatio.max?.label).toBe("10:1");
+    expect(v.minFrameRate?.label).toBe("23 fps");
+    expect(v.maxFrameRate?.label).toBe("60 fps");
+    expect(v.notes).toEqual(["9:16 (vertical) is recommended."]);
+    expect(r.carousel).toMatchObject({
+      maxItems: 20,
+      mixed: true,
+      notes: ["A carousel holds 2 to 20 items, images and videos counted together."],
+    });
+    expect(r.carousel?.videoAspectRatio.min?.label).toBe("1:100");
+    expect(r.carousel?.videoAspectRatio.max?.label).toBe("10:1");
+  });
+
   it("describes the mock's video limits with labels", () => {
     const r = requirementsOf(findProvider("mock")!.capabilities, { uploadTypes }).video;
     expect(r.maxVideos).toBe(1);
@@ -202,8 +228,28 @@ describe("label helpers", () => {
       expect(requirementsOf(caps, { uploadTypes, postType: "video" }).video.notes).toEqual([]);
     });
 
+    it("shows no post type for per-type limits without a choice (P2)", () => {
+      const caps: ProviderCapabilities = {
+        ...findProvider("mock")!.capabilities,
+        video: { maxVideos: 1, byPostType: { video: { notes: ["Vertical is best."] } } },
+        postTypes: ["text", "image", "video"],
+      };
+      const r = requirementsOf(caps, { uploadTypes });
+      expect(r.video.postType).toBeNull();
+      expect(r.video.notes).toEqual(["Vertical is best."]);
+    });
+
+    it("keeps one Instagram and one Facebook post type per shown type", () => {
+      for (const key of ["instagram", "facebook"]) {
+        const caps = findProvider(key)!.capabilities;
+        for (const type of caps.postTypeChoices!.flatMap((c) => c.options.map((o) => o.type))) {
+          expect(requirementsOf(caps, { uploadTypes, postType: type }).video.postType?.value, `${key} ${type}`).toBe(type);
+        }
+      }
+    });
+
     it("leaves providers without choices or per-type limits unchanged", () => {
-      for (const key of ["mock", "threads", "bluesky", "x"]) {
+      for (const key of ["mock", "bluesky", "x"]) {
         const r = requirementsOf(findProvider(key)!.capabilities, { uploadTypes });
         expect(r.carousel, key).toBeNull();
         expect(r.video.postType, key).toBeNull();

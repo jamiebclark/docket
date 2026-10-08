@@ -18,7 +18,7 @@ import { runTokenRefresh } from "../../../src/server/scheduler/token-refresh";
 import { decryptCredentials } from "../../../src/server/services/accounts";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { atTime } from "../../helpers/clock";
-import { scriptThreads, threadsSetup, THREADS_TOKEN } from "../../helpers/threads-publish";
+import { scriptThreads, threadsSetup, threadsVideoSetup, THREADS_TOKEN } from "../../helpers/threads-publish";
 import { postsEnv } from "../../helpers/posts-env";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
@@ -305,6 +305,21 @@ describe("Threads credentials never leak", () => {
       () => scriptThreads(fake).create(["1002"]).status("1002", ["FINISHED"]).quota(3).publish({ kind: "reset_mid_body" }),
       "ambiguous",
     );
+
+    // A video ERROR whose error_message echoes the token, on a single video and on a carousel item.
+    for (const kinds of [["video"], ["image", "video"]] as const) {
+      fake.reset();
+      scriptThreads(fake).create(["1001", "1002", "1003"]).status(kinds.length === 1 ? "1001" : "1002", [
+        { status: "ERROR", error_message: `FAILED_PROCESSING_VIDEO for token ${THREADS_TOKEN}` },
+      ]);
+      const s = await threadsVideoSetup(storage, "video", kinds);
+      for (let i = 0; i < 6; i++) await s.tick(await s.afterNext(1_000));
+      const target = await s.row();
+      expect(target.status).toBe("failed");
+      seen.push(JSON.stringify(target));
+      seen.push(JSON.stringify(await forSchedulerProject(s.projectId).targets.get(s.targetId)));
+      seen.push(JSON.stringify(await forSchedulerProject(s.projectId).attempts.listForTarget(s.targetId)));
+    }
 
     const blob = `${seen.join("\n")}\n${output()}`;
     for (const secret of T_ALL) {

@@ -1003,3 +1003,12 @@ These are fixes to existing helpers, inert for every provider before this entry.
 - **P15 — The 23-hour guard measures from the oldest container,** video items included.
 - **P19 — New test files only.** Existing Threads suites stay byte-for-byte unchanged.
 - **P21 — No `docker-compose.yml`, `.env.example`, migration or dependency change.**
+
+### Implementation outcome
+
+- Built as planned: the `VIDEO` container, video carousel items checked before the parent, the video pace with its 60-minute ceiling, plain error explanations, and the shared limits for summary and badges.
+- Three generic fixes landed (inert for other providers): "Post as" only with a declared choice (P2), gigabyte labels (P3), and no single-video enforcement rows when a carousel override is declared (P6).
+- P5: the 10-item post cap (`POST_MEDIA_MAX`) was kept, so no post reaches Threads' 20 items from the composer.
+- P12: `errorMessage` is now recorded on image status reads as well as video reads.
+- No compose, env, migration or dependency edit was needed (FR-025, P21).
+- Live checks are owed by the operator (`docs/meta-setup.md`, "Threads video: owed live checks").

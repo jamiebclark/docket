@@ -153,6 +153,20 @@ Until the owner runs these four checks in one sitting, Facebook video is "verifi
 4. **Failed processing.** Make a Page video fail processing and see whether `fields=status` reports it (Docket does not poll
    Page videos today).
 
+## Threads video: owed live checks
+
+Threads video needs **no new permission**: `threads_content_publish` already covers it. There is no `docker-compose.yml` change.
+Until the owner runs these five checks in one sitting, Threads video is "verified with mocks only". Report all results together.
+
+1. **Single video.** Publish a 1,080 × 1,920, 30 s H.264/AAC MP4 with text. It should appear on Threads with the text.
+2. **Mixed carousel.** Publish a carousel of image, video and image. It should appear as one post with the items in order.
+3. **Do video items need to finish first?** Watch whether the item checks ever wait. If Threads accepts a parent built on
+   unfinished items, Docket's item checks can be dropped (decision D5).
+4. **Processing time.** Note how long the single video and the carousel items take to reach `FINISHED`; this informs the
+   60-minute ceiling.
+5. **A refused video's `error_message`.** Send a 15 fps or 6-minute file with a direct Graph call using the same token and note
+   the exact `error_message`, to confirm Docket still finds the error code in it.
+
 ## Threads
 
 Threads has its own app id and secret, separate from the App ID and App Secret above. You can add it to the same Meta app

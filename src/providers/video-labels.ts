@@ -31,8 +31,9 @@ export function durationLabel(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-/** Decimal megabytes with at most one decimal place. */
-export const videoBytesLabel = (n: number) => `${Number((n / 1_000_000).toFixed(1))} MB`;
+/** Decimal megabytes with at most one decimal place; decimal gigabytes with at most two from 1 GB up. */
+export const videoBytesLabel = (n: number) =>
+  n >= 1_000_000_000 ? `${Number((n / 1e9).toFixed(2))} GB` : `${Number((n / 1_000_000).toFixed(1))} MB`;
 
 /** `a:b` for a small exact fraction (0.5625 → "9:16", 16/9 → "16:9"), `1:n` for a tiny one (0.01 → "1:100"), else `r:1`. */
 export function ratioLabel(r: number): string {
