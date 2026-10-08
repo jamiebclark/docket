@@ -7,13 +7,12 @@ import { NotificationList } from "@/components/notifications/NotificationList";
 import { Alert } from "@/components/ui/Alert";
 import { Button, buttonStyles } from "@/components/ui/Button";
 import type { ActionResult } from "@/lib/action-result";
+import { CHANGED_EVENT } from "./poll";
 import { unreadDisplay, unreadLabel } from "@/lib/notifications/text";
 import type { NotificationPanel as PanelData, UnreadSummary } from "@/lib/notifications/types";
 
 type Load = { status: "loading" } | { status: "error" } | { status: "ready"; panel: PanelData };
 type MarkResult = ActionResult<{ count: number; busy: string[] }> | null;
-
-const CHANGED_EVENT = "docket:notifications-changed";
 
 /** The popover under the bell: the 10 newest problems with "Mark all as read". Opening and closing it marks nothing. */
 export function NotificationPanel({ onSummary }: { onSummary: (summary: UnreadSummary) => void }) {

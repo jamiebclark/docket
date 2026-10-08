@@ -8,6 +8,9 @@ vi.mock("next/navigation", async () => (await import("../../helpers/actions")).n
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
 
+import type { ReactNode } from "react";
+import ProjectActivityPage from "../../../src/app/p/[projectSlug]/activity/page";
+import { NotificationsChanged } from "../../../src/components/notifications/NotificationsChanged";
 import { ensureProblemsViewMarked } from "../../../src/components/notifications/request";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { unreadSummary } from "../../../src/server/services/notifications";
@@ -41,7 +44,7 @@ async function setup() {
 
 async function visit(path: string, extra: Record<string, string> = {}) {
   request.headers = new Headers({ "x-docket-path": path, ...extra });
-  await ensureProblemsViewMarked();
+  return await ensureProblemsViewMarked();
 }
 
 describe("viewing the problems marks them read", () => {
@@ -88,5 +91,31 @@ describe("viewing the problems marks them read", () => {
     expect(await count()).toBe(1);
     await recordEvent(a.id, "target_failed");
     expect(await count()).toBe(2);
+  });
+});
+
+/** Whether the element tree contains a NotificationsChanged element (server components are not expanded). */
+function hasLeaf(node: ReactNode): boolean {
+  if (Array.isArray(node)) return node.some(hasLeaf);
+  if (!node || typeof node !== "object" || !("props" in node)) return false;
+  if (node.type === NotificationsChanged) return true;
+  return hasLeaf((node.props as { children?: ReactNode }).children);
+}
+
+describe("telling the bell", () => {
+  it("resolves true only when the request marked a problems view", async () => {
+    const { a } = await setup();
+    expect(await visit(`/p/${a.slug}/activity?outcome=problems`)).toBe(true);
+    expect(await visit(`/p/${a.slug}/activity`)).toBe(false);
+    expect(await visit(`/p/${a.slug}/activity?outcome=problems`, { "next-router-prefetch": "1" })).toBe(false);
+  });
+
+  it("the project activity page renders the refresh leaf exactly when it marks read", async () => {
+    const { a } = await setup();
+    const props = { params: Promise.resolve({ projectSlug: a.slug }) };
+    request.headers = new Headers({ "x-docket-path": `/p/${a.slug}/activity?outcome=problems` });
+    expect(hasLeaf(await ProjectActivityPage({ ...props, searchParams: Promise.resolve({ outcome: "problems" }) }))).toBe(true);
+    request.headers = new Headers({ "x-docket-path": `/p/${a.slug}/activity` });
+    expect(hasLeaf(await ProjectActivityPage({ ...props, searchParams: Promise.resolve({}) }))).toBe(false);
   });
 });
