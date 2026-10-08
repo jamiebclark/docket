@@ -71,28 +71,39 @@ function declared(provider: SocialProvider): Map<string, string[]> {
     ["alt text length", media.maxAltTextLength],
   ];
   for (const [k, v] of optional) if (v !== undefined) m.set(k, [String(v)]);
-  const video = provider.capabilities.video;
+  const { byPostType, ...video } = provider.capabilities.video;
   m.set("videos", [String(video.maxVideos)]);
   if (video.maxVideos > 0) {
     const yesNo = (b: boolean) => (b ? "yes" : "no");
-    const listed: [string, string | undefined][] = [
-      ["video with images", video.withImages === undefined ? undefined : yesNo(video.withImages)],
-      ["video containers", video.containers?.join(", ")],
-      ["video codecs", video.videoCodecs?.join(", ")],
-      ["audio codecs", video.audioCodecs?.join(", ")],
-      ["silent video", video.silentAllowed === undefined ? undefined : yesNo(video.silentAllowed)],
-      ["video bytes", video.maxBytes?.toString()],
-      ["min duration", video.minDurationSeconds?.toString()],
-      ["max duration", video.maxDurationSeconds?.toString()],
-      ["video min width", video.minWidth?.toString()],
-      ["video max width", video.maxWidth?.toString()],
-      ["video min height", video.minHeight?.toString()],
-      ["video max height", video.maxHeight?.toString()],
-      ["video min aspect", video.minAspectRatio?.toString()],
-      ["video max aspect", video.maxAspectRatio?.toString()],
-      ["max frame rate", video.maxFrameRate?.toString()],
+    const listed = (v: Partial<typeof video>, prefix: string): [string, string | undefined][] => [
+      ["videos", prefix ? v.maxVideos?.toString() : undefined],
+      ["video with images", v.withImages === undefined ? undefined : yesNo(v.withImages)],
+      ["video containers", v.containers?.join(", ")],
+      ["video codecs", v.videoCodecs?.join(", ")],
+      ["audio codecs", v.audioCodecs?.join(", ")],
+      ["silent video", v.silentAllowed === undefined ? undefined : yesNo(v.silentAllowed)],
+      ["video bytes", v.maxBytes?.toString()],
+      ["min duration", v.minDurationSeconds?.toString()],
+      ["max duration", v.maxDurationSeconds?.toString()],
+      ["video min width", v.minWidth?.toString()],
+      ["video max width", v.maxWidth?.toString()],
+      ["video min height", v.minHeight?.toString()],
+      ["video max height", v.maxHeight?.toString()],
+      ["video min aspect", v.minAspectRatio?.toString()],
+      ["video max aspect", v.maxAspectRatio?.toString()],
+      ["min frame rate", v.minFrameRate?.toString()],
+      ["max frame rate", v.maxFrameRate?.toString()],
     ];
-    for (const [k, v] of listed) if (v !== undefined) m.set(k, [v]);
+    for (const [k, v] of listed(video, "")) if (v !== undefined && k !== "videos") m.set(k, [v]);
+    // One prefixed row per field a post type overrides: `carousel videos`, `carousel video min aspect` …
+    for (const [type, over] of Object.entries(byPostType ?? {})) {
+      const { notes: _notes, ...limits } = over;
+      for (const [k, v] of listed(limits, type)) if (v !== undefined) m.set(`${type} ${k}`, [v]);
+    }
+  }
+  if (provider.creationAllowance) {
+    const a = provider.creationAllowance;
+    m.set("creation allowance", [`${a.count} / ${a.windowSeconds} s`]);
   }
   m.set("media required", [media.required ? "yes" : "no"]);
   m.set("text only", [textOnlyAllowed ? "yes" : "no"]);
@@ -163,9 +174,15 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
         }
       });
 
-      it("marks only Facebook text length and images UNVERIFIED", () => {
+      it("marks only Facebook text length and images, and Instagram's carousel video aspect, UNVERIFIED", () => {
         const flagged = rows.filter((r) => r.source.includes("UNVERIFIED")).map((r) => r.category).sort();
-        expect(flagged).toEqual(provider.key === "facebook" ? ["images", "text length"] : []);
+        const expected =
+          provider.key === "facebook"
+            ? ["images", "text length"]
+            : provider.key === "instagram"
+              ? ["carousel video max aspect", "carousel video min aspect"]
+              : [];
+        expect(flagged).toEqual(expected);
       });
 
       it("marks interim values UNVERIFIED", () => {

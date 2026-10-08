@@ -3,13 +3,15 @@ import type { ApiPost, ApiTarget } from "@/lib/api/schemas";
 import type { AccountRecord } from "../../dal/accounts";
 import type { PostRecord } from "../../dal/posts";
 import type { TargetRecord } from "../../dal/targets";
+import { resolvePostType } from "../../../providers/post-type";
+import { findProvider } from "../../../providers/registry";
 import { plannedTime } from "../queue";
 
 export interface PostViewInput {
   post: PostRecord;
   targets: readonly TargetRecord[];
   accounts: ReadonlyMap<string, Pick<AccountRecord, "displayName" | "providerKey">>;
-  media: readonly { id: string; url: string | null; altText: string }[];
+  media: readonly { id: string; url: string | null; altText: string; kind?: "image" | "video" }[];
   timeZone: string;
   /** `null` when the creator is unknown (a former member, or no record). */
   createdBy: ApiPost["createdBy"];
@@ -19,6 +21,7 @@ export function toApiTarget(
   t: TargetRecord,
   account: Pick<AccountRecord, "displayName" | "providerKey"> | undefined,
   timeZone: string,
+  items: readonly { kind?: "image" | "video" }[] = [],
 ): ApiTarget {
   return {
     id: t.id,
@@ -35,6 +38,7 @@ export function toApiTarget(
     attemptCount: t.attemptCount,
     lastError: t.lastError,
     overrideText: t.overrideText,
+    postType: resolvePostType(account ? (findProvider(account.providerKey)?.capabilities ?? null) : null, items, t.chosenPostType),
   };
 }
 
@@ -60,6 +64,6 @@ export function toApiPost(input: PostViewInput): ApiPost {
     createdBy: input.createdBy,
     createdAt: post.createdAt.toISOString(),
     updatedAt: post.updatedAt.toISOString(),
-    targets: input.targets.map((t) => toApiTarget(t, input.accounts.get(t.socialAccountId), input.timeZone)),
+    targets: input.targets.map((t) => toApiTarget(t, input.accounts.get(t.socialAccountId), input.timeZone, input.media)),
   };
 }

@@ -16,6 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { PostType } from "../../../providers/types";
 import { postingSlots, socialAccounts } from "./accounts";
 import { apiKeys } from "./api";
 import { user } from "./auth";
@@ -156,6 +157,8 @@ export const postTargets = pgTable(
     slotId: uuid("slot_id").references(() => postingSlots.id, { onDelete: "set null" }),
     slotOccurrenceAt: timestamp("slot_occurrence_at", { withTimezone: true }),
     overrideText: text("override_text"),
+    /** The post type a person or API caller chose; null = the provider's default. */
+    chosenPostType: text("chosen_post_type").$type<PostType>(),
     stepState: jsonb("step_state"),
     inFlightStep: text("in_flight_step"),
     inFlightMayPublish: boolean("in_flight_may_publish"),
@@ -186,6 +189,10 @@ export const postTargets = pgTable(
     check(
       "post_targets_occurrence_is_slot",
       sql`${t.slotOccurrenceAt} IS NULL OR ${t.scheduleKind} = 'slot'`,
+    ),
+    check(
+      "post_targets_chosen_post_type_known",
+      sql`${t.chosenPostType} IS NULL OR ${t.chosenPostType} IN ('text','image','carousel','video','story','reel')`,
     ),
     check("post_targets_lease_pair", sql`(${t.leaseUntil} IS NULL) = (${t.leaseOwner} IS NULL)`),
     check(

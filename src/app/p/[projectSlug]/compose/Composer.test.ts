@@ -29,6 +29,7 @@ const target = (over: Partial<CheckResult["targets"][number]> = {}): CheckResult
   limit: 300,
   countingRule: "graphemes",
   postType: "text",
+  postTypeChoice: null,
   issues: [],
   canSchedule: true,
   requirements: requirementsOf(findProvider("bluesky")!.capabilities, { uploadTypes: UPLOAD_MIME_TYPES }),
@@ -186,5 +187,59 @@ describe("Composer", () => {
     const editor = render({ accounts: [], canManageAccounts: false });
     expect(editor).toContain("Ask an owner or admin");
     expect(editor).not.toContain('href="/p/demo/accounts"');
+  });
+});
+
+describe("Composer post type choice", () => {
+  const instagram = findProvider("instagram")!;
+  const choice = {
+    options: [
+      { type: "video" as const, label: "Feed video", description: "Shown in your feed and the Reels tab." },
+      { type: "reel" as const, label: "Reel", description: "Shown in the Reels tab only." },
+    ],
+    selected: "reel" as const,
+    default: "video" as const,
+  };
+  const withChoice = target({
+    providerName: "Instagram",
+    postType: "reel",
+    postTypeChoice: choice,
+    requirements: requirementsOf(instagram.capabilities, { uploadTypes: UPLOAD_MIME_TYPES, postType: "reel" }),
+  });
+  const video = { id: "v1", kind: "video", status: "ready", altText: "", thumbnailUrl: "/t.png" } as never;
+
+  it("renders a Post as fieldset with a legend, labelled radios named per account and descriptions", () => {
+    const html = render({ check: result([withChoice]), initialMedia: [video] });
+    expect(html).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Post as<\/legend>/);
+    expect(html).toContain('name="post-type-a1"');
+    const radios = [...html.matchAll(/<input type="radio"[^>]*>/g)].map((m) => m[0]).filter((t) => t.includes("post-type-a1"));
+    expect(radios).toHaveLength(2);
+    const reel = radios.find((t) => t.includes('value="reel"'))!;
+    expect(reel).toContain('checked=""');
+    expect(radios.find((t) => t.includes('value="video"'))).not.toContain("checked");
+    expect(html).toMatch(/<label[^>]*><input type="radio"[^>]*\/>Feed video<span/);
+    for (const tag of radios) {
+      const id = tag.match(/aria-describedby="([^"]+)"/)?.[1];
+      expect(id).toBeTruthy();
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).toContain("Shown in the Reels tab only.");
+  });
+
+  it("has a polite live line that is empty at first render", () => {
+    const html = render({ check: result([withChoice]), initialMedia: [video] });
+    expect(html).toMatch(/<p aria-live="polite" class="sr-only"><\/p>/);
+  });
+
+  it("renders no fieldset without postTypeChoice", () => {
+    const html = render({ check: result([target()]), initialMedia: [video] });
+    expect(html).not.toContain("Post as");
+    expect(html).not.toContain("post-type-a1");
+  });
+
+  it("labels videos in the preview list", () => {
+    const html = render({ check: result([withChoice]), initialMedia: [video] });
+    expect(html).toContain("Video 1");
+    expect(html).not.toContain("no alt text");
   });
 });

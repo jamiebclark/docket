@@ -1,6 +1,7 @@
 import { providerPublishLimits } from "../../src/providers/limits";
 import { mediaConstraintsOf, planImage, type ImagePlan, type MediaConstraints, type PlannedAsset } from "../../src/providers/media";
-import type { MediaItem, PublishLimit, SocialProvider } from "../../src/providers/types";
+import type { MediaItem, PostType, ProviderCapabilities, PublishLimit, SocialProvider } from "../../src/providers/types";
+import { videoLimitsFor } from "../../src/providers/validation";
 import type { VideoAssetOptions } from "./factories";
 import { UPLOAD_MIME_TYPES } from "../../src/server/services/media";
 import { validateResolvedContent } from "../../src/server/services/posts/validate";
@@ -189,47 +190,119 @@ export interface VideoRow {
   videos: VideoAssetOptions[];
   /** Attach one stored image as well. */
   withImage?: boolean;
-  /** The error the gate must refuse with. */
+  /** The error the gate must refuse with; with `codes`, any one of those. */
   code: string;
+  codes: readonly string[];
+  /** The post type the target is set to, for a provider that offers a choice. Absent = none chosen. */
+  chosenPostType?: PostType;
+  /** The type the post resolves to, so the row is checked against that type's limits. */
+  postType: PostType;
 }
 
 const CONTAINERS = ["mp4", "mov"] as const;
+
+/** The `MediaItem` a stored video row with these facts becomes, with the same defaults as `createVideoAsset`. */
+export function videoItem(o: VideoAssetOptions = {}): MediaItem {
+  const container = o.container ?? "mp4";
+  return {
+    url: "http://localhost:3000/media/x.mp4",
+    mimeType: container === "mov" ? "video/quicktime" : "video/mp4",
+    width: o.width ?? 1280,
+    height: o.height ?? 720,
+    bytes: o.byteSize ?? 5_000_000,
+    altText: "",
+    kind: "video",
+    video: {
+      container,
+      durationSeconds: o.durationSeconds ?? 20,
+      frameRate: o.frameRate === undefined ? 30 : o.frameRate,
+      videoCodec: o.videoCodec ?? "h264",
+      audioCodec: o.audioCodec === undefined ? "aac" : o.audioCodec,
+    },
+  };
+}
+
+/** The post a row builds, as the validator sees it: the image (if any) first, then the videos. */
+export function videoRowContent(provider: SocialProvider, row: VideoRow): { text: string; media: MediaItem[]; postType: PostType } {
+  const media: MediaItem[] = [];
+  if (row.withImage) media.push(image({ mimeType: provider.capabilities.media.allowedMimeTypes[0] ?? "image/jpeg" }));
+  media.push(...row.videos.map(videoItem));
+  return { text: "hi", media, postType: row.postType };
+}
 
 /**
  * One row per declared video category that can be broken. A list that already allows every value Docket accepts
  * (the mock's containers) or a bound that cannot be crossed (`silentAllowed: true`) has no refusing fact; those
  * rows are proved by `src/providers/validation.test.ts` instead, and docs/limits.md names that test.
+ *
+ * A provider with a `single_video` choice gets every base row once per option type (`<key>: <category>` for the
+ * default, `<key>: <category> (<type>)` for the others), and one row per bound a `byPostType` entry overrides.
  */
 export function videoRows(provider: SocialProvider): VideoRow[] {
-  const v = provider.capabilities.video;
+  const caps = provider.capabilities;
   const key = provider.key;
-  const row = (category: string, code: string, videos: VideoAssetOptions[], withImage = false): VideoRow => ({
-    title: `${key}: ${category}`,
-    category,
-    videos,
-    withImage,
-    code,
-  });
-  if (v.maxVideos === 0) return [row("videos", "video_not_accepted", [{}])];
-  const rows: VideoRow[] = [
-    row("videos", "too_many_videos", Array.from({ length: v.maxVideos + 1 }, () => ({}))),
-  ];
-  if (v.withImages === false && provider.capabilities.media.maxImages > 0) rows.push(row("video with images", "video_with_images", [{}], true));
-  const otherContainer = CONTAINERS.find((c) => v.containers && !v.containers.includes(c));
-  if (otherContainer) rows.push(row("video containers", "video_container_not_allowed", [{ container: otherContainer }]));
-  if (v.videoCodecs && !v.videoCodecs.includes("hevc")) rows.push(row("video codecs", "video_codec_not_allowed", [{ videoCodec: "hevc" }]));
-  if (v.audioCodecs && !v.audioCodecs.includes("opus")) rows.push(row("audio codecs", "audio_codec_not_allowed", [{ audioCodec: "opus" }]));
-  if (v.silentAllowed === false) rows.push(row("silent video", "audio_required", [{ audioCodec: null }]));
-  if (v.maxBytes !== undefined) rows.push(row("video bytes", "video_too_large", [{ byteSize: v.maxBytes + 1 }]));
-  if (v.minDurationSeconds !== undefined) rows.push(row("min duration", "video_too_short", [{ durationSeconds: Math.max(0, v.minDurationSeconds - 0.5) }]));
-  if (v.maxDurationSeconds !== undefined) rows.push(row("max duration", "video_too_long", [{ durationSeconds: v.maxDurationSeconds + 1 }]));
-  if (v.minWidth !== undefined) rows.push(row("video min width", "video_too_small", [{ width: v.minWidth - 1 }]));
-  if (v.maxWidth !== undefined) rows.push(row("video max width", "video_too_big", [{ width: v.maxWidth + 1 }]));
-  if (v.minHeight !== undefined) rows.push(row("video min height", "video_too_small", [{ height: v.minHeight - 1 }]));
-  if (v.maxHeight !== undefined) rows.push(row("video max height", "video_too_big", [{ height: v.maxHeight + 1 }]));
-  if (v.minAspectRatio !== undefined) rows.push(row("video min aspect", "video_aspect_out_of_range", [{ width: Math.floor(v.minAspectRatio * 1000) - 1, height: 1000 }]));
-  if (v.maxAspectRatio !== undefined) rows.push(row("video max aspect", "video_aspect_out_of_range", [{ width: Math.ceil(v.maxAspectRatio * 1000) + 1, height: 1000 }]));
-  if (v.maxFrameRate !== undefined) rows.push(row("max frame rate", "video_frame_rate_too_high", [{ frameRate: v.maxFrameRate + 1 }]));
+  const choice = caps.postTypeChoices?.find((c) => c.shape === "single_video");
+  if (caps.video.maxVideos === 0) {
+    return [{ title: `${key}: videos`, category: "videos", videos: [{}], code: "video_not_accepted", codes: ["video_not_accepted"], postType: "video" }];
+  }
+  const rows: VideoRow[] = [];
+  const types: (PostType | null)[] = choice ? choice.options.map((o) => o.type) : [null];
+  for (const chosen of types) {
+    const postType: PostType = chosen ?? "video";
+    const v = videoLimitsFor(caps, postType);
+    const suffix = chosen && chosen !== choice!.default ? ` (${chosen})` : "";
+    const row = (category: string, code: string | readonly string[], videos: VideoAssetOptions[], withImage = false): VideoRow => ({
+      title: `${key}: ${category}${suffix}`,
+      category,
+      videos,
+      withImage,
+      code: typeof code === "string" ? code : code[0]!,
+      codes: typeof code === "string" ? [code] : code,
+      ...(chosen ? { chosenPostType: chosen } : {}),
+      postType,
+    });
+    // With a choice, a second video or an image makes a carousel, so these two are carousel rows below.
+    if (!choice) {
+      rows.push(row("videos", "too_many_videos", Array.from({ length: v.maxVideos + 1 }, () => ({}))));
+      if (v.withImages === false && caps.media.maxImages > 0) rows.push(row("video with images", "video_with_images", [{}], true));
+    }
+    const otherContainer = CONTAINERS.find((c) => v.containers && !v.containers.includes(c));
+    if (otherContainer) rows.push(row("video containers", "video_container_not_allowed", [{ container: otherContainer }]));
+    const otherCodec = ["hevc", "vp9"].find((c) => v.videoCodecs && !v.videoCodecs.includes(c));
+    if (otherCodec) rows.push(row("video codecs", "video_codec_not_allowed", [{ videoCodec: otherCodec }]));
+    if (v.audioCodecs && !v.audioCodecs.includes("opus")) rows.push(row("audio codecs", "audio_codec_not_allowed", [{ audioCodec: "opus" }]));
+    if (v.silentAllowed === false) rows.push(row("silent video", "audio_required", [{ audioCodec: null }]));
+    if (v.maxBytes !== undefined) rows.push(row("video bytes", "video_too_large", [{ byteSize: v.maxBytes + 1 }]));
+    if (v.minDurationSeconds !== undefined) rows.push(row("min duration", "video_too_short", [{ durationSeconds: Math.max(0, v.minDurationSeconds - 0.5) }]));
+    if (v.maxDurationSeconds !== undefined) rows.push(row("max duration", "video_too_long", [{ durationSeconds: v.maxDurationSeconds + 1 }]));
+    if (v.minWidth !== undefined) rows.push(row("video min width", "video_too_small", [{ width: v.minWidth - 1 }]));
+    if (v.maxWidth !== undefined) rows.push(row("video max width", "video_too_big", [{ width: v.maxWidth + 1 }]));
+    if (v.minHeight !== undefined) rows.push(row("video min height", "video_too_small", [{ height: v.minHeight - 1 }]));
+    if (v.maxHeight !== undefined) rows.push(row("video max height", "video_too_big", [{ height: v.maxHeight + 1 }]));
+    if (v.minAspectRatio !== undefined) rows.push(row("video min aspect", "video_aspect_out_of_range", [{ width: Math.floor(v.minAspectRatio * 1000) - 1, height: 1000 }]));
+    if (v.maxAspectRatio !== undefined) rows.push(row("video max aspect", "video_aspect_out_of_range", [{ width: Math.ceil(v.maxAspectRatio * 1000) + 1, height: 1000 }]));
+    if (v.minFrameRate !== undefined) rows.push(row("min frame rate", "video_frame_rate_too_low", [{ frameRate: v.minFrameRate - 1 }]));
+    if (v.maxFrameRate !== undefined) rows.push(row("max frame rate", "video_frame_rate_too_high", [{ frameRate: v.maxFrameRate + 1 }]));
+  }
+  // Per-type overrides: a post of that type's shape (a carousel is an image plus a video), breaking only the overridden bound.
+  for (const [type, over] of Object.entries(caps.video.byPostType ?? {}) as [PostType, NonNullable<ProviderCapabilities["video"]["byPostType"]>[PostType]][]) {
+    if (!over) continue;
+    const row = (category: string, code: string | readonly string[], videos: VideoAssetOptions[], withImage: boolean): VideoRow => ({
+      title: `${key}: ${type} ${category}`,
+      category: `${type} ${category}`,
+      videos,
+      withImage,
+      code: typeof code === "string" ? code : code[0]!,
+      codes: typeof code === "string" ? [code] : code,
+      postType: type,
+    });
+    if (over.maxVideos !== undefined) rows.push(row("videos", ["too_many_videos", "too_many_items"], Array.from({ length: over.maxVideos + 1 }, () => ({})), false));
+    if (over.minAspectRatio !== undefined) rows.push(row("video min aspect", "video_aspect_out_of_range", [{ width: Math.floor(over.minAspectRatio * 1000) - 1, height: 1000 }], true));
+    if (over.maxAspectRatio !== undefined) rows.push(row("video max aspect", "video_aspect_out_of_range", [{ width: Math.ceil(over.maxAspectRatio * 1000) + 1, height: 1000 }], true));
+    if (over.maxBytes !== undefined) rows.push(row("video bytes", "video_too_large", [{ byteSize: over.maxBytes + 1 }], true));
+    if (over.maxDurationSeconds !== undefined) rows.push(row("max duration", "video_too_long", [{ durationSeconds: over.maxDurationSeconds + 1 }], true));
+    if (over.minFrameRate !== undefined) rows.push(row("min frame rate", "video_frame_rate_too_low", [{ frameRate: over.minFrameRate - 1 }], true));
+  }
   return rows;
 }
 
@@ -254,6 +327,19 @@ export function limitRows(provider: SocialProvider): LimitRow[] {
   return own.map((limit) => ({ title: `${provider.key}: publish limit ${limit.count} / ${limit.windowSeconds} s`, limit, accountLevel: false, all: own }));
 }
 
+export interface AllowanceRow {
+  title: string;
+  count: number;
+  windowSeconds: number;
+  name: string;
+}
+
+/** One row for a provider that declares a creation allowance (docs/limits.md category `creation allowance`). */
+export function allowanceRows(provider: SocialProvider): AllowanceRow[] {
+  const a = provider.creationAllowance;
+  return a ? [{ title: `${provider.key}: creation allowance`, count: a.count, windowSeconds: a.windowSeconds, name: a.name }] : [];
+}
+
 /** Every generated title in the enforcement test, by suite. */
 export function generatedTitles(provider: SocialProvider): { suite: Suite; title: string }[] {
   const noop: Assert = () => {};
@@ -262,6 +348,7 @@ export function generatedTitles(provider: SocialProvider): { suite: Suite; title
     ...textRows(provider).map((r) => ({ suite: "text" as const, title: r.title })),
     ...plannerRows(provider, noop).map((r) => ({ suite: "planner" as const, title: r.title })),
     ...limitRows(provider).map((r) => ({ suite: "limits" as const, title: r.title })),
+    ...allowanceRows(provider).map((r) => ({ suite: "limits" as const, title: r.title })),
     ...videoRows(provider).map((r) => ({ suite: "video" as const, title: r.title })),
   ];
 }

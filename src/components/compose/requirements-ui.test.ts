@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { findProvider } from "@/providers/registry";
 import { requirementsOf, type RequirementsSummary } from "@/providers/requirements";
-import { conversionText, detailRows, rangeText, summaryLine, videoLine } from "./requirements-ui";
+import { carouselLine, conversionText, detailRows, rangeText, summaryLine, videoLine } from "./requirements-ui";
 
 const of = (key: string): RequirementsSummary => requirementsOf(findProvider(key)!.capabilities, { uploadTypes: UPLOAD_MIME_TYPES });
 const row = (r: RequirementsSummary, term: string) => detailRows(r).find((d) => d.term === term)?.detail;
@@ -72,9 +72,9 @@ describe("conversionText / rangeText", () => {
 
 describe("videoLine and the video rows", () => {
   it("says video is not accepted yet", () => {
-    expect(videoLine(of("instagram"))).toBe("Video: not accepted yet");
-    expect(row(of("instagram"), "Video")).toBe("not accepted yet");
-    expect(row(of("instagram"), "Video width")).toBeUndefined();
+    expect(videoLine(of("facebook"))).toBe("Video: not accepted yet");
+    expect(row(of("facebook"), "Video")).toBe("not accepted yet");
+    expect(row(of("facebook"), "Video width")).toBeUndefined();
   });
   it("describes the mock's limits and marks undeclared ones", () => {
     const r = of("mock");
@@ -84,5 +84,33 @@ describe("videoLine and the video rows", () => {
     expect(row(r, "Video containers")).toBe("MP4, MOV");
     expect(row(r, "Video width")).toBe("no limit Docket checks");
     expect(row(r, "Video frame rate")).toBe("up to 60 fps");
+  });
+});
+
+describe("Instagram video summary", () => {
+  const ig = (postType?: "video" | "reel" | "carousel") =>
+    requirementsOf(findProvider("instagram")!.capabilities, { uploadTypes: UPLOAD_MIME_TYPES, postType });
+
+  it("prefixes the chosen type, shows the frame-rate range and the placement", () => {
+    expect(videoLine(ig("reel"))).toBe(
+      "Reel: 1 video per post, MP4, MOV, H.264, HEVC, up to 300 MB, 3 seconds – 15 minutes, aspect 1:100 – 10:1, 23 fps – 60 fps, not with images, Shown in the Reels tab only",
+    );
+    expect(videoLine(ig())).toMatch(/^Feed video: /);
+  });
+
+  it("lists the post type, frame rate and carousel rows", () => {
+    const r = ig("reel");
+    expect(row(r, "Post as")).toBe("Reel. Shown in the Reels tab only.");
+    expect(row(r, "Video frame rate")).toBe("23 fps – 60 fps");
+    expect(row(r, "Carousel items")).toBe("up to 10; images and videos may be mixed");
+    expect(row(r, "Carousel video aspect ratio")).toBe("4:5 – 1.91:1");
+    expect(detailRows(r).filter((d) => d.term === "Note").map((d) => d.detail)).toEqual(["Reels cannot be carousel items."]);
+  });
+
+  it("describes the carousel, and has none for other providers", () => {
+    expect(carouselLine(ig())).toBe(
+      "Carousel: up to 10 items; images and videos may be mixed; video items 4:5 – 1.91:1; Reels cannot be carousel items.",
+    );
+    expect(carouselLine(of("mock"))).toBeNull();
   });
 });

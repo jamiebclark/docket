@@ -109,6 +109,15 @@ describe("fitOf for video", () => {
       expect(fitOf(video(), p), p.key).toMatchObject({ state: "refused", details: ["This account does not accept video yet."] });
     }
   });
+  it("fits Instagram as a Feed video, and refuses with the rewritten sentence, never converting", () => {
+    expect(fitOf(video(), by("instagram"))).toMatchObject({ state: "fits", details: [], steps: [], convertedTo: null });
+    const fit = fitOf(video({ durationMs: 960_000 }), by("instagram"));
+    expect(fit.state).toBe("refused");
+    expect(fit.details).toEqual([
+      "This video is 16 minutes long; the limit is 15 minutes for an Instagram Feed video. Docket does not crop, trim or convert video yet.",
+    ]);
+    expect(fitOf(video({ frameRate: 15 }), by("instagram")).details[0]).toMatch(/^This video is 15 fps; the minimum is 23 fps for an Instagram Feed video/);
+  });
   it("is never converted", () => {
     for (const p of listProviders()) {
       for (const asset of [video(), video({ durationMs: 999_000 }), video({ container: "mov" })]) {

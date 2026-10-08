@@ -12,6 +12,7 @@ export const instagramProvider: SocialProvider<InstagramSettings, InstagramState
   displayName: "Instagram",
   capabilities: instagramCapabilities,
   defaultPublishLimit: INSTAGRAM_DEFAULT_PUBLISH_LIMIT,
+  creationAllowance: { count: 400, windowSeconds: 86_400, name: "Instagram's daily container allowance" },
   connect: { strategy: "oauth", group: metaConnectGroup },
   settingsSchema: instagramSettingsSchema,
   validate: validateInstagram,

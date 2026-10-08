@@ -1,6 +1,8 @@
 import { MIME_LABEL } from "@/lib/media/types";
 import { countingRuleName, countingUnit } from "./text";
+import { choiceFor, postTypeLabel, resolvePostType } from "./post-type";
 import type { PostType, ProviderCapabilities } from "./types";
+import { videoLimitsFor } from "./validation";
 import {
   CONTAINER_LABEL,
   audioCodecLabel,
@@ -58,8 +60,20 @@ export interface RequirementsSummary {
     width: Range;
     height: Range;
     aspectRatio: Range;
+    minFrameRate: Labelled<number> | null;
     maxFrameRate: Labelled<number> | null;
+    /** The type these limits are for; null when the provider declares no choice and no per-type limits. */
+    postType: { value: PostType; label: string; description: string | null } | null;
+    notes: string[];
   };
+  /** Null when the provider has no carousel post type or does not accept video. */
+  carousel: {
+    maxItems: number;
+    /** Images and videos may share one carousel. */
+    mixed: boolean;
+    videoAspectRatio: Range;
+    notes: string[];
+  } | null;
   post: {
     mediaRequired: boolean;
     textOnlyAllowed: boolean;
@@ -96,9 +110,25 @@ function range(min: number | undefined, max: number | undefined, label: (n: numb
 
 const px = (n: number) => `${n} px`;
 
-export function requirementsOf(caps: ProviderCapabilities, ctx: { uploadTypes: readonly string[] }): RequirementsSummary {
+/** The video part's type: the chosen one when it is a carousel or an option of a choice, else what a single video would get. */
+function shownTypeOf(caps: ProviderCapabilities, postType: PostType | undefined): PostType {
+  const options = choiceFor(caps, [{ kind: "video" }])?.options ?? [];
+  if (postType === "carousel" || (postType !== undefined && options.some((o) => o.type === postType))) return postType!;
+  return resolvePostType(caps, [{ kind: "video" }], null);
+}
+
+export function requirementsOf(
+  caps: ProviderCapabilities,
+  ctx: { uploadTypes: readonly string[]; postType?: PostType },
+): RequirementsSummary {
   const m = caps.media;
-  const v = caps.video;
+  const shown = shownTypeOf(caps, ctx.postType);
+  const v = videoLimitsFor(caps, shown);
+  const hasChoice = (caps.postTypeChoices?.length ?? 0) > 0 || Object.keys(caps.video.byPostType ?? {}).length > 0;
+  const option = caps.postTypeChoices?.flatMap((c) => c.options).find((o) => o.type === shown);
+  // Only a provider that declares carousel video limits has a carousel part.
+  const carouselLimits = caps.postTypes.includes("carousel") && caps.video.byPostType?.carousel ? videoLimitsFor(caps, "carousel") : null;
+  const carouselNotes = [...(caps.video.byPostType?.carousel?.notes ?? [])];
   const accepts = m.maxImages > 0;
   const output = m.outputMimeType ?? m.allowedMimeTypes[0];
   return {
@@ -132,8 +162,24 @@ export function requirementsOf(caps: ProviderCapabilities, ctx: { uploadTypes: r
       width: range(v.minWidth, v.maxWidth, px),
       height: range(v.minHeight, v.maxHeight, px),
       aspectRatio: range(v.minAspectRatio, v.maxAspectRatio, ratioLabel),
+      minFrameRate: v.minFrameRate === undefined ? null : { value: v.minFrameRate, label: fpsLabel(v.minFrameRate) },
       maxFrameRate: v.maxFrameRate === undefined ? null : { value: v.maxFrameRate, label: fpsLabel(v.maxFrameRate) },
+      postType: !hasChoice
+        ? null
+        : shown === "carousel"
+          ? { value: shown, label: postTypeLabel(caps, shown), description: null }
+          : { value: shown, label: option?.label ?? postTypeLabel(caps, shown), description: option?.description ?? null },
+      notes: shown === "carousel" ? carouselNotes : [],
     },
+    carousel:
+      carouselLimits && carouselLimits.maxVideos > 0
+        ? {
+            maxItems: Math.max(m.maxImages, carouselLimits.maxVideos),
+            mixed: carouselLimits.withImages ?? false,
+            videoAspectRatio: range(carouselLimits.minAspectRatio, carouselLimits.maxAspectRatio, ratioLabel),
+            notes: carouselNotes,
+          }
+        : null,
     post: {
       mediaRequired: m.required || !caps.textOnlyAllowed,
       textOnlyAllowed: caps.textOnlyAllowed,
