@@ -27,13 +27,18 @@ export function getLlmStatus():
     : { configured: false, problems: r.problems };
 }
 
+/** Every setting the owner must set, all at once: a lone LLM_PROVIDER problem expands to provider, model and key. */
+export function missingLlmSettings(problems: readonly { name: string }[]): string[] {
+  const names = problems.map((p) => p.name);
+  return names.length === 1 && names[0] === "LLM_PROVIDER" ? ["LLM_PROVIDER", "LLM_MODEL", "OPENAI_API_KEY"] : names;
+}
+
 /** The configured provider; throws `LlmNotConfiguredError` naming only the missing settings. */
 export function getLlm(): LlmProvider {
   if (override) return override;
   const r = parseLlmConfig(process.env);
   if (!r.ok) {
-    const names = r.problems.map((p) => p.name);
-    throw new LlmNotConfiguredError(names.length === 1 && names[0] === "LLM_PROVIDER" ? ["LLM_PROVIDER", "LLM_MODEL", "OPENAI_API_KEY"] : names);
+    throw new LlmNotConfiguredError(missingLlmSettings(r.problems));
   }
   const key = JSON.stringify(r.config);
   if (cached?.key === key) return cached.provider;

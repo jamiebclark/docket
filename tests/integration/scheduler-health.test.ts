@@ -57,8 +57,11 @@ describe("getSchedulerHealth", () => {
   });
 });
 
-const render = (variant: "quiet" | "banner", h: Parameters<typeof SchedulerHealth>[0]["health"]) =>
-  renderToStaticMarkup(createElement(SchedulerHealth, { variant, health: h, now: NOW, timezone: TZ }));
+const render = (
+  variant: "quiet" | "banner",
+  h: Parameters<typeof SchedulerHealth>[0]["health"],
+  viewer: Parameters<typeof SchedulerHealth>[0]["viewer"] = { kind: "owner" },
+) => renderToStaticMarkup(createElement(SchedulerHealth, { variant, health: h, now: NOW, timezone: TZ, viewer }));
 
 describe("SchedulerHealth rendering", () => {
   const ok = { state: "ok" as const, lastSuccessAt: "2026-10-03T14:05:10.000Z" };
@@ -99,5 +102,35 @@ describe("SchedulerHealth rendering", () => {
     const html = render("banner", stale) + render("quiet", ok);
     expect(html).not.toMatch(/STALE_AFTER|SCHEDULER_|secret=/);
     expect(html).toContain("TICK_SECRET");
+  });
+});
+
+describe("SchedulerHealth by viewer", () => {
+  const stale = { state: "stale" as const, lastSuccessAt: "2026-10-03T12:05:50.000Z" };
+  const never = { state: "never" as const, lastSuccessAt: null };
+
+  it("gives the owner the remedies and a docs link", () => {
+    for (const h of [stale, never]) {
+      const html = render("banner", h);
+      expect(html).toContain("docker compose up -d worker");
+      expect(html).toContain("How to fix this");
+      expect(html).toContain("9-is-the-scheduler-running");
+    }
+  });
+
+  it.each([
+    ["admin", stale, "The scheduler last ran"],
+    ["editor", stale, "The scheduler last ran"],
+    ["admin", never, "The scheduler has never run."],
+    ["editor", never, "The scheduler has never run."],
+  ])("tells a non-owner %s whom to ask and shows no server detail (%#)", (_who, h, headline) => {
+    const html = render("banner", h, { kind: "ask", owners: "Robin" });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain(headline);
+    expect(html).toContain("Scheduled posts are not going out. Ask Robin to start the scheduler.");
+    expect(html).not.toContain("<code");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toMatch(/\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/);
+    expect(html.toLowerCase()).not.toContain("docker");
   });
 });

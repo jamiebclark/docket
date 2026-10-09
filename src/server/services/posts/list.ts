@@ -70,3 +70,11 @@ export async function listPosts(scope: ProjectScope, input: unknown = {}): Promi
     counts: await scope.posts.counts(),
   };
 }
+
+/** Every live post in the project (all statuses; `needs_decision` is an overlay and not added). */
+export async function countPosts(scope: ProjectScope): Promise<number> {
+  if (!scope.can({ post: ["view"] })) throw new ForbiddenError();
+  const { needs_decision: _overlay, ...byStatus } = await scope.posts.counts();
+  void _overlay;
+  return Object.values(byStatus).reduce((sum, n) => sum + n, 0);
+}

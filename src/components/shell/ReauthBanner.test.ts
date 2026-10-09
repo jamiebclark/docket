@@ -24,10 +24,15 @@ describe("ReauthBanner", () => {
   });
 
   it("tells editors to ask an owner or admin, with no link", () => {
-    const out = html({ accounts: accounts.slice(0, 1), projectSlug: "p", canManage: false });
+    const out = html({ accounts: accounts.slice(0, 1), projectSlug: "p", canManage: false, askNames: "Robin or Sam" });
     expect(out).toContain("An account needs reconnecting");
     expect(out).toContain("Studio (Bluesky)");
-    expect(out).toContain("Ask an owner or admin to reconnect it.");
+    expect(out).toContain("Ask Robin or Sam to reconnect it.");
     expect(out).not.toContain("href=");
+  });
+
+  it("falls back to a generic ask when no names are given", () => {
+    const out = html({ accounts, projectSlug: "p", canManage: false });
+    expect(out).toContain("Ask an owner or admin to reconnect them.");
   });
 });

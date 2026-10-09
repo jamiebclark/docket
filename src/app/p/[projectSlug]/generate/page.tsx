@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Checklist } from "@/components/ui/Checklist";
 import { FilterTabs } from "@/components/ui/FilterTabs";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { findProvider } from "@/providers/registry";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
-import { getLlmStatus } from "@/server/llm";
+import { PREREQUISITES_TITLE } from "@/lib/roles/prerequisites";
 import * as accounts from "@/server/services/accounts";
 import { listRecentFailures } from "@/server/services/generation/failures";
 import { getStorage } from "@/server/storage";
+import { loadPrerequisites } from "./prerequisites";
 import { GenerateForm } from "./GenerateForm";
 import type { AccountOption } from "./generate-logic";
 
@@ -46,50 +46,18 @@ export default async function GeneratePage({ params, searchParams }: Props) {
     </>
   );
 
-  const status = getLlmStatus();
-  if (!status.configured) {
-    const names = status.problems.map((p) => p.name);
+  const prerequisites = await loadPrerequisites(scope, projectSlug);
+  if (prerequisites) {
     return (
       <section className="flex flex-col gap-4">
         {heading}
-        <EmptyState
-          message={`Generation is not set up. Set ${names.join(", ")} on the server, then reload this page.`}
-        />
+        <Checklist title={PREREQUISITES_TITLE} items={prerequisites} />
       </section>
     );
   }
 
   const profiles = await scope.voiceProfiles.list();
-  if (profiles.length === 0) {
-    const manage = scope.can({ voice: ["manage"] });
-    return (
-      <section className="flex flex-col gap-4">
-        {heading}
-        <EmptyState
-          message={
-            manage
-              ? "No voice profile yet. Create one so generated posts sound like you."
-              : "No voice profile yet. Ask an owner or admin to create one."
-          }
-          action={manage ? <Link href={`/p/${projectSlug}/voice/new`} className="text-sm underline">Create a voice profile</Link> : undefined}
-        />
-      </section>
-    );
-  }
-
   const list = await accounts.listAccounts(scope);
-  if (list.length === 0) {
-    return (
-      <section className="flex flex-col gap-4">
-        {heading}
-        <EmptyState
-          message="Connect an account first, then come back to generate posts for it."
-          action={<Link href={`/p/${projectSlug}/accounts`} className="text-sm underline">Go to Accounts</Link>}
-        />
-      </section>
-    );
-  }
-
   const options: AccountOption[] = list.map((a) => {
     const caps = findProvider(a.providerKey)?.capabilities;
     return {

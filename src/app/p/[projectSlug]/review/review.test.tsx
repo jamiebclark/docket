@@ -52,7 +52,7 @@ describe("review page", () => {
   it("shows the empty state linking to Generate", async () => {
     const env = await postsEnv();
     const html = await renderReview(env);
-    expect(html).toContain("Nothing to review");
+    expect(html).toContain("Generated posts wait here for approval before they&#x27;re scheduled. Posts you write yourself don&#x27;t come here.");
     expect(html).toContain(`href="/p/${env.project.slug}/generate"`);
   });
 

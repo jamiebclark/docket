@@ -1,4 +1,5 @@
 import { alertStyles } from "@/components/ui/Alert";
+import { docsUrl } from "@/lib/docs";
 import { relativeTimeText } from "@/lib/time/relative";
 import type { SchedulerHealth as Health } from "@/server/services/scheduler-health";
 
@@ -24,6 +25,8 @@ function When({ at, now, timezone }: { at: Date; now: Date; timezone: string }) 
   );
 }
 
+export type SchedulerViewer = { kind: "owner" } | { kind: "ask"; owners: string };
+
 /**
  * Scheduler liveness (FR-047): `quiet` is the small header text when healthy and renders nothing
  * otherwise; `banner` is the alert when stale or never run and renders nothing when healthy.
@@ -34,11 +37,14 @@ export function SchedulerHealth({
   now,
   timezone,
   variant,
+  viewer,
 }: {
   health: Health;
   now: Date;
   timezone: string;
   variant: "quiet" | "banner";
+  /** Owners get the remedies; everyone else is told whom to ask and sees no server detail. */
+  viewer: SchedulerViewer;
 }) {
   const at = health.lastSuccessAt ? new Date(health.lastSuccessAt) : null;
   if (variant === "quiet") {
@@ -51,6 +57,22 @@ export function SchedulerHealth({
     );
   }
   if (health.state === "ok") return null;
+  if (viewer.kind === "ask") {
+    return (
+      <div role="alert" className={alertStyles("danger", true)}>
+        <p className="font-semibold">
+          {at ? (
+            <>
+              The scheduler last ran <When at={at} now={now} timezone={timezone} />.
+            </>
+          ) : (
+            "The scheduler has never run."
+          )}
+        </p>
+        <p className="mt-1">Scheduled posts are not going out. Ask {viewer.owners} to start the scheduler.</p>
+      </div>
+    );
+  }
   return (
     <div role="alert" className={alertStyles("danger", true)}>
       <p className="font-semibold">
@@ -74,6 +96,14 @@ export function SchedulerHealth({
           or call <code>POST /api/internal/tick</code> from a cron every minute with <code>TICK_SECRET</code>
         </li>
       </ul>
+      <p className="mt-1">
+        <a
+          href={docsUrl("deployment", "9-is-the-scheduler-running")}
+          className="rounded-md font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          How to fix this
+        </a>
+      </p>
     </div>
   );
 }

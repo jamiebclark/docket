@@ -244,7 +244,7 @@ full width, size `lg`.
 | `ActionBar` | `message`, `label`, `edge` `top`/`bottom`, `stickyFrom` `always`/`md` | Floating commit/selection row; primary action last. |
 | `Card`, `cardStyles` | `title`, `description`, `actions`, `as`, `padded` | `cardStyles` for a `<form>` or `<fieldset>` that is itself the card. |
 | `PageHeader` | `title`, `description`, `actions`, `eyebrow` | The route's only `h1`. |
-| `Checklist` | `title`, `items` (`key`, `title`, `description`, `optional`, `status` done/todo/waiting, `action`, `blocked`, `children`), `collapsedSummary` | Ordered setup steps, each with status as text, a decorative icon, one line and at most one action. `collapsedSummary` folds it into a native `<details>`. State comes from data, never from stored dismissal. Used by the project overview. |
+| `Checklist` | `title`, `items` (`key`, `title`, `description`, `optional`, `status` done/todo/waiting, `action`, `blocked`, `children`), `collapsedSummary` | Ordered setup steps, each with status as text, a decorative icon, one line and at most one action. `collapsedSummary` folds it into a native `<details>`. State comes from data, never from stored dismissal. Used by the project overview; also used for prerequisite lists (Generate, Jobs). |
 | `Table`, `Row`, `Cell` | `caption`, `columns`, `header` cell | Card-wrapped, uppercase muted column heads, row hover. Below `sm` each row stacks into a card and every cell is labelled with its column name (CSS variables `--col-N` + `.stack-table` in globals.css, so rows can come from any server or client component). |
 | `Badge`, `StatusBadge` | tones `neutral`, `brand`, `info`, `success`, `warning`, `danger` | Tinted pill + dot + text. Status → tone map lives in `StatusBadge` (scheduled = brand, approved/publishing/running = info). |
 | `Alert`, `alertStyles()` | tones `info`, `success`, `warning`, `danger`; `banner` | `role="alert"` for danger/warning, `status` otherwise. |
@@ -284,6 +284,13 @@ Unchanged from `docket-ui`, now with the components above:
 **loading** = `loading.tsx` built from `Skeleton`-style blocks matching the
 layout; **empty** = `EmptyState`; **error** = `error.tsx` with `Alert` tone
 danger copy and a `secondary` "Try again"; **populated**.
+
+- Empty-state actions are always `buttonStyles` (primary when they are the
+  only next step), never underlined text.
+- An unfiltered empty list hides its filter, search and bulk controls; a
+  filtered one keeps them so the filter can be cleared.
+- "Ask" copy names people by display name ("Ask Robin or Sam to …"), owners
+  only for server pieces, never by email.
 
 ## 9. Motion
 

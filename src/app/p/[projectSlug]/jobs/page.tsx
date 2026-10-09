@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { buttonStyles } from "@/components/ui/Button";
+import { Checklist } from "@/components/ui/Checklist";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Pagination } from "@/components/ui/Pagination";
@@ -8,9 +10,11 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Cell, Row, Table } from "@/components/ui/Table";
 import { getSession } from "@/server/auth/session";
 import { forProject, NotFoundError } from "@/server/dal";
-import { getLlmStatus } from "@/server/llm";
+import { PREREQUISITES_TITLE } from "@/lib/roles/prerequisites";
+import { mediaStatus } from "@/server/services/media";
 import { JOBS_PAGE_SIZE, listJobs } from "@/server/services/jobs/read";
 import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../generate/generate-logic";
+import { loadPrerequisites } from "../generate/prerequisites";
 import { UNREVIEWED_QUEUE_LABEL } from "../generate/PolicyPicker";
 
 export const metadata: Metadata = { title: "Jobs" };
@@ -20,8 +24,6 @@ type Props = {
   params: Promise<{ projectSlug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
-
-const link = "text-sm underline";
 
 export default async function JobsPage({ params, searchParams }: Props) {
   const { projectSlug } = await params;
@@ -37,18 +39,22 @@ export default async function JobsPage({ params, searchParams }: Props) {
   const page = Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1);
   const { items, total } = await listJobs(scope, { page });
   const canRun = scope.can({ generation: ["run"] });
-  const llm = getLlmStatus();
+  const prerequisites = canRun ? await loadPrerequisites(scope, projectSlug) : null;
+  const storageOn = scope.can({ media: ["view"] }) ? (await mediaStatus(scope)).enabled : false;
   const base = `/p/${projectSlug}`;
-  const actions = canRun ? (
-    <div className="flex gap-4">
-      <Link href={`${base}/media`} className={link}>
-        New job from media
-      </Link>
-      <Link href={`${base}/jobs/new/csv`} className={link}>
-        New job from CSV
-      </Link>
-    </div>
-  ) : null;
+  const actions =
+    canRun && prerequisites === null ? (
+      <div className="flex flex-wrap gap-2">
+        <Link href={`${base}/jobs/new/csv`} className={buttonStyles({ variant: "primary" })}>
+          New job from CSV
+        </Link>
+        {storageOn ? (
+          <Link href={`${base}/media`} className={buttonStyles({ variant: "secondary" })}>
+            Choose images in Media
+          </Link>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <section className="flex flex-col gap-4">
@@ -56,13 +62,13 @@ export default async function JobsPage({ params, searchParams }: Props) {
         <h1 className="text-2xl font-semibold">Jobs</h1>
         {actions}
       </div>
-      {!llm.configured && (
-        <p role="note" className="rounded-md border border-warning-border p-3 text-sm">
-          Generation is not configured. Set: {llm.problems.map((p) => p.name).join(", ")}.
-        </p>
-      )}
+      {prerequisites ? <Checklist title={PREREQUISITES_TITLE} items={prerequisites} /> : null}
       {items.length === 0 ? (
-        <EmptyState message="No generation jobs yet. Start one from your media library or a CSV file." action={actions} />
+        prerequisites ? null : (
+          <EmptyState
+            message={`No generation jobs yet. Start one from a CSV file${storageOn ? ", or choose images in Media" : ""}.`}
+          />
+        )
       ) : (
         <>
           <Table

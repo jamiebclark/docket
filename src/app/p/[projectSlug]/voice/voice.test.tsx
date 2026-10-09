@@ -54,8 +54,28 @@ describe("voice list", () => {
     expect(owner).toContain("No voice profile yet. Create one");
     expect(owner).toContain("Create a voice profile");
     const editor = await list(env, env.editor);
-    expect(editor).toContain("Ask an owner or admin to create one.");
+    expect(editor).toMatch(/No voice profile yet\. Ask .+ to create one\./);
     expect(editor).not.toContain("Create a voice profile");
+    expect(editor).not.toContain("an owner or admin");
+  });
+
+  it("hides the tabs when no profile exists at all (scenario 13)", async () => {
+    const env = await postsEnv();
+    const owner = await list(env, env.owner);
+    expect(owner).not.toContain("Include archived");
+    expect(owner).toContain("New voice profile");
+    expect(owner).toContain("Create a voice profile");
+  });
+
+  it("keeps the tabs when only archived profiles exist", async () => {
+    const env = await postsEnv();
+    const p = await voice.createVoiceProfile(env.scope, { name: "Old", content: {} });
+    const q = await voice.createVoiceProfile(env.scope, { name: "New", content: {} });
+    await voice.setDefaultVoiceProfile(env.scope, q.profileId);
+    await voice.archiveVoiceProfile(env.scope, p.profileId);
+    await voice.archiveVoiceProfile(env.scope, q.profileId).catch(() => {});
+    const owner = await list(env, env.owner);
+    expect(owner).toContain("Include archived");
   });
 
   it("shows name, default badge, version and updated time; actions only for owners and admins", async () => {

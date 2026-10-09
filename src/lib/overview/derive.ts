@@ -2,6 +2,8 @@
 // The service (src/server/services/overview.ts) gathers OverviewFacts; the page renders OverviewView.
 
 import { docsUrl } from "@/lib/docs";
+import { joinNames } from "@/lib/roles/names";
+import { hasActiveSlot } from "@/lib/roles/slots";
 
 export const EXPIRY_WINDOW_DAYS = 14;
 
@@ -128,16 +130,7 @@ export type OverviewView = {
   contentTools: { voice: ToolLine | null; media: ToolLine | null } | null;
 };
 
-export function joinNames(names: readonly string[], conjunction: "and" | "or"): string {
-  const kept = names.map((n) => n.trim()).filter((n) => n.length > 0);
-  const [a, b, c] = kept;
-  if (a === undefined) return "an owner or admin";
-  if (b === undefined) return a;
-  if (c === undefined) return `${a} ${conjunction} ${b}`;
-  if (kept.length === 3) return `${a}, ${b} ${conjunction} ${c}`;
-  const others = kept.length - 3;
-  return `${a}, ${b}, ${c} ${conjunction} ${others} ${others === 1 ? "other" : "others"}`;
-}
+export { joinNames } from "@/lib/roles/names";
 
 /** `names(and)` / `names(or)` for the managers, used by every section that tells an editor who to ask. */
 export function names(facts: Pick<OverviewFacts, "managers">, conjunction: "and" | "or"): string {
@@ -180,7 +173,7 @@ export function deriveChecklist(facts: OverviewFacts): ChecklistView | null {
   const { can } = facts.viewer;
   const managers = names(facts, "and");
   const hasAccount = facts.accounts.length >= 1;
-  const slotsDone = facts.accounts.some((a) => a.providerAvailable && a.slots.active >= 1);
+  const slotsDone = facts.accounts.some((a) => hasActiveSlot({ providerAvailable: a.providerAvailable, active: a.slots.active }));
   const c = facts.postCounts;
   const postDone = (c.scheduled ?? 0) + (c.publishing ?? 0) + (c.published ?? 0) + (c.partially_failed ?? 0) >= 1;
   const slotsAccount = facts.accounts.find((a) => a.providerAvailable) ?? facts.accounts[0];

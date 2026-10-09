@@ -15,6 +15,7 @@ import { AnnounceProvider, announcedText } from "../../../src/components/ui/Anno
 import { TargetResolution } from "../../../src/components/targets/TargetResolution";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
+import { createPostInReview } from "../../helpers/factories";
 import { outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
 import { parkAllDueTargets } from "../../helpers/scheduling";
@@ -67,6 +68,16 @@ describe("failures page markup (FR-013)", () => {
   it("shows the empty and filtered-empty states", async () => {
     const env = await postsEnv();
     actAs(env.owner);
+    const none = await render(env.project.slug);
+    expect(none).toContain("Posts that fail to publish will show up here.");
+    // Failures explains what will appear; writing a post is not its job (and needs an account first).
+    expect(none).not.toContain("Write a post");
+    expect(none).not.toContain("Retry all");
+    expect(none).not.toContain("need your decision");
+    expect(none).not.toContain('aria-label="Filter failures by status"');
+    // Once any post exists, an empty list means "nothing needs attention", not "no posts".
+    const acct = await env.account();
+    await createPostInReview(env.project.id, { accountIds: [acct.id], baseText: "Quiet", schedulingPolicy: "leave_as_draft" });
     expect(await render(env.project.slug)).toContain("Nothing needs attention. Every post that was due went out or is still scheduled.");
     await outcomeTarget(env, "fatal");
     const filtered = await render(env.project.slug, { status: "ambiguous" });

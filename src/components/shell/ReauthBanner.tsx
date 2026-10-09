@@ -15,10 +15,13 @@ export function ReauthBanner({
   accounts,
   projectSlug,
   canManage,
+  askNames = "an owner or admin",
 }: {
   accounts: ReauthAccount[];
   projectSlug: string;
   canManage: boolean;
+  /** Who to ask when the viewer can't reconnect: `askManagers(managers, "or")`. */
+  askNames?: string;
 }) {
   if (accounts.length === 0) return null;
   return (
@@ -42,7 +45,7 @@ export function ReauthBanner({
           </li>
         ))}
       </ul>
-      {canManage ? null : <p className="mt-1">Ask an owner or admin to reconnect {accounts.length === 1 ? "it" : "them"}.</p>}
+      {canManage ? null : <p className="mt-1">Ask {askNames} to reconnect {accounts.length === 1 ? "it" : "them"}.</p>}
     </div>
   );
 }

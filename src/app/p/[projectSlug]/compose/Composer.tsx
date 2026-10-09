@@ -13,7 +13,7 @@ import { DEFAULT_VIDEO_EDIT, type VideoEdit } from "@/lib/video/edit";
 import type { PostType } from "@/providers/types";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonStyles } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { MediaView } from "@/server/services/media";
@@ -25,6 +25,7 @@ import {
   fetchCheck,
   groupIssues,
   isOverLimit,
+  queueSlotHint,
   scheduleBlockedReason,
   SEVERITY_LABEL,
   type CheckResult,
@@ -49,6 +50,8 @@ export interface AccountOption {
   providerName: string;
   status: string;
   providerAvailable: boolean;
+  /** Whether the account has an active posting slot; null when that couldn't be read. */
+  hasActiveSlot?: boolean | null;
 }
 
 export interface ComposerInitial {
@@ -89,6 +92,8 @@ export function Composer({
   timeZone,
   accounts,
   canManageAccounts,
+  canManageSlots = false,
+  managersToAsk = "an owner or admin",
   canEdit,
   canSchedule,
   mediaEnabled,
@@ -100,6 +105,8 @@ export function Composer({
   timeZone: string;
   accounts: AccountOption[];
   canManageAccounts: boolean;
+  canManageSlots?: boolean;
+  managersToAsk?: string;
   canEdit: boolean;
   canSchedule: boolean;
   mediaEnabled: boolean;
@@ -243,13 +250,13 @@ export function Composer({
           <EmptyState
             message="No accounts are connected yet. Connect an account to start composing posts."
             action={
-              <Link href={`/p/${slug}/accounts`} className="text-sm font-medium underline">
-                Go to Accounts
+              <Link href={`/p/${slug}/accounts`} className={buttonStyles({ variant: "primary" })}>
+                Connect an account
               </Link>
             }
           />
         ) : (
-          <EmptyState message="No accounts are connected yet. Ask an owner or admin to connect one in Accounts." />
+          <EmptyState message={`No accounts are connected yet. Ask ${managersToAsk} to connect one.`} />
         )}
       </section>
     );
@@ -294,6 +301,24 @@ export function Composer({
   }
 
   const blockedId = `${ids}-blocked`;
+  const hint = queueSlotHint({ slug, selectedIds: selected, accounts, canManageSlots, managersToAsk });
+  const hintId = `${ids}-hint`;
+  const hintAll = !blocked && hint.kind === "all" ? hint : null;
+  const barMessage = blocked ? (
+    <span id={blockedId}>{blocked}</span>
+  ) : hint.kind === "none" ? undefined : (
+    <span id={hintId}>
+      {hint.text}
+      {hint.kind === "all" && hint.link ? (
+        <>
+          {" "}
+          <Link href={hint.link.href} className="font-medium underline">
+            {hint.link.label}
+          </Link>
+        </>
+      ) : null}
+    </span>
+  );
   return (
     <form
       className="flex flex-col gap-6"
@@ -533,19 +558,32 @@ export function Composer({
         </fieldset>
       </div>
 
-      <ActionBar stickyFrom="md" message={blocked ? <span id={blockedId}>{blocked}</span> : undefined}>
+      <ActionBar stickyFrom="md" message={barMessage}>
         <Button type="submit" variant="secondary" pending={saving} pendingLabel="Saving…" disabled={!canSave}>
           Save draft
         </Button>
         <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openPublishNow}>
           Publish now…
         </Button>
-        <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openScheduleAt}>
-          Schedule…
-        </Button>
-        <Button variant="cta" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
-          Add to queue…
-        </Button>
+        {hintAll ? (
+          <>
+            <Button variant="secondary" disabled aria-describedby={hintId} onClick={openQueue}>
+              Add to queue…
+            </Button>
+            <Button variant="cta" disabled={saving} onClick={openScheduleAt}>
+              Schedule…
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openScheduleAt}>
+              Schedule…
+            </Button>
+            <Button variant="cta" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
+              Add to queue…
+            </Button>
+          </>
+        )}
       </ActionBar>
       <LiveRegion message={message} />
 

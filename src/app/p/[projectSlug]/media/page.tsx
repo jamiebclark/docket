@@ -14,6 +14,10 @@ import { MediaCardActions } from "./MediaCardActions";
 import { UploadDropzone } from "./UploadDropzone";
 import { buttonStyles } from "@/components/ui/Button";
 import { controlStyles } from "@/components/ui/controls";
+import { alertStyles } from "@/components/ui/Alert";
+import { docsUrl } from "@/lib/docs";
+import { askOwners } from "@/lib/roles/names";
+import { listManagers } from "@/server/services/members";
 
 export const metadata: Metadata = { title: "Media" };
 export const dynamic = "force-dynamic";
@@ -67,11 +71,30 @@ export default async function MediaPage({ params, searchParams }: Props) {
     ...(list?.tags ?? []).map((t) => ({ label: t, href: hrefFor(projectSlug, { tag: t }), active: filter.tag === t })),
   ];
 
+  const isOwner = scope.membership.role === "owner";
+  const libraryEmpty = !failed && !!list && list.total === 0 && !filtered;
+
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">Media</h1>
       {!status.enabled ? (
-        <EmptyState message="Media storage is not set up. Ask an administrator to configure S3-compatible storage, then you can upload images here." />
+        <EmptyState
+          message={`Media storage is not set up, so images and videos can't be uploaded yet.${
+            isOwner ? "" : ` Ask ${askOwners(await listManagers(scope), "or")} to set it up.`
+          }`}
+          action={
+            isOwner ? (
+              <a href={docsUrl("storage")} target="_blank" rel="noreferrer" className={buttonStyles({ variant: "primary" })}>
+                Set up storage
+              </a>
+            ) : undefined
+          }
+        />
+      ) : libraryEmpty ? (
+        <>
+          {canEdit ? <UploadDropzone slug={projectSlug} limits={status.limits} /> : null}
+          <EmptyState message={canEdit ? "No images or videos yet. Upload your first one above." : "No images or videos yet."} />
+        </>
       ) : (
         <>
           {canEdit ? <UploadDropzone slug={projectSlug} limits={status.limits} /> : null}
@@ -100,9 +123,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
                 Generate for all unused images ({unusedCount > GENERATE_ALL_CAP ? `${GENERATE_ALL_CAP}+` : unusedCount})
               </Link>
             ) : (
-              <span aria-disabled="true" className="self-start rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground">
-                No unused images to generate for
-              </span>
+              <p className={`${alertStyles("info")} self-start`}>No unused images to generate for</p>
             )
           ) : null}
           {canGenerate && (filter.tag || filter.missingAlt || filter.q) && list && list.total > 0 ? (
@@ -125,7 +146,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
               The library could not be loaded. Reload the page to try again.
             </p>
           ) : list.items.length === 0 ? (
-            <EmptyState message={filtered ? "No images match these filters." : "No images yet. Upload your first image above."} />
+            <EmptyState message={filtered ? "No images or videos match these filters." : "No images or videos yet."} />
           ) : (
             <MediaSelection slug={projectSlug}>
               <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

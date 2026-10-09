@@ -5,6 +5,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterTabs } from "@/components/ui/FilterTabs";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Cell, Row, Table } from "@/components/ui/Table";
+import { askManagers } from "@/lib/roles/names";
+import { listManagers } from "@/server/services/members";
 import { listVoiceProfiles } from "@/server/services/voice";
 import { scopeOrNotFound } from "./scope";
 import { buttonStyles } from "@/components/ui/Button";
@@ -24,6 +26,8 @@ export default async function VoicePage({ params, searchParams }: Props) {
   const manage = scope.can({ voice: ["manage"] });
   const base = `/p/${projectSlug}/voice`;
   const profiles = await listVoiceProfiles(scope, { includeArchived: archived });
+  const anyProfile =
+    profiles.length > 0 || archived ? profiles.length > 0 : (await listVoiceProfiles(scope, { includeArchived: true })).length > 0;
 
   return (
     <section className="flex flex-col gap-4">
@@ -35,21 +39,29 @@ export default async function VoicePage({ params, searchParams }: Props) {
           </Link>
         ) : null}
       </div>
-      <FilterTabs
-        label="Profiles"
-        tabs={[
-          { label: "Active", href: base, active: !archived },
-          { label: "Include archived", href: `${base}?archived=1`, active: archived },
-        ]}
-      />
+      {anyProfile ? (
+        <FilterTabs
+          label="Profiles"
+          tabs={[
+            { label: "Active", href: base, active: !archived },
+            { label: "Include archived", href: `${base}?archived=1`, active: archived },
+          ]}
+        />
+      ) : null}
       {profiles.length === 0 ? (
         <EmptyState
           message={
             manage
               ? "No voice profile yet. Create one so generated posts sound like you."
-              : "No voice profile yet. Ask an owner or admin to create one."
+              : `No voice profile yet. Ask ${askManagers(await listManagers(scope), "or")} to create one.`
           }
-          action={manage ? <Link href={`${base}/new`} className="text-sm underline">Create a voice profile</Link> : undefined}
+          action={
+            manage ? (
+              <Link href={`${base}/new`} className={buttonStyles({ variant: "secondary" })}>
+                Create a voice profile
+              </Link>
+            ) : undefined
+          }
         />
       ) : (
         <Table caption="Voice profiles" columns={manage ? ["Name", "Default", "Version", "Updated", "Actions"] : ["Name", "Default", "Version", "Updated"]}>
