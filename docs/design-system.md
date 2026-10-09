@@ -150,7 +150,8 @@ text/UI pairs in both themes.
 ┌────────────────────────────────────────────────────────────────────┐
 │ [D] Docket │ Acme Launch ▾  ⌘K   ● Scheduler ran 12 s ago   ✉ Invitations  (RO) Sign out │  ← sticky header, h-14
 ├──────────────┬─────────────────────────────────────────────────────┤
-│ PUBLISH      │  (banners: scheduler stale = danger, reauth = warning) │
+│ ◫ Overview   │  (banners: scheduler stale = danger, reauth = warning) │
+│ PUBLISH      │                                                     │
 │ ▣ Calendar   │                                                     │
 │ ☰ Posts      │   Page title                         [Secondary][Primary]
 │ ✎ Compose    │   One-line description                              │
@@ -171,7 +172,8 @@ text/UI pairs in both themes.
   chevron and `Ctrl/⌘ K` hint), quiet scheduler status (green dot, `lg+`
   only), then invitations and user menu (initials avatar from the user's own
   display name, never from their email).
-- **Sidebar:** 240 px, sticky below the header, grouped by job: **Publish**
+- **Sidebar:** 240 px, sticky below the header, grouped by job: **Overview** first
+  (the project home, ungrouped), then **Publish**
   (Calendar, Posts, Compose, Review, Failures), **Create** (Generate, Jobs,
   Media, Voice), **Project** (Accounts, Settings). Review stays directly above
   Failures (tested). Active item: `bg-accent/60`, purple icon, 4 px purple
@@ -190,7 +192,7 @@ text/UI pairs in both themes.
 
 ### Page anatomy
 
-1. `PageHeader` — `title`, optional `description`, `actions` (primary last).
+1. `PageHeader` — `title`, optional `description`, `actions` (primary last). The project home (overview) uses it too.
 2. Optional `FilterTabs` (segmented control) and toolbar.
 3. Content in `Card`s / `Table` / `EmptyState`; one topic per card.
 4. `Pagination` at the bottom of lists.
@@ -242,6 +244,7 @@ full width, size `lg`.
 | `ActionBar` | `message`, `label`, `edge` `top`/`bottom`, `stickyFrom` `always`/`md` | Floating commit/selection row; primary action last. |
 | `Card`, `cardStyles` | `title`, `description`, `actions`, `as`, `padded` | `cardStyles` for a `<form>` or `<fieldset>` that is itself the card. |
 | `PageHeader` | `title`, `description`, `actions`, `eyebrow` | The route's only `h1`. |
+| `Checklist` | `title`, `items` (`key`, `title`, `description`, `optional`, `status` done/todo/waiting, `action`, `blocked`, `children`), `collapsedSummary` | Ordered setup steps, each with status as text, a decorative icon, one line and at most one action. `collapsedSummary` folds it into a native `<details>`. State comes from data, never from stored dismissal. Used by the project overview. |
 | `Table`, `Row`, `Cell` | `caption`, `columns`, `header` cell | Card-wrapped, uppercase muted column heads, row hover. Below `sm` each row stacks into a card and every cell is labelled with its column name (CSS variables `--col-N` + `.stack-table` in globals.css, so rows can come from any server or client component). |
 | `Badge`, `StatusBadge` | tones `neutral`, `brand`, `info`, `success`, `warning`, `danger` | Tinted pill + dot + text. Status → tone map lives in `StatusBadge` (scheduled = brand, approved/publishing/running = info). |
 | `Alert`, `alertStyles()` | tones `info`, `success`, `warning`, `danger`; `banner` | `role="alert"` for danger/warning, `status` otherwise. |

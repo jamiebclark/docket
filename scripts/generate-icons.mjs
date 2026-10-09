@@ -46,6 +46,8 @@ const ICONS = {
   activity: "activity",
   bell: "bell",
   slidersHorizontal: "sliders-horizontal",
+  overview: "layout-dashboard",
+  circle: "circle",
 };
 
 /** Provider key → Simple Icons slug. The mock provider has no brand; it uses the "flask" UI icon. */

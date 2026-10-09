@@ -185,7 +185,7 @@ export default async function AccountsPage({
                 ) : (
                   <p className="text-sm text-muted-foreground">No posting instructions.</p>
                 )}
-                <h4 className="text-sm font-semibold">Posting slots ({timeZone})</h4>
+                <h4 id={`account-${account.id}-slots`} className="scroll-mt-[calc(var(--sticky-top)+1rem)] text-sm font-semibold">Posting slots ({timeZone})</h4>
                 {rows.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No posting slots yet.</p>
                 ) : (
