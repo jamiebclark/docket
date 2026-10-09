@@ -1292,3 +1292,30 @@ TikTok connect, tokens, refresh, posting fields, consent, video by chunked uploa
 ### Open item
 
 - `.claude/skills/docket-ui/SKILL.md` (App shell bullet, line ~31) still needs "Overview first (project home, above the groups)" added before "Publish": the sandbox refused writes to `.claude/skills`. A human should make that one-line edit.
+
+## 028 — Empty states and role awareness (2026-10-09)
+
+- **D1 —** Role checks use the existing `scope.can` statements and, for server pieces, `role === "owner"`. Client components get booleans
+- **D2 —** `joinNames` moves to `src/lib/roles/names.ts` with a fallback parameter. `managersOf` and `listManagers` give one ranking of owners and admins
+- **D3 —** `listSlotCounts(scope)` with the pure rule `hasActiveSlot` (available provider and at least one unpaused slot), shared with the overview
+- **D4 —** `countPosts(scope)` for Failures' "no posts at all", read only when the unfiltered list is empty
+- **D5 —** `getGenerationReadiness(scope)` drops setting names for non-owners. `missingLlmSettings` gives the full list at once
+- **D6 —** Non-owner scheduler banner: the headline's first sentence, then the exact FR-061 sentence
+- **D7 —** `SchedulerHealth` has a required `viewer` prop; `ReauthBanner` has `askNames`
+- **D8 —** The layout reads managers only when a banner needs names
+- **D9 —** Accounts: section for managers only. Order: configured groups, mock, credentials, then the owner-only disclosure. Admin fallback line when nothing is connectable
+- **D10 —** Calendar has five derived states; "any active slot" is project-wide, regardless of the account filter
+- **D11 —** `hasActiveSlot` is optional on `AccountOption`; unknown means no hint
+- **D12 —** A blocking reason wins. When no selected account has slots, Add to queue is disabled and secondary, and Schedule… is the headline action, placed last
+- **D13 —** The compose empty-state href is unchanged (`/accounts`), now button-styled
+- **D14 —** Review's action is "Generate a post", shown when the viewer can run generation, never linking to Voice or Accounts
+- **D15 —** Jobs, when prerequisites are missing and no jobs exist: the list only, with no empty state. With jobs: the list above the table
+- **D16 —** Prerequisite card title: "Before you can generate". New job from media adds item 4 last, reusing today's selection messages
+- **D17 —** Media: the "No unused images" note becomes `alertStyles("info")` on a `<p>`, with no live role (it's static)
+- **D18 —** Voice reads archived profiles only when the active list is empty and the archived tab isn't open
+- **D19 —** Empty-state action variants: `primary` when it's the page's only next step, `secondary` when the header already has a primary action or when it's a navigation aid (contracts/ui.md lists each)
+- **D20 —** Pinned tests updated, as in R12
+
+### Open item
+
+- `.claude/skills/docket-ui/SKILL.md` "States" section still needs one line after the "populated" bullet: "Empty-state actions use `buttonStyles`; unfiltered empty lists hide their filters; prerequisite lists use `Checklist`; 'ask' copy names owners/admins by display name." The sandbox refused writes to `.claude/skills`; a human should make the edit.
