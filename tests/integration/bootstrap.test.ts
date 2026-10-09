@@ -90,7 +90,9 @@ describe("bootstrapped account", () => {
       await db.delete(user).where(eq(user.id, userId));
       await db.delete(installState);
     }
-  });
+    // Emptying the shared database's users cascades over every earlier file's rows, which grows with the suite;
+    // in CI this file reached 18 s of the 20 s default.
+  }, 60_000);
 });
 
 function envFor(url: string, extra: Record<string, string>): Record<string, string> {
