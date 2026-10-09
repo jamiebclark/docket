@@ -11,8 +11,9 @@ import { listMedia, mediaStatus } from "./media";
 import { listPosts } from "./posts";
 import { countReviewQueue } from "./review";
 import { getSchedulerHealth } from "./scheduler-health";
-import { listSlots } from "./slots";
+import { listSlotCounts } from "./slots";
 import { listVoiceProfiles } from "./voice";
+import { managersOf } from "@/lib/roles/names";
 import type { OverviewAccount, OverviewFacts, PostStatusKey, UpcomingPost } from "@/lib/overview/derive";
 
 export type * from "@/lib/overview/derive";
@@ -45,8 +46,8 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
       media.enabled ? listMedia(scope, { limit: 1 }) : Promise.resolve(null),
     ]);
 
-  const slotLists = await Promise.all(accounts.map((a) => listSlots(scope, a.id)));
-  const overviewAccounts: OverviewAccount[] = accounts.map((a, i) => ({
+  const slotCounts = new Map((await listSlotCounts(scope)).map((c) => [c.accountId, c]));
+  const overviewAccounts: OverviewAccount[] = accounts.map((a) => ({
     id: a.id,
     providerKey: a.providerKey,
     providerName: a.providerName,
@@ -54,10 +55,7 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
     status: a.status === "needs_reauth" ? "needs_reauth" : "active",
     providerAvailable: a.providerAvailable,
     credentialsExpireAt: a.credentialsExpireAt,
-    slots: {
-      active: (slotLists[i] ?? []).filter((s) => !s.paused).length,
-      paused: (slotLists[i] ?? []).filter((s) => s.paused).length,
-    },
+    slots: { active: slotCounts.get(a.id)?.active ?? 0, paused: slotCounts.get(a.id)?.paused ?? 0 },
   }));
 
   const upcoming: UpcomingPost[] = scheduled.items.slice(0, UPCOMING_MAX).map((p) => ({
@@ -70,11 +68,7 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
   const { needs_decision: _needsDecision, ...postCounts } = scheduled.counts;
   void _needsDecision;
 
-  const rank = { owner: 0, admin: 1 } as const;
-  const managers = memberRows
-    .filter((m): m is typeof m & { role: "owner" | "admin" } => m.role === "owner" || m.role === "admin")
-    .sort((a, b) => rank[a.role] - rank[b.role])
-    .map((m) => ({ name: m.name, role: m.role }));
+  const managers = managersOf(memberRows);
 
   const unconfiguredPlatforms =
     scope.membership.role === "owner" && accounts.length === 0

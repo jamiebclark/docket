@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { addSlotSchema } from "@/lib/validation/scheduling";
 import { ForbiddenError, NotFoundError } from "../dal/errors";
+import { listAccounts } from "./accounts";
 import type { SlotRow } from "../dal/slots";
 import type { ProjectScope } from "../dal/scope";
 
@@ -44,4 +45,18 @@ export async function deleteSlot(scope: ProjectScope, slotId: string): Promise<v
     if (!(await tx.slots.get(id))) throw new NotFoundError();
     await tx.slots.delete(id);
   });
+}
+
+export type AccountSlotCount = { accountId: string; providerAvailable: boolean; active: number; paused: number };
+
+/** Slot counts per account, in `listAccounts` order: one `listSlots` per account. */
+export async function listSlotCounts(scope: ProjectScope): Promise<AccountSlotCount[]> {
+  const accounts = await listAccounts(scope);
+  return Promise.all(
+    accounts.map(async (a) => {
+      const slots = await listSlots(scope, a.id);
+      const paused = slots.filter((s) => s.paused).length;
+      return { accountId: a.id, providerAvailable: a.providerAvailable, active: slots.length - paused, paused };
+    }),
+  );
 }

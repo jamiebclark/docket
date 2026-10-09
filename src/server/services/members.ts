@@ -4,6 +4,7 @@ import { ConflictError, ForbiddenError, LastOwnerError, NotFoundError } from "@/
 import type { AuditRow } from "@/server/dal/audit";
 import type { MemberRow } from "@/server/dal/members";
 import type { ProjectScope } from "@/server/dal/scope";
+import { managersOf, type Manager } from "@/lib/roles/names";
 import { recordAudit } from "./audit";
 
 const userIdSchema = z.object({ userId: z.uuid() });
@@ -20,6 +21,11 @@ export interface MemberView extends MemberRow {
 function asRole(value: string): Role {
   if (!(value in roles)) throw new Error("Unexpected role");
   return value as Role;
+}
+
+/** Owners and admins, owners first: names and roles only, no email or id. */
+export async function listManagers(scope: ProjectScope): Promise<Manager[]> {
+  return managersOf(await list(scope));
 }
 
 /** Members of the project with the actions the caller may take on each row. */

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeLlm } from "../../../tests/helpers/fake-llm";
-import { getLlm, getLlmStatus, LlmNotConfiguredError, setLlmForTests } from "./index";
+import { getLlm, getLlmStatus, LlmNotConfiguredError, missingLlmSettings, setLlmForTests } from "./index";
 
 const NAMES = ["LLM_PROVIDER", "LLM_MODEL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_TIMEOUT_SECONDS", "LLM_MAX_OUTPUT_TOKENS"];
 const saved: Record<string, string | undefined> = {};
@@ -24,6 +24,11 @@ describe("llm selection", () => {
     expect(getLlmStatus()).toMatchObject({ configured: false, problems: [{ name: "LLM_PROVIDER" }] });
     expect(() => getLlm()).toThrow(LlmNotConfiguredError);
     expect(() => getLlm()).toThrow("Generation is not configured. Set: LLM_PROVIDER, LLM_MODEL, OPENAI_API_KEY.");
+  });
+
+  it("missingLlmSettings expands a lone LLM_PROVIDER problem and passes others through", () => {
+    expect(missingLlmSettings([{ name: "LLM_PROVIDER" }])).toEqual(["LLM_PROVIDER", "LLM_MODEL", "OPENAI_API_KEY"]);
+    expect(missingLlmSettings([{ name: "LLM_MODEL" }])).toEqual(["LLM_MODEL"]);
   });
 
   it("names only the missing settings, never values", () => {
