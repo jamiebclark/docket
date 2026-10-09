@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { buttonStyles } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
@@ -35,11 +36,13 @@ export default async function ReviewPage({ params, searchParams }: Props) {
       <h1 className="text-2xl font-semibold">Review</h1>
       {queue.items.length === 0 ? (
         <EmptyState
-          message="Nothing to review"
+          message="Generated posts wait here for approval before they're scheduled. Posts you write yourself don't come here."
           action={
-            <Link href={`/p/${projectSlug}/generate`} className="text-sm underline">
-              Generate a post
-            </Link>
+            scope.can({ generation: ["run"] }) ? (
+              <Link href={`/p/${projectSlug}/generate`} className={buttonStyles({ variant: "primary" })}>
+                Generate a post
+              </Link>
+            ) : undefined
           }
         />
       ) : (

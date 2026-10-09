@@ -8,6 +8,10 @@ import { firstParam } from "@/lib/validation/media";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { getCalendar } from "@/server/services/calendar";
+import { calendarState } from "@/lib/roles/calendar";
+import { askManagers } from "@/lib/roles/names";
+import { listManagers } from "@/server/services/members";
+import { listSlotCounts } from "@/server/services/slots";
 import { CalendarBoard } from "./CalendarBoard";
 import { ChoiceField } from "@/components/ui/ChoiceField";
 
@@ -55,12 +59,34 @@ export default async function CalendarPage({ params, searchParams }: Props) {
   };
   const hasContent = calendar.days.some((d) => d.items.length > 0);
   const canSchedule = scope.can({ post: ["schedule"] });
+  const canManageAccounts = scope.can({ account: ["manage"] });
+  const canManageSlots = scope.can({ slot: ["manage"] });
+  const state = calendarState({
+    slug: projectSlug,
+    accounts: await listSlotCounts(scope),
+    hasContent,
+    canManageAccounts,
+    canManageSlots,
+    managersToAsk: canManageAccounts && canManageSlots ? "" : askManagers(await listManagers(scope), "or"),
+    todayHref: href({ date: calendar.today }),
+  });
+  const action = state.kind === "content" ? null : state.action;
+  const actionLink = (variant: "primary" | "secondary", size?: "sm") =>
+    action ? (
+      <Link href={action.href} className={buttonStyles({ variant, size })}>
+        {action.label}
+      </Link>
+    ) : null;
 
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">
         {calendar.title} <span className="text-base font-normal text-muted-foreground">· {calendar.timeZone}</span>
       </h1>
+      {state.kind === "no_accounts" ? (
+        <EmptyState icon="accounts" message={state.message} action={actionLink("primary")} />
+      ) : (
+        <>
       <div className="flex flex-wrap items-end gap-2">
         <nav aria-label="Calendar navigation" className="flex gap-2">
           <Link href={href({ date: calendar.prev })} className={linkClass}>
@@ -80,7 +106,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
             </Link>
           ))}
         </nav>
-        <form method="get" action={`/p/${projectSlug}/calendar`} className="flex items-end gap-2">
+        <form method="get" action={`/p/${projectSlug}/calendar`} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="view" value={calendar.view} />
           <input type="hidden" name="date" value={calendar.today} />
           <ChoiceField
@@ -102,17 +128,23 @@ export default async function CalendarPage({ params, searchParams }: Props) {
           </noscript>
         </form>
       </div>
-      {!hasContent ? (
-        <EmptyState
-          message="No posts or posting slots in this period. Posting slots are set per account."
-          action={
-            <Link href={`/p/${projectSlug}/accounts`} className={linkClass}>
-              Go to Accounts
-            </Link>
-          }
-        />
-      ) : null}
-      <CalendarBoard slug={projectSlug} calendar={calendar} canSchedule={canSchedule} />
+      {state.kind === "no_slots" ? (
+        <EmptyState message={state.message} action={actionLink("primary")} />
+      ) : state.kind === "empty_period" ? (
+        <EmptyState message={state.message} action={actionLink("secondary")} />
+      ) : (
+        <>
+          {state.kind === "no_slots_line" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-muted-foreground">{state.message}</p>
+              {actionLink("secondary", "sm")}
+            </div>
+          ) : null}
+          <CalendarBoard slug={projectSlug} calendar={calendar} canSchedule={canSchedule} />
+        </>
+      )}
+        </>
+      )}
     </section>
   );
 }

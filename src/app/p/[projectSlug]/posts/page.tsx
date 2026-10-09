@@ -69,11 +69,14 @@ export default async function PostsPage({ params, searchParams }: Props) {
     list = null;
   }
   const tz = scope.project.timezone;
+  const canWritePosts = scope.can({ post: ["edit"] });
+  const total = list ? Object.entries(list.counts).filter(([k]) => k !== "needs_decision").reduce((n, [, v]) => n + v, 0) : 0;
+  const noPosts = list !== null && total === 0 && !status;
   const tabs = FILTERS.map((f) => ({
     label: f.label,
     href: hrefFor(projectSlug, f.key),
     active: f.key === status,
-    ...(list ? { count: f.key ? list.counts[f.key] : Object.entries(list.counts).filter(([k]) => k !== "needs_decision").reduce((n, [, v]) => n + v, 0) } : {}),
+    ...(list ? { count: f.key ? list.counts[f.key] : total } : {}),
   }));
 
   return (
@@ -81,13 +84,13 @@ export default async function PostsPage({ params, searchParams }: Props) {
       <ProblemsCallout scope={scope} />
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Posts</h1>
-        {scope.can({ post: ["edit"] }) ? (
+        {canWritePosts ? (
           <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "primary" })}>
             New post
           </Link>
         ) : null}
       </div>
-      <FilterTabs label="Filter posts by status" tabs={tabs} />
+      {noPosts ? null : <FilterTabs label="Filter posts by status" tabs={tabs} />}
       <div className="mt-4">
         {list === null ? (
           <p role="alert" className="text-sm text-danger">
@@ -98,14 +101,14 @@ export default async function PostsPage({ params, searchParams }: Props) {
             message={status ? "No posts match this filter." : "No posts yet. Write your first post to see it here."}
             action={
               status ? (
-                <Link href={hrefFor(projectSlug)} className="text-sm underline">
+                <Link href={hrefFor(projectSlug)} className={buttonStyles({ variant: "secondary" })}>
                   Show all posts
                 </Link>
-              ) : (
-                <Link href={`/p/${projectSlug}/compose`} className="text-sm underline">
+              ) : canWritePosts ? (
+                <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "secondary" })}>
                   Write a post
                 </Link>
-              )
+              ) : undefined
             }
           />
         ) : (

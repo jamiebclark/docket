@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Checklist } from "@/components/ui/Checklist";
+import { PREREQUISITES_TITLE } from "@/lib/roles/prerequisites";
 import { getSession } from "@/server/auth/session";
 import { forProject, NotFoundError } from "@/server/dal";
-import { getLlmStatus } from "@/server/llm";
 import { previewJob } from "@/server/services/jobs";
+import { loadPrerequisites } from "../../generate/prerequisites";
 import { loadJobFormData } from "./form-data";
 import { JobForm } from "./JobForm";
 
@@ -49,62 +50,33 @@ export default async function NewJobPage({ params, searchParams }: Props) {
           }
         : { mode: "unused" as const };
   const includeUsed = mode !== "unused" && one(raw.includeUsed) === "1";
-  const back = (
-    <Link href={`${base}/media`} className="text-sm underline">
-      Back to Media
-    </Link>
-  );
   const heading = <h1 className="text-2xl font-semibold">New job</h1>;
 
-  const llm = getLlmStatus();
-  if (!llm.configured) {
-    return (
-      <section className="flex flex-col gap-4">
-        {heading}
-        <EmptyState message={`Generation is not set up. Set ${llm.problems.map((p) => p.name).join(", ")} on the server, then reload this page.`} action={back} />
-      </section>
-    );
-  }
-
   let preview;
+  let images: { message: string } | null = null;
   try {
     preview = await previewJob(scope, { source: { kind: "media", selection, includeUsed } });
+    if (preview.itemCount === 0) {
+      images = {
+        message:
+          mode === "unused" || mode === undefined ? "No unused images left to generate for." : "No images to generate for.",
+      };
+    }
   } catch {
-    return (
-      <section className="flex flex-col gap-4">
-        {heading}
-        <EmptyState message="That selection can't be used. Go back and choose the images again." action={back} />
-      </section>
-    );
+    images = { message: "That selection can't be used. Go back and choose the images again." };
   }
-  if (preview.itemCount === 0) {
+
+  const prerequisites = await loadPrerequisites(scope, projectSlug, images);
+  if (prerequisites || !preview) {
     return (
       <section className="flex flex-col gap-4">
         {heading}
-        <EmptyState
-          message={mode === "unused" || mode === undefined ? "No unused images left to generate for" : "No images to generate for."}
-          action={back}
-        />
+        <Checklist title={PREREQUISITES_TITLE} items={prerequisites ?? []} />
       </section>
     );
   }
 
   const data = await loadJobFormData(scope);
-  if (data.profiles.length === 0 || data.accounts.length === 0) {
-    return (
-      <section className="flex flex-col gap-4">
-        {heading}
-        <EmptyState
-          message={data.profiles.length === 0 ? "Create a voice profile first so generated posts sound like you." : "Connect an account first, then come back to generate posts for it."}
-          action={
-            <Link href={`${base}/${data.profiles.length === 0 ? "voice" : "accounts"}`} className="text-sm underline">
-              {data.profiles.length === 0 ? "Go to Voice" : "Go to Accounts"}
-            </Link>
-          }
-        />
-      </section>
-    );
-  }
   const used = preview.excluded.find((e) => e.reason === "already_used")?.count ?? 0;
   const deleted = preview.excluded.find((e) => e.reason === "deleted")?.count ?? 0;
   const toggle = new URLSearchParams(Object.entries(raw).flatMap(([k, v]) => (k === "includeUsed" || v === undefined ? [] : [[k, one(v)!]])));

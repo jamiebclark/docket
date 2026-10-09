@@ -6,6 +6,10 @@ import { getStorage } from "@/server/storage";
 import * as accounts from "@/server/services/accounts";
 import * as media from "@/server/services/media";
 import * as posts from "@/server/services/posts";
+import { hasActiveSlot } from "@/lib/roles/slots";
+import { askManagers } from "@/lib/roles/names";
+import { listManagers } from "@/server/services/members";
+import { listSlotCounts } from "@/server/services/slots";
 import { Composer } from "../Composer";
 
 export const metadata: Metadata = { title: "Edit post" };
@@ -24,6 +28,12 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
     throw error;
   }
   const list = await accounts.listAccounts(scope);
+  const counts = await listSlotCounts(scope).catch(() => null);
+  const slotById = new Map((counts ?? []).map((c) => [c.accountId, hasActiveSlot(c)]));
+  const canManageAccounts = scope.can({ account: ["manage"] });
+  const canManageSlots = scope.can({ slot: ["manage"] });
+  const managersToAsk =
+    canManageAccounts && canManageSlots ? undefined : askManagers(await listManagers(scope), "or");
   // Deleted images drop out of the picker; the next save removes them from the post.
   const initialMedia = (await Promise.all(detail.mediaIds.map((id) => media.getMedia(scope, id).catch(() => null)))).filter(
     (m) => m !== null,
@@ -41,8 +51,11 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
         providerName,
         status,
         providerAvailable,
+        hasActiveSlot: counts ? (slotById.get(id) ?? false) : null,
       }))}
-      canManageAccounts={scope.can({ account: ["manage"] })}
+      canManageAccounts={canManageAccounts}
+      canManageSlots={canManageSlots}
+      managersToAsk={managersToAsk}
       canEdit={scope.can({ post: ["edit"] })}
       canSchedule={scope.can({ post: ["schedule"] })}
       mediaEnabled={getStorage() !== null}

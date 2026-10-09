@@ -12,6 +12,8 @@ import { findConnectGroup } from "@/providers/registry";
 import * as connect from "@/server/services/connect";
 import { openBannerMessage } from "@/server/services/connect-banner";
 import * as slots from "@/server/services/slots";
+import { askManagers, askOwners } from "@/lib/roles/names";
+import { listManagers } from "@/server/services/members";
 import { ConnectGroupSection } from "./ConnectGroupSection";
 import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
@@ -63,6 +65,7 @@ export default async function AccountsPage({
     throw error;
   }
   const canManage = scope.can({ account: ["manage"] });
+  const isOwner = scope.membership.role === "owner";
   const timeZone = scope.project.timezone;
   const [list, providers] = await Promise.all([accounts.listAccounts(scope), accounts.listConnectableProviders(scope)]);
   const mockEnabled = providers.some((p) => p.key === "mock");
@@ -71,6 +74,27 @@ export default async function AccountsPage({
     p.key !== "mock" && p.credentialConnect && p.connect.strategy !== "oauth" ? [{ ...p, fields: [...p.connect.fields] }] : [],
   );
   const groups = await connect.listConnectGroups(scope);
+  const managers = await listManagers(scope);
+  const configuredGroups = groups.filter((g) => g.configured);
+  // Only owners can set a platform up on the server, so only they see the groups that aren't.
+  const unconfiguredGroups = isOwner ? groups.filter((g) => !g.configured) : [];
+  const nothingConnectable = configuredGroups.length === 0 && !mockEnabled && credentialProviders.length === 0 && unconfiguredGroups.length === 0;
+  const groupSection = (g: (typeof groups)[number]) => (
+    <ConnectGroupSection
+      key={g.key}
+      slug={projectSlug}
+      groupKey={g.key}
+      displayName={g.displayName}
+      providerKeys={g.providerKeys}
+      providerNames={g.providerNames}
+      configured={g.configured}
+      setupDoc={g.setupDoc}
+      redirectUri={g.redirectUri}
+      canManage={canManage}
+      paste={g.paste}
+      unavailable={g.unavailable}
+    />
+  );
   const withSlots = await Promise.all(list.map(async (account) => ({ account, slots: await slots.listSlots(scope, account.id) })));
 
   return (
@@ -97,7 +121,14 @@ export default async function AccountsPage({
           Connected accounts{withSlots.length > 0 ? ` (${withSlots.length})` : ""}
         </h2>
         {withSlots.length === 0 ? (
-          <EmptyState icon="accounts" message="No accounts are connected yet. Add one below to start scheduling posts." />
+          <EmptyState
+            icon="accounts"
+            message={
+              canManage
+                ? "You don't have any accounts yet. Connect one below to start scheduling posts."
+                : `No accounts yet. Ask ${askManagers(managers, "or")} to connect one.`
+            }
+          />
         ) : (
           withSlots.map(({ account, slots: rows }) => {
             const status = STATUS[account.status];
@@ -219,7 +250,7 @@ export default async function AccountsPage({
           })
         )}
       </section>
-      {canManage || groups.length > 0 ? (
+      {canManage ? (
         <section id="add-account" aria-labelledby="add-account-heading" className="flex scroll-mt-[calc(var(--sticky-top)+1rem)] flex-col gap-4">
           <div className="flex flex-col gap-1">
             <h2 id="add-account-heading" className="text-lg font-semibold">
@@ -228,22 +259,7 @@ export default async function AccountsPage({
             <p className="text-sm text-muted-foreground">Each connection brings in the accounts you choose; posting slots are set per account afterwards.</p>
           </div>
           <div className="grid items-start gap-4 lg:grid-cols-2">
-            {groups.map((g) => (
-              <ConnectGroupSection
-                key={g.key}
-                slug={projectSlug}
-                groupKey={g.key}
-                displayName={g.displayName}
-                providerKeys={g.providerKeys}
-                providerNames={g.providerNames}
-                configured={g.configured}
-                setupDoc={g.setupDoc}
-                redirectUri={g.redirectUri}
-                canManage={canManage}
-                paste={g.paste}
-                unavailable={g.unavailable}
-              />
-            ))}
+            {configuredGroups.map(groupSection)}
             {canManage && mockEnabled ? (
               <section aria-labelledby="connect-mock-heading" className="flex flex-col gap-3 rounded-xl border border-dashed border-input bg-surface p-5">
                 <div className="flex items-center gap-3">
@@ -269,6 +285,19 @@ export default async function AccountsPage({
                 ))
               : null}
           </div>
+          {unconfiguredGroups.length > 0 ? (
+            <details className="rounded-lg border border-border bg-surface p-3">
+              <summary className="cursor-pointer rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                Not set up on this server ({unconfiguredGroups.length})
+              </summary>
+              <div className="mt-3 flex flex-col gap-4">{unconfiguredGroups.map(groupSection)}</div>
+            </details>
+          ) : null}
+          {nothingConnectable ? (
+            <p className="text-sm text-muted-foreground">
+              No platforms are set up on this server yet. Ask {askOwners(managers, "or")} to set one up.
+            </p>
+          ) : null}
         </section>
       ) : null}
     </section>

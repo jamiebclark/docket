@@ -12,6 +12,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { Pagination } from "@/components/ui/Pagination";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
+import { countPosts } from "@/server/services/posts";
 import { listFailures, failuresQuerySchema, type AttemptRun, type FailureList, type FailureRow } from "@/server/services/failures";
 import { buttonStyles } from "@/components/ui/Button";
 import { ChoiceField } from "@/components/ui/ChoiceField";
@@ -168,7 +169,9 @@ export default async function FailuresPage({ params, searchParams }: Props) {
     ...(list ? { count: t.key === "all" ? list.totals.ambiguous + list.totals.failed : list.totals[t.key as "ambiguous" | "failed"] } : {}),
   }));
   const empty = list !== null && list.rows.length === 0;
-  const filtered = query.status !== "all" || !!query.account;
+  const filtered = query.status !== "all" || !!query.account || !!query.target;
+  const noPosts = empty && !filtered ? (await countPosts(scope).catch(() => 1)) === 0 : false;
+  const canWritePosts = scope.can({ post: ["edit"] });
 
   return (
     <AnnounceProvider focusFallbackId="page-title">
@@ -176,20 +179,20 @@ export default async function FailuresPage({ params, searchParams }: Props) {
       <h1 id="page-title" tabIndex={-1} className="text-2xl font-semibold">
         Failures
       </h1>
-      {list ? (
+      {list && !noPosts ? (
         <p className="mt-1 text-sm">
           {list.totals.ambiguous} need your decision · {list.totals.failed} failed
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap items-end gap-4">
-        {query.target ? (
+        {noPosts ? null : query.target ? (
           <Link href={`/p/${projectSlug}/failures`} className="text-sm underline">
             Show all failures
           </Link>
         ) : (
           <FilterTabs label="Filter failures by status" tabs={tabs} />
         )}
-        {list ? (
+        {list && !noPosts ? (
           <form method="get" action={`/p/${projectSlug}/failures`} className="flex items-end gap-2">
             {query.status !== "all" ? <input type="hidden" name="status" value={query.status} /> : null}
             <ChoiceField
@@ -208,7 +211,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
             </noscript>
           </form>
         ) : null}
-        {canSchedule && query.status !== "ambiguous" && list ? (
+        {canSchedule && query.status !== "ambiguous" && list && !noPosts ? (
           <RetryAllFailed
             key={`${query.status}:${query.account ?? ""}`}
             slug={projectSlug}
@@ -226,14 +229,26 @@ export default async function FailuresPage({ params, searchParams }: Props) {
           </p>
         ) : empty ? (
           <EmptyState
-            message={filtered ? "No posts match this filter." : "Nothing needs attention. Every post that was due went out or is still scheduled."}
+            message={
+              filtered
+                ? "No posts match this filter."
+                : noPosts
+                  ? "Posts that fail to publish will show up here."
+                  : "Nothing needs attention. Every post that was due went out or is still scheduled."
+            }
             action={
               filtered ? (
-                <Link href={`/p/${projectSlug}/failures`} className="text-sm underline">
+                <Link href={`/p/${projectSlug}/failures`} className={buttonStyles({ variant: "secondary" })}>
                   Clear filters
                 </Link>
+              ) : noPosts ? (
+                canWritePosts ? (
+                  <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "primary" })}>
+                    Write a post
+                  </Link>
+                ) : undefined
               ) : (
-                <Link href={`/p/${projectSlug}/posts`} className="text-sm underline">
+                <Link href={`/p/${projectSlug}/posts`} className={buttonStyles({ variant: "secondary" })}>
                   View posts
                 </Link>
               )

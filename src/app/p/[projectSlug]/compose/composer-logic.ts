@@ -1,3 +1,4 @@
+import { joinNames } from "@/lib/roles/names";
 import type { VideoEdit } from "@/lib/video/edit";
 import type { PostType } from "@/providers/types";
 import type { CompositionCheck, TargetCheck } from "@/server/services/posts";
@@ -81,3 +82,45 @@ export type EmptyAccountsAudience = "manage" | "ask";
 /** Who sees which empty state when the project has no accounts (US1-AS8). */
 export const emptyAccountsAudience = (canManageAccounts: boolean): EmptyAccountsAudience =>
   canManageAccounts ? "manage" : "ask";
+
+export type QueueSlotHint =
+  | { kind: "none" }
+  | { kind: "all"; text: string; link: { label: string; href: string } | null }
+  | { kind: "some"; text: string };
+
+/** Says why Add to queue may not place a post, from which selected accounts have no active slot. */
+export function queueSlotHint(input: {
+  slug: string;
+  selectedIds: readonly string[];
+  accounts: readonly { id: string; displayName: string; hasActiveSlot?: boolean | null }[];
+  canManageSlots: boolean;
+  managersToAsk: string;
+}): QueueSlotHint {
+  const selected = input.accounts.filter((a) => input.selectedIds.includes(a.id));
+  if (selected.length === 0) return { kind: "none" };
+  if (selected.some((a) => a.hasActiveSlot === null || a.hasActiveSlot === undefined)) return { kind: "none" };
+  const without = selected.filter((a) => a.hasActiveSlot === false);
+  if (without.length === 0) return { kind: "none" };
+  if (without.length === selected.length) {
+    const first = without[0];
+    if (input.canManageSlots && first) {
+      return {
+        kind: "all",
+        text: "Add to queue needs posting slots.",
+        link: { label: "Add slots in Accounts", href: `/p/${input.slug}/accounts#account-${first.id}-slots` },
+      };
+    }
+    return { kind: "all", text: `Add to queue needs posting slots. Ask ${input.managersToAsk} to add some.`, link: null };
+  }
+  const names = joinNames(
+    without.map((a) => a.displayName),
+    "and",
+  );
+  return {
+    kind: "some",
+    text:
+      without.length === 1
+        ? `${names} has no posting slots, so Add to queue can't place it.`
+        : `${names} have no posting slots, so Add to queue can't place them.`,
+  };
+}
