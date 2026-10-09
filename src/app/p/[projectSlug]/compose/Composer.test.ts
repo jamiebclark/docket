@@ -13,7 +13,7 @@ import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { findProvider } from "@/providers/registry";
 import { requirementsOf } from "@/providers/requirements";
 import { Composer, type AccountOption } from "./Composer";
-import { fetchCheck, type CheckResult } from "./composer-logic";
+import { fetchCheck, queueSlotHint, type CheckResult } from "./composer-logic";
 
 const accounts: AccountOption[] = [
   { id: "a1", displayName: "Main", providerKey: "bluesky", providerName: "Bluesky", status: "active", providerAvailable: true },
@@ -185,6 +185,7 @@ describe("Composer", () => {
   it("shows the empty-accounts state per role", () => {
     const owner = render({ accounts: [], canManageAccounts: true });
     expect(owner).toContain('href="/p/demo/accounts"');
+    expect(owner).toContain("Connect an account");
     const editor = render({ accounts: [], canManageAccounts: false });
     expect(editor).toContain("Ask an owner or admin");
     expect(editor).not.toContain('href="/p/demo/accounts"');
@@ -242,5 +243,72 @@ describe("Composer post type choice", () => {
     const html = render({ check: result([withChoice]), initialMedia: [video] });
     expect(html).toContain("Video 1");
     expect(html).not.toContain("no alt text");
+  });
+});
+
+describe("queueSlotHint", () => {
+  const accounts = [
+    { id: "a", displayName: "Alpha", hasActiveSlot: false },
+    { id: "b", displayName: "Beta", hasActiveSlot: false },
+    { id: "c", displayName: "Gamma", hasActiveSlot: true },
+    { id: "d", displayName: "Delta", hasActiveSlot: null },
+  ];
+  const hint = (selectedIds: string[], canManageSlots = true) =>
+    queueSlotHint({ slug: "p", selectedIds, accounts, canManageSlots, managersToAsk: "Robin or Sam" });
+
+  it("is none with nothing selected, all slotted, or an unknown read", () => {
+    expect(hint([])).toEqual({ kind: "none" });
+    expect(hint(["c"])).toEqual({ kind: "none" });
+    expect(hint(["a", "d"])).toEqual({ kind: "none" });
+  });
+
+  it("all: a manager gets a link to the first account without slots", () => {
+    expect(hint(["b", "a"])).toEqual({
+      kind: "all",
+      text: "Add to queue needs posting slots.",
+      link: { label: "Add slots in Accounts", href: "/p/p/accounts#account-a-slots" },
+    });
+  });
+
+  it("all: an editor is told who to ask, with no link", () => {
+    expect(hint(["a"], false)).toEqual({
+      kind: "all",
+      text: "Add to queue needs posting slots. Ask Robin or Sam to add some.",
+      link: null,
+    });
+  });
+
+  it("some: names one or two accounts", () => {
+    expect(hint(["a", "c"])).toEqual({ kind: "some", text: "Alpha has no posting slots, so Add to queue can't place it." });
+    expect(hint(["a", "b", "c"])).toEqual({
+      kind: "some",
+      text: "Alpha and Beta have no posting slots, so Add to queue can't place them.",
+    });
+  });
+});
+
+describe("Composer action bar when no slot is active (FR-081)", () => {
+  const noSlot: AccountOption[] = accounts.map((a) => ({ ...a, hasActiveSlot: false }));
+  const withCheck = async () => ({ check: await checked(result([target()])) });
+
+  it("disables Add to queue and links to slots for a manager", async () => {
+    const html = render({ accounts: noSlot, canManageSlots: true, ...(await withCheck()) });
+    expect(html).toContain("Add to queue needs posting slots.");
+    expect(html).toContain("Add slots in Accounts");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Add to queue…/);
+    expect(html).toMatch(/<button[^>]*aria-describedby="[^"]*-hint"[^>]*>Add to queue…/);
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Schedule…/);
+  });
+
+  it("names who to ask for a viewer who cannot manage slots", async () => {
+    const html = render({ accounts: noSlot, managersToAsk: "Robin or Sam", ...(await withCheck()) });
+    expect(html).toContain("Ask Robin or Sam to add some.");
+    expect(html).not.toContain("Add slots in Accounts");
+  });
+
+  it("leaves the bar alone when slot state is unknown or active", async () => {
+    const unknown = render({ accounts: accounts.map((a) => ({ ...a, hasActiveSlot: null })), ...(await withCheck()) });
+    expect(unknown).not.toContain("needs posting slots");
+    expect(unknown).not.toMatch(/<button[^>]*disabled=""[^>]*>Add to queue…/);
   });
 });

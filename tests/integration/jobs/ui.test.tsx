@@ -58,12 +58,23 @@ function find(node: ReactNode, type: unknown): { props: Record<string, unknown> 
 }
 
 describe("Jobs list", () => {
-  it("shows the empty state with both start links", async () => {
+  it("shows the header actions and an empty state with no actions when ready", async () => {
     const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
     const html = await jobsHtml(e);
-    expect(html).toContain("No generation jobs yet. Start one from your media library or a CSV file.");
-    expect(html).toContain("New job from media");
+    expect(html).toContain("No generation jobs yet. Start one from a CSV file, or choose images in Media.");
     expect(html).toContain("New job from CSV");
+    expect(html).toContain("Choose images in Media");
+    expect(html).not.toContain("Before you can generate");
+  });
+
+  it("not ready: the checklist replaces the header actions and the empty state (scenario 11)", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(null);
+    const html = await jobsHtml(e);
+    expect(html).toContain("Before you can generate");
+    expect(html).not.toContain("New job from CSV");
+    expect(html).not.toContain("No generation jobs yet");
   });
 
   it("lists a job with its policies, status and counts", async () => {
@@ -79,18 +90,20 @@ describe("Jobs list", () => {
     expect(html).toContain('scope="col"');
   });
 
-  it("says generation is not configured above the table", async () => {
+  it("shows the checklist above the table when generation is not set up", async () => {
     const e = await jobsEnv();
     setLlmForTests(createFakeLlm([]));
     await e.assets(1);
     await createJob(e.scope, e.input());
     setLlmForTests(null);
     const html = await jobsHtml(e);
-    expect(html).toMatch(/Generation is not configured\. Set: /);
+    expect(html).toContain("Before you can generate");
+    expect(html).toContain("Generation jobs");
   });
 
   it("shows the start links to an editor", async () => {
     const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
     expect(await jobsHtml(e, e.editor)).toContain("New job from CSV");
   });
 });
@@ -144,10 +157,42 @@ describe("Job page", () => {
 });
 
 describe("Media page", () => {
-  const mediaHtml = async (e: Env) => {
-    actAs(e.owner);
+  const mediaHtml = async (e: Env, as: { id: string } = e.owner) => {
+    actAs(as);
     return renderToStaticMarkup(await MediaPage({ params: Promise.resolve({ projectSlug: e.project.slug }), searchParams: noParams }));
   };
+
+  it("empty library shows only the dropzone and one sentence (scenario 12)", async () => {
+    const e = await jobsEnv();
+    const empty = await mediaHtml(e);
+    expect(empty).toContain("No images or videos yet. Upload your first one above.");
+    expect(empty).not.toContain('role="search"');
+    expect(empty).not.toContain("Filter media");
+    const editor = await mediaHtml(e, e.editor);
+    expect(editor).toContain("No images or videos yet.");
+  });
+
+  it("filtered with no matches keeps the controls", async () => {
+    const e = await jobsEnv();
+    actAs(e.owner);
+    const html = renderToStaticMarkup(
+      await MediaPage({ params: Promise.resolve({ projectSlug: e.project.slug }), searchParams: Promise.resolve({ q: "zzz" }) }),
+    );
+    expect(html).toContain("No images or videos match these filters.");
+    expect(html).toContain('role="search"');
+  });
+
+  it("storage off: owner gets the setup button, others are told whom to ask", async () => {
+    const e = await jobsEnv();
+    setStorageForTests(null);
+    const owner = await mediaHtml(e);
+    expect(owner).toContain("Set up storage");
+    expect(owner).toContain('target="_blank"');
+    const editor = await mediaHtml(e, e.editor);
+    expect(editor).toContain(`Ask ${e.owner.name} to set it up.`);
+    expect(editor).not.toContain("Set up storage");
+    setStorageForTests(undefined);
+  });
 
   it("offers Generate for all unused images, disabled at zero, and marks an image in a job", async () => {
     const e = await jobsEnv();

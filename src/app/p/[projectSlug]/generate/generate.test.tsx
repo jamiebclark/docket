@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-import { getLlmStatus, setLlmForTests } from "@/server/llm";
+import { getLlmStatus, missingLlmSettings, setLlmForTests } from "@/server/llm";
 import * as accounts from "@/server/services/accounts";
 import { createFakeLlm } from "../../../../../tests/helpers/fake-llm";
 import { createVoiceProfile } from "../../../../../tests/helpers/factories";
@@ -59,37 +59,52 @@ const connect = (env: Env, providerKey: string, displayName: string) =>
 const configured = () => setLlmForTests(createFakeLlm([]));
 
 describe("generate page states", () => {
-  it("names the missing settings when the model is not configured", async () => {
+  it("lists every missing prerequisite at once, naming the setting for an owner", async () => {
     vi.stubEnv("LLM_PROVIDER", "");
     vi.stubEnv("LLM_MODEL", "");
     vi.stubEnv("OPENAI_API_KEY", "");
     setLlmForTests(null);
     const status = getLlmStatus();
     expect(status.configured).toBe(false);
-    const html = await render(await postsEnv());
-    expect(html).toContain("Generation is not set up");
-    if (!status.configured) for (const p of status.problems) expect(html).toContain(p.name);
+    const env = await postsEnv();
+    const html = await render(env);
+    expect(html).toContain("Before you can generate");
+    if (!status.configured) for (const name of missingLlmSettings(status.problems)) expect(html).toContain(name);
+    expect(html).toContain("Connect an account");
+    expect(html).toContain(`/p/${env.project.slug}/accounts#add-account`);
+    expect(html).toContain("Create a voice profile");
+    expect(html).toContain(`/p/${env.project.slug}/voice/new`);
     expect(html).not.toContain("<form");
   });
 
-  it("differs for owners and editors when there is no voice profile", async () => {
+  it("gives an editor no settings and no actions, only who to ask", async () => {
+    vi.stubEnv("LLM_PROVIDER", "");
+    vi.stubEnv("LLM_MODEL", "");
+    vi.stubEnv("OPENAI_API_KEY", "");
+    setLlmForTests(null);
+    const env = await postsEnv();
+    const html = await render(env, env.editor);
+    expect(html).toContain("Before you can generate");
+    expect(html).toContain("Waiting on");
+    expect(html).not.toContain("LLM_PROVIDER");
+    expect(html).not.toContain("/voice/new");
+    expect(html).not.toContain("#add-account");
+    expect(html).not.toContain("<form");
+  });
+
+  it("shows only what is still missing as to do", async () => {
     configured();
     const env = await postsEnv();
     const owner = await render(env, env.owner);
     const editor = await render(env, env.editor);
     expect(owner).toContain("Create a voice profile");
     expect(owner).toContain(`/p/${env.project.slug}/voice/new`);
-    expect(editor).toContain("Ask an owner or admin to create one");
-    expect(editor).not.toContain("Create a voice profile");
-  });
-
-  it("links to Accounts when there are no accounts", async () => {
-    configured();
-    const env = await postsEnv();
+    expect(editor).not.toContain(`/p/${env.project.slug}/voice/new`);
+    expect(editor).toContain("Waiting on");
     await createVoiceProfile(env.project.id);
-    const html = await render(env);
-    expect(html).toContain("Connect an account first");
-    expect(html).toContain(`/p/${env.project.slug}/accounts`);
+    const partial = await render(env);
+    expect(partial).toContain("Connect an account");
+    expect(partial).not.toContain("<form");
   });
 
   it("preselects the default profile and shows account status badges", async () => {

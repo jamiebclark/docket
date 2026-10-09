@@ -16,6 +16,7 @@ import * as accounts from "../../src/server/services/accounts";
 import * as posts from "../../src/server/services/posts";
 import * as slots from "../../src/server/services/slots";
 import { closeDb, testDb } from "../helpers/db";
+import { addMember, createUser } from "../helpers/factories";
 import { postsEnv } from "../helpers/posts-env";
 import { sessionFor } from "../helpers/connect-group";
 import MembersPage from "../../src/app/p/[projectSlug]/settings/members/page";
@@ -154,6 +155,56 @@ describe("accounts page with the Meta connect group", () => {
     expect(html).toContain("is not configured on this server");
     expect(html).toContain("connect-group-meta-redirect");
     expect(html).not.toContain('id="connect-group-meta-token"');
+  });
+});
+
+describe("accounts page by role", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  async function pageAs(env: Awaited<ReturnType<typeof postsEnv>>, userId: string) {
+    return renderAs(userId, async () => renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })));
+  }
+
+  it("owner: closed disclosure holds the unconfigured platforms", async () => {
+    vi.stubEnv("META_APP_ID", "");
+    vi.stubEnv("META_APP_SECRET", "");
+    const env = await postsEnv();
+    const html = await pageAs(env, env.owner.id);
+    expect(html).toContain('id="add-account"');
+    expect(html).toMatch(/<details(?![^>]*\bopen\b)[^>]*>\s*<summary[^>]*>Not set up on this server \(\d+\)/);
+    expect(html).toContain("connect-group-meta-redirect");
+  });
+
+  it("owner: a configured platform is not in the disclosure", async () => {
+    vi.stubEnv("META_APP_ID", "12345");
+    vi.stubEnv("META_APP_SECRET", "app-secret-value-0000");
+    const env = await postsEnv();
+    const html = await pageAs(env, env.owner.id);
+    expect(html).not.toContain("connect-group-meta-redirect");
+    expect(html).toContain('id="connect-group-meta-token"');
+  });
+
+  it("admin: sees no disclosure and no redirect address for unconfigured platforms", async () => {
+    vi.stubEnv("META_APP_ID", "");
+    vi.stubEnv("META_APP_SECRET", "");
+    const env = await postsEnv();
+    const admin = await createUser({ name: "Sam" });
+    await addMember(env.project.id, admin.id, "admin");
+    const html = await pageAs(env, admin.id);
+    expect(html).toContain('id="add-account"');
+    expect(html).not.toContain("Not set up on this server");
+    expect(html).not.toContain("connect-group-meta-redirect");
+  });
+
+  it("editor: no add-account section, and managers are named", async () => {
+    const env = await postsEnv();
+    const editor = await createUser();
+    await addMember(env.project.id, editor.id, "editor");
+    const html = await pageAs(env, editor.id);
+    expect(html).not.toContain('id="add-account"');
+    expect(html).not.toContain("Not set up on this server");
+    expect(html).not.toContain("connect-group-meta-redirect");
+    expect(html).toContain(`Ask ${env.owner.name} or ${env.admin.name} to connect one.`);
   });
 });
 
