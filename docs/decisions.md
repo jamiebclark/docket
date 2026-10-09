@@ -1273,3 +1273,22 @@ Each generic hook is optional, so removing a provider's declaration turns it off
 ### Implementation outcome
 
 TikTok connect, tokens, refresh, posting fields, consent, video by chunked upload, photo posts, status checks, plain-word refusals, the unaudited behaviour and the operator docs are built and tested with mocked HTTP only. Nothing was run against TikTok's live service; the live checks are listed in `docs/tiktok-setup.md` (FR-037) and are owed once the operator's app is audited. Not built, and owned by no spec: the items in `docs/feature-map.md` (FR-041) and a confirm-at-send flow (FR-042), the fallback if the audit refuses consent given at scheduling.
+
+## 027 — Project overview (2026-10-09)
+
+- **D1 — Step 1 counts any account that isn't removed**, including one needing reconnecting or from an unregistered provider. Reconnecting is a Needs attention item, not a setup step.
+- **D2 — Step 2 counts only slots on accounts whose provider is available.** Its action goes to the first such account without an active slot; if every account is unavailable, to the first account.
+- **D3 — What counts as a first post:** status `scheduled`, `publishing`, `published` or `partially_failed`. The enum has no "partially published" value, and `partially_failed` means some targets went out.
+- **D4 — Failed vs partially failed:** Failed = `failed` + `partially_failed`. A partially failed post counts both as a first post and under Needs attention; both are true.
+- **D5 — Expiry and reconnect never both appear for one account.** A reconnect item wins; otherwise an expiry item shows when `credentialsExpireAt <= now + 14 days`.
+- **D6 — Accounts status badge precedence:** Unavailable (provider not registered), then Needs reconnecting, then Connected.
+- **D7 — The collapsed checklist is a native `<details>`/`<summary>`** reading "Setup complete"; opened, it shows unfinished optional steps and the owner's server-setup row.
+- **D8 — Settings keeps the generic "Loading…" state** (`[projectSlug]/loading.tsx` unchanged); the overview skeleton is scoped to the home route group.
+- **D9 — Who sees the invite step:** only viewers with `invitation: create` (owners, admins). Done when there is more than one member or a pending invitation.
+- **D10 — When the platform item shows:** only to owners while the project has no accounts.
+- **D11 — The Media "Upload" action** is shown to every role with `media: edit`, which today is all three roles.
+- **D12 — Accounts page anchor** `#account-{id}-slots` is the only Accounts page change.
+
+### Open item
+
+- `.claude/skills/docket-ui/SKILL.md` (App shell bullet, line ~31) still needs "Overview first (project home, above the groups)" added before "Publish": the sandbox refused writes to `.claude/skills`. A human should make that one-line edit.
