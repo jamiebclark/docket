@@ -22,8 +22,47 @@ export const NAV_SECTIONS = [
   { slug: "settings", label: "Settings", group: "Project", icon: "settings" },
 ] as const satisfies readonly { slug: string; label: string; group: (typeof NAV_GROUPS)[number]; icon: IconName }[];
 
+/** Overview matches only `/p/{slug}` itself (trailing slash allowed); every other item matches its prefix. */
+export function isNavItemActive(pathname: string, href: string, exact = false): boolean {
+  if (exact) return pathname === href || pathname === `${href}/`;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 function count(slug: string, reviewCount: number, failuresCount: number): number {
   return slug === "review" ? reviewCount : slug === "failures" ? failuresCount : 0;
+}
+
+function NavLink({ href, label, icon, active, n, slug }: { href: string; label: string; icon: IconName; active: boolean; n: number; slug: string }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
+        active ? "bg-accent/60 text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+    >
+      {active ? <span aria-hidden="true" className="absolute inset-y-1.5 left-0 hidden w-1 rounded-r-full bg-primary md:block" /> : null}
+      <Icon name={icon} className={active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"} />
+      {n > 0 ? (
+        <>
+          <span className="sr-only">{`${label} (${n})`}</span>
+          <span aria-hidden="true" className="flex-1">
+            {label}
+          </span>
+          <span
+            aria-hidden="true"
+            className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-xs font-semibold tabular-nums ${
+              slug === "failures" ? "bg-danger-bg text-danger" : "bg-cta text-cta-foreground"
+            }`}
+          >
+            {n}
+          </span>
+        </>
+      ) : (
+        <span className="flex-1">{label}</span>
+      )}
+    </Link>
+  );
 }
 
 /**
@@ -51,44 +90,20 @@ export function LeftNav({ projectSlug, reviewCount = 0, failuresCount = 0 }: { p
       className="sticky top-14 z-20 shrink-0 overflow-x-auto border-b border-border bg-surface/95 backdrop-blur [scrollbar-width:none] md:h-[calc(100dvh-3.5rem)] md:w-60 md:overflow-y-auto md:border-r md:border-b-0 md:bg-surface md:[scrollbar-width:auto]"
     >
       <div className="flex gap-1 px-3 py-2 md:flex-col md:gap-5 md:px-3 md:py-5">
+        <ul className="flex gap-1 md:flex-col">
+          <li>
+            <NavLink href={`/p/${projectSlug}`} label="Overview" icon="overview" active={isNavItemActive(pathname, `/p/${projectSlug}`, true)} n={0} slug="overview" />
+          </li>
+        </ul>
         {NAV_GROUPS.map((group) => (
           <div key={group} className="flex md:flex-col md:gap-1">
             <p className="hidden px-3 pb-1 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase md:block">{group}</p>
             <ul className="flex gap-1 md:flex-col">
               {NAV_SECTIONS.filter((s) => s.group === group).map(({ slug, label, icon }) => {
                 const href = `/p/${projectSlug}/${slug}`;
-                const active = pathname === href || pathname.startsWith(`${href}/`);
-                const n = count(slug, reviewCount, failuresCount);
                 return (
                   <li key={slug}>
-                    <Link
-                      href={href}
-                      aria-current={active ? "page" : undefined}
-                      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
-                        active ? "bg-accent/60 text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      {active ? <span aria-hidden="true" className="absolute inset-y-1.5 left-0 hidden w-1 rounded-r-full bg-primary md:block" /> : null}
-                      <Icon name={icon} className={active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"} />
-                      {n > 0 ? (
-                        <>
-                          <span className="sr-only">{`${label} (${n})`}</span>
-                          <span aria-hidden="true" className="flex-1">
-                            {label}
-                          </span>
-                          <span
-                            aria-hidden="true"
-                            className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-xs font-semibold tabular-nums ${
-                              slug === "failures" ? "bg-danger-bg text-danger" : "bg-cta text-cta-foreground"
-                            }`}
-                          >
-                            {n}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="flex-1">{label}</span>
-                      )}
-                    </Link>
+                    <NavLink href={href} label={label} icon={icon} active={isNavItemActive(pathname, href)} n={count(slug, reviewCount, failuresCount)} slug={slug} />
                   </li>
                 );
               })}
