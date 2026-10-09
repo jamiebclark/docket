@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { SocialProvider } from "../../../src/providers/types";
 import { forApiKey } from "../../../src/server/dal/scope";
@@ -10,7 +10,8 @@ import * as posts from "../../../src/server/services/posts";
 import * as slots from "../../../src/server/services/slots";
 import { createKey } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
-import { createProject } from "../../helpers/factories";
+import { createProject, createVideoAsset } from "../../helpers/factories";
+import { createFakeTikTok, creatorReply } from "../../helpers/fake-tiktok";
 import { postsEnv } from "../../helpers/posts-env";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
@@ -202,5 +203,104 @@ describe("consent in the engine (G27)", () => {
     expect(result).toMatchObject({ ok: true });
     await runTick({ config: {} });
     expect(advanced).toBeGreaterThan(0);
+  });
+});
+
+describe("consent for TikTok (G27, P5)", () => {
+  const CREATOR = "/v2/post/publish/creator_info/query/";
+  const fake = createFakeTikTok();
+  const tiktokValues = { privacy: "PUBLIC_TO_EVERYONE" };
+  const TT_REFUSAL = "Tick 'I agree' to post to TikTok.";
+
+  beforeEach(() => {
+    vi.stubEnv("TIKTOK_CLIENT_KEY", "CLIENT-KEY");
+    vi.stubEnv("TIKTOK_CLIENT_SECRET", "CLIENT-SECRET-XYZ");
+    vi.stubEnv("TIKTOK_APP_AUDITED", "true");
+    fake.reset();
+    fake.install();
+    fake.on("POST", CREATOR, { kind: "ok", body: creatorReply({ max_video_post_duration_sec: 300 }) });
+  });
+  afterEach(() => {
+    fake.uninstall();
+    vi.unstubAllEnvs();
+  });
+
+  async function tiktokSetup(videoSeconds = 120) {
+    const env = await postsEnv();
+    const account = await accounts.saveConnectedAccount(env.scope, {
+      providerKey: "tiktok",
+      externalAccountId: `open-${Math.random().toString(36).slice(2, 8)}`,
+      displayName: "Ada (@ada)",
+      settings: { username: "ada", nickname: "Ada" },
+      credentials: {
+        v: 1,
+        accessToken: "TT-ACCESS-0123456789",
+        refreshToken: "TT-REFRESH-0123456789",
+        accessExpiresAt: Date.now() + 20 * 3_600_000,
+        refreshIssuedAt: Date.now(),
+        refreshExpiresAt: Date.now() + 300 * 86_400_000,
+        refreshExpiryEstimated: false,
+        openId: "open-id-1",
+      },
+    });
+    await slots.addSlot(env.scope, { accountId: account.id, weekday: 1, localTime: "09:00" });
+    const video = await createVideoAsset(env.project.id, { width: 1080, height: 1920, durationSeconds: videoSeconds });
+    return { env, account, video };
+  }
+
+  async function tiktokDraft(t: Awaited<ReturnType<typeof tiktokSetup>>, over: { baseText?: string; posting?: unknown; consent?: boolean } = {}) {
+    const baseText = over.baseText ?? "hello";
+    const posting = over.posting ?? tiktokValues;
+    const check = await posts.checkComposition(t.env.scope, { baseText, mediaIds: [t.video.id], targets: [{ accountId: t.account.id, posting }] });
+    const fp = check.targets[0]!.posting!.consent!.fingerprint;
+    return posts.createDraft(t.env.scope, {
+      baseText,
+      mediaIds: [t.video.id],
+      targets: [{ accountId: t.account.id, posting, ...(over.consent === false ? {} : { consent: { fingerprint: fp } }) }],
+    });
+  }
+
+  it("refuses scheduling without consent, and allows it with consent", async () => {
+    const t = await tiktokSetup();
+    const without = await tiktokDraft(t, { consent: false });
+    const [refused] = await posts.scheduleAt(t.env.scope, without.post.id, { at: FUTURE() });
+    expect(refused).toMatchObject({ ok: false, code: "validation", message: TT_REFUSAL });
+    const agreed = await tiktokDraft(t);
+    const [ok] = await posts.scheduleAt(t.env.scope, agreed.post.id, { at: FUTURE() });
+    expect(ok).toMatchObject({ ok: true });
+  });
+
+  it("records the creator details with the consent", async () => {
+    const t = await tiktokSetup();
+    const draft = await tiktokDraft(t);
+    const [target] = await t.env.scope.targets.listForPost(draft.post.id);
+    expect(target).toMatchObject({ consentByUserId: t.env.owner.id, consentDetails: { nickname: "Ada", maxVideoSeconds: 300 } });
+    expect(target!.consentFingerprint).toMatch(/^v1:[0-9a-f]{64}$/);
+  });
+
+  it("any change to the text or a posting value invalidates the consent", async () => {
+    const t = await tiktokSetup();
+    const edits = [{ baseText: "changed" }, { targets: [{ accountId: t.account.id, posting: { ...tiktokValues, allowComments: true } }] }];
+    for (const body of edits) {
+      const draft = await tiktokDraft(t);
+      await posts.updatePost(t.env.scope, draft.post.id, body);
+      const [target] = await t.env.scope.targets.listForPost(draft.post.id);
+      expect(target!.consentFingerprint).toBeNull();
+      const [result] = await posts.publishNow(t.env.scope, draft.post.id);
+      expect(result).toMatchObject({ ok: false, message: TT_REFUSAL });
+    }
+  });
+
+  it("the gate checks the video against the creator maximum stored with the consent, not a fresh read", async () => {
+    const t = await tiktokSetup(120);
+    fake.on("POST", CREATOR, { kind: "ok", body: creatorReply({ max_video_post_duration_sec: 60 }) });
+    const draft = await tiktokDraft(t);
+    // TikTok now says 300 s, but the person agreed when the maximum was 60 s.
+    clearAccountDetailsCache();
+    fake.on("POST", CREATOR, { kind: "ok", body: creatorReply({ max_video_post_duration_sec: 300 }) });
+    const [result] = await posts.scheduleAt(t.env.scope, draft.post.id, { at: FUTURE() });
+    expect(result).toMatchObject({ ok: false, code: "validation" });
+    expect(JSON.stringify(result)).toContain("up to 60 seconds");
+    expect(fake.callsTo("POST", CREATOR).length).toBeLessThanOrEqual(2);
   });
 });

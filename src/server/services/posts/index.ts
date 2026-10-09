@@ -81,6 +81,9 @@ export interface PostTargetView {
   inProgress: boolean;
   /** Scheduled and due, waiting for the adapted video to be built. */
   preparingVideo: boolean;
+  /** The stored posting values (G25) and consent fingerprint (G27), for the composer only; never part of the public API. */
+  postingFields: unknown | null;
+  consentFingerprint: string | null;
 }
 
 export interface PostDetail {
@@ -138,6 +141,8 @@ async function targetView(tx: Tx, t: TargetRecord, now: Date): Promise<PostTarge
     publishedAt: t.publishedAt,
     inProgress: hasLiveLease(t, now),
     preparingVideo: t.status === "scheduled" && t.videoWaitSince !== null,
+    postingFields: t.postingFields,
+    consentFingerprint: t.consentFingerprint,
   };
 }
 

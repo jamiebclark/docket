@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { blueskyLikeProvider, registerTestProvider } from "../../../tests/helpers/provider-fixtures";
+// eslint-disable-next-line no-restricted-imports -- test teardown only closes the pool
 import { closeDb } from "../../../tests/helpers/db";
 import { postsEnv } from "../../../tests/helpers/posts-env";
 import type { SocialProvider } from "../../providers/types";

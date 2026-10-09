@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_VIDEO_EDIT } from "../../../src/lib/video/edit";
+import { tiktokPostingSchema } from "../../../src/providers/tiktok/posting";
+import { consentFingerprint } from "../../../src/server/services/posts/consent";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
 import { runTick } from "../../../src/server/scheduler";
@@ -11,7 +14,8 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
 import { createFakeTikTok, tokenReply } from "../../helpers/fake-tiktok";
-import { createDraftPost, createMediaAsset, parkAllDueTargets } from "../../helpers/scheduling";
+import { createVideoAsset } from "../../helpers/factories";
+import { createDraftPost, parkAllDueTargets } from "../../helpers/scheduling";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -141,12 +145,22 @@ describe("TikTok renewal on the publish path", () => {
     // Re-base the access expiry on the real clock the tick will read.
     const creds = { ...(await s.stored()), accessExpiresAt: now + 10 * MINUTE, refreshExpiresAt: now + 200 * DAY, refreshIssuedAt: now - 165 * DAY };
     await forSchedulerProject(s.projectId).accounts.setCredentials(s.accountId, encryptCredentials(s.accountId, creds), new Date(now + 200 * DAY));
-    // A photo post that passes the first-step content check, so the engine reaches credentials.
-    const image = await createMediaAsset(s.projectId, { mimeType: "image/jpeg", altText: "a" });
-    const { post, targets } = await createDraftPost(s.projectId, { baseText: "needs a fresh token", accountIds: [s.accountId], mediaIds: [image.id] });
+    // A video post with its posting values and consent, so it passes the first-step content and consent checks and the engine reaches credentials.
+    const video = await createVideoAsset(s.projectId, { width: 1080, height: 1920, durationSeconds: 20 });
+    const text = "needs a fresh token";
+    const { post, targets } = await createDraftPost(s.projectId, { baseText: text, accountIds: [s.accountId], mediaIds: [video.id] });
     const repos = forSchedulerProject(s.projectId);
     const due = new Date(now - 60_000);
-    await repos.targets.update(targets[0]!.id, { status: "scheduled", scheduleKind: "explicit", scheduledAt: due, nextAttemptAt: due });
+    const values = tiktokPostingSchema.parse({ privacy: "SELF_ONLY" });
+    await repos.targets.update(targets[0]!.id, {
+      status: "scheduled",
+      scheduleKind: "explicit",
+      scheduledAt: due,
+      nextAttemptAt: due,
+      postingFields: values,
+      consentAt: new Date(now - 120_000),
+      consentFingerprint: consentFingerprint({ text, mediaIds: [video.id], videoEdits: [{ mediaId: video.id, edit: DEFAULT_VIDEO_EDIT }], values, details: null }),
+    });
     await repos.posts.setStatus(post.id, "scheduled");
 
     await atTime(new Date(now), () => runTick({ config: {} }));

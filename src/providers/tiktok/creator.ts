@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { AccountDetailsReader } from "../types";
+import { readTikTokCredentials } from "./credentials";
 import { readEnvelope, tiktokRequest } from "./http";
 
 /** Live, non-secret creator details (data-model §4). The avatar URL is dropped. */
@@ -66,3 +68,30 @@ export async function readCreatorInfo(accessToken: string, signal: AbortSignal):
   const details = env.data ? detailsFrom(env.data) : null;
   return details ? { kind: "ok", details } : { kind: "transient" };
 }
+
+const LOAD_FAILED = "Couldn't load this TikTok account's options.";
+const RECONNECT = "TikTok did not grant permission to post. Connect again and allow posting.";
+
+/** G26: the composer's live creator details. `message` is fixed text, so no reply content or secret reaches it. */
+export const tiktokAccountDetails: AccountDetailsReader<unknown, CreatorDetails> = {
+  schema: creatorDetailsSchema,
+  async read({ credentials, signal }) {
+    const c = readTikTokCredentials(credentials);
+    if (!c) return { ok: false, message: LOAD_FAILED, transient: false };
+    const r = await readCreatorInfo(c.accessToken, signal);
+    switch (r.kind) {
+      case "ok":
+        return { ok: true, details: r.details };
+      case "expired":
+        return { ok: false, message: LOAD_FAILED, credentialsExpired: true, transient: true };
+      case "refused":
+        return { ok: false, message: r.code === "scope_not_authorized" ? RECONNECT : LOAD_FAILED, transient: false };
+      case "banned":
+        return { ok: false, message: "TikTok has blocked this account from posting right now.", transient: false };
+      case "cap":
+        return { ok: false, message: "TikTok's daily posting limit has been reached for this account.", transient: true };
+      default:
+        return { ok: false, message: LOAD_FAILED, transient: true };
+    }
+  },
+};
