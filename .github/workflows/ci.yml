@@ -76,6 +76,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Test
         run: pnpm test
+        env:
+          DOCKET_SKIP_PERF_TESTS: "1"
+      # Timing budgets measure the query, so they run alone rather than beside thousands of parallel tests.
+      - name: Performance budgets, one file at a time
+        run: pnpm exec vitest run tests/integration/activity/performance.test.ts tests/integration/notifications/performance.test.ts --no-file-parallelism
 
   build:
     runs-on: ubuntu-latest

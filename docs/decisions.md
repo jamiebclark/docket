@@ -1292,3 +1292,14 @@ TikTok connect, tokens, refresh, posting fields, consent, video by chunked uploa
 ### Open item
 
 - `.claude/skills/docket-ui/SKILL.md` (App shell bullet, line ~31) still needs "Overview first (project home, above the groups)" added before "Publish": the sandbox refused writes to `.claude/skills`. A human should make that one-line edit.
+
+## 027 follow-up: browser walk-through (2026-10-09)
+
+A walk-through as an owner and as an editor, on desktop and at 390 px, found the new home still repeated itself:
+
+- **No dead-end primary action.** With no account, an editor gets no primary action instead of "Write a post", which led to a Compose page that cannot post. *Why:* every button on a first visit must lead somewhere useful.
+- **Posts by status has no action of its own when empty.** The header, the checklist and Coming up already offer the next step; "Write a post" appeared four times.
+- **Unconfigured platforms share one server-setup line** ("More platforms you can set up: …"), linking to the accounts guide. *Why:* a platform nobody here posts to is not missing; six "isn't set up" lines read as a broken server.
+- **"Optional" once.** The step badge already says it; the descriptions no longer start with "Optional.".
+
+At 390 px the page does not scroll sideways (the nav strip scrolls inside itself), no console errors, focusable controls have focus rings.
