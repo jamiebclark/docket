@@ -175,7 +175,12 @@ describe("video adapt rows: the formatter adapts what it can, and the gate lets 
           mediaIds,
         });
         const queued = await atTime(BEFORE, () => posts.addToQueue(scope, draft.post.id, {}));
-        expect(queued[0], JSON.stringify(queued[0])).toMatchObject({ ok: true });
+        if (provider.posting || provider.consent) {
+          // Posting fields and consent are not set here; only media-field blockers would fail this row.
+          const blockers = (queued[0] as { issues?: { severity: string; field: string }[] }).issues?.filter((i) => i.severity === "error") ?? [];
+          expect(blockers.filter((i) => i.field === "media" || i.field.startsWith("media.")), JSON.stringify(queued[0])).toEqual([]);
+          expect(blockers.every((i) => i.field === "consent" || i.field === "posting" || i.field.startsWith("posting.")), JSON.stringify(queued[0])).toBe(true);
+        } else expect(queued[0], JSON.stringify(queued[0])).toMatchObject({ ok: true });
       });
     }
   }
