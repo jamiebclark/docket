@@ -65,8 +65,8 @@ describe("project overview, new owner (US1)", () => {
     expect(empty).toContain("Invite a teammate");
     expect(empty.match(/>To do</g)?.length).toBeGreaterThanOrEqual(3 + serverRow);
     expect(empty.match(/Needs an account first/g)).toHaveLength(2);
-    // "Write a post" is now only the empty Posts by status action, never the header's primary action.
-    expect(empty.match(/Write a post/g)).toHaveLength(1);
+    // With no account, "Write a post" leads nowhere, so a new project offers it nowhere.
+    expect(empty).not.toContain("Write a post");
     expect(empty).not.toContain("Setup complete");
     // The header's action is the page's only primary button.
     const primaries = empty.match(/<a [^>]*bg-primary text-primary-foreground[^>]*>[^<]*/g) ?? [];
@@ -271,7 +271,12 @@ describe("project overview, server setup (US4)", () => {
     expect(owner).toContain(`${DOCS_BASE_URL}deployment/#9-is-the-scheduler-running`);
     expect(owner).toContain("Media storage isn&#x27;t set up");
     expect(owner).toContain(`${DOCS_BASE_URL}storage/`);
-    for (const g of missingGroups) expect(owner).toContain(`${g.displayName} isn&#x27;t set up`);
+    // Unconfigured platforms share one line; none of them is reported as missing.
+    for (const g of missingGroups) expect(owner).not.toContain(`${g.displayName} isn&#x27;t set up`);
+    if (missingGroups.length > 0) {
+      expect(owner).toContain("More platforms you can set up:");
+      for (const g of missingGroups) expect(owner).toContain(g.displayName);
+    }
     expect(owner).not.toMatch(/LLM_|S3_|_CLIENT_ID|_SECRET|pnpm|docker|redirect/i);
 
     for (const user of [env.admin, env.editor]) {
