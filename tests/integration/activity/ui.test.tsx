@@ -196,7 +196,7 @@ describe("activity page", () => {
     const html = await render(env.project.slug, { range: "7d", platform: "bluesky" });
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain("Last 7 days:");
-    expect(html).toMatch(/href="[^"]*platform=bluesky[^"]*range=7d[^"]*outcome=successes"[^>]*>1 successes</);
+    expect(html).toMatch(/href="[^"]*platform=bluesky[^"]*range=7d[^"]*outcome=successes"[^>]*>1 success</);
     expect(html).toMatch(/href="[^"]*platform=bluesky[^"]*range=7d[^"]*outcome=problems"[^>]*>0 problems</);
     expect(html).not.toContain("counts ignore the outcome filter");
     const withOutcome = await render(env.project.slug, { outcome: "failed" });

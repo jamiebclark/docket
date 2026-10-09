@@ -4,12 +4,15 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { CopyField } from "@/components/ui/CopyField";
 import { Field } from "@/components/ui/Field";
+import { ProviderIcon } from "@/components/ui/Icon";
 import { pasteConnectTokenAction, startOAuthConnectAction } from "./actions";
 
 export interface ConnectGroupSectionProps {
   slug: string;
   groupKey: string;
   displayName: string;
+  /** The group's providers, for their platform marks beside the heading. */
+  providerKeys: string[];
   providerNames: string[];
   configured: boolean;
   setupDoc: string | null;
@@ -24,7 +27,7 @@ export interface ConnectGroupSectionProps {
 
 /** One "Connect <group>" section, rendered once per group even when two providers share it. */
 export function ConnectGroupSection(props: ConnectGroupSectionProps) {
-  const { slug, groupKey, displayName, providerNames, configured, setupDoc, redirectUri, canManage, paste, unavailable } = props;
+  const { slug, groupKey, displayName, providerKeys, providerNames, configured, setupDoc, redirectUri, canManage, paste, unavailable } = props;
   const [token, setToken] = useState("");
   const [pasteMessage, setPasteMessage] = useState("");
   const [pastePending, startPaste] = useTransition();
@@ -55,9 +58,16 @@ export function ConnectGroupSection(props: ConnectGroupSectionProps) {
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card">
-      <h3 id={headingId} className="text-lg font-semibold">
-        Connect {displayName}
-      </h3>
+      <div className="flex items-center gap-3">
+        <span className="flex shrink-0 gap-1.5">
+          {providerKeys.map((key) => (
+            <ProviderIcon key={key} providerKey={key} size={32} />
+          ))}
+        </span>
+        <h3 id={headingId} className="text-lg font-semibold">
+          Connect {displayName}
+        </h3>
+      </div>
       <p className="text-sm text-muted-foreground">Connects {providerNames.join(" and ")} accounts with one sign-in.</p>
       {!configured ? (
         <div className="flex max-w-xl flex-col gap-2 text-sm">
