@@ -27,6 +27,7 @@ nav:
       - Media storage: storage.md
       - Meta app (Facebook, Instagram, Threads): meta-setup.md
       - X: x-setup.md
+      - TikTok: tiktok-setup.md
   - Using Docket:
       - Members and accounts: accounts.md
       - Generator and jobs: generator.md

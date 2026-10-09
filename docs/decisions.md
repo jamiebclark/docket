@@ -1265,3 +1265,11 @@ Judgement calls from `specs/026-tiktok-provider/spec.md` (D1–D16) and its plan
 - **P33–P37 — Fit, request bodies, the creator check, refusal explanations, rate limits.** `auth_removed` in a failed status flags the account for reconnecting.
 - **P38–P40 — A generic `PostingFieldsPanel`; "Private on TikTok" in every target view; `docs/tiktok-setup.md` and the doc edits.**
 - **P41 — No new dependency.** `.env.example` gains three variables; `docker-compose.yml` does not change.
+
+### Hook reversal notes
+
+Each generic hook is optional, so removing a provider's declaration turns it off without touching the engine: drop `posting` (G25) and stored values are ignored; drop `accountDetails` (G26) and the composer shows no live details; drop `consent` (G27) and consent records are kept but unused; the extra `callbackParams` input (G28) and `now` (G13) are ignored by groups that do not read them. The migration (`0018`) only adds nullable columns, so reverting the code leaves the database valid.
+
+### Implementation outcome
+
+TikTok connect, tokens, refresh, posting fields, consent, video by chunked upload, photo posts, status checks, plain-word refusals, the unaudited behaviour and the operator docs are built and tested with mocked HTTP only. Nothing was run against TikTok's live service; the live checks are listed in `docs/tiktok-setup.md` (FR-037) and are owed once the operator's app is audited. Not built, and owned by no spec: the items in `docs/feature-map.md` (FR-041) and a confirm-at-send flow (FR-042), the fallback if the audit refuses consent given at scheduling.

@@ -111,6 +111,7 @@ file names and headings stable or update those links.
 | Members, roles and connecting accounts (including other people's) | [docs/accounts.md](docs/accounts.md) |
 | Facebook, Instagram and Threads apps | [docs/meta-setup.md](docs/meta-setup.md) |
 | The X developer app (optional) | [docs/x-setup.md](docs/x-setup.md) |
+| The TikTok developer app (optional) | [docs/tiktok-setup.md](docs/tiktok-setup.md) |
 | Generator and jobs | [docs/generator.md](docs/generator.md) |
 | n8n and the public API | [docs/n8n.md](docs/n8n.md) |
 | Adding a provider | [docs/adding-a-provider.md](docs/adding-a-provider.md) |
@@ -119,7 +120,7 @@ file names and headings stable or update those links.
 
 Connecting accounts: Bluesky uses an **app password** (never your main password, and it is not stored). Facebook, Instagram and
 Threads need one Meta app you create for the whole install; follow [docs/meta-setup.md](docs/meta-setup.md). X needs
-one X developer app you create too ([docs/x-setup.md](docs/x-setup.md)), and an HTTPS callback. Facebook, Instagram
+one X developer app you create too ([docs/x-setup.md](docs/x-setup.md)), and an HTTPS callback. TikTok needs its own developer app ([docs/tiktok-setup.md](docs/tiktok-setup.md)), an HTTPS callback, and TikTok's audit before posts can be public. Facebook, Instagram
 and Threads fetch images by URL, so the bucket must be publicly readable ([docs/storage.md](docs/storage.md)); Threads also needs
 an HTTPS address that is not localhost. Only project owners and admins can connect accounts; see
 [docs/accounts.md](docs/accounts.md).
@@ -128,7 +129,7 @@ an HTTPS address that is not localhost. Only project owners and admins can conne
 
 A platform is one folder under `src/providers/<key>/` and one line in `src/providers/registry.ts`; the scheduler, services and
 schema do not change. [docs/adding-a-provider.md](docs/adding-a-provider.md) covers the contract, step machine, limits and
-refresh, and walks through the mock, Bluesky, Instagram, Threads and X providers. A test keeps that guide in step with
+refresh, and walks through the mock, Bluesky, Instagram, Threads, X and TikTok providers. A test keeps that guide in step with
 `src/providers/types.ts`.
 
 ## Testing and contributing

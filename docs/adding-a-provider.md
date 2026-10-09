@@ -32,6 +32,9 @@ The contract lives in `src/providers/types.ts`; the `mock` provider
 | `stepFor(state, settings, content)` | Pure, total: names the next step and says whether it `mayPublish` (section 6). |
 | `advance(ctx)` | Does one bounded unit of work and returns a `StepResult` (section 7). |
 | `accountNotes?(input)` | Non-secret notes for the account card (G13, section 4). |
+| `posting?` | Per-target posting fields: a values schema and a pure `view()` (G25, section 18). |
+| `accountDetails?` | A server-side read of the account's live, non-secret details for the composer (G26, section 18). |
+| `consent?` | Explicit consent recorded when a target is scheduled (G27, section 18). |
 
 ### Generic hooks index
 
@@ -54,6 +57,10 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G13 | `accountNotes?` | 4 |
 | G14 | `defaultPublishLimit` as an array | 8 |
 | G17 | exchangeCode receives state | 4 |
+| G25 | `posting?`, per-target posting fields | 18 |
+| G26 | `accountDetails?` | 18 |
+| G27 | `consent?` | 18 |
+| G28 | `exchangeCode` receives `callbackParams` | 4, 18 |
 | G18 | the group's own message in the accounts banner | 4 |
 | G23 | `afterPublish`, `credentialsInvalid` on `ambiguous` | 6, 7 |
 | G24 | `continue` may carry `wait`, shown as `lastError` | 7 |
@@ -185,7 +192,13 @@ callback query in them.
 ### Account notes (G13)
 
 A provider may expose non-secret `accountNotes({ settings, credentialsExpireAt })` strings, shown on the account. Threads shows the estimated expiry of a
-pasted token. Keep notes plain text and free of secrets.
+pasted token. Keep notes plain text and free of secrets. The input also carries an optional `now` (the database clock), so a note can depend on time
+(TikTok's refresh-token warning).
+
+### Callback parameters (G28)
+
+`exchangeCode` also receives `callbackParams`, the callback's query string, so a group can read what the platform reports there. TikTok reads the
+granted `scopes` from it and refuses a grant without the posting scope.
 
 ## 5. Settings vs credentials
 
@@ -437,3 +450,26 @@ Bluesky video adds no engine code beyond G24 and shows how a multi-step upload f
 - **Error explanations.** Each start error and job failure code maps to a plain sentence, with Bluesky's code and a sanitised message.
 - **Unverified facts** (parts host and auth, limits and status audience, the already-processed shape) each sit in one named constant
   or function with a conservative fallback.
+
+## 18. Worked example: the `tiktok` provider
+
+`src/providers/tiktok/` is the provider with the most generic hooks. All of it is tested with mocked HTTP only; the live checks are listed in
+`docs/tiktok-setup.md`.
+
+- **Posting fields (G25).** `posting` declares a Zod `valuesSchema` and a pure `view()` that returns the field views (choice, toggle, text, fixed) for the
+  stored values, the account details and the post type. `targetNote()` ("Private on TikTok") and `summaryNotes()` feed the status badges and the
+  requirements summary. Values live in `post_targets.posting_fields` and reach `validate` and `advance`. The composer's generic `PostingFieldsPanel`
+  renders them; no composer code names TikTok.
+- **Account details (G26).** `accountDetails` reads the creator's live options (privacy choices, interaction toggles, maximum duration) on the server,
+  through the engine's single refresh path, and the result is cached in process for 60 seconds. It never returns a secret.
+- **Consent (G27).** `consent` supplies the declaration text. Consent is stored in four `post_targets` columns and is valid only while its fingerprint
+  (text, media, field values and the details shown) matches. The composer, the gate and the engine's first step check it through one implementation.
+- **Unaudited installs.** `TIKTOK_APP_AUDITED` defaults to false, and the provider then stores and sends only `SELF_ONLY`.
+- **Video by chunked upload, one chunk per step.** `start_upload` returns an upload address that is **sealed** (AES-256-GCM, keyed by an HMAC of the client
+  secret) before it is kept in the step state; `upload_chunk_<k>` sends one byte range read by HTTP `Range` (`src/providers/media-range.ts`). Only the
+  publishing request has `mayPublish: true`; everything before it is safe to retry.
+- **Photo posts.** `publish_photos` sends the public `https` addresses with `PULL_FROM_URL`; the deployer must have verified their media domain.
+- **Status checks.** `check_status` runs after the publishing request (`afterPublish`, G23) on a widening schedule, and `PUBLISH_COMPLETE` publishes with
+  the `publish_id` as the external id.
+- **Where to look.** `src/providers/tiktok/` (`capabilities.ts`, `posting.ts`, `creator.ts`, `steps.ts`, `publish.ts`, `state.ts`, `sealed.ts`, `errors.ts`)
+  and `tests/integration/tiktok/`.

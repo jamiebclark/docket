@@ -180,6 +180,32 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 
 X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce that cap (it is shared by every account on the app, not per account), so it has no row; a 429 from it defers the post instead.
 
+## TikTok
+
+| Category | Value | Counting | Source | Enforced in | Test |
+|---|---|---|---|---|---|
+| text length | 2200 | UTF-16 units (custom rule) | docs/research/tiktok.md (caption 2200 UTF-16 units) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: text length" |
+| images | 35 |  | docs/research/tiktok.md (photo posts up to 35) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: images" |
+| bytes per file | 20000000 |  | docs/research/tiktok.md (photo limit; larger is compressed) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: bytes per file" |
+| formats | image/jpeg, image/webp |  | docs/research/tiktok.md (JPEG and WebP; PNG is converted to JPEG) | media planner | `tests/integration/limits/enforcement.test.ts` "tiktok: formats" |
+| max width | 1080 |  | docs/research/tiktok.md (photos over 1080 × 1920 are downscaled) | media planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max width" |
+| max height | 1920 |  | docs/research/tiktok.md (photos over 1080 × 1920 are downscaled) | media planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max height" |
+| media required | yes |  | docs/research/tiktok.md (TikTok has no text-only post) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: media required" |
+| text only | no |  | docs/research/tiktok.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: text only" |
+| videos | 1 |  | docs/research/tiktok.md (one video per post) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: videos" |
+| video with images | no |  | docs/research/tiktok.md (TikTok posts a video on its own) | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
+| video containers | mp4, mov |  | docs/research/tiktok.md | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
+| video codecs | h264, hevc, vp8, vp9 |  | docs/research/tiktok.md; others are re-encoded | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video codecs" |
+| video bytes | 4000000000 |  | docs/research/tiktok.md (4 GB) | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video bytes" |
+| max duration | 300 |  | docs/research/tiktok.md (5 minutes; the creator's own maximum is checked separately) | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max duration" |
+| video min width | 360 |  | docs/research/tiktok.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: video min width" |
+| video max width | 4096 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video max width" |
+| video min height | 360 |  | docs/research/tiktok.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: video min height" |
+| video max height | 4096 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video max height" |
+| min frame rate | 23 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: min frame rate" |
+| max frame rate | 60 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max frame rate" |
+| publish limit | 15 / 86400 s |  | docs/research/tiktok.md (about 15 posts per account per day, shared with other apps) | engine deferral | `tests/integration/limits/enforcement.test.ts` "tiktok: publish limit 15 / 86400 s" |
+
 ## Mock (offline)
 
 | Category | Value | Counting | Source | Enforced in | Test |

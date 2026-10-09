@@ -141,6 +141,22 @@ and choose **Threads**.
 - **Removing access:** removing the account in Docket deletes the token. To revoke the app entirely, open Threads
   Settings → Account → Website permissions and remove it.
 
+## TikTok
+
+First register the TikTok app: [tiktok-setup.md](tiktok-setup.md). Then open **Accounts** and choose **TikTok**.
+
+- **HTTPS is required.** TikTok refuses `http://` and `localhost` redirect addresses, so the login button only works
+  when `BETTER_AUTH_URL` is an `https://` address that is not localhost.
+- **Log in as the account to post as** and allow posting. A grant without the posting permission is refused.
+- **Until your app is audited by TikTok, every post is private** ("Only me (private)") and the TikTok account must be
+  private. See [what an unaudited app can do](tiktok-setup.md#unaudited-apps).
+- **Each post needs consent.** The composer shows TikTok's declaration with an "I agree" checkbox; a post cannot be
+  scheduled until it is ticked, and any later change clears it.
+- **What is stored:** the access and refresh tokens, encrypted. Docket renews them automatically; **Needs reconnecting**
+  means TikTok rejected the refresh token.
+- **Removing access:** removing the account in Docket deletes its tokens. To revoke the app entirely, remove it in
+  TikTok's app settings (Docket does not revoke the grant itself).
+
 ## Scheduling for someone else's accounts
 
 A common setup: you run Docket, and a friend or client owns the Page and accounts you post for.

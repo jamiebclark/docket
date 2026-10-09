@@ -14,6 +14,7 @@ they always match `main`.
 | Media storage (R2, S3, MinIO). The bucket must be publicly readable | [Media storage](storage.md) |
 | The one Meta app for Facebook, Instagram and Threads | [Meta app](meta-setup.md) |
 | The X developer app (optional) | [X](x-setup.md) |
+| The TikTok developer app (optional) | [TikTok](tiktok-setup.md) |
 
 ## Using Docket
 
@@ -31,5 +32,5 @@ they always match `main`.
 |---|---|
 | Content and rate limits per platform | [Platform limits](limits.md) |
 | Security findings and hardening | [Security findings](security.md) |
-| Requested features not built yet (video, Reels, TikTok) | [Feature map](feature-map.md) |
+| Requested features not built yet (what no spec owns yet) | [Feature map](feature-map.md) |
 | Writing a new platform provider | [Adding a provider](adding-a-provider.md) |
