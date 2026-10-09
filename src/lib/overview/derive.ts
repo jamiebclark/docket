@@ -77,7 +77,7 @@ export type ChecklistStep = {
 };
 
 export type ServerSetupItem = {
-  key: "scheduler" | "ai" | "storage" | `platform:${string}`;
+  key: "scheduler" | "ai" | "storage" | "platforms";
   label: string;
   href: string;
 };
@@ -163,8 +163,14 @@ export function serverSetupItems(facts: OverviewFacts): ServerSetupItem[] {
   if (!facts.ai.configured)
     items.push({ key: "ai", label: "AI generation isn't set up", href: docsUrl("generator", "configuring-a-provider") });
   if (!facts.storage.configured) items.push({ key: "storage", label: "Media storage isn't set up", href: docsUrl("storage") });
-  for (const p of facts.unconfiguredPlatforms ?? [])
-    items.push({ key: `platform:${p.key}`, label: `${p.displayName} isn't set up`, href: p.setupDoc ?? docsUrl("accounts") });
+  // A platform nobody here posts to is not missing, so they share one line instead of one "isn't set up" each.
+  const platforms = facts.unconfiguredPlatforms ?? [];
+  if (platforms.length > 0)
+    items.push({
+      key: "platforms",
+      label: `More platforms you can set up: ${platforms.map((p) => p.displayName).join(", ")}`,
+      href: platforms.length === 1 ? (platforms[0]!.setupDoc ?? docsUrl("accounts")) : docsUrl("accounts"),
+    });
   return items;
 }
 
@@ -220,7 +226,7 @@ export function deriveChecklist(facts: OverviewFacts): ChecklistView | null {
     optional.push({
       key: "voice",
       title: "Create a voice profile",
-      description: "Optional. Teaches the generator how your posts sound.",
+      description: "Teaches the generator how your posts sound.",
       optional: true,
       status: withStatus(done, can.manageVoice, managers),
       action: !done && can.manageVoice ? { label: "Create a voice profile", href: `${base}/voice/new` } : null,
@@ -233,7 +239,7 @@ export function deriveChecklist(facts: OverviewFacts): ChecklistView | null {
     optional.push({
       key: "media",
       title: "Upload images or videos",
-      description: "Optional. Attach media to your posts from the library.",
+      description: "Attach media to your posts from the library.",
       optional: true,
       status: withStatus(done, true, managers),
       action: !done ? { label: "Upload images or videos", href: `${base}/media` } : null,
@@ -245,7 +251,7 @@ export function deriveChecklist(facts: OverviewFacts): ChecklistView | null {
     optional.push({
       key: "invite",
       title: "Invite a teammate",
-      description: "Optional. Add an editor or admin to share the work.",
+      description: "Add an editor or admin to share the work.",
       optional: true,
       status: withStatus(done, true, managers),
       action: !done ? { label: "Invite a teammate", href: `${base}/settings/members` } : null,
@@ -393,8 +399,8 @@ export function derivePostsByStatus(facts: OverviewFacts): OverviewView["postsBy
   const base = `/p/${facts.project.slug}`;
   const c = facts.postCounts;
   const total = Object.values(c).reduce<number>((sum, n) => sum + (n ?? 0), 0);
-  if (total === 0)
-    return { kind: "empty", action: facts.viewer.can.writePosts ? { label: "Write a post", href: `${base}/compose` } : null };
+  // No action of its own: the header, the checklist and Coming up already offer the next step, and a fourth copy is noise.
+  if (total === 0) return { kind: "empty", action: null };
   const line = (label: string, key: "draft" | "needs_review" | "approved" | "scheduled") => ({
     label,
     count: c[key] ?? 0,
@@ -409,9 +415,12 @@ export function derivePostsByStatus(facts: OverviewFacts): OverviewView["postsBy
 export function deriveOverview(facts: OverviewFacts): Pick<OverviewView, "title" | "description" | "primaryAction" | "checklist" | "needsAttention" | "comingUp" | "accounts" | "postsByStatus" | "contentTools"> {
   const base = `/p/${facts.project.slug}`;
   const { can } = facts.viewer;
+  // No account yet: the one primary action is connecting one, and someone who can't gets none rather than a dead end.
   const primaryAction: Action | null =
-    facts.accounts.length === 0 && can.manageAccounts
-      ? { label: "Connect an account", href: `${base}/accounts#add-account` }
+    facts.accounts.length === 0
+      ? can.manageAccounts
+        ? { label: "Connect an account", href: `${base}/accounts#add-account` }
+        : null
       : can.writePosts
         ? { label: "Write a post", href: `${base}/compose` }
         : null;

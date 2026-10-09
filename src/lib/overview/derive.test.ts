@@ -151,7 +151,9 @@ describe("deriveOverview", () => {
       label: "Write a post",
       href: "/p/acme/compose",
     });
-    expect(deriveOverview(facts({}, "editor")).primaryAction?.label).toBe("Write a post");
+    // An editor can't connect one, and Compose is a dead end without an account.
+    expect(deriveOverview(facts({}, "editor")).primaryAction).toBeNull();
+    expect(deriveOverview(facts({ accounts: [account()] }, "editor")).primaryAction?.label).toBe("Write a post");
   });
   it("offers no action to a viewer who can't write", () => {
     const f = facts({}, "editor");
@@ -279,8 +281,9 @@ describe("deriveAccounts", () => {
 });
 
 describe("derivePostsByStatus", () => {
-  it("is empty with a Write a post action when there are no posts", () => {
-    expect(derivePostsByStatus(facts())).toEqual({ kind: "empty", action: { label: "Write a post", href: "/p/acme/compose" } });
+  it("is empty with no action of its own when there are no posts", () => {
+    expect(derivePostsByStatus(facts({ accounts: [account()] }))).toEqual({ kind: "empty", action: null });
+    expect(derivePostsByStatus(facts())).toEqual({ kind: "empty", action: null });
     expect(derivePostsByStatus(facts({ postCounts: { draft: 0 } })).kind).toBe("empty");
   });
 
@@ -305,17 +308,26 @@ describe("serverSetupItems (US4)", () => {
     const items = serverSetupItems(
       facts({ scheduler: "stale", ai: { configured: false, voiceProfiles: null }, storage: { configured: false, libraryItems: null }, unconfiguredPlatforms: [platform] }),
     );
-    expect(items.map((i) => i.key)).toEqual(["scheduler", "ai", "storage", "platform:meta"]);
+    expect(items.map((i) => i.key)).toEqual(["scheduler", "ai", "storage", "platforms"]);
     expect(items.map((i) => i.label)).toEqual([
       "The scheduler isn't running",
       "AI generation isn't set up",
       "Media storage isn't set up",
-      "Meta isn't set up",
+      "More platforms you can set up: Meta",
     ]);
     expect(items[0]?.href).toContain("deployment/#9-is-the-scheduler-running");
     expect(items[1]?.href).toContain("generator/#configuring-a-provider");
     expect(items[2]?.href).toContain("storage/");
     expect(items[3]?.href).toBe(platform.setupDoc);
+  });
+
+  it("puts every unconfigured platform on one line that links to the accounts guide", () => {
+    const other = { key: "x", displayName: "X", setupDoc: "https://example.test/x-setup/" };
+    const items = serverSetupItems(facts({ unconfiguredPlatforms: [platform, other] }));
+    const line = items.find((i) => i.key === "platforms");
+    expect(line?.label).toBe("More platforms you can set up: Meta, X");
+    expect(line?.href).toContain("accounts/");
+    expect(items.filter((i) => i.key.startsWith("platform"))).toHaveLength(1);
   });
 
   it("treats a scheduler that never ran like a stale one", () => {
@@ -414,7 +426,7 @@ describe("step status transitions and tool lines (SC-004, SC-005)", () => {
     const upcoming = [{ id: "p1", excerpt: "p1", scheduledAt: new Date("2026-01-02T00:00:00Z"), accountNames: ["@acme"] }];
     expect(deriveComingUp(facts({ upcoming }, "editor")).kind).toBe("list");
     expect(deriveNeedsAttention(facts({}, "editor"))).toBeNull();
-    expect(derivePostsByStatus(facts({}, "editor"))).toEqual({ kind: "empty", action: { label: "Write a post", href: "/p/acme/compose" } });
+    expect(derivePostsByStatus(facts({ accounts: [account()] }, "editor"))).toEqual({ kind: "empty", action: null });
     const v = derivePostsByStatus(facts({ postCounts: { draft: 3 } }, "editor"));
     expect(v.kind).toBe("counts");
   });
