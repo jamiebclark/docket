@@ -14,6 +14,9 @@ import { getSession } from "@/server/auth/session";
 import * as posts from "@/server/services/posts";
 import { POST_LIST_STATUSES, postSearchParamsSchema } from "@/lib/validation/media";
 import { buttonStyles } from "@/components/ui/Button";
+import { askManagers } from "@/lib/roles/names";
+import { listAccounts } from "@/server/services/accounts";
+import { listManagers } from "@/server/services/members";
 
 export const metadata: Metadata = { title: "Posts" };
 export const dynamic = "force-dynamic";
@@ -70,8 +73,12 @@ export default async function PostsPage({ params, searchParams }: Props) {
   }
   const tz = scope.project.timezone;
   const canWritePosts = scope.can({ post: ["edit"] });
+  const canManageAccounts = scope.can({ account: ["manage"] });
   const total = list ? Object.entries(list.counts).filter(([k]) => k !== "needs_decision").reduce((n, [, v]) => n + v, 0) : 0;
   const noPosts = list !== null && total === 0 && !status;
+  // Without an account, Compose can't post: point to the account step instead of a dead end.
+  const noAccounts = noPosts && (await listAccounts(scope)).length === 0;
+  const askWho = noAccounts && !canManageAccounts ? askManagers(await listManagers(scope), "or") : "";
   const tabs = FILTERS.map((f) => ({
     label: f.label,
     href: hrefFor(projectSlug, f.key),
@@ -84,7 +91,7 @@ export default async function PostsPage({ params, searchParams }: Props) {
       <ProblemsCallout scope={scope} />
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Posts</h1>
-        {canWritePosts ? (
+        {canWritePosts && !noAccounts ? (
           <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "primary" })}>
             New post
           </Link>
@@ -98,12 +105,26 @@ export default async function PostsPage({ params, searchParams }: Props) {
           </p>
         ) : list.items.length === 0 ? (
           <EmptyState
-            message={status ? "No posts match this filter." : "No posts yet. Write your first post to see it here."}
+            message={
+              status
+                ? "No posts match this filter."
+                : noAccounts
+                  ? canManageAccounts
+                    ? "No posts yet. Connect an account first, then write your first post."
+                    : `No posts yet. Ask ${askWho} to connect an account first.`
+                  : "No posts yet. Write your first post to see it here."
+            }
             action={
               status ? (
                 <Link href={hrefFor(projectSlug)} className={buttonStyles({ variant: "secondary" })}>
                   Show all posts
                 </Link>
+              ) : noAccounts ? (
+                canManageAccounts ? (
+                  <Link href={`/p/${projectSlug}/accounts#add-account`} className={buttonStyles({ variant: "secondary" })}>
+                    Connect an account
+                  </Link>
+                ) : undefined
               ) : canWritePosts ? (
                 <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "secondary" })}>
                   Write a post

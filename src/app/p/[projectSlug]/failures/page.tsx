@@ -171,7 +171,6 @@ export default async function FailuresPage({ params, searchParams }: Props) {
   const empty = list !== null && list.rows.length === 0;
   const filtered = query.status !== "all" || !!query.account || !!query.target;
   const noPosts = empty && !filtered ? (await countPosts(scope).catch(() => 1)) === 0 : false;
-  const canWritePosts = scope.can({ post: ["edit"] });
 
   return (
     <AnnounceProvider focusFallbackId="page-title">
@@ -241,13 +240,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
                 <Link href={`/p/${projectSlug}/failures`} className={buttonStyles({ variant: "secondary" })}>
                   Clear filters
                 </Link>
-              ) : noPosts ? (
-                canWritePosts ? (
-                  <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "primary" })}>
-                    Write a post
-                  </Link>
-                ) : undefined
-              ) : (
+              ) : noPosts ? undefined : (
                 <Link href={`/p/${projectSlug}/posts`} className={buttonStyles({ variant: "secondary" })}>
                   View posts
                 </Link>

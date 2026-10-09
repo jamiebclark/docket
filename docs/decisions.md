@@ -1330,3 +1330,10 @@ A walk-through as an owner and as an editor, on desktop and at 390 px, found the
 - **"Optional" once.** The step badge already says it; the descriptions no longer start with "Optional.".
 
 At 390 px the page does not scroll sideways (the nav strip scrolls inside itself), no console errors, focusable controls have focus rings.
+
+## 028 follow-up: browser walk-through (2026-10-09)
+
+Walked every empty route as an owner and an editor. Editors are told who to ask (by display name) everywhere, see no actions they cannot take and no env var names; Accounts leads with the usable connect forms and collapses unconfigured platforms. One dead end remained:
+
+- **Posts with no account** offered "New post" and "Write a post", both to a Compose page that cannot post. Owners now get "Connect an account first", editors "Ask {names} to connect an account first", and the header button waits for an account.
+- **Failures with no posts** drops its "Write a post" button: the page explains what will appear there, and writing is not its job.

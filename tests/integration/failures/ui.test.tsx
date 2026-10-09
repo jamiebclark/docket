@@ -70,7 +70,8 @@ describe("failures page markup (FR-013)", () => {
     actAs(env.owner);
     const none = await render(env.project.slug);
     expect(none).toContain("Posts that fail to publish will show up here.");
-    expect(none).toContain("Write a post");
+    // Failures explains what will appear; writing a post is not its job (and needs an account first).
+    expect(none).not.toContain("Write a post");
     expect(none).not.toContain("Retry all");
     expect(none).not.toContain("need your decision");
     expect(none).not.toContain('aria-label="Filter failures by status"');

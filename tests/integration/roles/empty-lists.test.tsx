@@ -11,6 +11,7 @@ import ReviewPage from "../../../src/app/p/[projectSlug]/review/page";
 import { sessionModule } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
+import { createMockAccount } from "../../helpers/scheduling";
 
 afterAll(async () => {
   await closeDb();
@@ -22,7 +23,7 @@ async function setup(role: "owner" | "editor") {
   const proj = await createProject();
   const user = await createUser();
   await addMember(proj.id, user.id, role);
-  return { slug: proj.slug, userId: user.id };
+  return { slug: proj.slug, userId: user.id, projectId: proj.id };
 }
 
 async function renderAs(page: unknown, slug: string, userId: string, search: Record<string, string> = {}): Promise<string> {
@@ -39,11 +40,26 @@ async function renderAs(page: unknown, slug: string, userId: string, search: Rec
 describe("empty Posts, Failures and Review (scenarios 6-8)", () => {
   for (const role of ["owner", "editor"] as const) {
     it(`posts: no tabs, next step named (${role})`, async () => {
-      const { slug, userId } = await setup(role);
+      const { slug, userId, projectId } = await setup(role);
+      await createMockAccount(projectId);
       const html = await renderAs(PostsPage, slug, userId);
       expect(html).toContain("No posts yet. Write your first post to see it here.");
       expect(html).not.toContain('aria-label="Filter posts by status"');
       expect(html).toContain(`href="/p/${slug}/compose"`);
+    });
+
+    // Compose can't post without an account, so an empty project points at the account step instead.
+    it(`posts: with no account, the next step is the account, not Compose (${role})`, async () => {
+      const { slug, userId } = await setup(role);
+      const html = await renderAs(PostsPage, slug, userId);
+      expect(html).not.toContain(`href="/p/${slug}/compose"`);
+      if (role === "owner") {
+        expect(html).toContain("No posts yet. Connect an account first, then write your first post.");
+        expect(html).toContain(`href="/p/${slug}/accounts#add-account"`);
+      } else {
+        expect(html).toMatch(/No posts yet\. Ask .+ to connect an account first\./);
+        expect(html).not.toContain("accounts#add-account");
+      }
     });
 
     it(`failures: no-posts state hides controls (${role})`, async () => {
