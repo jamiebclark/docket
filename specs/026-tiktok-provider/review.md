@@ -1,162 +1,215 @@
-# Review: TikTok provider (026)
+# Review: TikTok provider (026), re-review after remediation
 
-Reviewed 105 files changed against `bbb9d30` (merge base with `origin/main`): 77 tracked files (5 commits, `a633d4a..118c599`, plus uncommitted edits) and 28 untracked files. **Most of the feature is not committed.** HEAD holds only setup, the generic hooks and US1. US2–US7 (posting fields, publishing, failures, unaudited UI and docs) exist only in the working tree. So this review covers the **present working tree against the base**, not `base...HEAD`.
+Reviewed 106 files changed across 9 commits (`a633d4a..0984c49`), against `bbb9d30...HEAD` (merge base with `origin/main`). The working tree is clean and everything is committed, so this is a real `base...HEAD` diff, unlike the first round.
 
-- **Read in full:**
-  - providers: `src/providers/tiktok/{index,publish,state,steps,validate,posting,creator,http,errors,sealed,connect-group,refresh,settings,config,capabilities}.ts`, `src/providers/types.ts` (diff);
-  - services: `src/server/services/posts/{consent,posting,notes,validate,compose,index}.ts` (diffs or full), `src/server/services/account-details.ts`;
-  - engine: `src/server/scheduler/publishing.ts` (diff and lines 395–530), the relevant parts of `src/server/scheduler/record.ts`;
-  - UI: `src/components/compose/{PostingFieldsPanel.tsx,posting-ui.ts}`, the diffs of `Composer.tsx`, `compose/[postId]/page.tsx`, `composer-logic.ts`, `posts/page.tsx`, `posts/[postId]/page.tsx`, `CalendarBoard.tsx`;
-  - views and schema: `src/server/services/{calendar.ts,posts/list.ts,posts/view.ts}` (diffs), `drizzle/0018_burly_living_lightning.sql`;
-  - docs: `docs/tiktok-setup.md`, `docs/limits.md` (TikTok section);
-  - tests: `tests/helpers/tiktok-publish.ts`, `tests/integration/posts/consent.test.ts`, `tests/integration/compose/tiktok-check.test.ts`, `tests/integration/tiktok/{video,unaudited-ui}.test.*`, the first 140 lines of `failures.test.ts`.
-- **Sampled:**
-  - code: `src/providers/tiktok/{oauth,credentials}.ts`, `src/server/services/{accounts,connect}.ts` (diffs), `src/server/dal/{posts,targets}.ts` (the touched queries);
-  - docs: `docs/{decisions,adding-a-provider,feature-map,accounts}.md`, `README.md`, `docs/index.md` (grep for the FR-031–FR-035 items);
-  - tests: `tests/integration/tiktok/{photo,no-secrets,unaudited,connect,refresh}.test.ts` and `posting-hooks-inert.test.ts` (case lists only), the unit test files (case lists only).
-- **Not reviewed:** `drizzle/meta/0018_snapshot.json` (generated) and `specs/**` (inputs, not output).
+This is the **second review**. The constitution limits a re-review to two things: confirming that each earlier finding is fixed, and checking that the remediation commit (`0984c49`) introduced no regression. Anything else is MINOR.
 
-**Checks I ran** (no test database is reachable here: 5433 refuses connections, and 5432 has no `docket` role):
+**Read in full:**
 
-- The TikTok, Bluesky, media-range and `posting-ui` unit suites, through a database-free Vitest config in `$TMPDIR`: **31 files, 360 tests, all passed**.
-- `tests/integration/docs/*` through the same config: 9 files passed, including `tiktok-docs`, `limits-inventory`, `provider-guide`, `readme` and `published-docs`. `n8n-flow` failed with `ECONNREFUSED :5433`, which is unrelated.
-- Two throwaway probes in `$TMPDIR`, which confirmed F1 and F2 below.
+- `git show 0984c49`, covering every file the remediation touched:
+  - `src/providers/tiktok/{publish,posting}.ts` and their tests;
+  - `tests/integration/tiktok/failures.test.ts`, `tests/integration/compose/tiktok-check.test.ts`;
+  - `docs/limits.md`, `specs/026-tiktok-provider/tasks.md`.
+- `src/providers/tiktok/publish.ts` (all 459 lines), `src/providers/tiktok/posting.ts:60-170`, `src/components/compose/PostingFieldsPanel.tsx:40-175`.
+- The engine's result handling: `src/server/scheduler/publishing.ts:500-590`, `src/server/scheduler/record.ts:60-110`.
 
-The working tree was unchanged afterwards.
+**Sampled:**
+
+- `src/providers/tiktok/validate.ts:20-32`, `src/providers/tiktok/state.ts:103`, `src/server/services/posts/compose.ts:110-160`;
+- `tests/helpers/{fake-tiktok,tiktok-publish,limit-rows}.ts`, `tests/integration/limits/enforcement.test.ts:100-180`, `tests/lint/env-coverage.test.ts`;
+- `.env.example:295-320`, `src/components/ui/Icon.tsx`, `scripts/generate-icons.mjs`;
+- main's new commits since the base (`24e199f`, PR #48).
+
+**Not reviewed:** the rest of the 106 files were not re-read line by line. The first round read them, and the constitution scopes this round to the remediation. Also skipped: `drizzle/meta/0018_snapshot.json` (generated) and `specs/**` (inputs).
+
+**Checks I ran.** This time a Postgres is reachable on :5433 (`DATABASE_URL` is set). The first round could not run any integration suite.
+
+- **The feature's suites:**
+  - **What ran:** `src/providers/tiktok`, `tests/integration/tiktok`, `compose/tiktok-check`, `compose/posting-hooks-inert`, `posts/consent`, `account-details`, `tests/integration/docs`, `tests/integration/limits`, `posting-ui`, `accounts-notes`.
+  - **Result:** 40 files and 553 tests; **546 passed and 7 failed**. All 7 failures are in `limits/enforcement.test.ts` (F14).
+- **The full `vitest run`:**
+  - **Result:** 511 files and 4,764 tests; **4,753 passed, 9 failed, 2 skipped**.
+  - **The failures:** the 7 above, `tests/lint/env-coverage.test.ts` (F13), and `media/video-publish-adapted.test.ts`. That last one passed when re-run alone and has no TikTok code (F18).
+  - **Why I ran it:** the constitution tells review not to re-run the full suite, because "implement's final pass and CI already run them on the same code". Neither had happened: T051 records that implement could not run `pnpm test`, and `gh pr list --head 026-tiktok-provider` returns no PR, so CI has never run. The first review named these suites as unverified (its F11 and "What I could not check"), so this run closes that gap.
+- **Other checks:**
+  - `pnpm typecheck` passed. `pnpm db:check` reported "Migrations are current". `npx commitlint --from bbb9d30 --to HEAD` passed.
+  - I did not run lint or build: T051 records both passing, and nothing in the remediation touches routes or config.
+  - `git merge-tree HEAD origin/main` merges with no conflict.
+- `git status` was clean before and after. A throwaway probe in `$TMPDIR` hung and was stopped; it wrote nothing in the tree.
 
 ## Verdict
 
-**Not ready to merge. It is close, and the design holds.**
+**Not ready to merge. The remediation itself is good, but `pnpm test` is red on this branch.**
 
-**What holds up:**
+All five earlier blocking findings are fixed and tested:
 
-- The generic hooks (G25–G28 and the G13 `now`) are inert for other providers.
-- Consent is one implementation, judged by fingerprint. The composer check, the save, the gate and the engine all agree on it, because each one recomputes the fingerprint from the same `loadTargetContent` shape.
-- The step machine follows the contract: only the final chunk and the photo `init` may publish, a final chunk is never re-sent, and `publish_id` becomes the external id.
-- Secrets are sealed and scrubbed.
+- **F1:** an after-publish failure can no longer claim "nothing was posted".
+- **F2:** a toggle the creator has turned off can be cleared.
+- **F3:** all the work is committed.
+- **F4:** the FR-038 ambiguity paths have passing integration tests.
+- **F5:** the five limits note rows are in, and their cited tests exist.
 
-**What blocks the merge** (five MAJOR findings, all cheap to fix):
+The remediation introduced no regression beyond one over-cautious message (F15, MINOR).
 
-1. **F1:** the TikTok step function can mark a target **failed with "nothing was posted" after the final chunk or the photo `init` was sent**. This happens whenever TikTok's configuration or stored credentials are unreadable at a status check. It breaks SC-003 and constitution V, and the false message invites a duplicate post.
-2. **F2:** an "Allow comments", "Allow duets" or "Allow stitches" toggle that is on, when the creator later turns that interaction off, is rendered disabled and still ticked. The validator then blocks scheduling, and the person cannot untick it: a dead end.
-3. **F3:** US2–US7 are uncommitted, and HEAD still registers TikTok with stub publishing.
-4. **F4:** the safety-critical paths FR-038 names have no test: a final-chunk timeout going to status checks, `SEND_TO_USER_INBOX`, and `access_token_invalid` at publish.
-5. **F5:** `docs/limits.md` lacks the five TikTok note rows FR-030 requires.
+Two deterministic failures stop the merge, because CI must be green under the constitution's quality gate. Both trace to the feature, and the first round could not see them without a database:
 
-The integration suites have never run in this environment (T051 is still open). CI must run them before a human merges.
+- **F13:** the TikTok block in `.env.example` lacks the per-variable description, marker and default that the project's env-coverage test requires.
+- **F14:** the generic limits enforcement test cannot queue a TikTok target, because TikTok rightly demands posting values and consent. T027 is ticked on the claim that this suite passes.
+
+**Why these block in a re-review.** The constitution says a re-review records anything new as MINOR. I classified these two as MAJOR anyway, because:
+
+- they resolve items the first review explicitly left unverified (SC-008, F11) rather than opening a new inquiry;
+- a red `pnpm test` fails the constitution's merge gate whatever label it carries;
+- recording them as MINOR would send a known-red build to the merge step.
+
+Both fixes are small (one comment block and one test-harness adjustment). A human may downgrade them if they prefer.
 
 ## Findings
 
-- [ ] MAJOR F1 — After publishing, an unconfigured TikTok or unreadable credentials end the target `failed`, "nothing was posted", instead of ambiguous
-      where:  src/providers/tiktok/publish.ts:123, src/providers/tiktok/publish.ts:130-135, src/providers/tiktok/publish.ts:147, src/server/scheduler/record.ts:96
-      why:    `advanceTikTok` checks the credentials (`:123–124`) and calls `requireTikTokConfig()` (`:130–135`) before it routes to `check_status` (`:147`), and returns `fatal_error` from both checks. The engine records a provider's `fatal_error` as `failed` even on an after-publish step (`record.ts:96`). Its own G23 rescue (`publishing.ts:503–506`) covers only the engine's own exceptions. Reproduced with a probe: state `phase: "status"` with a `publishId`, both TikTok variables empty, step `check_status`. The result is `{"kind":"fatal_error","error":"TikTok is not configured on this server; nothing was posted."}`, and no status read is made. The final chunk or photo `init` has already gone out at that point, so the post may be live. A person who trusts "nothing was posted" and retries makes a duplicate. That contradicts D12 ("status checks … can only end published, failed by TikTok's own report, or ambiguous"), SC-003 and constitution V. Realistic trigger: an operator restarts the worker with the TikTok variables removed or emptied while a post is in its ≤ 60-minute status window.
-      owed:   route `check_status` before the configuration check; it needs only the access token, not the client secret. When the credentials are unreadable or TikTok is unconfigured on an after-publish step, return `ambiguous` (or `retryable_error`, which the engine turns into ambiguous at max attempts), never `fatal_error`. Add a unit case to `publish.test.ts` for each.
-      traces: FR-026, FR-027, SC-003, D12, constitution V
+### Earlier findings (round 1)
 
-- [ ] MAJOR F2 — A creator-disabled interaction toggle that is on can be neither unticked nor scheduled
-      where:  src/providers/tiktok/posting.ts:97-100, src/components/compose/PostingFieldsPanel.tsx:162-163, src/providers/tiktok/validate.ts:53-61
-      why:    `view()` keeps the stored `value: true` and adds `disabled` when creator info says the interaction is off. The panel renders `checked={field.value}` and `disabled={!!field.disabled}`. Meanwhile `validateTikTok` raises the blocking `interaction_disabled` ("Ada has turned off comments on TikTok."). Reproduced with a probe: values `{privacy: FOLLOWER_OF_CREATOR, allowComments: true}` and details `commentDisabled: true` give the field `{"value":true,"disabled":{…}}` and the issue `interaction_disabled@posting.allowComments`. The composer has no other way to change the value: `postingValues` changes only through the panel's `onChange`, and a reload re-seeds it from the stored row. Realistic triggers:
-              - a saved draft whose creator later turns comments, duets or stitches off;
-              - a person who ticks a toggle while the details read failed (no `disabled` yet), then presses Retry.
-              The target can then never be scheduled to TikTok. The cross-pass seam: `posting.ts` (T028), `validate.ts` (T029) and the panel (T031) are each plausible alone.
-      owed:   let the person clear it. Either keep a disabled toggle enabled while its value is `true` (so it can only be turned off), or have `view()` show it unticked and the composer send `false`. Add a `posting.test.ts` case, and a `tiktok-check.test.ts` case where saving `false` clears the issue.
-      traces: FR-016, US2 #3, D7, SC-005
+- [x] MAJOR F1 — fixed. An after-publish step with unreadable credentials or an unconfigured server no longer claims "nothing was posted".
+      where:  src/providers/tiktok/publish.ts:124-131, src/providers/tiktok/publish.ts:137-147, src/providers/tiktok/publish.test.ts:199-216
+      check:  `check_status` now proceeds without the client secret (`:142`). Unreadable credentials on a `check_status` or may-publish step return `ambiguous` with `credentialsInvalid` (`:128-129`), which the engine turns into an account flag while the target stays ambiguous (`src/server/scheduler/publishing.ts:520-525`, `:560-561`). Three unit cases pass. `checkStatus` never reads `e.secret`, so the empty secret is harmless. If a status read needs a token refresh while TikTok is unconfigured, the refresh fails quietly (`publishing.ts:557-558` `.catch`). The status reads then retry until `record.ts:69` ends the target ambiguous, so it still never fails.
 
-- [ ] MAJOR F3 — US2–US7 are uncommitted; HEAD registers TikTok with stub publishing
-      where:  src/providers/tiktok/index.ts:21-27 (working tree), specs/026-tiktok-provider/tasks.md:73-139
-      why:    `git status` shows 22 modified and 28 untracked files. They include `publish.ts`, `posting.ts`, `validate.ts`, `steps.ts`, `state.ts`, `sealed.ts`, `errors.ts`, `PostingFieldsPanel.tsx`, the `Composer.tsx` edits, `docs/tiktok-setup.md` and every US2–US7 test. At HEAD, `src/providers/tiktok/index.ts` still has `advance: async () => ({ kind: "fatal_error", error: NOT_BUILT })` and plain capability validation. A PR or merge of HEAD would therefore ship a registered TikTok provider that cannot publish, with no posting fields and no consent: US2, US3, US4 and US6 would not work. Tasks T027–T050 are ticked, but none of their work is in git. The constitution's workflow rule is "commit after each completed task … explicit paths".
-      owed:   commit the existing working-tree changes in logical conventional commits with explicit paths, for example US2, US3+US4, US5+US6 and docs. Do this before or together with the other remediation tasks, and confirm `git status` is clean afterwards.
-      traces: Development Workflow (commits), US2–US7
+- [x] MAJOR F2 — fixed. A creator-disabled interaction toggle that is on can be unticked.
+      where:  src/providers/tiktok/posting.ts:87-92, src/components/compose/PostingFieldsPanel.tsx:155-171, tests/integration/compose/tiktok-check.test.ts:131-134
+      check:  while its value is `true`, the field has no `disabled` and carries `help` ("Turned off in this TikTok account's settings. Untick it to post."). The panel renders that help (`:170`) and leaves the checkbox enabled (`:163`). Once the person unticks it, the field becomes disabled with its reason. The check test confirms the issue clears when `allowDuets: false` is saved. "Branded content" on an unaudited install also benefits, because it can now be cleared.
 
-- [ ] MAJOR F4 — FR-038's ambiguity-path tests are missing: a final-chunk timeout going to status checks, `SEND_TO_USER_INBOX`, and `access_token_invalid` at publish
-      where:  tests/integration/tiktok/failures.test.ts:138-203, src/providers/tiktok/publish.test.ts:68-154, src/providers/tiktok/publish.ts:343, src/providers/tiktok/publish.ts:439-441, src/providers/tiktok/publish.ts:92-93
-      why:    FR-038 requires tests for "a timeout after the final chunk going to status checks; `FAILED`, `SEND_TO_USER_INBOX` and the 60-minute ceiling". US5 scenarios #5 and #7 and contract §9 add "`access_token_invalid` refresh then retry; a refused refresh leading to needs_reauth". A grep of `src/providers/tiktok/*.test.ts` and `tests/integration/tiktok/` finds none of the following:
-              - a final-chunk network failure, which `publish.ts:343` sends to status checks;
-              - `SEND_TO_USER_INBOX` (`:439–441`);
-              - `access_token_invalid` or `credentialsExpired` on `check_creator`, `start_upload` or `check_status` (`:92–93`, `:409–410`).
-              These are the paths that decide between a duplicate, a miss and ambiguity. T043 is ticked, but its test file stops at the 403-restart and 60-minute cases.
-      owed:   add integration cases through `runTick` to `failures.test.ts`:
-              (a) the final `PUT` times out: status reads follow, there is no second `PUT` and no second `init`, and the target ends published or ambiguous;
-              (b) `SEND_TO_USER_INBOX` ends ambiguous with the D11 message;
-              (c) `access_token_invalid` on `start_upload` refreshes and retries, and a refused refresh marks the account `needs_reauth` while the target waits.
-      traces: FR-038, US5 #5, US5 #7, SC-003
+- [x] MAJOR F3 — fixed. US2–US7 are committed.
+      where:  git log bbb9d30..HEAD (c90a08a, c01128b, 1e9e208, 0984c49), src/providers/tiktok/index.ts:21-27
+      check:  `git status --short` is empty, and HEAD's `index.ts` wires the real `advanceTikTok` and `validateTikTok`. Commitlint passes on all 9 commits.
 
-- [ ] MAJOR F5 — `docs/limits.md` lacks the five TikTok note rows FR-030 requires
-      where:  docs/limits.md:183-207
-      why:    FR-030 requires note rows for:
-              - the creator's maximum duration;
-              - the unaudited private-only rule and 5-account cap;
-              - the photo domain verification;
-              - the chunk sizing;
-              - the 60-minute status ceiling.
-              data-model §9 lists them. The TikTok table has only the 21 capability rows, while every other video provider carries its `note:` rows (Instagram `:94`, Threads `:134`, Bluesky `:161–165`). T027 is ticked.
-      owed:   add the five `note:` rows with source, enforcement point and an existing test. Possible test citations: `src/providers/tiktok/validate.test.ts` for the creator duration, `tests/integration/tiktok/unaudited.test.ts`, `tests/integration/tiktok/photo.test.ts` "surfaces url_ownership_unverified as a plain failure", `src/providers/tiktok/state.test.ts` for the chunk plan, and `tests/integration/tiktok/failures.test.ts` "ends ambiguous when TikTok is still processing after 60 minutes". Then re-run `tests/integration/docs/limits-inventory.test.ts`.
-      traces: FR-030
+- [x] MAJOR F4 — fixed. The FR-038 ambiguity paths are tested, and the tests pass against Postgres.
+      where:  tests/integration/tiktok/failures.test.ts:208-277
+      check:  four new `runTick` cases:
+              - the final `PUT` fails, status reads follow, and there is exactly one `init` and three `PUT`s;
+              - `SEND_TO_USER_INBOX` ends ambiguous with "did not report this as posted";
+              - `access_token_invalid` on `start_upload` refreshes once and re-sends `init`;
+              - a refused refresh marks the account `needs_reauth` with no `PUT`.
+              All pass. Two of them are weaker than their names (F16, MINOR).
 
-- [ ] MINOR F6 — A new TikTok target in the composer says "Open this post in the composer to choose TikTok's settings…"
+- [x] MAJOR F5 — fixed. The five FR-030 note rows are in `docs/limits.md`.
+      where:  docs/limits.md:208-212
+      check:  rows for the creator's maximum duration, unaudited apps, photo domain, chunk sizing and the status ceiling. Each cites a test that exists:
+              - `validate.test.ts:114`
+              - `unaudited.test.ts:15`
+              - `photo.test.ts:56`
+              - `state.test.ts:23`
+              - `failures.test.ts:189`
+              `tests/integration/docs/limits-inventory.test.ts` passes. The enforcement test skips `note:` rows (`enforcement.test.ts:145`, `:169`), so these rows are not what fails in F14.
+
+- [ ] MINOR F6 — still open. A new TikTok target in the composer says "Open this post in the composer…".
       where:  src/providers/tiktok/validate.ts:27-28, src/server/services/posts/compose.ts:143
-      why:    the composer sends no `posting` until a field is touched, so `values` is null and `validateTikTok` raises `posting_required`. That message was written for API- and generator-created posts (US2 #9), but here the person already is in the composer. It still blocks correctly; only the wording is wrong in this context.
-      owed:   in the check, treat absent values for a provider with `posting` as the declaration's defaults (so the issue becomes `privacy_required`). Alternatively, word the composer-side issue differently.
+      why:    unchanged from round 1. With no `posting` sent yet, `values` is null and the composer shows wording meant for API- and generator-created posts.
 
-- [ ] MINOR F7 — The unaudited explanation is not the spec's text
+- [ ] MINOR F7 — still open. The unaudited explanation drops "only the account owner can see it" from the D6 and FR-018 text.
       where:  src/providers/tiktok/posting.ts:75
-      why:    D6 and FR-018 give "Your TikTok app hasn't passed TikTok's audit, so every post is private: only the account owner can see it. The TikTok account itself must also be set to private." The code says "This TikTok app hasn't passed TikTok's audit, so every post is private. The TikTok account must also be set to private." It drops "only the account owner can see it".
-      owed:   use the spec's sentence. `unaudited-ui.test.tsx:65` matches only a fragment, so it keeps passing.
 
-- [ ] MINOR F8 — The generic `PostingFieldsPanel` hard-codes TikTok copy
+- [ ] MINOR F8 — still open. The generic `PostingFieldsPanel` hard-codes "Read how TikTok's audit works".
       where:  src/components/compose/PostingFieldsPanel.tsx:48
-      why:    the notice link always reads "Read how TikTok's audit works", whichever provider declared the notice. The plan says "there is no TikTok-specific UI code" (constitution V). The composer-ui contract §3 prescribes this label, so the contract itself is inconsistent here. The next provider with a `notice` would show TikTok's wording.
-      owed:   carry the link label in `notice()` (for example `{ text, doc, docLabel }`) and render that.
 
-- [ ] MINOR F9 — Consent tests skip several paths the contract lists
-      where:  tests/integration/posts/consent.test.ts:86-97, tests/integration/posts/consent.test.ts:124-135, tests/integration/posts/consent.test.ts:281-292
-      why:    the contract's `consent.test.ts` list asks for:
-              - approving (auto-queue) and retrying without consent (only queue, schedule and publish-now are driven);
-              - consent going stale on an override, media or video-edit change (only text and a posting value are driven);
-              - US2 #9, an API, generator or bulk-created TikTok post refused with the `posting_required` message while other targets are unaffected (tested only at the unit and check level).
-              All of these share the gate, so the risk is low.
-      owed:   add the missing cases.
+- [ ] MINOR F9 — still open. The consent tests skip approve and retry without consent, staleness after an override, media or video-edit change, and US2 #9 through the services.
+      where:  tests/integration/posts/consent.test.ts:86-97, tests/integration/posts/consent.test.ts:124-135
 
-- [ ] MINOR F10 — `fitState` in the TikTok state module is dead code
-      where:  src/providers/tiktok/state.ts:103-108, src/providers/tiktok/publish.ts:308
-      why:    `publish.ts` repeats the kind and file checks inline (`:308`), and `steps.ts:18` does its own kind check. `fitState` is called only by its test, so two passes each wrote a "does the state still fit" rule.
-      owed:   use `fitState` in `advanceTikTok`, or delete it.
+- [ ] MINOR F10 — still open. `fitState` in the TikTok state module is called only by its test.
+      where:  src/providers/tiktok/state.ts:103, src/providers/tiktok/state.test.ts:70
 
-- NOTE F11 — The integration suites have never run in this environment. T051 (`pnpm test`, `pnpm db:check`) is still open and BLOCKED, and none of the 14 TikTok and hook integration files could be executed here. The unit and docs suites I could run all pass. The constitution's merge gate (CI green, real Postgres) is therefore the first real execution of US2–US7. The tests read as meaningful: they drive `runTick` and the services against the fake TikTok, not the code under test.
+### New in this round
 
-- NOTE F12 — I checked concurrency at the consent seam and found it bounded:
-  - The engine reads the text (`effectiveContent`, `src/server/scheduler/publishing.ts:408`) and the consent (`loadTargetContent`, `:425`) in separate queries. Every commit that changes a scheduled target re-gates it (`src/server/services/posts/index.ts:317-324`, after `settleConsent`), so whatever text the engine reads was covered by a valid consent when it was committed.
-  - A failed live details read never clears a stored consent (`consent.ts:128–129`).
-  - The details cache is keyed by account id, after the project-scope check (`account-details.ts:35–56`).
+- [ ] MAJOR F13 — The TikTok block in `.env.example` fails the project's env-coverage test, so `pnpm test` is red
+      where:  .env.example:311-317, tests/lint/env-coverage.test.ts:68-85
+      why:    the test requires each configurable variable, including every connect-group variable (`PROVIDER_VARIABLES`, `env-coverage.test.ts:45`), to be preceded by:
+              - a description comment;
+              - a `Required.`, `Optional.` or `Group.` marker;
+              - a `Default …` or `No default.` line.
+              The TikTok block has one shared comment above all three assignments, so the scan from `TIKTOK_CLIENT_SECRET=` and `TIKTOK_APP_AUDITED=` finds no comment at all. The X block directly above (`.env.example:303-309`) shows the required shape. The test fails with 8 problems, and the failure is deterministic: it fails alone and in the full run. It breaks FR-002 ("documented in `.env.example`"), constitution VII ("documented in `.env.example`") and SC-008 (the inventory checks must pass with TikTok registered). The first round marked FR-002 satisfied without running this lint test.
+      owed:   give each of `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` and `TIKTOK_APP_AUDITED` its own comment block, modelled on X's:
+              - `Group.` for the key and secret, with "No default.";
+              - `Optional.` for the audited flag, with "Default false.";
+              - the secret's comment should say "Never logged.".
+              Keep the section header and the explanatory lines above them. Re-run `tests/lint/env-coverage.test.ts`. `docker-compose.yml` is still unchanged, so operators need no compose edit.
+      traces: FR-002, FR-036, SC-008, constitution VII, Development Workflow (CI green)
+
+- [ ] MAJOR F14 — The generic limits enforcement test fails for all 7 TikTok video adapt rows. T027 is ticked on the claim that it passes
+      where:  tests/integration/limits/enforcement.test.ts:147-178, src/providers/tiktok/validate.ts:27-28, specs/026-tiktok-provider/tasks.md:73, docs/limits.md:198-206
+      why:    "video adapt rows" checks two things for each provider's adaptable video row:
+              - the formatter plans a derive, which passes for TikTok;
+              - `addToQueue` returns `{ ok: true }` (`:178`) for a draft that has only `baseText` and media.
+              TikTok rightly refuses that draft with `posting_required` (US2 #9, `validate.ts:27-28`), so the following rows fail every time, and each is the test `docs/limits.md` cites for that row:
+              - `tiktok: video codecs`
+              - `video bytes`
+              - `max duration`
+              - `video max width`
+              - `video max height`
+              - `min frame rate`
+              - `max frame rate`
+              The only blocking issue in each failure is `posting_required`; the media issues are all `info` (for example "Video 1 will be re-encoded as H.264 and AAC for TikTok"). The product behaves as specified. The test harness predates G25–G27 and assumes no provider needs posting values or consent to queue. T027 said "add TikTok rows to `docs/limits.md` so `tests/integration/limits/enforcement.test.ts` … pass", and it is ticked, but the suite never ran in the implement phase (T051).
+      owed:   make the gate assertion provider-aware without weakening it for other providers. Two options:
+              - for a provider that declares `posting` or `consent`, create the target with valid posting values and a recorded consent (as `tests/helpers/tiktok-publish.ts` does);
+              - or assert that the gate raises no blocking issue on a `media*` field, and that every remaining blocker is a posting or consent issue, keeping `{ ok: true }` for every provider without `posting`.
+              Do not touch `validate.ts` (the refusal is correct). Re-run `tests/integration/limits/enforcement.test.ts` and confirm all 173 cases pass.
+      traces: FR-030, FR-008, SC-008, T027, Development Workflow (CI green)
+
+- [ ] MINOR F15 — The remediation turned accurate "nothing was posted" failures on may-publish steps into "the post may be live" ambiguity
+      where:  src/providers/tiktok/publish.ts:124, src/providers/tiktok/publish.ts:128-130, src/providers/tiktok/publish.ts:143-144, src/server/scheduler/publishing.ts:524-525
+      why:    `afterPublish` includes `ctx.step.mayPublish`. The final chunk and `publish_photos` therefore return `ambiguous` when credentials are unreadable or TikTok is unconfigured. Both checks run before the step sends anything, and a may-publish step is never re-entered after its request went out:
+              - after the final `PUT`, every outcome goes to `toStatus` or ends;
+              - a lost lease on a may-publish step is ended by the engine itself.
+              So the post is certainly not live. The target ends ambiguous and needs a manual check and retry, where a plain failure would be accurate. It is safe (never a duplicate), but it is the opposite error from F1. The ambiguous credentials message also says "Reconnect" twice once the engine appends its own suffix: "…Reconnect the account. The post may be live; check TikTok before retrying. Reconnect Ada to publish again."
+      owed:   apply the ambiguous branch only to `check_status`, or keep may-publish steps fatal with "nothing was posted". Drop "Reconnect the account." from the ambiguous variant.
+
+- [ ] MINOR F16 — Two of the new FR-038 tests are weaker than their names say
+      where:  tests/integration/tiktok/failures.test.ts:209-215, tests/helpers/fake-tiktok.ts:110-111, tests/integration/tiktok/failures.test.ts:262-276, src/providers/tiktok/publish.test.ts:212-216
+      why:
+              - **"A final PUT that times out"** scripts `pre_send_failure`, which the fake implements as `ECONNREFUSED`, a connection refused before sending. The fake has no "sent, then lost" kind. The code path is the same (any throw on the final chunk goes to status, `publish.ts:354-355`), so the behaviour is covered, but the test does not model a timeout.
+              - **The refused-refresh test** says "the target waits" but asserts only `not.toBe("published")`. A target that ended `failed` would pass it.
+              - **The unit case "check_status is routed before the config check"** uses a null state, so it ends on `LOST_TRACK` without making a request. No test shows a real status read succeeding with TikTok unconfigured.
+      owed:   add a `lost` (or `timeout`) response kind to the fake and use it in the final-`PUT` case. Assert the waiting status (scheduled, with a future `nextAttemptAt`) in the refused-refresh case. Give the unit case a `phase: "status"` state with a `publishId`, and assert a `done` result.
+
+- [ ] MINOR F17 — TikTok has no platform mark, so it shows the offline mock's flask glyph
+      where:  scripts/generate-icons.mjs:51-57, src/components/ui/Icon.tsx:45-56
+      why:    `PROVIDERS` lists facebook, instagram, threads, bluesky and x. For any other key, `ProviderIcon` falls back to the "flask" tile that `Icon.tsx:39-44` describes as the mark for "providers without a brand (the offline mock)". TikTok accounts therefore show the mock's mark in:
+              - the composer;
+              - `AccountPicker`;
+              - `ActivityRow`;
+              - `NotificationList`;
+              - after main's PR #48 merges, the TikTok connect card.
+              `simple-icons` is installed.
+      owed:   add `tiktok: "tiktok"` to `PROVIDERS` and run `pnpm icons`.
+
+- NOTE F11 — The integration suites now ran here, against Postgres. The TikTok, consent, hooks-inert, account-details, docs and no-secrets suites all pass. The first round's open question ("CI is the first real execution of US2–US7") is answered, except for F13 and F14. T051 remains open in `tasks.md`; it is the implement phase's to close.
+
+- NOTE F12 — The round-1 concurrency note still holds: the remediation did not touch the consent seam (`src/server/services/posts/consent.ts`, `src/server/scheduler/publishing.ts:408-425`).
+
+- NOTE F18 — `tests/integration/media/video-publish-adapted.test.ts:60` failed once in the full parallel run ("queued" instead of "ready") and passed alone. It contains no TikTok code, and this branch does not change the formatter. Under load it is a pre-existing flake (see the shared-database timeouts noted for heavy runs). If CI hits it, re-run before blaming this branch.
+
+- NOTE F19 — `origin/main` has moved to `24e199f` (PR #48: connect-card marks, activity wording). `git merge-tree` finds no conflict, and main took no migration number, so `0018` is still free.
 
 ## Coverage
 
-| Checked | Count | Satisfied | Partial | Absent | Contradicted | Unverified |
-|---|---|---|---|---|---|---|
-| Functional requirements (FR-001–FR-043) | 43 | 39 | 4 (FR-016 F2, FR-027 F1, FR-030 F5, FR-038 F4) | 0 | 0 | 0 |
-| Success criteria (SC-001–SC-008) | 8 | 6 | 1 (SC-003 F1) | 0 | 0 | 1 (SC-008: existing suites not run here) |
-| User stories (US1–US7, acceptance scenarios read one by one) | 7 | 5 | 2 (US2 F2; US5 F1, F4) | 0 | 0 | 0 |
-| Spec decisions (D1–D16) | 16 | 15 | 1 (D12 F1) | 0 | 0 | 0 |
-| Constitution principles (I–VII) and workflow | 8 | 6 | 2 (V F1, F8; workflow F3) | 0 | 0 | 0 |
+| Checked | Count | Satisfied | Partial | Absent | Contradicted |
+|---|---|---|---|---|---|
+| Functional requirements (FR-001–FR-043) | 43 | 41 | 2 (FR-002 F13; FR-030 F14) | 0 | 0 |
+| Success criteria (SC-001–SC-008) | 8 | 7 | 1 (SC-008 F13, F14) | 0 | 0 |
+| User stories (US1–US7) | 7 | 7 | 0 | 0 | 0 |
+| Spec decisions (D1–D16) | 16 | 16 | 0 | 0 | 0 |
+| Constitution principles (I–VII) and workflow | 8 | 6 | 2 (VII F13; workflow, CI gate F13 and F14) | 0 | 0 |
+| Round-1 blocking findings (F1–F5) | 5 | 5 fixed | 0 | 0 | 0 |
+| Remediation regressions (files in `0984c49`) | 8 files | 7 clean | 1 (publish.ts, F15 MINOR) | 0 | 0 |
 
-Constitution sweep categories:
+The previously partial FR-016, FR-027 and FR-038, SC-003, US2, US5 and D12 are now satisfied: F1, F2 and F4 are fixed, and their tests pass against Postgres.
 
-- concurrency and locking: F12;
-- idempotency and retries: a final chunk is never re-sent; the photo `init` is ambiguous on any lost reply; a refused repeat of a chunk restarts;
-- authorization and project scoping: `readAccountDetails` checks scope and permission first; consent is recorded only for a member actor; the public API mapper omits `postingFields`;
-- time zones: DB clock throughout, ISO UTC in the state, UTC date in the reconnect note;
-- error, timeout and ambiguous paths: F1, F4;
-- secrets: the upload address is sealed and added to the scrub list; `explainTikTok` strips links and query secrets; no token reaches the state or summaries.
+**SC-008** is partial for these reasons:
+
+- Existing providers' tests pass. The only non-TikTok failure is the F18 flake, which passes alone.
+- The doc-inventory, doc-link and no-secrets suites pass.
+- The env inventory (F13) and the limits enforcement inventory (F14) fail with TikTok registered.
 
 ## What I could not check
 
-- **Every integration suite against Postgres:** `tests/integration/tiktok/*`, `compose/tiktok-check`, `compose/posting-hooks-inert`, `posts/consent`, `src/server/services/account-details.test.ts`, `limits/enforcement`, and the existing providers' suites (SC-008). No test database is reachable in this sandbox. CI or a machine with `DATABASE_URL` on port 5433 must run `pnpm test` and `pnpm db:check` (T051).
-- **The composer in a browser:** keyboard use, focus, `aria-describedby` wiring, the Retry flow, and the ticked-then-stale consent box. I reviewed the markup only.
-- **Anything live at TikTok** (T052, quickstart §8):
-  - the reply envelope, the token fields and the absence of PKCE;
-  - chunk `PUT` behaviour, including whether Node's `fetch` sends the manual `content-length`, and the repeat semantics;
-  - the photo field names, and the branded-content rule;
-  - whether consent at scheduling passes TikTok's audit.
-  All of these are verified with mocks only, by design (D16).
-- **The 1 GiB upload at the default 10-second step limit** (≈ 30 Mbit/s): an operator measurement.
-- **Whether `docs/tiktok-setup.md` alone gets an operator from no app to a connected account** (SC-007). I checked it against FR-034's list and its links resolve (`tiktok-docs.test.ts` passed), but only a person following it can confirm.
+- **CI on a pull request.** None exists. Docker image build, `pnpm build` and `pnpm lint` were not re-run here; T051 records them passing before the remediation, which touched no routes or config.
+- **The composer in a browser.** That covers keyboard use and focus on the now-operable creator-disabled toggle, whether its help text reads well beside the error, and the Retry flow. I checked the markup and the `aria-describedby` wiring only.
+- **Anything live at TikTok** (T052, quickstart §8): the reply envelope, chunk `PUT` repeat semantics, photo field names, the branded-content rule, and whether consent at scheduling passes TikTok's audit. All of these are verified with mocks only, by design (D16).
+- **The 1 GiB upload at the default 10-second step limit:** an operator measurement.
+- **Whether `docs/tiktok-setup.md` alone gets an operator to a connected account** (SC-007). Its links resolve (`tiktok-docs.test.ts` passes), but only a person following it can confirm.
