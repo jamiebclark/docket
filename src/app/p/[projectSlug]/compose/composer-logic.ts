@@ -15,7 +15,17 @@ export interface CheckInput {
   mediaIds: string[];
   /** One edit per attached video, by media id; a default edit clears a stored one. */
   videoEdits?: Record<string, VideoEdit>;
-  targets: { accountId: string; overrideText?: string | null; postType?: PostType | null }[];
+  targets: {
+    accountId: string;
+    overrideText?: string | null;
+    postType?: PostType | null;
+    /** The provider's posting values (G25); absent keeps the stored ones. */
+    posting?: unknown;
+    /** The fingerprint the person agreed to (G27); absent = not ticked. */
+    consent?: { fingerprint: string };
+  }[];
+  /** Bypasses the account-details cache; only the composer's Retry sends it. */
+  refreshDetails?: boolean;
 }
 
 export const counterText = (t: Pick<TargetCheck, "count" | "limit">): string =>
