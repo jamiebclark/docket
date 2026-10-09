@@ -85,7 +85,10 @@ function privacyField(values: TikTokPostingValues, details: CreatorDetails | nul
 }
 
 function toggle(key: string, label: string, value: boolean, disabledReason: string | null): PostingFieldView {
-  return { key, label, kind: "toggle", value, ...(disabledReason ? { disabled: { reason: disabledReason } } : {}) };
+  if (!disabledReason) return { key, label, kind: "toggle", value };
+  // A creator-disabled toggle that is still on stays operable, so a person can untick it and clear interaction_disabled.
+  if (value) return { key, label, kind: "toggle", value, help: `${disabledReason} Untick it to post.` };
+  return { key, label, kind: "toggle", value, disabled: { reason: disabledReason } };
 }
 
 /** Pure and total (G25). Unaudited installs show a fixed private level and a disabled "Branded content". */

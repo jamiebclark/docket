@@ -147,3 +147,17 @@ describe("consent and values", () => {
     expect(tiktokPostingSchema.parse({ disclosure: true, yourBrand: true })).toMatchObject({ yourBrand: true });
   });
 });
+
+describe("creator-disabled interaction toggles", () => {
+  it("stay operable (with a reason) while still on, so they can be cleared", () => {
+    const duet = view(values({ allowDuets: true }), details).find((f) => f.key === "allowDuets")!;
+    expect(duet).toMatchObject({ kind: "toggle", value: true });
+    expect(duet.disabled).toBeUndefined();
+    expect(duet.help).toContain("Turned off in this TikTok account's settings.");
+  });
+
+  it("are disabled once off", () => {
+    const duet = view(values({ allowDuets: false }), details).find((f) => f.key === "allowDuets")!;
+    expect(duet.disabled?.reason).toBe("Turned off in this TikTok account's settings.");
+  });
+});

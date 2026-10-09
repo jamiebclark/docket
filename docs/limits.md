@@ -205,6 +205,11 @@ X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce 
 | min frame rate | 23 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: min frame rate" |
 | max frame rate | 60 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max frame rate" |
 | publish limit | 15 / 86400 s |  | docs/research/tiktok.md (about 15 posts per account per day, shared with other apps) | engine deferral | `tests/integration/limits/enforcement.test.ts` "tiktok: publish limit 15 / 86400 s" |
+| note: creator maximum duration | The creator's own `max_video_post_duration_sec`, read before each post and at publish | | docs/research/tiktok.md ("Query creator info") | composer check (`validate.ts`) and the TikTok check_creator step | `src/providers/tiktok/validate.test.ts` "refuses a video longer than the creator's maximum, at the video's position" |
+| note: unaudited apps | Private-only posts; at most 5 posting accounts per 24 h until TikTok's audit passes | | docs/research/tiktok.md ("Unaudited clients") | TikTok step machine (sends `SELF_ONLY`); the 5-account cap is TikTok's and not counted by Docket | `tests/integration/tiktok/unaudited.test.ts` "sends SELF_ONLY whatever options the creator offers" |
+| note: photo domain verification | Photo URLs must come from a domain verified in the TikTok developer portal | | docs/research/tiktok.md ("Photo posts") | TikTok (`url_ownership_unverified`), explained by the step machine | `tests/integration/tiktok/photo.test.ts` "surfaces url_ownership_unverified as a plain failure" |
+| note: chunk sizing | Contiguous chunks of 5 MB to 64 MB (about 30 per file); the final chunk absorbs the remainder and stays under 128 MB | | docs/research/tiktok.md ("Upload video") | TikTok step machine (`chunkPlan`) | `src/providers/tiktok/state.test.ts` "covers the whole file with contiguous ranges" |
+| note: status ceiling | 60 min | | docs/research/tiktok.md ("Fetch post status"); a post still processing then ends ambiguous | TikTok step machine | `tests/integration/tiktok/failures.test.ts` "ends ambiguous when TikTok is still processing after 60 minutes" |
 
 ## Mock (offline)
 

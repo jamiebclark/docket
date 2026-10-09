@@ -128,6 +128,10 @@ describe("composer check: TikTok posting panel", () => {
     expect(errors(disclosure)).toContain("disclosure_incomplete@posting.disclosure");
     const duet = await check(s, { posting: { privacy: "PUBLIC_TO_EVERYONE", allowDuets: true } });
     expect(errors(duet)).toContain("interaction_disabled@posting.allowDuets");
+    // The toggle stays operable while on, so the person can clear the error; once off, the error is gone.
+    expect(duet.posting!.fields.find((f) => f.key === "allowDuets")!.disabled).toBeUndefined();
+    const cleared = await check(s, { posting: { privacy: "PUBLIC_TO_EVERYONE", allowDuets: false } });
+    expect(errors(cleared)).not.toContain("interaction_disabled@posting.allowDuets");
     const branded = await check(s, { posting: { privacy: "SELF_ONLY", disclosure: true, brandedContent: true } });
     expect(errors(branded)).toContain("branded_private@posting.privacy");
     const p = branded.posting!.fields.find((f) => f.key === "privacy")!;

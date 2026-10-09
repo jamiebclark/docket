@@ -1,6 +1,8 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { creatorReply } from "../../helpers/fake-tiktok";
-import { closeDb } from "../../helpers/db";
+import { and, eq } from "drizzle-orm";
+import { socialAccounts } from "../../../src/server/db/schema/accounts";
+import { creatorReply, tokenReply } from "../../helpers/fake-tiktok";
+import { closeDb, testDb } from "../../helpers/db";
 import { CREATOR, STATUS, tiktokVideoSetup, UPLOAD_PATH, UPLOAD_URL, VIDEO_INIT } from "../../helpers/tiktok-publish";
 
 let teardown: (() => void) | undefined;
@@ -12,6 +14,7 @@ type Setup = Awaited<ReturnType<typeof tiktokVideoSetup>>;
 const creator = (overrides: Record<string, unknown> = {}) => ({ kind: "ok", body: creatorReply({ privacy_level_options: ["FOLLOWER_OF_CREATOR", "SELF_ONLY"], ...overrides }) }) as const;
 const init = { kind: "ok", body: { data: { publish_id: "v_pub_1", upload_url: UPLOAD_URL }, error: { code: "ok" } } } as const;
 const complete = { kind: "ok", body: { data: { status: "PUBLISH_COMPLETE" }, error: { code: "ok" } } } as const;
+const TOKEN = "/v2/oauth/token/";
 const done = ["published", "failed", "ambiguous"];
 
 const run = async (s: Setup, ticks = 10, stepMs = 120_000) => {
@@ -199,5 +202,76 @@ describe("TikTok: slow or refused uploads", () => {
     expect(row.lastError ?? "").toContain("60 minutes");
     expect(s.fake.callsTo("POST", VIDEO_INIT)).toHaveLength(1);
     expect(s.fake.callsTo("PUT", UPLOAD_PATH)).toHaveLength(1);
+  });
+});
+
+describe("TikTok: the ambiguity paths (FR-038)", () => {
+  it("a final PUT that times out is read back through status, never re-sent", async () => {
+    const s = await tiktokVideoSetup();
+    teardown = s.teardown;
+    s.fake
+      .on("POST", CREATOR, creator())
+      .on("POST", VIDEO_INIT, init)
+      .on("PUT", UPLOAD_PATH, [{ kind: "http", status: 206 }, { kind: "http", status: 206 }, { kind: "pre_send_failure" }])
+      .on("POST", STATUS, complete);
+
+    await run(s, 20);
+
+    const row = await s.row();
+    expect(["published", "ambiguous"], row.lastError ?? "").toContain(row.status);
+    expect(s.fake.callsTo("POST", VIDEO_INIT)).toHaveLength(1);
+    expect(s.fake.callsTo("PUT", UPLOAD_PATH)).toHaveLength(3);
+    expect(s.fake.callsTo("POST", STATUS).length).toBeGreaterThan(0);
+  });
+
+  it("SEND_TO_USER_INBOX ends ambiguous rather than published or failed", async () => {
+    const s = await tiktokVideoSetup({ sizeBytes: 3_000_000 });
+    teardown = s.teardown;
+    s.fake
+      .on("POST", CREATOR, creator())
+      .on("POST", VIDEO_INIT, init)
+      .on("PUT", UPLOAD_PATH, { kind: "http", status: 201 })
+      .on("POST", STATUS, { kind: "ok", body: { data: { status: "SEND_TO_USER_INBOX" }, error: { code: "ok" } } });
+
+    await run(s);
+
+    const row = await s.row();
+    expect(row.status).toBe("ambiguous");
+    expect(row.lastError ?? "").toContain("did not report this as posted");
+    expect(s.fake.callsTo("POST", VIDEO_INIT)).toHaveLength(1);
+  });
+
+  it("access_token_invalid on start_upload refreshes the token and retries", async () => {
+    const s = await tiktokVideoSetup({ sizeBytes: 3_000_000 });
+    teardown = s.teardown;
+    s.fake
+      .on("POST", CREATOR, creator())
+      .on("POST", VIDEO_INIT, [{ kind: "error", code: "access_token_invalid", message: "expired", status: 401 }, init])
+      .on("POST", TOKEN, { kind: "ok", body: tokenReply({ access_token: "NEW-ACCESS", refresh_token: "NEW-REFRESH" }) })
+      .on("PUT", UPLOAD_PATH, { kind: "http", status: 201 })
+      .on("POST", STATUS, complete);
+
+    await run(s, 14);
+
+    const row = await s.row();
+    expect(row.status, row.lastError ?? "").toBe("published");
+    expect(s.fake.callsTo("POST", TOKEN)).toHaveLength(1);
+    expect(s.fake.callsTo("POST", VIDEO_INIT)).toHaveLength(2);
+  });
+
+  it("a refused refresh flags the account needs_reauth and the target waits", async () => {
+    const s = await tiktokVideoSetup({ sizeBytes: 3_000_000 });
+    teardown = s.teardown;
+    s.fake
+      .on("POST", CREATOR, creator())
+      .on("POST", VIDEO_INIT, { kind: "error", code: "access_token_invalid", message: "expired", status: 401 })
+      .on("POST", TOKEN, { kind: "oauth_error", status: 400, error: "invalid_grant" });
+
+    await run(s, 4);
+
+    const [account] = await testDb().select().from(socialAccounts).where(and(eq(socialAccounts.projectId, s.projectId), eq(socialAccounts.id, s.accountId)));
+    expect(account!.status).toBe("needs_reauth");
+    expect((await s.row()).status).not.toBe("published");
+    expect(s.fake.callsTo("PUT", UPLOAD_PATH)).toHaveLength(0);
   });
 });

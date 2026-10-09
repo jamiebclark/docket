@@ -70,14 +70,14 @@
 
 **Independent Test**: with `TIKTOK_APP_AUDITED=true` and creator info mocked, the check response shows heading, three privacy options with none selected, Duet disabled with reason, blocking issues until privacy and consent are given (`tests/integration/compose/tiktok-check.test.ts`).
 
-- [ ] T027 [P] [US2] Create `src/providers/tiktok/capabilities.ts` (declaration per plan P18, `utf16` custom rule, publish limit 15/day) with `capabilities.test.ts`; add TikTok rows to `docs/limits.md` so `tests/integration/limits/enforcement.test.ts` and the inventory test pass
-- [ ] T028 [P] [US2] Create `src/providers/tiktok/posting.ts` (values schema, pure `view()`, heading, notice, `targetNote`, `summaryNotes`, consent declaration, privacy labels, "Branded content" rule) with `posting.test.ts` for audited/unaudited, per post type, per details
-- [ ] T029 [US2] Create `src/providers/tiktok/validate.ts` (`validateTikTok`: posting-field, creator-duration and photo-`https` issues) with `validate.test.ts` covering every row of contracts/tiktok-publishing.md §2; wire into `src/providers/tiktok/index.ts`
-- [ ] T030 [P] [US2] Create `src/components/compose/posting-ui.ts` pure helpers with `posting-ui.test.ts`
-- [ ] T031 [US2] Create client component `src/components/compose/PostingFieldsPanel.tsx` (choice/toggle/text/fixed views, disabled reasons via `aria-describedby`, details-unavailable Retry, consent checkbox; follow the `docket-ui` skill)
-- [ ] T032 [US2] Edit `src/app/p/[projectSlug]/compose/Composer.tsx` (posting and consent state, panel in each target preview card, note badge) and `src/app/p/[projectSlug]/compose/[postId]/page.tsx` (initial values and valid consent fingerprint)
-- [ ] T033 [US2] Write `tests/integration/compose/tiktok-check.test.ts` per contracts/composer-ui.md §7 (options, disabled duet, issues until privacy+consent, `details_unavailable` + Retry, 60 s cache, duration over creator max)
-- [ ] T034 [US2] Extend `tests/integration/posts/consent.test.ts` with TikTok: consent invalid after any change, gate checks creator max duration against stored consent details
+- [X] T027 [P] [US2] Create `src/providers/tiktok/capabilities.ts` (declaration per plan P18, `utf16` custom rule, publish limit 15/day) with `capabilities.test.ts`; add TikTok rows to `docs/limits.md` so `tests/integration/limits/enforcement.test.ts` and the inventory test pass
+- [X] T028 [P] [US2] Create `src/providers/tiktok/posting.ts` (values schema, pure `view()`, heading, notice, `targetNote`, `summaryNotes`, consent declaration, privacy labels, "Branded content" rule) with `posting.test.ts` for audited/unaudited, per post type, per details
+- [X] T029 [US2] Create `src/providers/tiktok/validate.ts` (`validateTikTok`: posting-field, creator-duration and photo-`https` issues) with `validate.test.ts` covering every row of contracts/tiktok-publishing.md §2; wire into `src/providers/tiktok/index.ts`
+- [X] T030 [P] [US2] Create `src/components/compose/posting-ui.ts` pure helpers with `posting-ui.test.ts`
+- [X] T031 [US2] Create client component `src/components/compose/PostingFieldsPanel.tsx` (choice/toggle/text/fixed views, disabled reasons via `aria-describedby`, details-unavailable Retry, consent checkbox; follow the `docket-ui` skill)
+- [X] T032 [US2] Edit `src/app/p/[projectSlug]/compose/Composer.tsx` (posting and consent state, panel in each target preview card, note badge) and `src/app/p/[projectSlug]/compose/[postId]/page.tsx` (initial values and valid consent fingerprint)
+- [X] T033 [US2] Write `tests/integration/compose/tiktok-check.test.ts` per contracts/composer-ui.md §7 (options, disabled duet, issues until privacy+consent, `details_unavailable` + Retry, 60 s cache, duration over creator max)
+- [X] T034 [US2] Extend `tests/integration/posts/consent.test.ts` with TikTok: consent invalid after any change, gate checks creator max duration against stored consent details
 
 **Checkpoint**: US1 + US2 testable.
 
@@ -89,12 +89,12 @@
 
 **Independent Test**: 20,000,000-byte 1080×1920 MP4, privacy Followers: check creator, start, three chunks (two of 5,242,880), status → done (`tests/integration/tiktok/video.test.ts`).
 
-- [ ] T035 [P] [US3] Create `src/providers/tiktok/state.ts` (state schema, `chunkPlan`: size = file ÷ 30 clamped 5,242,880–64,000,000, last chunk absorbs remainder; `fitState`, `nextReadAt` pace 15 s / 1 min / 5 min / 60-min ceiling) with `state.test.ts` covering data-model §7 and SC-006 figures
-- [ ] T036 [P] [US3] Create `src/providers/tiktok/sealed.ts` (AES-256-GCM seal/open of upload address, HMAC-derived key from provider secret) with `sealed.test.ts` (round trip, wrong AAD, rotated secret)
-- [ ] T037 [P] [US3] Create `src/providers/tiktok/errors.ts` (`explainTikTok`: plain sentence per code and fail reason, scrubbing) with `errors.test.ts`
-- [ ] T038 [US3] Create `src/providers/tiktok/steps.ts` (`tiktokStepFor`: `check_creator`, `start_upload`, `upload_chunk_k`, `publish_photos`, `check_status`; only last chunk and photos may publish, `check_status` after-publish) with `steps.test.ts` from empty and every saved state
-- [ ] T039 [US3] Create `src/providers/tiktok/publish.ts` `advanceTikTok` for video: creator check (fail on any mismatch, posting-cap hourly wait via G24, fail at 23 h), start with `post_info`/`source_info`, one chunk per step by byte range with `Content-Range`, restarts (max 2) on 403/refused repeat/unsealable/55-minute-old address, status reads, never a second publishing request; replace stubs in `index.ts`; add `publish.test.ts`
-- [ ] T040 [US3] Create `tests/helpers/tiktok-publish.ts` (account, post, target setup with posting values and consent) and write `tests/integration/tiktok/video.test.ts` (requests, `Content-Range`, DB-clock pace, `mayPublish` only on last chunk, one-chunk video under 5 MB, done with `publish_id`); confirm Bluesky video suites pass untouched
+- [x] T035 [P] [US3] Create `src/providers/tiktok/state.ts` (state schema, `chunkPlan`: size = file ÷ 30 clamped 5,242,880–64,000,000, last chunk absorbs remainder; `fitState`, `nextReadAt` pace 15 s / 1 min / 5 min / 60-min ceiling) with `state.test.ts` covering data-model §7 and SC-006 figures
+- [x] T036 [P] [US3] Create `src/providers/tiktok/sealed.ts` (AES-256-GCM seal/open of upload address, HMAC-derived key from provider secret) with `sealed.test.ts` (round trip, wrong AAD, rotated secret)
+- [x] T037 [P] [US3] Create `src/providers/tiktok/errors.ts` (`explainTikTok`: plain sentence per code and fail reason, scrubbing) with `errors.test.ts`
+- [x] T038 [US3] Create `src/providers/tiktok/steps.ts` (`tiktokStepFor`: `check_creator`, `start_upload`, `upload_chunk_k`, `publish_photos`, `check_status`; only last chunk and photos may publish, `check_status` after-publish) with `steps.test.ts` from empty and every saved state
+- [x] T039 [US3] Create `src/providers/tiktok/publish.ts` `advanceTikTok` for video: creator check (fail on any mismatch, posting-cap hourly wait via G24, fail at 23 h), start with `post_info`/`source_info`, one chunk per step by byte range with `Content-Range`, restarts (max 2) on 403/refused repeat/unsealable/55-minute-old address, status reads, never a second publishing request; replace stubs in `index.ts`; add `publish.test.ts`
+- [x] T040 [US3] Create `tests/helpers/tiktok-publish.ts` (account, post, target setup with posting values and consent) and write `tests/integration/tiktok/video.test.ts` (requests, `Content-Range`, DB-clock pace, `mayPublish` only on last chunk, one-chunk video under 5 MB, done with `publish_id`); confirm Bluesky video suites pass untouched
 
 **Checkpoint**: video publishing works with mocks.
 
@@ -106,8 +106,8 @@
 
 **Independent Test**: three JPEGs, privacy Only me: check creator, `content/init` (`PHOTO`, `DIRECT_POST`), `PROCESSING_DOWNLOAD`, done (`tests/integration/tiktok/photo.test.ts`).
 
-- [ ] T041 [US4] Add `publish_photos` to `src/providers/tiktok/publish.ts` (`media_type=PHOTO`, `post_mode=DIRECT_POST`, `https` URLs in order, `photo_cover_index` 0, title/description, interaction toggles) with unit cases in `publish.test.ts`
-- [ ] T042 [US4] Write `tests/integration/tiktok/photo.test.ts` (body, `PROCESSING_DOWNLOAD`, `url_ownership_unverified`, timeout after init is ambiguous, `photo_pull_failed`, PNG→JPEG and >1080 px downscale by the planner)
+- [x] T041 [US4] Add `publish_photos` to `src/providers/tiktok/publish.ts` (`media_type=PHOTO`, `post_mode=DIRECT_POST`, `https` URLs in order, `photo_cover_index` 0, title/description, interaction toggles) with unit cases in `publish.test.ts`
+- [x] T042 [US4] Write `tests/integration/tiktok/photo.test.ts` (body, `PROCESSING_DOWNLOAD`, `url_ownership_unverified`, timeout after init is ambiguous, `photo_pull_failed`, PNG→JPEG and >1080 px downscale by the planner)
 
 ---
 
@@ -117,8 +117,8 @@
 
 **Independent Test**: each D10 mismatch, cap wait and 23 h failure, every error code (`tests/integration/tiktok/failures.test.ts`).
 
-- [ ] T043 [US5] Write `tests/integration/tiktok/failures.test.ts` (every D10 mismatch with no upload request; cap wait and 23-hour failure; every code in contracts/tiktok-publishing.md §8 including codes inside HTTP 200; non-final chunk timeout repeated; refused repeat restarts; 403 restarts twice then fails; 60-minute status ceiling ends ambiguous); fix `publish.ts`/`errors.ts` as the tests reveal
-- [ ] T044 [P] [US5] Write `tests/integration/tiktok/no-secrets.test.ts` (fake API echoes tokens and upload address; none reach state, `lastError`, attempts, summaries, activity, logs, snapshots)
+- [x] T043 [US5] Write `tests/integration/tiktok/failures.test.ts` (every D10 mismatch with no upload request; cap wait and 23-hour failure; every code in contracts/tiktok-publishing.md §8 including codes inside HTTP 200; non-final chunk timeout repeated; refused repeat restarts; 403 restarts twice then fails; 60-minute status ceiling ends ambiguous); fix `publish.ts`/`errors.ts` as the tests reveal
+- [x] T044 [P] [US5] Write `tests/integration/tiktok/no-secrets.test.ts` (fake API echoes tokens and upload address; none reach state, `lastError`, attempts, summaries, activity, logs, snapshots)
 
 ---
 
@@ -128,9 +128,9 @@
 
 **Independent Test**: `TIKTOK_APP_AUDITED` unset, all four privacy levels offered; composer, list, detail, calendar markup (`tests/integration/tiktok/unaudited-ui.test.tsx`).
 
-- [ ] T045 [US6] Show the note badge on `src/app/p/[projectSlug]/posts/page.tsx`, `src/app/p/[projectSlug]/posts/[postId]/page.tsx` ("Published on TikTok" with no link), and `src/app/p/[projectSlug]/calendar/CalendarBoard.tsx`
-- [ ] T046 [P] [US6] Write `tests/integration/tiktok/unaudited-ui.test.tsx` with `renderToStaticMarkup` (composer: "Only me (private)", explanation, no privacy `<select>`, Branded content disabled; list, detail, calendar: "Private on TikTok" before and after publishing)
-- [ ] T047 [P] [US6] Write `tests/integration/tiktok/unaudited.test.ts` (`privacy_level = SELF_ONLY` whatever the options; audited→unaudited flip fails at publish)
+- [x] T045 [US6] Show the note badge on `src/app/p/[projectSlug]/posts/page.tsx`, `src/app/p/[projectSlug]/posts/[postId]/page.tsx` ("Published on TikTok" with no link), and `src/app/p/[projectSlug]/calendar/CalendarBoard.tsx`
+- [x] T046 [P] [US6] Write `tests/integration/tiktok/unaudited-ui.test.tsx` with `renderToStaticMarkup` (composer: "Only me (private)", explanation, no privacy `<select>`, Branded content disabled; list, detail, calendar: "Private on TikTok" before and after publishing)
+- [x] T047 [P] [US6] Write `tests/integration/tiktok/unaudited.test.ts` (`privacy_level = SELF_ONLY` whatever the options; audited→unaudited flip fails at publish)
 
 ---
 
@@ -138,15 +138,15 @@
 
 **Independent Test**: `tests/integration/docs/tiktok-docs.test.ts` resolves every link and anchor.
 
-- [ ] T048 [US7] Create `docs/tiktok-setup.md` per FR-034 (modelled on `docs/meta-setup.md`; unverified-steps notice; callback address; app registration; audit; env vars; owed live-check list per FR-037), add the `tiktok-setup` page to `src/lib/docs.ts` and `mkdocs.yml`
-- [ ] T049 [P] [US7] Edit `docs/adding-a-provider.md` (TikTok worked example, contract table, generic hooks index G25–G28, G13), `docs/feature-map.md` (TikTok to "Already built", verified with mocks only; FR-041/FR-042 unowned items; consent-at-scheduling risk), `docs/accounts.md` (TikTok section), `README.md`, `docs/index.md`
-- [ ] T050 [US7] Append `## 026` to `docs/decisions.md` (spec D1–D16, plan P1–P41, hook reversal notes, implementation outcome) and write `tests/integration/docs/tiktok-docs.test.ts`
+- [x] T048 [US7] Create `docs/tiktok-setup.md` per FR-034 (modelled on `docs/meta-setup.md`; unverified-steps notice; callback address; app registration; audit; env vars; owed live-check list per FR-037), add the `tiktok-setup` page to `src/lib/docs.ts` and `mkdocs.yml`
+- [x] T049 [P] [US7] Edit `docs/adding-a-provider.md` (TikTok worked example, contract table, generic hooks index G25–G28, G13), `docs/feature-map.md` (TikTok to "Already built", verified with mocks only; FR-041/FR-042 unowned items; consent-at-scheduling risk), `docs/accounts.md` (TikTok section), `README.md`, `docs/index.md`
+- [x] T050 [US7] Append `## 026` to `docs/decisions.md` (spec D1–D16, plan P1–P41, hook reversal notes, implementation outcome) and write `tests/integration/docs/tiktok-docs.test.ts`
 
 ---
 
 ## Phase 10: Polish
 
-- [ ] T051 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` once, synchronously; fix every failure
+- [ ] T051 🛑 BLOCKED: no Postgres on :5433 and docker socket denied in this sandbox, so `pnpm test`/`pnpm db:check` could not run (lint 0 errors, typecheck and build passed) — run the full suite where a DB exists. Original: Run `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` once, synchronously; fix every failure
 - [ ] T052 🛑 BLOCKED: needs an audited TikTok app, a public https callback and a real account — run the owed live checks listed in `docs/tiktok-setup.md` (quickstart §8: connect scopes, reply envelope, chunk repeat, photo fields, branded-content rule, 30 Mbit/s upload) together; leaves unchecked until the operator has done them
 
 ---
@@ -169,3 +169,13 @@ T016 config.ts   T017 http.ts   T018 credentials.ts   T020 creator.ts   T025 fak
 - **MVP**: Phases 1–2, then US1 (connect), then US2 and US3 (the feature is not useful without a publishable video; US2 consent is mandatory for any publish).
 - Then US4, US5, US6 (private labelling must ship with any publish), US7, and the final pass.
 - T052 is owed to the operator and does not block completion.
+
+---
+
+## Phase 11: Review remediation
+
+- [x] T053 Commit the uncommitted US2–US7 work (22 modified, 28 untracked files: `src/providers/tiktok/{publish,posting,validate,steps,state,sealed,errors}.ts` and tests, `src/components/compose/PostingFieldsPanel.tsx`, `posting-ui.ts`, the composer/posts/calendar edits, `docs/tiktok-setup.md` and the other docs, every new test) in logical conventional commits with explicit paths, before the fixes below; confirm `git status` is clean — review F3 (MAJOR), src/providers/tiktok/index.ts:21
+- [x] T054 Make `advanceTikTok` route `check_status` before `requireTikTokConfig()`, and return `ambiguous` (never `fatal_error` "nothing was posted") when credentials are unreadable or TikTok is unconfigured on an after-publish step; add `publish.test.ts` cases for both — review F1 (MAJOR), src/providers/tiktok/publish.ts:123
+- [x] T055 Let a person clear an interaction toggle the creator has since turned off: keep a creator-disabled toggle operable while its value is `true` (or show it unticked and send `false`), so `interaction_disabled` can be resolved in the composer; add `posting.test.ts` and `tiktok-check.test.ts` cases — review F2 (MAJOR), src/providers/tiktok/posting.ts:97
+- [x] T056 Add the missing FR-038 integration cases to `tests/integration/tiktok/failures.test.ts`: (a) final `PUT` times out → status reads, no second `PUT` or `init`, ends published or ambiguous; (b) `SEND_TO_USER_INBOX` → ambiguous with the D11 message; (c) `access_token_invalid` on `start_upload` → refresh then retry, and a refused refresh → account `needs_reauth`, target waits — review F4 (MAJOR), tests/integration/tiktok/failures.test.ts:138
+- [x] T057 Add the five FR-030 `note:` rows to the TikTok table in `docs/limits.md` (creator's maximum duration; unaudited private-only and 5-account cap; photo domain verification; chunk sizing; 60-minute status ceiling) with source, enforcement point and an existing test each; re-run `tests/integration/docs/limits-inventory.test.ts` — review F5 (MAJOR), docs/limits.md:183

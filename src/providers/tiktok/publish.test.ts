@@ -194,3 +194,24 @@ describe("advanceTikTok photo", () => {
     expect((r as { error: string }).error).toContain("Nothing was posted");
   });
 });
+
+describe("advanceTikTok after a publish", () => {
+  it("check_status with unreadable credentials is ambiguous, never 'nothing was posted'", async () => {
+    const r = await advanceTikTok(ctx("check_status", null, { account: { id: "a1", externalId: "o", displayName: "Ada", settings: {}, credentials: {} } }));
+    expect(r).toMatchObject({ kind: "ambiguous", credentialsInvalid: true });
+    expect((r as { error: string }).error).not.toContain("nothing was posted");
+  });
+
+  it("a may-publish step on an unconfigured server is ambiguous", async () => {
+    vi.stubEnv("TIKTOK_CLIENT_KEY", "");
+    vi.stubEnv("TIKTOK_CLIENT_SECRET", "");
+    const r = await advanceTikTok(ctx("upload_chunk_2", chunksState(2), { step: { name: "upload_chunk_2", mayPublish: true } }));
+    expect(r.kind).toBe("ambiguous");
+  });
+
+  it("check_status is routed before the config check (lost state is ambiguous, not fatal)", async () => {
+    vi.stubEnv("TIKTOK_CLIENT_KEY", "");
+    vi.stubEnv("TIKTOK_CLIENT_SECRET", "");
+    expect((await advanceTikTok(ctx("check_status", null))).kind).toBe("ambiguous");
+  });
+});

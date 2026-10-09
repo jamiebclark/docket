@@ -120,18 +120,30 @@ function postInfo(e: Env, text: string): Record<string, unknown> {
 }
 
 export async function advanceTikTok(ctx: PublishContext): Promise<StepResult> {
+  // A step that may already have published must never claim "nothing was posted": its failures are ambiguous.
+  const afterPublish = ctx.step.name === "check_status" || ctx.step.mayPublish;
   const creds = readTikTokCredentials(ctx.account.credentials);
-  if (!creds) return { kind: "fatal_error", error: "TikTok's saved credentials are unreadable. Reconnect the account.", credentialsInvalid: true };
+  if (!creds) {
+    const error = "TikTok's saved credentials are unreadable. Reconnect the account.";
+    return afterPublish
+      ? { kind: "ambiguous", error: `${error} The post may be live; check TikTok before retrying.`, credentialsInvalid: true }
+      : { kind: "fatal_error", error, credentialsInvalid: true };
+  }
   const stateRaw = ctx.state === null || ctx.state === undefined ? null : parseTikTokState(ctx.state);
 
   const isVideo = ctx.postType === "video" || !!videoOf(ctx);
   const kind = isVideo ? "video" : "photo";
   const parsedValues = tiktokPostingSchema.safeParse(ctx.content.posting?.values ?? undefined);
-  let secret: string;
+  let secret = "";
   try {
     secret = requireTikTokConfig().clientSecret;
   } catch {
-    return fatal("TikTok is not configured on this server; nothing was posted.");
+    // Reading a post's status needs only the access token, so it proceeds without the client secret.
+    if (ctx.step.name !== "check_status") {
+      return afterPublish
+        ? { kind: "ambiguous", error: "TikTok is not configured on this server; the post may be live. Check TikTok before retrying." }
+        : fatal("TikTok is not configured on this server; nothing was posted.");
+    }
   }
   const e: Env = {
     ctx,
