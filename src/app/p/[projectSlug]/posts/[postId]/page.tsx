@@ -114,6 +114,7 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
               <StatusBadge status={t.status} />
               {t.preparingVideo ? <span className="ml-2">{preparingVideoLabel(t.providerName)}…</span> : null}
               {t.inProgress ? <span className="ml-2">Publishing now…</span> : null}
+              {t.note ? <span className="ml-2">{t.note}</span> : null}
             </dd>
             {t.scheduledAt ? (
               <>
@@ -144,6 +145,12 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
                     t.externalUrl
                   )}
                 </dd>
+              </>
+            ) : null}
+            {!t.externalUrl && t.status === "published" ? (
+              <>
+                <dt className="font-medium">Link</dt>
+                <dd>Published on {t.providerName}</dd>
               </>
             ) : null}
             <dt className="font-medium">Attempts</dt>

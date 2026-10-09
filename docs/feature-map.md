@@ -17,6 +17,15 @@ spec is written.
   platform, per-target edits, video upload or edit fields in the public API, generator video input, HDR tone mapping, enlarging small
   videos, joining or splitting clips, speed or filter effects, audio replacement and adding a silent track. Bluesky video (025) and TikTok
   get the formatter by declaring their limits.
+- **TikTok (026).** Connect an account with TikTok's web login, then post a video (one MP4 or MOV, uploaded in chunks) or a photo post (1–35 images
+  TikTok pulls from a verified media domain). The composer shows TikTok's own fields (who can view, comments, duet, stitch, commercial-content
+  disclosure, title) and its consent declaration, driven by three generic hooks (posting fields, account details, consent). Until the operator sets
+  `TIKTOK_APP_AUDITED=true`, every post is private. Verified with mocks only until the live checks in `docs/tiktok-setup.md` are done.
+  **Risk:** whether TikTok's audit accepts consent given when a post is scheduled, for a later automated send, is not known.
+  Not yet owned by any spec: inbox (draft) upload, webhooks, revoking the grant on disconnect, a route that serves media from Docket's own domain,
+  video pulled from a URL, AI-generated-content labels, a cover frame choice, music options, TikTok fields in the public API, generator or bulk
+  create, a link built from a username, counting TikTok accounts against the 5-user cap, Terms of Service and Privacy Policy pages served by Docket,
+  and a confirm-at-send flow (the fallback if the audit refuses consent at scheduling).
 - **Bluesky video (025).** One video per post (MP4, up to 300 MB), uploaded to Bluesky's video service in parts, then checked until
   Bluesky has processed it, with plain error explanations, an upload-limit check and a daily allowance of about 25. Verified with mocks
   only until the live checks in `docs/accounts.md` are done. Not yet owned by any spec: WebVTT captions, a GIF hint, a gallery embed,
@@ -66,7 +75,7 @@ The build prompt left video out of scope but kept room for it. `PostType` alread
 | **Facebook Page video** (Built, 021) | Yes (Page `/videos`) | Built: one `videos` request with `file_url`, chosen per target as Page video or Reel. Not yet owned: byte or chunked upload, Page video status checks, optional fields (title, place, thumbnail, collaborators, draft), Facebook-side scheduling, API video upload, generator video |
 | **Threads video** (Built, 023) | Yes (`media_type=VIDEO`, also in carousels) | Same container-and-poll pattern as Instagram |
 | **Bluesky video** (Built, 025) | Yes (`app.bsky.embed.video`: MP4 up to 300 MB, about 25 videos a day; the maximum duration is not documented officially) | Upload to the video service, then poll the job |
-| **TikTok** | Yes, through the Content Posting API (video and photo posts). Until the app passes TikTok's audit (its length is not published), every post is forced private (`SELF_ONLY`) whatever privacy you ask for. Photo posts can only be pulled from a URL on a domain the deployer has verified with TikTok. Videos can be uploaded directly | A new provider and OAuth app, plus the audit. TikTok also requires its own posting UI elements (privacy picker, interaction toggles), so the composer needs TikTok-specific fields |
+| **TikTok** (Built, 026) | Yes, through the Content Posting API (video and photo posts). Until the app passes TikTok's audit (its length is not published), every post is forced private (`SELF_ONLY`) whatever privacy you ask for. Photo posts can only be pulled from a URL on a domain the deployer has verified with TikTok. Videos can be uploaded directly | A new provider and OAuth app, plus the audit. TikTok also requires its own posting UI elements (privacy picker, interaction toggles), so the composer needs TikTok-specific fields |
 
 ### Video formatter (crop and fit for each account)
 
@@ -91,4 +100,4 @@ follows subjects would be a later, optional step.
 3. Facebook Reels and Page video (built in 021) and Threads video (built in 023).
 4. Video formatter (crop and fit for each target).
 5. Bluesky video.
-6. TikTok: start the developer app and audit early, because the audit takes weeks.
+6. TikTok (built in 026, verified with mocks only): start the developer app and audit early, because the audit takes weeks.

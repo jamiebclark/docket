@@ -1213,3 +1213,63 @@ Judgement calls from `specs/025-bluesky-video/spec.md` (D1–D13) and its plan (
 - Built as planned (T001–T039): capabilities, G24, the upload in parts, limits check, job polling, error explanations, summary and badges, and the daily allowance, with unit and integration suites (`video*.test.ts`, including a no-secrets suite).
 - `docker-compose.yml` and `.env.example` are unchanged (FR-025).
 - Real publishing is verified with mocks only (FR-027); the live checks are owed in `docs/accounts.md` (T040, blocked on a real account).
+
+## 026 — TikTok provider (2026-10-08)
+
+Judgement calls from `specs/026-tiktok-provider/spec.md` (D1–D16) and its plan (`research.md`, P1–P41). External facts come from `docs/research/tiktok.md` only (checked 2026-10-07, nothing run live). All TikTok behaviour is verified with mocks only; the live checks are owed once the operator's TikTok app has passed TikTok's audit (`docs/tiktok-setup.md`). This is the last entry of the video roadmap, so anything not built here is owned by no spec (`docs/feature-map.md`).
+
+### Spec decisions
+
+- **D1 — One TikTok app per install, unaudited until the operator says otherwise.** `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` (both or neither) switch TikTok on; `TIKTOK_APP_AUDITED` defaults to false, and while it is false every TikTok post is private (`SELF_ONLY`) and every view says so. *Reverse:* remove the variable and always offer the creator's own options.
+- **D2 — Connect with TikTok's web login** (`user.info.basic,video.publish`, client secret, no PKCE, `https` public callback, no paste fallback); the account is the `open_id`, named "nickname (@username)" from creator info; a grant without `video.publish` is refused. *Reverse:* add PKCE if TikTok requires it for web.
+- **D3 — Generic: per-target posting fields declared by a provider** (G25). *Reverse:* drop the declaration; stored values are ignored.
+- **D4 — Generic: live account details for the composer** (G26), read on the server, refreshed through the engine's single refresh path, reused for under a minute. *Reverse:* providers that do not declare the read are unaffected.
+- **D5 — Generic: explicit consent recorded when a target is scheduled** (G27): who, when and a fingerprint of the content, the fields and the details shown; any change clears it. **Risk (UNVERIFIED):** whether TikTok's audit accepts consent given at scheduling for a later automated send is not known; if not, a confirm-at-send flow is needed, owned by no spec. *Reverse:* remove the requirement; records are kept but unused.
+- **D6 — Privacy:** the creator's options in plain words with no default; "Only me" disabled while branded content is on; a fixed "Only me (private)" while unaudited; "Private on TikTok" wherever a `SELF_ONLY` target's status is shown.
+- **D7 — Interactions, disclosure and title:** Comment (video and photo), Duet and Stitch (video), all off and disabled when the creator disabled them; the disclosure toggle with "Your brand" and "Branded content", at least one when on; an optional photo title of at most 90 units. The declaration's policy links are NEEDS RESEARCH and left out. No AIGC label, cover choice or music.
+- **D8 — Declared limits:** image, carousel and video; media required; 2,200 UTF-16 units; 1–35 JPEG or WebP images, 20 MB, at most 1080 × 1920; one MP4 or MOV video, never with images, H.264/H.265/VP8/VP9, 23–60 fps, 360–4,096 px, 4 GB, 300 s; 15 posts per day, approximate. The creator's own maximum duration is checked at the gate and at publish.
+- **D9 — Video by chunked upload, one chunk per step, in order:** size ÷ 30 clamped to 5,242,880–64,000,000 bytes, the final chunk absorbing the remainder; only the final chunk may publish; a repeated or expired upload restarts at most twice. *Reverse:* a fixed chunk size is one constant.
+- **D10 — Creator info re-checked at publish:** a privacy, interaction or duration the creator no longer allows fails with nothing posted; a posting cap waits.
+- **D11 — Status checks after the publishing request:** 15 s, then every minute to 10 minutes, then every 5 minutes; `PUBLISH_COMPLETE` publishes with `publish_id` as the external id and no link (the link format is NEEDS RESEARCH); inbox or unknown statuses and the 60-minute ceiling are ambiguous. *Reverse:* webhooks could replace polling (unowned).
+- **D12 — Outcomes:** everything before the publishing request is safe to retry; a refusal of a publishing request fails with nothing posted; uncertainty after the final chunk goes to status checks, after the photo `init` is ambiguous at once. A missed post beats a duplicate.
+- **D13 — TikTok's refusals explained in plain words,** codes matched exactly, HTTP 200 bodies with codes treated as errors.
+- **D14 — Photo posts pull from the media bucket's public `https` address;** the deployer must verify their media domain with TikTok; videos never need it.
+- **D15 — Tokens:** renew within 30 minutes of the access token's expiry; keep the newest refresh token; refusal → reconnect; transient → retry in five minutes; warn 30 days before the refresh token's (estimated) expiry.
+- **D16 — No live check is owed until the app is audited.**
+
+### Generic changes
+
+- **G25 — Posting fields** (`SocialProvider.posting`): a values schema and a pure `view()` returning field views, plus `targetNote()` and `summaryNotes()`; values in `post_targets.posting_fields`, reaching `validate` and `advance` as `PostContent.posting`. *Reverse:* drop the member and the column.
+- **G26 — Account details** (`SocialProvider.accountDetails`): a server-side read of non-secret details, refreshed through `refreshForPublish`, cached in process for 60 s. *Reverse:* drop the member.
+- **G27 — Consent** (`SocialProvider.consent`): the declaration text; consent stored in four `post_targets` columns and valid only while its fingerprint matches; checked by the composer, the gate and the engine's first step. *Reverse:* drop the member and the columns.
+- **G28 — `exchangeCode` receives `callbackParams`** (the callback query), so a group can read what the platform reports there (TikTok's granted `scopes`). *Reverse:* drop the input.
+- **G13 — `accountNotes` receives an optional `now`** (DB clock), so a note can depend on time. *Reverse:* drop the input.
+
+### Plan decisions
+
+- **P1–P3 — The three hooks' shapes** (contracts/generic-hooks.md). A pure `view()` per provider instead of a declarative rule language; consent validity by fingerprint match instead of clearing on every write path.
+- **P4 — Consent is recorded on the save that precedes scheduling.** Every schedule path saves first; the server records it only when its own fingerprint equals the one the person agreed to. *Why against the letter of "when the post is scheduled":* that save is part of the same action, and the gate refuses scheduling without it.
+- **P5–P6 — Consent is checked by the composer, the gate and the engine's first step through one implementation;** the gate and the engine use the details stored with the consent, the provider's own creator check reads them live.
+- **P7 — G28** instead of trusting the token reply's `scope` (UNVERIFIED), which is kept as a fallback.
+- **P8–P9 — G13 `now`; summary notes and target notes** are part of G25 (`RequirementsSummary.notes`, `note` on target views).
+- **P10 — One migration (`0018`), five nullable columns on `post_targets`;** no backfill.
+- **P11–P17 — Configuration, envelope, tokens and identity.** `TIKTOK_APP_AUDITED` is `true` or `false`; the reply envelope (UNVERIFIED) is read in one function; missing token fields default to the research's lifetimes, the refresh expiry estimated at 365 days; the account's expiry is the refresh token's, as for X; no PKCE.
+- **P18–P22 — Declaration, validation, unaudited storage, privacy labels, declaration text.** Unaudited installs store `SELF_ONLY`; a stored privacy other than that fails at the gate and at publish rather than being silently changed. "Your brand" alone keeps the plain declaration (UNVERIFIED).
+- **P23 — Step names:** `check_creator`, `start_upload`, `upload_chunk_<k>`, `publish_photos`, `check_status`; unreadable state after the publishing request is ambiguous, before it restarts.
+- **P24 — A one-chunk upload declares `chunk_size` = `video_size`.** *Why:* TikTok says small files are uploaded whole, and it satisfies both the floor rule and D9's "one chunk of its whole size".
+- **P25 — The upload address is sealed in the step state** with AES-256-GCM, keyed by HMAC-SHA256 of `TIKTOK_CLIENT_SECRET` (as X derives its PKCE verifier); an unsealable address restarts the upload.
+- **P26–P28 — Chunk outcomes, repeats and renewal.** A 201 before the last chunk goes to status checks; a repeat is a chunk step with an attempt above 1; an address 55 minutes old restarts before sending.
+- **P29 — The posting-cap wait fails at the refusal 23 hours after the first,** not 24. *Why:* the engine fails a target 24 hours after its first step, which would always fire first with a generic message (as Bluesky P9).
+- **P30–P31 — Status pace with a read on the 60-minute ceiling;** a hanging final chunk is caught by the provider and goes to status checks (if the engine's own timer wins, the target is ambiguous, the safe side).
+- **P32 — Byte-range reads move to `src/providers/media-range.ts`;** Bluesky re-exports them unchanged.
+- **P33–P37 — Fit, request bodies, the creator check, refusal explanations, rate limits.** `auth_removed` in a failed status flags the account for reconnecting.
+- **P38–P40 — A generic `PostingFieldsPanel`; "Private on TikTok" in every target view; `docs/tiktok-setup.md` and the doc edits.**
+- **P41 — No new dependency.** `.env.example` gains three variables; `docker-compose.yml` does not change.
+
+### Hook reversal notes
+
+Each generic hook is optional, so removing a provider's declaration turns it off without touching the engine: drop `posting` (G25) and stored values are ignored; drop `accountDetails` (G26) and the composer shows no live details; drop `consent` (G27) and consent records are kept but unused; the extra `callbackParams` input (G28) and `now` (G13) are ignored by groups that do not read them. The migration (`0018`) only adds nullable columns, so reverting the code leaves the database valid.
+
+### Implementation outcome
+
+TikTok connect, tokens, refresh, posting fields, consent, video by chunked upload, photo posts, status checks, plain-word refusals, the unaudited behaviour and the operator docs are built and tested with mocked HTTP only. Nothing was run against TikTok's live service; the live checks are listed in `docs/tiktok-setup.md` (FR-037) and are owed once the operator's app is audited. Not built, and owned by no spec: the items in `docs/feature-map.md` (FR-041) and a confirm-at-send flow (FR-042), the fallback if the audit refuses consent given at scheduling.

@@ -52,6 +52,7 @@ export interface PostListRow {
     status: PostTargetStatus;
     scheduledAt: Date | null;
     publishedAt: Date | null;
+    postingFields: unknown | null;
   }[];
 }
 
@@ -122,6 +123,7 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
               status: postTargets.status,
               scheduledAt: postTargets.scheduledAt,
               publishedAt: postTargets.publishedAt,
+              postingFields: postTargets.postingFields,
             })
             .from(postTargets)
             .where(and(eq(postTargets.projectId, projectId), inArray(postTargets.postId, ids)))
@@ -144,6 +146,7 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
             status: t.status,
             scheduledAt: t.scheduledAt,
             publishedAt: t.publishedAt,
+            postingFields: t.postingFields ?? null,
           })),
         };
       });

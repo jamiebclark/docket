@@ -14,7 +14,8 @@ import {
 import type { TargetPatch, TargetRecord } from "../dal/targets";
 import { decryptCredentials } from "../services/accounts";
 import { applyDerivedStatus } from "../services/posts/status";
-import { validateResolvedContent } from "../services/posts/validate";
+import { engineConsentRefusal } from "../services/posts/consent";
+import { loadTargetContent, postingContentOf, validateResolvedContent } from "../services/posts/validate";
 import type { SchedulerConfig } from "./config";
 import { resolvePublishMedia } from "../services/media-variants";
 import { providerPublishLimits } from "../../providers/limits";
@@ -421,7 +422,8 @@ async function execute(
       media = resolved.media;
     }
     const postType = resolvePostType(provider.capabilities, media, target.chosenPostType);
-    const content = { text: loaded.text, media, postType };
+    const stored = provider.posting || provider.consent ? await loadTargetContent(repos, target) : null;
+    const content = { text: loaded.text, media, postType, ...(stored ? postingContentOf(provider, stored) : {}) };
     // G15: a capability lowered after scheduling must not reach the platform. Runs on the first step only,
     // before credentials are read.
     if (target.stepState === null) {
@@ -429,6 +431,12 @@ async function execute(
       if (refusal) {
         validationFailed = true;
         throw new ContentInvalid(`Can't publish to ${provider.displayName}: ${refusal.message}`);
+      }
+      // G27: consent that went stale after scheduling must not reach the platform.
+      const noConsent = stored ? engineConsentRefusal(provider, stored) : null;
+      if (noConsent) {
+        validationFailed = true;
+        throw new ContentInvalid(noConsent);
       }
     }
     seenCiphertext = await repos.accounts.getCredentialsCiphertext(account.id);

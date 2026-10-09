@@ -37,6 +37,13 @@ export function RequirementsSummary({
       <p>{summaryLine(requirements)}</p>
       <p>{videoLine(requirements)}</p>
       {carouselLine(requirements) && <p>{carouselLine(requirements)}</p>}
+      {requirements.notes && requirements.notes.length > 0 && (
+        <ul className="mt-1 list-disc pl-4" data-testid="requirements-notes">
+          {requirements.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      )}
       <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)} className="mt-1">
         <summary className="cursor-pointer font-medium text-foreground">What {providerName} accepts</summary>
         <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">

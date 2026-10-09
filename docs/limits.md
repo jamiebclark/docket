@@ -180,6 +180,37 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 
 X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce that cap (it is shared by every account on the app, not per account), so it has no row; a 429 from it defers the post instead.
 
+## TikTok
+
+| Category | Value | Counting | Source | Enforced in | Test |
+|---|---|---|---|---|---|
+| text length | 2200 | UTF-16 units (custom rule) | docs/research/tiktok.md (caption 2200 UTF-16 units) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: text length" |
+| images | 35 |  | docs/research/tiktok.md (photo posts up to 35) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: images" |
+| bytes per file | 20000000 |  | docs/research/tiktok.md (photo limit; larger is compressed) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: bytes per file" |
+| formats | image/jpeg, image/webp |  | docs/research/tiktok.md (JPEG and WebP; PNG is converted to JPEG) | media planner | `tests/integration/limits/enforcement.test.ts` "tiktok: formats" |
+| max width | 1080 |  | docs/research/tiktok.md (photos over 1080 × 1920 are downscaled) | media planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max width" |
+| max height | 1920 |  | docs/research/tiktok.md (photos over 1080 × 1920 are downscaled) | media planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max height" |
+| media required | yes |  | docs/research/tiktok.md (TikTok has no text-only post) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: media required" |
+| text only | no |  | docs/research/tiktok.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: text only" |
+| videos | 1 |  | docs/research/tiktok.md (one video per post) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: videos" |
+| video with images | no |  | docs/research/tiktok.md (TikTok posts a video on its own) | validateResolvedContent | `src/providers/validation.test.ts` "limits videos and mixing with images" |
+| video containers | mp4, mov |  | docs/research/tiktok.md | validateResolvedContent | `src/providers/validation.test.ts` "refuses a container the provider does not list" |
+| video codecs | h264, hevc, vp8, vp9 |  | docs/research/tiktok.md; others are re-encoded | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video codecs" |
+| video bytes | 4000000000 |  | docs/research/tiktok.md (4 GB) | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video bytes" |
+| max duration | 300 |  | docs/research/tiktok.md (5 minutes; the creator's own maximum is checked separately) | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max duration" |
+| video min width | 360 |  | docs/research/tiktok.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: video min width" |
+| video max width | 4096 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video max width" |
+| video min height | 360 |  | docs/research/tiktok.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "tiktok: video min height" |
+| video max height | 4096 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: video max height" |
+| min frame rate | 23 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: min frame rate" |
+| max frame rate | 60 |  | docs/research/tiktok.md | video planner | `tests/integration/limits/enforcement.test.ts` "tiktok: max frame rate" |
+| publish limit | 15 / 86400 s |  | docs/research/tiktok.md (about 15 posts per account per day, shared with other apps) | engine deferral | `tests/integration/limits/enforcement.test.ts` "tiktok: publish limit 15 / 86400 s" |
+| note: creator maximum duration | The creator's own `max_video_post_duration_sec`, read before each post and at publish | | docs/research/tiktok.md ("Query creator info") | composer check (`validate.ts`) and the TikTok check_creator step | `src/providers/tiktok/validate.test.ts` "refuses a video longer than the creator's maximum, at the video's position" |
+| note: unaudited apps | Private-only posts; at most 5 posting accounts per 24 h until TikTok's audit passes | | docs/research/tiktok.md ("Unaudited clients") | TikTok step machine (sends `SELF_ONLY`); the 5-account cap is TikTok's and not counted by Docket | `tests/integration/tiktok/unaudited.test.ts` "sends SELF_ONLY whatever options the creator offers" |
+| note: photo domain verification | Photo URLs must come from a domain verified in the TikTok developer portal | | docs/research/tiktok.md ("Photo posts") | TikTok (`url_ownership_unverified`), explained by the step machine | `tests/integration/tiktok/photo.test.ts` "surfaces url_ownership_unverified as a plain failure" |
+| note: chunk sizing | Contiguous chunks of 5 MB to 64 MB (about 30 per file); the final chunk absorbs the remainder and stays under 128 MB | | docs/research/tiktok.md ("Upload video") | TikTok step machine (`chunkPlan`) | `src/providers/tiktok/state.test.ts` "covers the whole file with contiguous ranges" |
+| note: status ceiling | 60 min | | docs/research/tiktok.md ("Fetch post status"); a post still processing then ends ambiguous | TikTok step machine | `tests/integration/tiktok/failures.test.ts` "ends ambiguous when TikTok is still processing after 60 minutes" |
+
 ## Mock (offline)
 
 | Category | Value | Counting | Source | Enforced in | Test |

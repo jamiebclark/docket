@@ -89,6 +89,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
       <>
         <span className="font-medium">{hm(item.localTime)}</span> <span>{accountName(item.accountId)}</span>{" "}
         <StatusBadge status={item.status} />
+        {item.note ? <span className="block text-xs text-muted-foreground">{item.note}</span> : null}
         <span className="block truncate text-xs text-muted-foreground">{item.excerpt}</span>
       </>
     );

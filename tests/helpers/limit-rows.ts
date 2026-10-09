@@ -163,8 +163,9 @@ export function plannerRows(provider: SocialProvider, assert: Assert): PlannerRo
     rows.push({
       title: `${key}: max height`,
       category: "max height",
-      asset: jpeg(max + 560, max + 560),
-      inside: jpeg(max, max),
+      // Narrow enough to be inside any max width, so only the height is over.
+      asset: jpeg(Math.min(max + 560, c.maxWidth ?? Infinity), max + 560),
+      inside: jpeg(Math.min(max, c.maxWidth ?? Infinity), max),
       check: (plan) => {
         derives("downscale")(plan);
         assert(plan.kind === "derive" && plan.output.height === max, `${key}: not downscaled to ${max}`);

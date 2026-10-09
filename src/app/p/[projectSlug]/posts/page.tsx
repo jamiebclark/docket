@@ -127,6 +127,7 @@ export default async function PostsPage({ params, searchParams }: Props) {
                         <li key={t.id}>
                           <Badge tone={t.status === "failed" ? "danger" : t.status === "ambiguous" ? "warning" : t.status === "published" ? "success" : "neutral"}>
                             {t.accountName}: {t.status.replaceAll("_", " ")}
+                            {t.note ? ` · ${t.note}` : ""}
                           </Badge>
                         </li>
                       ))}

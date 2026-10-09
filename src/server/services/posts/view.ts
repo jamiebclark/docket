@@ -9,6 +9,7 @@ import { targetActions, toAttemptViews, type AttemptEntryView, type FailureActio
 import { getMedia } from "../media";
 import { plannedTime } from "../queue";
 import { hasLiveLease } from "./cancel";
+import { targetNoteFor } from "./notes";
 
 export type AttemptView = AttemptEntryView;
 
@@ -30,6 +31,8 @@ export interface PostViewTarget {
   attemptCount: number;
   actions: FailureActions;
   attempts: AttemptView[];
+  /** The provider's short label for this target, e.g. "Private on TikTok"; null when none. */
+  note: string | null;
 }
 
 /** The status line shown beside the badge while a target waits for its adapted video. */
@@ -74,6 +77,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
         attemptCount: t.attemptCount,
         actions: targetActions(canSchedule, t.status, account ?? null),
         attempts: await toAttemptViews(scope, await scope.attempts.listForTarget(t.id)),
+        note: account ? targetNoteFor(account.providerKey, t.postingFields) : null,
       };
     }),
   );

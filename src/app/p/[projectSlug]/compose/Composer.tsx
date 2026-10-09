@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { PostingFieldsPanel } from "@/components/compose/PostingFieldsPanel";
+import { withFixedValues, withValue } from "@/components/compose/posting-ui";
 import { RequirementsSummary } from "@/components/compose/RequirementsSummary";
 import { VideoTargetPreview } from "@/components/compose/VideoTargetPreview";
 import { VideoEditButton } from "@/components/compose/VideoEditButton";
@@ -10,6 +12,7 @@ import { cutNotes } from "@/components/compose/video-edit-ui";
 import { DEFAULT_VIDEO_EDIT, type VideoEdit } from "@/lib/video/edit";
 import type { PostType } from "@/providers/types";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
@@ -53,7 +56,15 @@ export interface ComposerInitial {
   baseText: string;
   mediaIds: string[];
   videoEdits?: Record<string, VideoEdit>;
-  targets: { accountId: string; overrideText: string | null; postType?: PostType | null }[];
+  targets: {
+    accountId: string;
+    overrideText: string | null;
+    postType?: PostType | null;
+    /** The stored posting values (G25). */
+    posting?: unknown;
+    /** The stored consent's fingerprint; the check decides whether it still matches (G27). */
+    consentFingerprint?: string | null;
+  }[];
   editable: boolean;
   reviewBlocked: boolean;
 }
@@ -121,6 +132,18 @@ export function Composer({
   const [postTypes, setPostTypes] = useState<Record<string, PostType | null>>(
     Object.fromEntries((initial?.targets ?? []).filter((t) => t.postType).map((t) => [t.accountId, t.postType ?? null])),
   );
+  // Per-target posting values (G25) and the fingerprint each person agreed to (G27). Sent on every check and save.
+  const [postingValues, setPostingValues] = useState<Record<string, Record<string, unknown>>>(
+    Object.fromEntries(
+      (initial?.targets ?? []).filter((t) => t.posting && typeof t.posting === "object").map((t) => [t.accountId, t.posting as Record<string, unknown>]),
+    ),
+  );
+  const [agreed, setAgreed] = useState<Record<string, string>>(
+    Object.fromEntries((initial?.targets ?? []).filter((t) => t.consentFingerprint).map((t) => [t.accountId, t.consentFingerprint!])),
+  );
+  // Bumped by Retry, so the check runs again and bypasses the details cache once.
+  const [checkVersion, setCheckVersion] = useState(0);
+  const refreshNext = useRef(false);
   const [lastCheck, setCheck] = useState<CheckResult | null>(initialCheck);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -142,8 +165,10 @@ export function Composer({
         accountId,
         overrideText: overrides[accountId] || null,
         ...(postTypes[accountId] ? { postType: postTypes[accountId] } : {}),
+        ...(postingValues[accountId] ? { posting: postingValues[accountId] } : {}),
+        ...(agreed[accountId] ? { consent: { fingerprint: agreed[accountId]! } } : {}),
       })),
-    [selected, overrides, postTypes],
+    [selected, overrides, postTypes, postingValues, agreed],
   );
 
   useEffect(() => {
@@ -155,14 +180,34 @@ export function Composer({
     if (targets.length === 0) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      const result = await fetchCheck(slug, { ...(postId ? { postId } : {}), baseText, mediaIds, videoEdits, targets }, controller.signal);
+      const refreshDetails = refreshNext.current;
+      refreshNext.current = false;
+      const result = await fetchCheck(
+        slug,
+        { ...(postId ? { postId } : {}), baseText, mediaIds, videoEdits, targets, ...(refreshDetails ? { refreshDetails } : {}) },
+        controller.signal,
+      );
       if (result && !controller.signal.aborted) setCheck(result);
     }, DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [slug, postId, baseText, mediaIds, videoEdits, targets, initialCheck, mediaVersion]);
+  }, [slug, postId, baseText, mediaIds, videoEdits, targets, initialCheck, mediaVersion, checkVersion]);
+
+  // A provider's fixed choice (TikTok's private level on an unaudited app) is never edited, so it is sent from here.
+  // Adjusted while rendering, once per check result, rather than in an effect.
+  const [seededFor, setSeededFor] = useState<CheckResult | null>(null);
+  if (lastCheck && lastCheck !== seededFor) {
+    setSeededFor(lastCheck);
+    let next = postingValues;
+    for (const t of lastCheck.targets) {
+      if (!t.posting) continue;
+      const seeded = withFixedValues(next[t.accountId], t.posting.fields);
+      if (seeded && seeded !== next[t.accountId]) next = { ...next, [t.accountId]: seeded };
+    }
+    if (next !== postingValues) setPostingValues(next);
+  }
 
   // Polls attached media that is not ready yet (P15); stops when none is.
   const waitingKey = waitingIds.join(",");
@@ -389,12 +434,15 @@ export function Composer({
                         </span>
                       </span>
                     </h3>
+                    <span className="flex flex-wrap items-center justify-end gap-2">
+                      {t.note ? <Badge tone="neutral">{t.note}</Badge> : null}
                     <span
                       data-testid={`counter-${accountId}`}
                       className={over ? "font-semibold text-danger" : "text-muted-foreground"}
                     >
                       {counterText(t)}
                       {over ? " · over the limit" : ""}
+                    </span>
                     </span>
                   </div>
                   {t.postTypeChoice ? (
@@ -417,6 +465,33 @@ export function Composer({
                         </label>
                       ))}
                     </fieldset>
+                  ) : null}
+                  {t.posting ? (
+                    <PostingFieldsPanel
+                      idPrefix={`${ids}-${accountId}-posting`}
+                      panel={
+                        t.posting.consent
+                          ? {
+                              ...t.posting,
+                              consent: { ...t.posting.consent, agreed: !!agreed[accountId] && agreed[accountId] === t.posting.consent.fingerprint },
+                            }
+                          : t.posting
+                      }
+                      images={media.filter((m) => m.kind !== "video")}
+                      disabled={!canSave}
+                      onChange={(key, value) => setPostingValues((cur) => ({ ...cur, [accountId]: withValue(cur[accountId], key, value) }))}
+                      onAgree={(on) =>
+                        setAgreed((cur) => {
+                          const rest = { ...cur };
+                          delete rest[accountId];
+                          return on && t.posting?.consent ? { ...rest, [accountId]: t.posting.consent.fingerprint } : rest;
+                        })
+                      }
+                      onRetry={() => {
+                        refreshNext.current = true;
+                        setCheckVersion((v) => v + 1);
+                      }}
+                    />
                   ) : null}
                   <RequirementsSummary providerName={t.providerName} requirements={t.requirements} openInitially={selected.length === 1} />
                   <VideoTargetPreview

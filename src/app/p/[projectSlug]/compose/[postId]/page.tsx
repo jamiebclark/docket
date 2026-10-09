@@ -52,7 +52,14 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
         baseText: detail.post.baseText,
         mediaIds: detail.mediaIds,
         videoEdits,
-        targets: live.map((t) => ({ accountId: t.accountId, overrideText: t.overrideText, postType: t.chosenPostType ?? null })),
+        targets: live.map((t) => ({
+          accountId: t.accountId,
+          overrideText: t.overrideText,
+          postType: t.chosenPostType ?? null,
+          posting: t.postingFields ?? undefined,
+          // The check compares this with the post as it stands, so a stale record shows unticked.
+          consentFingerprint: t.consentFingerprint,
+        })),
         editable: !detail.targets.some((t) => ["publishing", "published", "ambiguous"].includes(t.status)),
         reviewBlocked: detail.post.reviewState === "needs_review",
       }}
