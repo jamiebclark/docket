@@ -13,6 +13,10 @@ import { calendarState } from "@/lib/roles/calendar";
 import { askManagers } from "@/lib/roles/names";
 import { listManagers } from "@/server/services/members";
 import { listSlotCounts } from "@/server/services/slots";
+import * as accounts from "@/server/services/accounts";
+import { hasActiveSlot } from "@/lib/roles/slots";
+import { hasFirstPost } from "@/server/services/overview";
+import { getStorage } from "@/server/storage";
 import { CalendarBoard } from "./CalendarBoard";
 import { ChoiceField } from "@/components/ui/ChoiceField";
 
@@ -71,6 +75,32 @@ export default async function CalendarPage({ params, searchParams }: Props) {
     managersToAsk: canManageAccounts && canManageSlots ? "" : askManagers(await listManagers(scope), "or"),
     todayHref: href({ date: calendar.today }),
   });
+  // Everything the compose screen hands `Composer`, so clicking an empty slot can open the same
+  // component in a dialog rather than a second, thinner editor that would drift from it.
+  const composeAccounts = await accounts.listAccounts(scope);
+  const composeSlotCounts = await listSlotCounts(scope).catch(() => null);
+  const composeHasSlot = new Map((composeSlotCounts ?? []).map((c) => [c.accountId, hasActiveSlot(c)]));
+  const compose = canSchedule
+    ? {
+        timeZone: scope.project.timezone,
+        accounts: composeAccounts.map(({ id, displayName, providerKey, providerName, status, providerAvailable }) => ({
+          id,
+          displayName,
+          providerKey,
+          providerName,
+          status,
+          providerAvailable,
+          hasActiveSlot: composeSlotCounts ? (composeHasSlot.get(id) ?? false) : null,
+        })),
+        canManageAccounts,
+        canManageSlots,
+        managersToAsk: canManageAccounts && canManageSlots ? undefined : askManagers(await listManagers(scope), "or"),
+        canEdit: scope.can({ post: ["edit"] }),
+        firstPostDone: await hasFirstPost(scope),
+        mediaEnabled: getStorage() !== null,
+      }
+    : null;
+
   const action = state.kind === "content" ? null : state.action;
   const actionLink = (variant: "primary" | "secondary", size?: "sm") =>
     action ? (
@@ -139,7 +169,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
               {actionLink("secondary", "sm")}
             </div>
           ) : null}
-          <CalendarBoard slug={projectSlug} calendar={calendar} canSchedule={canSchedule} />
+          <CalendarBoard slug={projectSlug} calendar={calendar} canSchedule={canSchedule} compose={compose} />
         </>
       )}
         </>

@@ -102,6 +102,10 @@ export function Composer({
   initialMedia = [],
   initial,
   initialCheck = null,
+  initialSelected = [],
+  scheduleFor,
+  onScheduled,
+  embedded = false,
 }: {
   slug: string;
   timeZone: string;
@@ -119,6 +123,14 @@ export function Composer({
   initial?: ComposerInitial;
   /** A check result to start from (server rendering and tests); the first edit replaces it. */
   initialCheck?: CheckResult | null;
+  /** Accounts ticked on a NEW post. Ignored when `initial` is given — that post's targets win. */
+  initialSelected?: string[];
+  /** The slot this compose is for: names it on screen and opens Schedule on that time. */
+  scheduleFor?: { local: string; label: string };
+  /** Runs after a successful schedule, on top of the refresh — a host dialog closes itself here. */
+  onScheduled?: () => void;
+  /** Drop the page header: the host already has a title, and a dialog must not contain an `<h1>`. */
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const ids = useId();
@@ -133,7 +145,8 @@ export function Composer({
     [media, editsById],
   );
   const [selected, setSelected] = useState<string[]>(
-    initial?.targets.map((t) => t.accountId).filter((id) => accounts.some((a) => a.id === id)) ?? [],
+    initial?.targets.map((t) => t.accountId).filter((id) => accounts.some((a) => a.id === id)) ??
+      initialSelected.filter((id) => accounts.some((a) => a.id === id)),
   );
   const removedCount = initial ? initial.targets.filter((t) => !accounts.some((a) => a.id === t.accountId)).length : 0;
   const [overrides, setOverrides] = useState<Record<string, string>>(
@@ -287,7 +300,10 @@ export function Composer({
     setMessage("Draft saved.");
     if (!postId) {
       setPostId(res.data.postId);
-      router.replace(`/p/${slug}/compose/${res.data.postId}`);
+      // On the compose screen the URL moves to the new post so a reload lands on its editor. Embedded
+      // in a dialog that would navigate the host page away mid-compose, closing the dialog and losing
+      // the slot that was being written for; the draft is saved either way and listed under Posts.
+      if (!embedded) router.replace(`/p/${slug}/compose/${res.data.postId}`);
     }
     return res.data.postId;
   }
@@ -334,10 +350,17 @@ export function Composer({
         void save();
       }}
     >
-      <PageHeader
-        title={initial ? "Edit post" : "Compose"}
-        description="Write once, tailor per account, then queue, schedule or publish."
-      />
+      {embedded ? null : (
+        <PageHeader
+          title={initial ? "Edit post" : "Compose"}
+          description="Write once, tailor per account, then queue, schedule or publish."
+        />
+      )}
+      {scheduleFor ? (
+        <p role="status" className={alertStyles("info")}>
+          Writing for the {scheduleFor.label} slot. Schedule opens on that time; queue or publish still work as usual.
+        </p>
+      ) : null}
 
       {!editable ? <p role="status" className={alertStyles("info")}>Publishing has started, so this post can no longer be edited.</p> : null}
       {removedCount > 0 ? (
@@ -614,7 +637,11 @@ export function Composer({
           firstPostDone={firstPostDone}
           names={names}
           accountIds={selected}
-          onScheduled={() => router.refresh()}
+          defaultLocal={scheduleFor?.local}
+          onScheduled={() => {
+            router.refresh();
+            onScheduled?.();
+          }}
         />
       ) : null}
       {postId ? (

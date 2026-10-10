@@ -8,6 +8,18 @@ import { Menu } from "@/components/ui/Menu";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProviderIcon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import dynamicImport from "next/dynamic";
+import type { AccountOption } from "../compose/Composer";
+
+/**
+ * Loaded only when a slot is clicked. The composer is the largest client component in the app, and
+ * the calendar is a read-mostly screen — pulling it into this route's initial bundle makes every
+ * calendar visit pay for an editor almost nobody opens.
+ */
+const Composer = dynamicImport(() => import("../compose/Composer").then((m) => m.Composer), {
+  loading: () => <p className="text-sm text-muted-foreground">Loading the composer…</p>,
+});
 import type { CalendarDay, CalendarItem, CalendarView } from "@/server/services/calendar";
 import {
   listEmptySlotsAction,
@@ -23,15 +35,38 @@ import { MoveToSlotDialog, PullForwardDialog, SwapDialog } from "./MoveDialogs";
 
 type TargetItem = Extract<CalendarItem, { kind: "target" }>;
 type EmptyItem = Extract<CalendarItem, { kind: "empty" }>;
-type Dialog = { kind: "move" | "swap"; item: TargetItem } | { kind: "pull"; accountId: string } | null;
+type OpenDialog = { kind: "move" | "swap"; item: TargetItem } | { kind: "pull"; accountId: string } | null;
 
 const hm = (localTime: string) => /T(\d{2}:\d{2})/.exec(localTime)?.[1] ?? localTime;
 
-export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; calendar: CalendarView; canSchedule: boolean }) {
+/** Everything `Composer` needs that the board itself has no business knowing; the page supplies it. */
+export interface ComposeContext {
+  timeZone: string;
+  accounts: AccountOption[];
+  canManageAccounts: boolean;
+  canManageSlots: boolean;
+  managersToAsk?: string;
+  canEdit: boolean;
+  firstPostDone: boolean;
+  mediaEnabled: boolean;
+}
+
+export function CalendarBoard({
+  slug,
+  calendar,
+  canSchedule,
+  compose = null,
+}: {
+  slug: string;
+  calendar: CalendarView;
+  canSchedule: boolean;
+  /** Null when the viewer cannot schedule; the empty slots are then inert, as they were before. */
+  compose?: ComposeContext | null;
+}) {
   const router = useRouter();
   const [announcement, setAnnouncement] = useState("");
   const [error, setError] = useState("");
-  const [dialog, setDialog] = useState<Dialog>(null);
+  const [dialog, setDialog] = useState<OpenDialog>(null);
   const dragging = useRef<{ targetId: string; accountId: string } | null>(null);
   const focusId = useRef<string | null>(null);
   const accountOf = (id: string) => calendar.accounts.find((a) => a.id === id);
@@ -48,6 +83,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
    * that, and it is one node instead of one per slot.
    */
   const [hover, setHover] = useState<{ accountId: string; localTime: string; lines: string[]; x: number; y: number } | null>(null);
+  const [composeFor, setComposeFor] = useState<EmptyItem | null>(null);
 
   function detailHandlers(accountId: string, localTime: string, lines: string[] = []) {
     const show = (e: { currentTarget: HTMLElement }) => {
@@ -217,7 +253,11 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
           e.preventDefault();
           void dropOn(item);
         }}
-        onClick={() => say("To place a post here, open its menu and choose Move to slot…")}
+        onClick={() => {
+          // Was a dead end: it announced "open its menu and choose Move to slot…" and did nothing.
+          if (compose) setComposeFor(item);
+          else say("To place a post here, open its menu and choose Move to slot…");
+        }}
         aria-label={`Empty slot · ${accountName(item.accountId)} · ${hm(item.localTime)}`}
         className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-input/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         {...detailHandlers(item.accountId, item.localTime, ["Empty slot"])}
@@ -318,6 +358,42 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
           ))}
         </div>
       )}
+
+      {compose && composeFor ? (
+        <Dialog
+          open
+          size="lg"
+          title={`Write for ${accountName(composeFor.accountId)} · ${hm(composeFor.localTime)}`}
+          onClose={() => setComposeFor(null)}
+        >
+          <Composer
+            slug={slug}
+            timeZone={compose.timeZone}
+            accounts={compose.accounts}
+            canManageAccounts={compose.canManageAccounts}
+            canManageSlots={compose.canManageSlots}
+            managersToAsk={compose.managersToAsk}
+            canEdit={compose.canEdit}
+            canSchedule={canSchedule}
+            firstPostDone={compose.firstPostDone}
+            mediaEnabled={compose.mediaEnabled}
+            // The slot's own account and time: the post starts aimed at the thing that was clicked.
+            initialSelected={[composeFor.accountId]}
+            scheduleFor={{
+              // `localTime`, never `at`: `at` is the UTC instant, and the schedule dialog's date and
+              // time inputs are wall-clock in the project's zone. Passing `at` put a 09:15 slot in at
+              // 13:15 — right instant, wrong field.
+              local: composeFor.localTime.slice(0, 16),
+              label: `${accountName(composeFor.accountId)} · ${hm(composeFor.localTime)}`,
+            }}
+            embedded
+            onScheduled={() => {
+              setComposeFor(null);
+              say(`Scheduled for ${hm(composeFor.localTime)} on ${accountName(composeFor.accountId)}`);
+            }}
+          />
+        </Dialog>
+      ) : null}
 
       {dialog?.kind === "move" ? (
         <MoveToSlotDialog
