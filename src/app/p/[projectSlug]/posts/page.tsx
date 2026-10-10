@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterTabs } from "@/components/ui/FilterTabs";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Pagination } from "@/components/ui/Pagination";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StatusBadge, statusLabel, statusTone } from "@/components/ui/StatusBadge";
 import { Cell, Row, Table } from "@/components/ui/Table";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
@@ -89,14 +90,17 @@ export default async function PostsPage({ params, searchParams }: Props) {
   return (
     <section>
       <ProblemsCallout scope={scope} />
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Posts</h1>
-        {canWritePosts && !noAccounts ? (
-          <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "primary" })}>
-            New post
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Posts"
+        description="Everything written or generated in this project."
+        actions={
+          canWritePosts && !noAccounts ? (
+            <Link href={`/p/${projectSlug}/compose`} className={buttonStyles({ variant: "primary" })}>
+              New post
+            </Link>
+          ) : null
+        }
+      />
       {noPosts ? null : <FilterTabs label="Filter posts by status" tabs={tabs} />}
       <div className="mt-4">
         {list === null ? (
@@ -149,8 +153,8 @@ export default async function PostsPage({ params, searchParams }: Props) {
                     <ul className="flex flex-wrap gap-1">
                       {p.targets.map((t) => (
                         <li key={t.id}>
-                          <Badge tone={t.status === "failed" ? "danger" : t.status === "ambiguous" ? "warning" : t.status === "published" ? "success" : "neutral"}>
-                            {t.accountName}: {t.status.replaceAll("_", " ")}
+                          <Badge tone={statusTone(t.status)}>
+                            {t.accountName}: {statusLabel(t.status)}
                             {t.note ? ` · ${t.note}` : ""}
                           </Badge>
                         </li>

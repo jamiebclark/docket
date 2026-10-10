@@ -7,6 +7,7 @@ import * as invitations from "@/server/services/invitations";
 import { acceptInvitationByToken, declineInvitationByToken } from "./actions";
 import { SignupForm } from "./signup-form";
 import { buttonStyles } from "@/components/ui/Button";
+import { roleDescription, roleLabel } from "@/lib/roles/roles";
 import { AuthShell } from "@/components/brand/AuthShell";
 
 // The token is a credential: no referrer, no caching. The matching header is set in next.config.ts.
@@ -38,9 +39,12 @@ export default async function SignupPage({
   } else {
     const { invitation } = resolved;
     const summary = (
-      <p className="text-sm">
-        {invitation.inviterName} invited you to <strong>{invitation.projectName}</strong> as <strong>{invitation.role}</strong>.
-      </p>
+      <>
+        <p className="text-sm">
+          {invitation.inviterName} invited you to <strong>{invitation.projectName}</strong> as <strong>{roleLabel(invitation.role)}</strong>.
+        </p>
+        <p className="text-sm text-muted-foreground">{roleDescription(invitation.role)}</p>
+      </>
     );
     if (resolved.state === "signup") {
       body = (

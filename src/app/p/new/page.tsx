@@ -16,7 +16,7 @@ export default async function NewProjectPage() {
         <div className="flex flex-col gap-6 rounded-2xl border border-border bg-surface p-6 shadow-card sm:p-8">
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-semibold">Create a project</h1>
-            <p className="text-sm text-muted-foreground">A project holds its own accounts, posting slots, voice and team.</p>
+            <p className="text-sm text-muted-foreground">Next you&apos;ll connect a social account and choose when it posts.</p>
           </div>
           <NewProjectForm />
         </div>

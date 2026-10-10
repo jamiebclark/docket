@@ -144,6 +144,31 @@ describe("voice editor", () => {
     expect(out).toContain("Samples are not saved.");
   });
 
+  it("shows a linked hint under each voice field, in edit and read-only modes", () => {
+    const hints: [string, string][] = [
+      ["tone", "How posts sound, e.g."],
+      ["audience", "Who reads this, e.g."],
+      ["topics", "What posts are about, e.g."],
+      ["avoid", "Words, topics or styles to leave out, e.g."],
+    ];
+    for (const canManage of [true, false]) {
+      const out = render({ canManage });
+      for (const [key, text] of hints) {
+        expect(out).toContain(text);
+        const id = new RegExp(`id="([^"]*-${key}-hint)"`).exec(out)?.[1];
+        expect(id).toBeTruthy();
+        expect(out).toMatch(new RegExp(`<textarea[^>]*aria-describedby="${id}"`));
+      }
+    }
+  });
+
+  it("still shows a field error beside its hint", async () => {
+    const { Area } = await import("./VoiceEditor");
+    const out = renderToStaticMarkup(createElement(Area, { id: "x", label: "L", value: "", readOnly: false, hint: "H", error: "Too long", onChange: () => {} }));
+    expect(out).toContain("Too long");
+    expect(out).toContain('aria-describedby="x-hint x-error"');
+  });
+
   it("shows the conflict banner with the typed values kept", () => {
     const out = render({ initial: { conflict: true } });
     expect(out).toContain("This profile changed since you opened it");

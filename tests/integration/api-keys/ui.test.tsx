@@ -18,6 +18,7 @@ import { revokeApiKey } from "../../../src/server/services/api-keys";
 import { actAs, NotFoundSignal } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
+import { expectPageHeader } from "../../helpers/page-header";
 
 afterAll(async () => {
   await closeDb();
@@ -134,5 +135,14 @@ describe("create action", () => {
     actAs(env.editor);
     const refused = await createApiKeyAction(env.project.slug, form("x"));
     expect(refused).toMatchObject({ ok: false, error: "forbidden" });
+  });
+});
+
+describe("API keys page header", () => {
+  it("shows the title, the first sentence as the description, and the rest below", async () => {
+    const env = await postsEnv();
+    const out = await html(env, env.owner);
+    expectPageHeader(out, { title: "API keys", description: "Keys let tools like n8n use this project's API." });
+    expect(out).toContain("Each key works only in this project");
   });
 });

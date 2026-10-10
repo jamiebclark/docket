@@ -23,6 +23,7 @@ import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { expectPageHeader } from "../../helpers/page-header";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -63,7 +64,7 @@ describe("Jobs list", () => {
     setLlmForTests(createFakeLlm([]));
     const html = await jobsHtml(e);
     expect(html).toContain("No generation jobs yet. Start one from a CSV file, or choose images in Media.");
-    expect(html).toContain("New job from CSV");
+    expect(html).toContain("New batch job from CSV");
     expect(html).toContain("Choose images in Media");
     expect(html).not.toContain("Before you can generate");
   });
@@ -73,7 +74,7 @@ describe("Jobs list", () => {
     setLlmForTests(null);
     const html = await jobsHtml(e);
     expect(html).toContain("Before you can generate");
-    expect(html).not.toContain("New job from CSV");
+    expect(html).not.toContain("New batch job from CSV");
     expect(html).not.toContain("No generation jobs yet");
   });
 
@@ -104,7 +105,7 @@ describe("Jobs list", () => {
   it("shows the start links to an editor", async () => {
     const e = await jobsEnv();
     setLlmForTests(createFakeLlm([]));
-    expect(await jobsHtml(e, e.editor)).toContain("New job from CSV");
+    expect(await jobsHtml(e, e.editor)).toContain("New batch job from CSV");
   });
 });
 
@@ -231,5 +232,18 @@ describe("CSV form", () => {
     expect(html).toContain("This file can&#x27;t be used:");
     expect(html).toContain("Line 4: Row has 3 values; the header has 2");
     expect(html).toContain("The file is larger than 1 MB.");
+  });
+});
+
+describe("Batch job page header", () => {
+  it("titles the page by its source, with the FR-012 description and an Accounts row", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(2);
+    const { jobId } = await createJob(e.scope, e.input());
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as React.ReactElement);
+    expectPageHeader(html, { title: "", description: "One batch job: its settings, progress and the posts it made." });
+    expect(html).toContain(">Accounts</dt>");
+    expect(html).not.toContain(">Targets</dt>");
   });
 });

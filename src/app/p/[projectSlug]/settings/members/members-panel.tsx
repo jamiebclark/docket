@@ -8,12 +8,9 @@ import { Cell, Row, Table } from "@/components/ui/Table";
 import type { ActionResult } from "@/lib/action-result";
 import { changeMemberRole, leaveProject, removeMember, transferOwnership } from "./actions";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { ROLE_OPTIONS, roleLabel } from "@/lib/roles/roles";
 
-const ROLE_OPTIONS = [
-  { value: "editor", label: "Editor" },
-  { value: "admin", label: "Admin" },
-  { value: "owner", label: "Owner" },
-];
+const ROLE_CHOICES = ROLE_OPTIONS.map(({ value, label }) => ({ value, label }));
 
 export interface MemberItem {
   userId: string;
@@ -72,14 +69,14 @@ function MemberRow({ slug, m }: { slug: string; m: MemberItem }) {
               hideLabel
               size="sm"
               defaultValue={m.role}
-              options={ROLE_OPTIONS}
+              options={ROLE_CHOICES}
             />
             <Button type="submit" variant="secondary" size="sm" pending={changing} pendingLabel="Saving…">
               Save
             </Button>
           </form>
         ) : (
-          <span className="capitalize">{m.role}</span>
+          <span>{roleLabel(m.role)}</span>
         )}
       </Cell>
       <Cell>

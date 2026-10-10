@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { docsUrl } from "@/lib/docs";
@@ -25,10 +26,10 @@ export default async function WebhooksPage({ params }: { params: Promise<{ proje
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Webhooks</h1>
-      <p className="text-sm">
-        Docket can tell another service when posts publish or fail, when a job finishes, or when an account needs reconnecting.
-      </p>
+      <PageHeader
+        title="Webhooks"
+        description="Docket can tell another service when posts publish or fail, when a job finishes, or when an account needs reconnecting."
+      />
       <p className="text-sm">
         <a href={docsUrl("n8n", "6-verifying-webhook-signatures")} className="underline">
           Verifying webhook signatures

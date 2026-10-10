@@ -2,6 +2,7 @@
 // The service (src/server/services/overview.ts) gathers OverviewFacts; the page renders OverviewView.
 
 import { docsUrl } from "@/lib/docs";
+import { roleLabel } from "@/lib/roles/roles";
 import { joinNames } from "@/lib/roles/names";
 import { hasActiveSlot } from "@/lib/roles/slots";
 
@@ -140,7 +141,11 @@ export function names(facts: Pick<OverviewFacts, "managers">, conjunction: "and"
   );
 }
 
-const ROLE_LABEL: Record<ViewerRole, string> = { owner: "an Owner", admin: "an Admin", editor: "an Editor" };
+const ROLE_LABEL: Record<ViewerRole, string> = {
+  owner: `an ${roleLabel("owner")}`,
+  admin: `an ${roleLabel("admin")}`,
+  editor: `an ${roleLabel("editor")}`,
+};
 
 function withStatus(done: boolean, canAct: boolean, managers: string): ChecklistStep["status"] {
   if (done) return { kind: "done" };

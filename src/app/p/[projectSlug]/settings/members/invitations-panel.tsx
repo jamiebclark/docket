@@ -11,6 +11,7 @@ import { Cell, Row, Table } from "@/components/ui/Table";
 import type { ActionResult } from "@/lib/action-result";
 import { inviteMember, regenerateInvitation, revokeInvitation, type DeliveryDto } from "./actions";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { ROLE_OPTIONS, roleLabel } from "@/lib/roles/roles";
 
 export interface InvitationView {
   id: string;
@@ -101,13 +102,10 @@ function InviteForm({
         <SegmentedControl
           name="role"
           label="Role"
+          layout="cards"
           defaultValue="editor"
           error={errors.role}
-          options={[
-            { value: "editor", label: "Editor" },
-            { value: "admin", label: "Admin" },
-            ...(canInviteOwner ? [{ value: "owner", label: "Owner" }] : []),
-          ]}
+          options={ROLE_OPTIONS.filter((o) => canInviteOwner || o.value !== "owner").map(({ value, label, description }) => ({ value, label, description }))}
         />
         <Button type="submit" pending={pending} pendingLabel="Inviting…" className="mb-5">
           Invite
@@ -142,7 +140,7 @@ function InvitationRow({ slug, inv, onLink }: { slug: string; inv: InvitationVie
   return (
     <Row>
       <Cell header>{inv.email}</Cell>
-      <Cell>{inv.role}</Cell>
+      <Cell>{roleLabel(inv.role)}</Cell>
       <Cell>
         <Badge tone={tone[inv.status]}>{label[inv.status]}</Badge>
       </Cell>

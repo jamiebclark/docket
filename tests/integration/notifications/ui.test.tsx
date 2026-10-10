@@ -23,6 +23,7 @@ import { actAs, RedirectSignal } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
 import { recordEvent, startReading } from "../../helpers/notifications";
+import { expectPageHeader } from "../../helpers/page-header";
 
 afterAll(async () => {
   actAs(null);
@@ -268,5 +269,19 @@ describe("panel focus after marking", () => {
     focusAfterMark(true, heading);
     expect(heading.focus).toHaveBeenCalledTimes(1);
     expect(() => focusAfterMark(true, null)).not.toThrow();
+  });
+});
+
+describe("Project settings page header", () => {
+  it("shows the title and description", async () => {
+    const p = await createProject();
+    const u = await createUser();
+    await addMember(p.id, u.id, "owner");
+    actAs(u);
+    const out = await renderAsync(await ProjectSettingsPage({ params: Promise.resolve({ projectSlug: p.slug }), searchParams: Promise.resolve({}) }));
+    expectPageHeader(out, {
+      title: "Project settings",
+      description: "The project's name, time zone, and how new posts are approved and scheduled.",
+    });
   });
 });

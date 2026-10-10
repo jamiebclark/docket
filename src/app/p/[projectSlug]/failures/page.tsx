@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { attemptActorLabel } from "@/lib/failures/attempt-actor";
 import Link from "next/link";
@@ -175,9 +176,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
   return (
     <AnnounceProvider focusFallbackId="page-title">
     <section>
-      <h1 id="page-title" tabIndex={-1} className="text-2xl font-semibold">
-        Failures
-      </h1>
+      <PageHeader title="Failures" titleId="page-title" description="Posts that didn't go out, and what you can do about them." />
       {list && !noPosts ? (
         <p className="mt-1 text-sm">
           {list.totals.ambiguous} need your decision · {list.totals.failed} failed

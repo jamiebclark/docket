@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Alert } from "@/components/ui/Alert";
@@ -36,7 +37,7 @@ export default async function ProjectSettingsPage({
   const muteError = parseMuteError(raw.notifications);
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Project settings</h1>
+      <PageHeader title="Project settings" description="The project's name, time zone, and how new posts are approved and scheduled." />
       <SettingsForm
         canEdit={scope.can({ project: ["update"] })}
         values={{

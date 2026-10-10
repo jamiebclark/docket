@@ -173,7 +173,7 @@ describe("prerequisite statuses on every setup page (FR-082)", () => {
       expect(html).toContain("Before you can generate");
       expect(count(html, "Done")).toBe(2);
       expect(count(html, "To do")).toBe(1 + extra);
-      if (name === "Jobs") expect(html).not.toContain("New job from CSV");
+      if (name === "Jobs") expect(html).not.toContain("New batch job from CSV");
     });
   }
 
@@ -184,7 +184,7 @@ describe("prerequisite statuses on every setup page (FR-082)", () => {
     await env.account();
     const html = await renderAs(JobsPage as Page, env.project.slug, env.owner.id);
     expect(count(html, "Done")).toBe(2);
-    expect(html).not.toContain("New job from CSV");
+    expect(html).not.toContain("New batch job from CSV");
   });
 });
 

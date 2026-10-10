@@ -29,7 +29,12 @@ export function statusLabel(status: string): string {
   return STATUSES[status]?.label ?? status.replaceAll("_", " ");
 }
 
+/** Tone for the same vocabulary; unknown values are "neutral". */
+export function statusTone(status: string): BadgeTone {
+  return STATUSES[status]?.tone ?? "neutral";
+}
+
 /** Post, target or account status as text plus colour (never colour alone). */
 export function StatusBadge({ status }: { status: string }) {
-  return <Badge tone={STATUSES[status]?.tone ?? "neutral"}>{statusLabel(status)}</Badge>;
+  return <Badge tone={statusTone(status)}>{statusLabel(status)}</Badge>;
 }

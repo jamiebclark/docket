@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,7 +11,7 @@ import { loadPrerequisites } from "../../generate/prerequisites";
 import { loadJobFormData } from "./form-data";
 import { JobForm } from "./JobForm";
 
-export const metadata: Metadata = { title: "New job" };
+export const metadata: Metadata = { title: "New batch job" };
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -50,7 +51,7 @@ export default async function NewJobPage({ params, searchParams }: Props) {
           }
         : { mode: "unused" as const };
   const includeUsed = mode !== "unused" && one(raw.includeUsed) === "1";
-  const heading = <h1 className="text-2xl font-semibold">New job</h1>;
+  const heading = <PageHeader title="New batch job" description="Generate one post for each image you chose." />;
 
   let preview;
   let images: { message: string } | null = null;

@@ -13,6 +13,7 @@ import { actAs, NotFoundSignal } from "../../helpers/actions";
 import { closeDb, testDb } from "../../helpers/db";
 import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterThrowaway } from "../../helpers/connect-group";
 import { postsEnv } from "../../helpers/posts-env";
+import { expectPageHeader } from "../../helpers/page-header";
 
 beforeAll(registerThrowaway);
 afterAll(async () => {
@@ -63,6 +64,24 @@ describe("chooser page", () => {
       await expect(
         ConnectChooserPage({ params: Promise.resolve({ projectSlug: env.project.slug, attemptId: id }) }),
       ).rejects.toBeInstanceOf(NotFoundSignal);
+    } finally {
+      sessionModule.getSession = original;
+    }
+  });
+});
+
+describe("chooser page header", () => {
+  it("shows the Connect title and the shared description", async () => {
+    const env = await postsEnv();
+    const session = await sessionFor(env.owner.id);
+    const id = await readyAttempt(env.scope, session, pageCandidate("100", "Acme"));
+    const { sessionModule } = await import("../../helpers/actions");
+    const original = sessionModule.getSession;
+    sessionModule.getSession = (async () => ({ user: { id: env.owner.id }, session: { id: session.sessionId } })) as never;
+    try {
+      const html = renderToStaticMarkup(await ConnectChooserPage({ params: Promise.resolve({ projectSlug: env.project.slug, attemptId: id }) }));
+      expectPageHeader(html, { title: "Connect", description: "Choose which accounts to add to this project." });
+      expect(html).toContain("This choice is available until");
     } finally {
       sessionModule.getSession = original;
     }

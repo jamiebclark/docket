@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -33,7 +34,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Review</h1>
+      <PageHeader title="Review" description="Generated posts waiting for someone to approve them." />
       {queue.items.length === 0 ? (
         <EmptyState
           message="Generated posts wait here for approval before they're scheduled. Posts you write yourself don't come here."

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -17,7 +18,7 @@ import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../generate/generate-logic";
 import { loadPrerequisites } from "../generate/prerequisites";
 import { UNREVIEWED_QUEUE_LABEL } from "../generate/PolicyPicker";
 
-export const metadata: Metadata = { title: "Jobs" };
+export const metadata: Metadata = { title: "Batch jobs" };
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -46,7 +47,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
     canRun && prerequisites === null ? (
       <div className="flex flex-wrap gap-2">
         <Link href={`${base}/jobs/new/csv`} className={buttonStyles({ variant: "primary" })}>
-          New job from CSV
+          New batch job from CSV
         </Link>
         {storageOn ? (
           <Link href={`${base}/media`} className={buttonStyles({ variant: "secondary" })}>
@@ -58,10 +59,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Jobs</h1>
-        {actions}
-      </div>
+      <PageHeader title="Batch jobs" description="Generate many posts at once from images or a CSV file." actions={actions} />
       {prerequisites ? <Checklist title={PREREQUISITES_TITLE} items={prerequisites} /> : null}
       {items.length === 0 ? (
         prerequisites ? null : (

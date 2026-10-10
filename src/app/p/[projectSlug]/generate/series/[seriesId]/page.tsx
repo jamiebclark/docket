@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -29,7 +30,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ project
   });
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Series</h1>
+      <PageHeader title="Series" description="A run of related posts generated from one brief." />
       <p className="max-w-2xl text-sm text-muted-foreground">{detail.series.brief}</p>
       <SeriesWriter slug={projectSlug} seriesId={seriesId} angles={detail.angles} initialSlots={initialSlots} />
       <Link href={`/p/${projectSlug}/review`} className="text-sm underline">

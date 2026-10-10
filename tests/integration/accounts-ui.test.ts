@@ -18,6 +18,7 @@ import * as slots from "../../src/server/services/slots";
 import { closeDb, testDb } from "../helpers/db";
 import { addMember, createUser } from "../helpers/factories";
 import { postsEnv } from "../helpers/posts-env";
+import { expectPageHeader } from "../helpers/page-header";
 import { sessionFor } from "../helpers/connect-group";
 import MembersPage from "../../src/app/p/[projectSlug]/settings/members/page";
 
@@ -236,7 +237,7 @@ describe("posting instructions on the accounts page", () => {
     expect(html).toContain("12 / 2,000");
     expect(html).toContain("How posts for this account are written");
     expect(html).toContain("Save");
-    expect(html.indexOf("Posting instructions</h4>")).toBeLessThan(html.indexOf("Posting slots"));
+    expect(html.indexOf("Posting instructions</h4>")).toBeLessThan(html.indexOf("Posting slots ("));
   });
 
   it("shows editors read-only text and no form control", async () => {
@@ -272,5 +273,18 @@ describe("provider marks", () => {
     expect(html).toContain("<path");
     expect(html).toContain("#000000");
     expect(html).not.toContain("lucide");
+  });
+});
+
+describe("Members page header", () => {
+  it("shows the title and description", async () => {
+    const env = await postsEnv();
+    const html = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await MembersPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    expectPageHeader(html, {
+      title: "Members & invitations",
+      description: "Who works in this project, and invitations that haven't been accepted yet.",
+    });
   });
 });

@@ -120,6 +120,11 @@ export default async function AccountsPage({
         <h2 id="connected-heading" className="text-lg font-semibold">
           Connected accounts{withSlots.length > 0 ? ` (${withSlots.length})` : ""}
         </h2>
+        {withSlots.length > 0 ? (
+          <p id="posting-slots-definition" className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Posting slots:</span> Weekly times this account posts at. Add to queue fills the next free slot.
+          </p>
+        ) : null}
         {withSlots.length === 0 ? (
           <EmptyState
             icon="accounts"

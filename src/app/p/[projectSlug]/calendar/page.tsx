@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -80,9 +81,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">
-        {calendar.title} <span className="text-base font-normal text-muted-foreground">· {calendar.timeZone}</span>
-      </h1>
+      <PageHeader title={calendar.title} description={`Scheduled posts and open posting slots, in ${calendar.timeZone}.`} />
       {state.kind === "no_accounts" ? (
         <EmptyState icon="accounts" message={state.message} action={actionLink("primary")} />
       ) : (

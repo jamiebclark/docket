@@ -1,12 +1,14 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { Badge } from "./Badge";
 import { FilterTabs } from "./FilterTabs";
 import { LiveRegion } from "./LiveRegion";
 import { formatLocal, LocalTime } from "./LocalTime";
 import { nextMenuIndex } from "./Menu";
 import { Pagination, pageCount } from "./Pagination";
-import { StatusBadge, statusLabel } from "./StatusBadge";
+import { PageHeader } from "./PageHeader";
+import { StatusBadge, statusLabel, statusTone } from "./StatusBadge";
 
 const html = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(el);
 
@@ -18,6 +20,33 @@ describe("StatusBadge", () => {
     expect(html(createElement(StatusBadge, { status: "partially_failed" }))).toContain("Partly failed");
     expect(html(createElement(StatusBadge, { status: "rejected" }))).toContain("Rejected");
     expect(statusLabel("something_new")).toBe("something new");
+  });
+});
+
+describe("status vocabulary", () => {
+  it("has a readable label and matching tone for every target status", () => {
+    for (const status of ["draft", "scheduled", "publishing", "published", "failed", "ambiguous", "cancelled"]) {
+      const label = statusLabel(status);
+      expect(label, status).not.toContain("_");
+      expect(label, status).not.toBe(status);
+      expect(html(createElement(StatusBadge, { status })), status).toBe(
+        html(createElement(Badge, { tone: statusTone(status) } as never, label)),
+      );
+    }
+    expect(statusTone("approved")).toBe("info");
+    expect(statusTone("something_new")).toBe("neutral");
+    expect(html(createElement(StatusBadge, { status: "failed" }))).toContain("text-danger");
+    expect(statusLabel("something_new")).toBe("something new");
+  });
+});
+
+describe("PageHeader aside", () => {
+  it("leaves markup unchanged without aside and keeps the h1 to the title with it", () => {
+    const plain = html(createElement(PageHeader, { title: "Posts", description: "d" }));
+    expect(plain).not.toContain("gap-3\"><h1");
+    const withAside = html(createElement(PageHeader, { title: "Posts", aside: "Badge" }));
+    expect(withAside).toContain("Badge");
+    expect(/<h1[^>]*>([^<]*)<\/h1>/.exec(withAside)?.[1]).toBe("Posts");
   });
 });
 

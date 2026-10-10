@@ -44,7 +44,7 @@ export interface VoiceEditorProps {
 const box =
   "rounded-md border border-input bg-surface px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
-function Area(props: {
+export function Area(props: {
   id: string;
   label: string;
   value: string;
@@ -60,7 +60,11 @@ function Area(props: {
       <label htmlFor={props.id} className="text-sm font-medium">
         {props.label}
       </label>
-      {props.hint ? <p className="text-xs text-muted-foreground">{props.hint}</p> : null}
+      {props.hint ? (
+        <p id={`${props.id}-hint`} className="text-xs text-muted-foreground">
+          {props.hint}
+        </p>
+      ) : null}
       <textarea
         id={props.id}
         rows={props.rows ?? 3}
@@ -68,9 +72,10 @@ function Area(props: {
         readOnly={props.readOnly}
         maxLength={props.max ? props.max * 2 : undefined}
         onChange={(e) => props.onChange(e.target.value)}
+        aria-describedby={[props.hint ? `${props.id}-hint` : "", props.error ? `${props.id}-error` : ""].filter(Boolean).join(" ") || undefined}
         className={box}
       />
-      {props.error ? <p className="text-xs text-danger">{props.error}</p> : null}
+      {props.error ? <p id={`${props.id}-error`} className="text-xs text-danger">{props.error}</p> : null}
     </div>
   );
 }
@@ -187,10 +192,10 @@ export function VoiceEditor(props: VoiceEditorProps) {
         </Group>
 
         <Group legend="Voice">
-          <Area id={`${uid}-tone`} label="Voice and tone" value={form.voiceAndTone} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("voiceAndTone", v)} {...(fieldErrors["content.voiceAndTone"] ? { error: fieldErrors["content.voiceAndTone"] } : {})} />
-          <Area id={`${uid}-audience`} label="Audience" value={form.audience} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("audience", v)} />
-          <Area id={`${uid}-topics`} label="Topics and pillars" value={form.topicsAndPillars} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("topicsAndPillars", v)} />
-          <Area id={`${uid}-avoid`} label="Avoid" value={form.avoid} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("avoid", v)} />
+          <Area id={`${uid}-tone`} label="Voice and tone" hint="How posts sound, e.g. 'warm, plain-spoken, a little dry'." value={form.voiceAndTone} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("voiceAndTone", v)} {...(fieldErrors["content.voiceAndTone"] ? { error: fieldErrors["content.voiceAndTone"] } : {})} />
+          <Area id={`${uid}-audience`} label="Audience" hint="Who reads this, e.g. 'indie game developers'." value={form.audience} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("audience", v)} />
+          <Area id={`${uid}-topics`} label="Topics and pillars" hint="What posts are about, e.g. 'release notes, behind the scenes, tips'." value={form.topicsAndPillars} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("topicsAndPillars", v)} />
+          <Area id={`${uid}-avoid`} label="Avoid" hint="Words, topics or styles to leave out, e.g. 'hype, exclamation marks, competitor names'." value={form.avoid} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("avoid", v)} />
         </Group>
 
         <Group legend="Examples">

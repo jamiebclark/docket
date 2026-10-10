@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -76,7 +77,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Media</h1>
+      <PageHeader title="Media" description="Images and videos you can attach to posts." />
       {!status.enabled ? (
         <EmptyState
           message={`Media storage is not set up, so images and videos can't be uploaded yet.${

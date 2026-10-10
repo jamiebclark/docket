@@ -10,6 +10,7 @@ export function PageHeader({
   actions,
   eyebrow,
   titleId,
+  aside,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -17,12 +18,17 @@ export function PageHeader({
   eyebrow?: ReactNode;
   /** Gives the `<h1>` an id and makes it programmatically focusable, as a focus fallback after a dialog closes. */
   titleId?: string;
+  /** Rendered on the title's line, after the `<h1>` and outside it (status badges). */
+  aside?: ReactNode;
 }) {
+  const h1 = (
+    <h1 id={titleId} tabIndex={titleId ? -1 : undefined} className="text-2xl font-semibold sm:text-[1.75rem]">{title}</h1>
+  );
   return (
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1">
         {eyebrow ? <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{eyebrow}</div> : null}
-        <h1 id={titleId} tabIndex={titleId ? -1 : undefined} className="text-2xl font-semibold sm:text-[1.75rem]">{title}</h1>
+        {aside ? <div className="flex flex-wrap items-center gap-3">{h1}{aside}</div> : h1}
         {description ? <p className="max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

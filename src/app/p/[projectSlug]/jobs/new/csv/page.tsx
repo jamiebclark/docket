@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Checklist } from "@/components/ui/Checklist";
@@ -8,7 +9,7 @@ import { getSession } from "@/server/auth/session";
 import { loadJobFormData } from "../form-data";
 import { CsvJobForm } from "./CsvJobForm";
 
-export const metadata: Metadata = { title: "New job from CSV" };
+export const metadata: Metadata = { title: "New batch job from CSV" };
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ projectSlug: string }> };
@@ -28,7 +29,7 @@ export default async function CsvJobPage({ params }: Props) {
   }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">New job from CSV</h1>
+      <PageHeader title="New batch job from CSV" description="Generate one post for each row of a CSV file." />
       {prerequisites || !form ? (
         <Checklist title={PREREQUISITES_TITLE} items={prerequisites ?? []} />
       ) : (

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/ui/AutoRefresh";
@@ -39,7 +40,7 @@ async function load(projectSlug: string, jobId: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { projectSlug, jobId } = await params;
   const { job } = await load(projectSlug, jobId);
-  return { title: `Job: ${job.sourceSummary}` };
+  return { title: `Batch job: ${job.sourceSummary}` };
 }
 
 export default async function JobPage({ params, searchParams }: Props) {
@@ -60,15 +61,20 @@ export default async function JobPage({ params, searchParams }: Props) {
   return (
     <section className="flex flex-col gap-4">
       <AutoRefresh active={active} intervalMs={5000} />
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">{job.sourceSummary}</h1>
-        <StatusBadge status={job.status} />
-        {job.open && job.status !== "cancelled" ? (
-          <span className="rounded border border-info-border px-2 py-0.5 text-xs font-medium text-info">
-            Open: accepting items
-          </span>
-        ) : null}
-      </div>
+      <PageHeader
+        title={job.sourceSummary}
+        description="One batch job: its settings, progress and the posts it made."
+        aside={
+          <>
+            <StatusBadge status={job.status} />
+            {job.open && job.status !== "cancelled" ? (
+              <span className="rounded border border-info-border px-2 py-0.5 text-xs font-medium text-info">
+                Open: accepting items
+              </span>
+            ) : null}
+          </>
+        }
+      />
       <div className="text-sm">
         <p>
           Created by {job.createdBy?.name ?? "Removed member"} on <LocalTime value={job.createdAt} timeZone={tz} />
@@ -105,7 +111,7 @@ export default async function JobPage({ params, searchParams }: Props) {
         <dd>
           <pre className="whitespace-pre-wrap font-mono text-xs">{job.template}</pre>
         </dd>
-        <dt className="font-medium">Targets</dt>
+        <dt className="font-medium">Accounts</dt>
         <dd>{job.targets.map((t) => (t.removed ? `${t.displayName} (removed)` : t.displayName)).join(", ")}</dd>
         <dt className="font-medium">Posting instructions (as of job creation)</dt>
         <dd>
