@@ -144,6 +144,12 @@ text/UI pairs in both themes.
 - **Control heights:** `sm` 32 px (dense rows, pagination, menus), `md` 36 px
   (default), `lg` 44 px (auth forms, touch-first). Touch targets on mobile are
   ≥ 36 px tall.
+- **Cursor:** one base rule in `globals.css` gives the pointer cursor to
+  `button`, `[role="button"]`, `summary` and checkbox/radio inputs that are not
+  disabled — Tailwind 4's Preflight sets `cursor: default` on buttons, which left
+  every button in the app showing an arrow. Don't add `cursor-pointer` per
+  component; do keep it on clickable `<label>`s and listbox options, which the
+  rule does not cover.
 
 ## 6. Layout
 
@@ -214,7 +220,8 @@ under the header.
 | Project nav | phone strip under the header; sidebar from `md` | `LeftNav` (`z-20`); the strip scrolls the current section into view |
 | Commit row of long forms | bottom, from `md` up | `ActionBar stickyFrom="md"` — Compose, Generate, Jobs, Series plan |
 | Selection bars | bottom (Review bulk actions) or under the header (Media selection), always | `ActionBar` with `label` |
-| Composer preview | top, from `lg` up | `Composer` preview card |
+| Composer preview | top, from `lg` up | `Composer` preview card — on the compose page only; in a dialog the composer is one column and the preview sits last |
+| Dialog header | top of the panel | `Dialog size="lg"` (title + Close), so Close stays in reach while a long form scrolls |
 | In-page anchors | `scroll-mt-[calc(var(--sticky-top)+1rem)]` | Accounts sections, so jumps land below the sticky chrome |
 
 ### Responsiveness
@@ -257,15 +264,15 @@ full width, size `lg`.
 | `EmptyState` | `message`, `action`, `icon` | Dashed card, lavender icon disc, one sentence, one action. |
 | `FilterTabs` | tabs with `count` | Segmented control on a surface; active = filled primary. Counts are pills; the accessible text stays "(3)". |
 | `SubNav` | `label`, `items`, `nested` | Underlined tab row for a section's own pages (Settings). Active = purple underline + `aria-current`. |
-| `Dialog`, `ShowOnceDialog` | — | Native `<dialog>`, `rounded-2xl`, `shadow-overlay`, blurred backdrop (base layer). |
+| `Dialog`, `ShowOnceDialog` | `size` `md`/`lg`, `returnFocus`, `dismissOnBackdrop` | Native `<dialog>`, `rounded-2xl`, `shadow-overlay`, blurred backdrop (base layer). Three ways out, all through the element's own `close()` so focus returns the same way: the header's **Close** (X, `sr-only` label), Escape, and a click on the backdrop. `dismissOnBackdrop={false}` for any dialog holding unsaved typing — the calendar's composer, alt text, a reject reason, a regenerate instruction, a video edit; the X and Escape stay. `size="lg"` scrolls, and its header (title + Close) sticks to the top of the panel. |
 | `Menu` | items, `triggerClassName` | Trigger looks like `secondary sm` unless `triggerClassName` is given (calendar chips); focused item lavender. |
 | `Pagination` | — | `secondary sm` buttons; disabled ends at 50% opacity. |
 | `CursorPagination` | `newerHref`, `olderHref` | Newer/Older links for keyset-paged lists (Activity). `secondary sm`, `rel="prev"`/`"next"`; a direction with nothing more is a 50%-opacity disabled span; renders nothing when both are null. Use `Pagination` for numbered pages. |
 | `CopyField` | — | Mono read-only input plus secondary Copy button. |
 | `Skeleton` | `className` | `bg-muted`, pulses only with `motion-safe`. |
 | `Icon` | `name`, `size` | The one UI icon set: Lucide (ISC), 24-px grid, 1.75 stroke, `currentColor`, always `aria-hidden` beside a text label. Names say what they mean (`failures`, `arrowLeft`). Add one by adding a line to `ICONS` in `scripts/generate-icons.mjs` and running `pnpm icons`; never hand-draw paths, and never use emoji or Unicode symbols (← ✓ ⚠) as icons. |
-| `ProviderIcon` | `providerKey`, `size` | Platform mark (Simple Icons, CC0) on a tile in the brand colour; the mock provider gets a neutral "flask" tile. Decorative — show the platform name as text. Used on account cards, the Accounts page and composer previews. |
-| `AccountPicker` | `legend`, `hint`, `accounts` (with `unavailableReason`), `value`, `onChange`, `idPrefix`, `showStatus` | Many-of-many account choice as checkbox cards (mark, name, platform, status, reason). "n of m selected" and Select all / Clear; a filter box past 8 accounts. Used by Compose, Generate and Jobs. |
+| `ProviderIcon` | `providerKey`, `size`, `muted` | Platform mark (Simple Icons, CC0) on a tile in the brand colour; the mock provider gets a neutral "flask" tile. Decorative — show the platform name as text. Used on account cards, the Accounts page and composer previews. `muted` keeps the mark but drops the brand colour for the `muted` tile, so placeholders (empty posting slots on the calendar) recede behind real posts. |
+| `AccountPicker` | `legend`, `hint`, `accounts` (with `unavailableReason`), `value`, `onChange`, `idPrefix`, `showStatus` | Many-of-many account choice as selectable cards (mark, name, platform, status, reason) on native checkboxes. Chosen = purple border, lavender fill and a small tick on the platform mark — no checkbox column of its own. "n of m selected" and Select all / Clear; a filter box past 8 accounts. Used by Compose, Generate and Jobs. |
 | `RelativeTime` | `value`, `timeZone`, `now` | "12 min ago" text; the absolute time and zone are the tooltip and screen-reader text. Pure: `now` is a prop. Used by the bell panel and the notifications list. |
 | `NotificationList` | `items`, `now` | Rows of outcome badge, project, platform/account, message and `RelativeTime`; unread rows carry a "New" badge. Shared by the panel and `/notifications`. |
 | `ProblemsCallout` | `scope` | "Problems since you last looked" line on a project's home and Posts; shows only when the count is above zero. |
@@ -372,3 +379,29 @@ No page scrolls sideways at 390 px (sweep of all 20 project routes plus
 5. Toasts for "Saved" / "Scheduled" confirmations (live region already exists).
 6. Optional manual theme toggle (light / dark / system) stored per user.
 7. Visual regression screenshots for the shell and three key pages in CI.
+8. The composer preview is one `aria-live="polite"` region wrapping every
+   account's card, so each check re-announces the whole preview. Narrow it to
+   the parts that change (issues, notes) now that the counts live under the
+   text box.
+9. The composer still offers four commit actions (Save draft, Publish now,
+   Add to queue, Schedule). They now have one cta and a clear order, but the
+   row still wraps below `sm`; revisit whether Publish now belongs in a menu.
+10. Compose keeps its two-column layout on the page and stacks only in the
+    dialog. If the page gains more per-account controls, settle on one of the two.
+
+## 13. Composer dialog usability (2026-10-10)
+
+The calendar's "write for this slot" dialog, reviewed by the owner in use.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| C1 | The dialog had no visible way out: no Close button and no backdrop dismissal, so only Escape closed it. | High (a11y) | `Dialog` grew a header **Close** button and backdrop dismissal, both routed through the element's own `close()` so focus returns as before. The composer and the other dialogs that hold typed text opt out of backdrop dismissal, keeping X and Escape. |
+| C2 | In the dialog the two-column composer gave the editor and the preview ~24 rem each; neither was usable. | High | One column when `embedded`: Accounts, Text, Media, Per-account text, then the preview last (and not sticky). The compose page keeps its side-by-side preview. |
+| C3 | "What <platform> accepts" opened by default and sat above the preview text, so ~25 spec rows dominated the dialog. | Medium | `RequirementsSummary` always starts closed, and sits last in each preview card, after the text, media list and issues. |
+| C4 | The character count lived in the preview card's header, away from the box being typed in. | Medium | Per-account counts render in `TextareaField`'s `counter` slot under the text (and under an account's own text when it has one), still from the check's own counting rule. |
+| C5 | Account cards carried a redundant circle checkbox plus a selected ring, with padding reserved for it. | Low | Tick moved onto the platform mark, mark 36 → 28 px, card padding `p-3` → `p-2.5`. |
+| C6 | A banner above the form repeated the dialog title ("Writing for the … slot"). | Low | Banner removed; the Schedule button is the magenta cta when writing for a slot, with "Opens on the … slot" as its `title` and an `sr-only` description. |
+| C7 | An untouched new post already showed "Errors", "The post has no text and no media" and "Fix the errors above". | Medium | While a new post has no text, media or per-account text, issues stay hidden, the preview reads "Nothing written yet." and the action bar says "Add some text or an image, then schedule." |
+| C8 | Four same-weight commit actions wrapped onto two lines. | Low | Hierarchy instead of hiding: Save draft `secondary`, Publish now `ghost`, and exactly one `cta` — Schedule for a slot, otherwise Add to queue. |
+| C9 | Empty calendar slots drew the platform mark in full brand colour, so a week of placeholders read as loudly as real posts. | Medium | `ProviderIcon muted` on empty slots: same mark, `muted` tile. |
+| C10 | Tailwind 4's Preflight sets `cursor: default` on buttons, so every button in the app showed an arrow; 13 files patched it ad hoc. | Medium | One base rule in `globals.css` (§5) for buttons, `role="button"`, `summary` and checkbox/radio inputs, disabled excluded; the redundant per-`<summary>` classes are gone. |

@@ -216,7 +216,7 @@ export default async function AccountsPage({
                       .filter((p) => p.key === account.providerKey)
                       .map((p) => (
                         <details key={p.key} className="rounded-lg border border-border bg-surface p-3">
-                          <summary className="cursor-pointer text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                          <summary className="text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                             Reconnect
                           </summary>
                           <div className="mt-3">
@@ -256,7 +256,7 @@ export default async function AccountsPage({
                   />
                 </div>
                 <details className="flex flex-col gap-3">
-                  <summary className="cursor-pointer rounded-md text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                  <summary className="rounded-md text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     Posting instructions · {account.postingInstructions ? "Set" : "None"}
                   </summary>
                   <div className="mt-3">
@@ -321,7 +321,7 @@ export default async function AccountsPage({
           </div>
           {unconfiguredGroups.length > 0 ? (
             <details className="rounded-lg border border-border bg-surface p-3">
-              <summary className="cursor-pointer rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+              <summary className="rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                 Not set up on this server ({unconfiguredGroups.length})
               </summary>
               <div className="mt-3 flex flex-col gap-4">{unconfiguredGroups.map(groupSection)}</div>

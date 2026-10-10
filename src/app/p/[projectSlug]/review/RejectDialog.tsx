@@ -35,7 +35,7 @@ export function RejectDialog({ slug, postId, text }: { slug: string; postId: str
       <Button variant="secondary" onClick={() => setOpen(true)}>
         Reject…
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Reject this post">
+      <Dialog open={open} onClose={() => setOpen(false)} title="Reject this post" dismissOnBackdrop={false}>
         <p className="mb-3 text-sm">
           Reject “{truncate(text, REJECT_NAME_MAX)}”? It stays in Posts as rejected and will not be scheduled.
         </p>

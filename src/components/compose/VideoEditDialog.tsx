@@ -43,7 +43,7 @@ export function VideoEditDialog({
   onSave: (edit: VideoEdit) => void;
 }) {
   return (
-    <Dialog open={open} onClose={onClose} title={`Edit ${label}`}>
+    <Dialog open={open} onClose={onClose} title={`Edit ${label}`} dismissOnBackdrop={false}>
       {/* Mounted only while open, so each opening starts from the saved edit. */}
       {open ? <EditForm media={media} label={label} edit={edit} cutNotes={cutNotes} onSave={onSave} onClose={onClose} /> : null}
     </Dialog>

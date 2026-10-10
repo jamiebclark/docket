@@ -215,7 +215,7 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       ) : null}
 
       <details>
-        <summary className="cursor-pointer text-sm font-medium">Add source text</summary>
+        <summary className="text-sm font-medium">Add source text</summary>
         <div className="mt-2">
           <TextArea
             id={`${uid}-source`}

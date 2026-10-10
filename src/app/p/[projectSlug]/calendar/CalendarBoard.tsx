@@ -262,8 +262,11 @@ export function CalendarBoard({
         className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-input/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         {...detailHandlers(item.accountId, item.localTime, ["Empty slot"])}
       >
-        <ProviderIcon providerKey={accountOf(item.accountId)?.providerKey ?? ""} size={16} />
-        <span className="tabular-nums">{hm(item.localTime)}</span>      </button>
+        {/* Muted, not brand-coloured: an empty slot is a placeholder, and a week of them should not
+            shout as loudly as the posts that really are scheduled. */}
+        <ProviderIcon providerKey={accountOf(item.accountId)?.providerKey ?? ""} size={16} muted />
+        <span className="tabular-nums">{hm(item.localTime)}</span>
+      </button>
     );
   }
 
@@ -364,6 +367,9 @@ export function CalendarBoard({
           open
           size="lg"
           title={`Write for ${accountName(composeFor.accountId)} · ${hm(composeFor.localTime)}`}
+          // Escape and the header's Close button still work; a stray click on the backdrop must not
+          // throw away a half-written post, so this is the one dialog that does not dismiss that way.
+          dismissOnBackdrop={false}
           onClose={() => setComposeFor(null)}
         >
           <Composer

@@ -323,12 +323,49 @@ export function Composer({
     if (id) setNowOpen(true);
   }
 
+  // Side by side only on the full-width compose page: in a dialog the two columns came out at about
+  // 24rem each, which left neither the editor nor the preview usable, so there everything stacks.
+  const columns = embedded ? "flex flex-col gap-6" : "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start";
+  const previewSection = embedded ? section : `${section} lg:sticky lg:top-[calc(var(--sticky-top)+1.5rem)]`;
+
+  // Nothing has been written on a brand-new post yet. Until something is, the check's "no text and no
+  // media" verdict is not news: the errors stay off and the action bar asks for text instead.
+  const pristine = !initial && baseText.trim() === "" && media.length === 0 && Object.values(overrides).every((t) => !t);
+
+  /** The count line for one account, as the check counted it (graphemes for Bluesky, and so on). */
+  function counter(accountId: string) {
+    const t = byAccount.get(accountId);
+    if (!t) return null;
+    const over = isOverLimit(t);
+    return (
+      <span key={accountId} data-testid={`counter-${accountId}`} className={over ? "font-semibold text-danger" : "text-muted-foreground"}>
+        {selected.length > 1 ? `${names[accountId]}: ` : ""}
+        {counterText(t)}
+        {over ? " · over the limit" : ""}
+      </span>
+    );
+  }
+  const countersClassName = "flex flex-wrap justify-end gap-x-4 gap-y-1 text-xs tabular-nums";
+  // The base field counts for every account still using it; an account with its own text counts under that text.
+  const baseCounters = selected.filter((id) => !overrides[id] && byAccount.has(id));
+  const baseOver = baseCounters.some((id) => isOverLimit(byAccount.get(id)!));
+
   const blockedId = `${ids}-blocked`;
+  const slotId = `${ids}-slot`;
   const hint = queueSlotHint({ slug, selectedIds: selected, accounts, canManageSlots, managersToAsk });
   const hintId = `${ids}-hint`;
   const hintAll = !blocked && hint.kind === "all" ? hint : null;
+  // On an untouched post the only thing stopping a schedule is that nothing is written, so say that
+  // rather than "fix the errors above" — there are no errors on screen to fix.
+  const blockedText = blocked && pristine && !!check && selected.length > 0 && editable && !reviewBlocked ? "Add some text or an image, then schedule." : blocked;
+  // Exactly one magenta commit action. Writing for a slot makes Schedule the headline (it opens on
+  // that time); so does having no posting slots at all, which is what Add to queue needs.
+  const scheduleIsCta = !!scheduleFor || !!hintAll;
+  const queueDisabled = hintAll ? true : !!blocked || saving;
+  const queueDescribedBy = hintAll ? hintId : blocked ? blockedId : undefined;
+  const scheduleDescribedBy = [blocked ? blockedId : null, scheduleFor ? slotId : null].filter(Boolean).join(" ") || undefined;
   const barMessage = blocked ? (
-    <span id={blockedId}>{blocked}</span>
+    <span id={blockedId}>{blockedText}</span>
   ) : hint.kind === "none" ? undefined : (
     <span id={hintId}>
       {hint.text}
@@ -356,12 +393,6 @@ export function Composer({
           description="Write once, tailor per account, then queue, schedule or publish."
         />
       )}
-      {scheduleFor ? (
-        <p role="status" className={alertStyles("info")}>
-          Writing for the {scheduleFor.label} slot. Schedule opens on that time; queue or publish still work as usual.
-        </p>
-      ) : null}
-
       {!editable ? <p role="status" className={alertStyles("info")}>Publishing has started, so this post can no longer be edited.</p> : null}
       {removedCount > 0 ? (
         <p role="status" className={alertStyles("warning")}>
@@ -371,7 +402,7 @@ export function Composer({
       ) : null}
       {reviewBlocked ? <p role="status" className={alertStyles("warning")}>This post is waiting for review.</p> : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start">
+      <div className={columns}>
         <div className="flex min-w-0 flex-col gap-6">
           <div className={section}>
             <AccountPicker
@@ -395,8 +426,15 @@ export function Composer({
               rowHeightRem={ROW_REM_COMPOSER}
               value={baseText}
               readOnly={!canSave}
+              // Clicking a calendar slot means "write this post": the caret starts in the box, not on
+              // the dialog's Close button. On the compose page the focus is left where the person put it.
+              autoFocus={embedded}
+              aria-invalid={baseOver || undefined}
               onChange={(e) => setBaseText(e.target.value)}
               className="!text-base leading-relaxed"
+              // The count belongs under the box being typed in, not in the preview beside it.
+              counter={baseCounters.length > 0 ? baseCounters.map((id) => counter(id)) : null}
+              counterClassName={countersClassName}
             />
           </fieldset>
 
@@ -443,6 +481,8 @@ export function Composer({
                         readOnly={!canSave}
                         aria-invalid={over || undefined}
                         onChange={(e) => setOverrides((cur) => ({ ...cur, [accountId]: e.target.value }))}
+                        counter={overrides[accountId] ? counter(accountId) : null}
+                        counterClassName={countersClassName}
                       />
                       <div>
                         <Button
@@ -461,7 +501,7 @@ export function Composer({
           ) : null}
         </div>
 
-        <fieldset className={`${section} lg:sticky lg:top-[calc(var(--sticky-top)+1.5rem)]`}>
+        <fieldset className={previewSection}>
           <legend className={legend}>Preview</legend>
           {selected.length === 0 ? <p className="text-xs text-muted-foreground">Choose an account to see what it will receive.</p> : null}
           <div aria-live="polite" className="flex flex-col gap-3">
@@ -475,7 +515,6 @@ export function Composer({
                   </article>
                 );
               }
-              const over = isOverLimit(t);
               return (
                 <article key={accountId} className="rounded-lg border border-border bg-surface p-3 text-sm">
                   <div className="flex items-baseline justify-between gap-2">
@@ -487,16 +526,12 @@ export function Composer({
                         </span>
                       </span>
                     </h3>
-                    <span className="flex flex-wrap items-center justify-end gap-2">
-                      {t.note ? <Badge tone="neutral">{t.note}</Badge> : null}
-                    <span
-                      data-testid={`counter-${accountId}`}
-                      className={over ? "font-semibold text-danger" : "text-muted-foreground"}
-                    >
-                      {counterText(t)}
-                      {over ? " · over the limit" : ""}
-                    </span>
-                    </span>
+                    {/* The count now sits under the text box it belongs to; the preview keeps the note. */}
+                    {t.note ? (
+                      <span className="flex flex-wrap items-center justify-end gap-2">
+                        <Badge tone="neutral">{t.note}</Badge>
+                      </span>
+                    ) : null}
                   </div>
                   {t.postTypeChoice ? (
                     <fieldset className="mt-2 flex flex-col gap-1" disabled={!canSave}>
@@ -546,14 +581,15 @@ export function Composer({
                       }}
                     />
                   ) : null}
-                  <RequirementsSummary providerName={t.providerName} requirements={t.requirements} openInitially={selected.length === 1} />
                   <VideoTargetPreview
                     slug={slug}
                     videos={t.videos}
                     requestInput={{ ...(postId ? { postId } : {}), baseText, mediaIds, videoEdits, targets }}
                     disabled={!canSave}
                   />
-                  <p className="mt-2 whitespace-pre-wrap">{t.effectiveText || <em>No text</em>}</p>
+                  <p className={`mt-2 whitespace-pre-wrap${t.effectiveText ? "" : " text-muted-foreground"}`}>
+                    {t.effectiveText || (pristine ? "Nothing written yet." : <em>No text</em>)}
+                  </p>
                   {media.length > 0 ? (
                     <ol className="mt-2 flex flex-col gap-1 text-xs" aria-label="Media, in order">
                       {media.map((m, n) => (
@@ -569,7 +605,9 @@ export function Composer({
                       ))}
                     </ol>
                   ) : null}
-                  {groupIssues(t.issues).map((g) => (
+                  {/* Held back until something is written: "the post has no text and no media" is not a
+                      finding on an untouched form, it is the form's starting point. */}
+                  {(pristine ? [] : groupIssues(t.issues)).map((g) => (
                     <div key={g.severity} className="mt-2">
                       <p className="text-xs font-semibold">{SEVERITY_LABEL[g.severity]}</p>
                       <ul className="list-disc pl-5">
@@ -579,6 +617,9 @@ export function Composer({
                       </ul>
                     </div>
                   ))}
+                  {/* Last and closed: the full spec table is reference material, not something to read
+                      before the post. The one-line gist above it stays visible. */}
+                  <RequirementsSummary providerName={t.providerName} requirements={t.requirements} />
                 </article>
               );
             })}
@@ -587,27 +628,41 @@ export function Composer({
       </div>
 
       <ActionBar stickyFrom="md" message={barMessage}>
+        {/* Replaces the banner that used to sit above the whole form and repeat the dialog's own title. */}
+        {scheduleFor ? (
+          <span id={slotId} className="sr-only">
+            Opens on the {scheduleFor.label} slot.
+          </span>
+        ) : null}
         <Button type="submit" variant="secondary" pending={saving} pendingLabel="Saving…" disabled={!canSave}>
           Save draft
         </Button>
-        <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openPublishNow}>
+        {/* Lowest emphasis of the three commits: it goes out at once and cannot be taken back. */}
+        <Button variant="ghost" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openPublishNow}>
           Publish now…
         </Button>
-        {hintAll ? (
+        {scheduleIsCta ? (
           <>
-            <Button variant="secondary" disabled aria-describedby={hintId} onClick={openQueue}>
+            <Button variant="secondary" disabled={queueDisabled} aria-describedby={queueDescribedBy} onClick={openQueue}>
               Add to queue…
             </Button>
-            <Button variant="cta" disabled={saving} onClick={openScheduleAt}>
+            <Button
+              variant="cta"
+              disabled={!!blocked || saving}
+              aria-describedby={scheduleDescribedBy}
+              title={scheduleFor ? `Opens on the ${scheduleFor.label} slot` : undefined}
+              onClick={openScheduleAt}
+            >
               Schedule…
             </Button>
           </>
         ) : (
           <>
-            <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openScheduleAt}>
+            {/* No slot in play here (writing for one makes Schedule the cta), so no slot tooltip either. */}
+            <Button variant="secondary" disabled={!!blocked || saving} aria-describedby={scheduleDescribedBy} onClick={openScheduleAt}>
               Schedule…
             </Button>
-            <Button variant="cta" disabled={!!blocked || saving} aria-describedby={blocked ? blockedId : undefined} onClick={openQueue}>
+            <Button variant="cta" disabled={queueDisabled} aria-describedby={queueDescribedBy} onClick={openQueue}>
               Add to queue…
             </Button>
           </>

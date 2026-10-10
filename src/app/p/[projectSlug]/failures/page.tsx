@@ -75,7 +75,7 @@ function AttemptLog({ row, tz }: { row: FailureRow; tz: string }) {
   const entries = row.attempts.reduce((n, r) => n + r.count, 0);
   return (
     <details>
-      <summary className="cursor-pointer text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+      <summary className="text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
         Attempt log ({entries} {entries === 1 ? "entry" : "entries"})
       </summary>
       <table className="mt-2 w-full border-collapse text-left text-xs">
@@ -106,7 +106,7 @@ function AttemptLog({ row, tz }: { row: FailureRow; tz: string }) {
               <tr key={run.entries[0]!.id} className="border-b border-border align-top">
                 <td colSpan={6} className="px-2 py-1">
                   <details>
-                    <summary className="cursor-pointer">
+                    <summary>
                       {run.step} · {run.outcome.replaceAll("_", " ")} × {run.count}
                       {run.error ? ` — ${run.error}` : ""}
                     </summary>

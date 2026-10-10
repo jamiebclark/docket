@@ -34,7 +34,7 @@ export function RegenerateDialog({ slug, postId }: { slug: string; postId: strin
       <Button variant="secondary" onClick={() => setOpen(true)}>
         Regenerate…
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Regenerate this post">
+      <Dialog open={open} onClose={() => setOpen(false)} title="Regenerate this post" dismissOnBackdrop={false}>
         <p className="mb-3 text-sm">The text is written again from the same brief. Your edits to the text will be replaced.</p>
         <TextareaField
           id={id}

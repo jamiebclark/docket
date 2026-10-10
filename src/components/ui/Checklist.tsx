@@ -79,7 +79,7 @@ export function Checklist({
     <Card title={title}>
       {collapsedSummary ? (
         <details>
-          <summary className="cursor-pointer rounded-md text-sm font-medium text-heading focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+          <summary className="rounded-md text-sm font-medium text-heading focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
             {collapsedSummary}
           </summary>
           <div className="pt-3">{list}</div>

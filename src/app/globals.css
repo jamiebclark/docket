@@ -162,6 +162,19 @@
     color: var(--accent-foreground);
   }
 
+  /*
+   * Tailwind 4's Preflight sets `cursor: default` on buttons, so every button in the app showed an
+   * arrow. Restored here once (as Tailwind's upgrade guide suggests) rather than per component, for
+   * everything that acts like a button and is not disabled.
+   */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    cursor: pointer;
+  }
+
   dialog::backdrop {
     background: rgb(18 12 25 / 0.55);
     backdrop-filter: blur(2px);
