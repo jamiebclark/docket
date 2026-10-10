@@ -12,6 +12,7 @@ export function Dialog({
   onClose,
   title,
   returnFocus = true,
+  size = "md",
   children,
 }: {
   open: boolean;
@@ -19,6 +20,8 @@ export function Dialog({
   title: string;
   /** Set false when the opener is going away; the caller then places focus itself. */
   returnFocus?: boolean;
+  /** `lg` for a dialog hosting a whole form; it also scrolls rather than growing past the viewport. */
+  size?: "md" | "lg";
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -60,7 +63,9 @@ export function Dialog({
         if (returnFocusRef.current) returnTo.current?.focus();
         onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-border bg-surface p-6 text-foreground shadow-overlay"
+      className={`m-auto w-[calc(100%-2rem)] rounded-2xl border border-border bg-surface p-6 text-foreground shadow-overlay ${
+        size === "lg" ? "max-h-[calc(100dvh-4rem)] max-w-3xl overflow-y-auto" : "max-w-md"
+      }`}
     >
       <h2 id={titleId} className="mb-3 text-lg font-semibold text-heading">
         {title}

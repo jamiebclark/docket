@@ -185,6 +185,7 @@ export function ScheduleAtDialog({
   names,
   accountIds,
   onScheduled,
+  defaultLocal,
 }: {
   open: boolean;
   onClose: () => void;
@@ -195,9 +196,11 @@ export function ScheduleAtDialog({
   names: Record<string, string>;
   accountIds: string[];
   onScheduled: () => void;
+  /** `YYYY-MM-DDTHH:MM` to open on, when the caller already knows the time — composing for a slot. */
+  defaultLocal?: string;
 }) {
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  const [date, setDate] = useState(defaultLocal?.slice(0, 10) ?? "");
+  const [time, setTime] = useState(defaultLocal?.slice(11, 16) ?? "");
   const [fetched, setPreview] = useState<ExplicitPreview | null>(null);
   const preview = date && time ? fetched : null;
   const [error, setError] = useState("");
