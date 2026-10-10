@@ -18,7 +18,9 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # Not `build`: CI has a job of that name too, and a required status check matches on the name
+  # alone, so two jobs sharing one would make the requirement ambiguous.
+  docs-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -37,7 +39,7 @@ jobs:
 
   deploy:
     if: github.event_name != 'pull_request'
-    needs: build
+    needs: docs-build
     runs-on: ubuntu-latest
     permissions:
       pages: write
