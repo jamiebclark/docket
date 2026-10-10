@@ -28,8 +28,54 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
+  # A merge commit of an up-to-date branch has the same *tree* as the branch head CI already checked,
+  # so re-running static/test/build/docker on main would check byte-identical source a second time.
+  # This looks for a merge parent whose tree matches HEAD's and whose own CI run succeeded, and skips
+  # the four when it finds one. Keyed on the tree, not the commit, so a rebase or an out-of-date
+  # branch (different tree) still gets the full run. Always runs, so the jobs that need it are never
+  # skipped for want of a dependency.
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "push" ]; then
+            echo "pull request: running everything"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tree=$(git rev-parse 'HEAD^{tree}')
+          # Field 1 is HEAD, field 2 is the first parent (main before the merge); the rest are the
+          # branches merged in. A squash or fast-forward leaves none, so the full suite runs.
+          parents=$(git rev-list --parents -n 1 HEAD | cut -d' ' -f3-)
+          for sha in $parents; do
+            if [ "$(git rev-parse "$sha^{tree}")" != "$tree" ]; then
+              echo "$sha: different tree"
+              continue
+            fi
+            passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$sha&status=success&per_page=100"               --jq '[.workflow_runs[] | select(.name == "CI")] | length')
+            if [ "${passed:-0}" -gt 0 ]; then
+              echo "$sha: same tree, CI already passed - skipping the re-check"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "$sha: same tree but no successful CI run"
+          done
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
   # static, test and build run in parallel; each needs only its own slice of work.
   static:
+    needs: [guard]
+    if: needs.guard.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -47,8 +93,17 @@ jobs:
         if: hashFiles('drizzle.config.ts') != ''
         run: pnpm db:check
 
+  # Sharded: the suite is the long pole in CI, and the shards are independent because each job gets
+  # its own Postgres service and so its own databases. Raising the shard count trades runner minutes
+  # for wall clock; keep SHARDS and the matrix in step.
   test:
+    needs: [guard]
+    if: needs.guard.outputs.skip != 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:17
@@ -75,14 +130,18 @@ jobs:
       - name: Install ffmpeg (the video suites skip without it)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Test
-        run: pnpm test
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
         env:
           DOCKET_SKIP_PERF_TESTS: "1"
-      # Timing budgets measure the query, so they run alone rather than beside thousands of parallel tests.
+      # Timing budgets measure the query, so they run alone rather than beside thousands of parallel
+      # tests - and on one shard only, so the budget is measured once rather than four times.
       - name: Performance budgets, one file at a time
+        if: matrix.shard == 1
         run: pnpm exec vitest run tests/integration/activity/performance.test.ts tests/integration/notifications/performance.test.ts --no-file-parallelism
 
   build:
+    needs: [guard]
+    if: needs.guard.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -101,6 +160,8 @@ jobs:
         run: pnpm build
 
   docker:
+    needs: [guard]
+    if: needs.guard.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -123,7 +184,11 @@ jobs:
           docker run --rm --cpus=2 --user 1001 --entrypoint node docket:ci scripts/video-smoke.mjs --formatter
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # `always()` so a skipped re-check (see `guard`) still publishes; the explicit result checks keep
+    # a real failure or a cancellation from doing so.
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     needs: [static, test, build, docker]
     runs-on: ubuntu-latest
     permissions:
@@ -156,7 +221,11 @@ jobs:
   # Publishes every green main commit as ghcr.io/<owner>/docket:edge (and :sha-<short>), whether
   # or not it cuts a release. `latest` stays on the last release; `edge` is for following main.
   edge:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # `always()` so a skipped re-check (see `guard`) still publishes; the explicit result checks keep
+    # a real failure or a cancellation from doing so.
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     needs: [static, test, build, docker]
     permissions:
       contents: read
