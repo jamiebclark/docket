@@ -246,7 +246,14 @@ jobs:
   # workflow would never run: releases created with GITHUB_TOKEN do not trigger workflows.
   image:
     needs: release
-    if: needs.release.outputs.version != ''
+    # `always()` for the same reason `release` and `edge` carry it: when `guard` skips the re-check,
+    # `static`/`test`/`build`/`docker` are skipped, and a job downstream of a skipped job is itself
+    # skipped whatever its own `if` says — so this condition was never even evaluated. Every release
+    # was cut without an image and `latest` only moved when someone published one by hand, while
+    # `edge` kept publishing because it has `always()` too. The result check keeps a failed or
+    # cancelled release from publishing.
+    if: >-
+      always() && needs.release.result == 'success' && needs.release.outputs.version != ''
     permissions:
       contents: read
       packages: write
