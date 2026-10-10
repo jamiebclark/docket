@@ -94,6 +94,12 @@ export const addSlotSchema = z.object({
   localTime: localTimeSchema,
 });
 
+export const moveSlotSchema = z.object({
+  id: z.uuid(),
+  weekday: weekdaySchema,
+  localTime: localTimeSchema,
+});
+
 export const registerAssetSchema = z.object({
   storageKey: z.string().min(1).max(500),
   publicUrl: z

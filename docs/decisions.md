@@ -1401,3 +1401,28 @@ environment has no running `pnpm dev` server and no browser tool. A human needs 
 walk-through table (growth, ceiling/scroll, shrink, saved-value-at-load, the collapsed `<details>`, the
 `Dialog` cases, monospace vs. proportional, read-only full height, the voice screen's caption-size copy,
 keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
+
+## 035 — Reusable week grid for posting slots (2026-10-10)
+
+- **R2 — chips are not drawn at the y that placed them.** A click or drop is positional (`timeAtPosition` maps
+  linearly across the column's own height), but each chip then lays out in its column's time order rather than
+  at the pixel it was placed or dropped at. *Why:* proportional positioning cannot keep chips legible at the
+  settled type scale inside a column short enough to satisfy SC-010 — a dense day would either overlap chips or
+  force the column so tall it broke the one-screen layout. No hour gutter or hover readout ships; the
+  announcement after a placement or move is the only thing that names the time it landed at, which review F6
+  flagged as a built mitigation that review found did not exist — this is the corrected account. See research.md
+  R2.
+- **FR-022 — delete without a confirm dialog.** `docs/design-system.md` §7 says a `danger` action always
+  confirms in a `Dialog` that names the thing; `WeekSlotGrid`'s Delete control is the one exception. A slot holds
+  no content, costs one click to re-add, and deleting one changes no scheduled post, so the spec requires the
+  exception rather than the confirm.
+- **Retime has no callback of its own.** A typed time in the Move dialog goes through the same `onMove` as a
+  drag, since a retime is a move whose weekday happens to be unchanged — this is also why a retime gets the same
+  duplicate-slot refusal as a drag for free.
+- **Old add-slot and table UI removed.** `SlotEditor` and `SlotRowActions` (the weekday-radios-plus-time-input
+  form and the Day/Time/Status/Actions table) are deleted from
+  `src/app/p/[projectSlug]/accounts/SlotEditor.tsx`; `ReconnectMockButton` and `MockBehaviourForm` stay. The
+  post-connect focus hand-off now targets `#account-<id>-add-slot` instead of the deleted radio input.
+- **Capability check moves from `account:["manage"]` to `slot:["manage"]`** for who sees the grid's editing
+  affordances, per contracts/week-slot-grid.md and the spec's capability split.
+- **No schema, migration, `docker-compose.yml`, env or dependency change.**

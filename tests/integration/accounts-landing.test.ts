@@ -43,6 +43,8 @@ describe("accounts page landing (033)", () => {
     const slotsHeading = added.indexOf(`id="account-${a.id}-slots"`);
     expect(added.indexOf("Add posting slots so Add to queue", slotsHeading)).toBeGreaterThan(slotsHeading);
     expect(statuses(added)).toBe(baseline + 1);
+    // The post-connect hand-off focuses the grid's add-slot button now that SlotEditor's weekday radio is gone (FR-050).
+    expect(added).toContain(`id="account-${a.id}-add-slot"`);
 
     const back = await render(env, env.owner.id, { landed: a.id, connected: "0", reconnected: "1" });
     expect(back).toContain(`Reconnected ${a.displayName}.`);

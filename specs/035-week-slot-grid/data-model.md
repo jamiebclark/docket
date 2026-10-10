@@ -92,7 +92,6 @@ Named here because the contracts and the task list refer to them; all live in
 | `roundToStep` | `(m: number) => number` | nearest `STEP_MINUTES` boundary; FR-009 |
 | `clampToDay` | `(m: number) => number` | into `[0, 1440 - STEP_MINUTES]`; FR-010 and the midnight edge case |
 | `timeAtPosition` | `(offsetY: number, height: number) => string` | R2's mapping, then `roundToStep`, then `clampToDay`; one function for click and for drop so they cannot diverge (FR-009) |
-| `hourTicks` | `() => { minutes: number; label?: string }[]` | 24 ticks, labelled every three hours, from the same mapping as `timeAtPosition` |
 | `slotsByWeekday` | `(slots: GridSlotState[]) => GridSlotState[][]` | seven buckets, each sorted; FR-001, FR-002 |
 | `nextFreeTime` | `(day: GridSlotState[], from = "09:00") => string \| null` | the keyboard add's target time; `null` when the day has no free boundary (R3) |
 | `isNoOpMove` | `(slot: GridSlot, intent: MoveIntent) => boolean` | same weekday and same rounded time → send nothing, announce nothing (FR-014) |

@@ -181,7 +181,7 @@ Written out so `/speckit-tasks` has an ordering to follow; it owns the task brea
 
 | Risk | Mitigation |
 |---|---|
-| R2's hit-test-versus-layout split confuses someone the first time they use it | The hour gutter is drawn from the same formula as the hit test, the hover readout names the time before the click, and the announcement names it after. Walk-through rows 1–3 and 19 are where a human judges whether that is enough |
+| R2's hit-test-versus-layout split confuses someone the first time they use it | No hour gutter or hover readout ships (see `docs/decisions.md` 035 R2); the announcement after a placement or move names the time it landed at. Walk-through rows 1–3 and 19 are where a human judges whether that is enough |
 | Optimistic overrides and `refresh()` fighting each other on a slow connection | R6 makes the server props the base and overrides self-erasing; `applyOverrides` is pure and unit-tested across arrival orders (quickstart §2), and walk-through rows 20–21 are the live check |
 | The hover-reveal pattern (`opacity-0` + `group-hover` + `group-focus-within` + `pointer-coarse`) is not exercised by `renderToStaticMarkup` | The classes are asserted in the markup test, and the behaviour is walk-through rows 9 and 18. `pointer-coarse` was verified present in the installed Tailwind rather than assumed |
 | Deleting `SlotEditor` silently breaks the post-connect hand-off | FR-050 is handled in the same task as the deletion (`addButtonId` → the page's new `focusSelector`), and `accounts-landing.test.ts` covers the flow |

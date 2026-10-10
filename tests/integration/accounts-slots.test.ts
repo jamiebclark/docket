@@ -2,8 +2,10 @@ import { afterAll, describe, expect, it } from "vitest";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../src/server/dal/errors";
 import { forProject } from "../../src/server/dal/scope";
 import * as accounts from "../../src/server/services/accounts";
+import * as posts from "../../src/server/services/posts";
 import * as slots from "../../src/server/services/slots";
 import { fakeSession } from "../helpers/auth";
+import { atTime } from "../helpers/clock";
 import { closeDb } from "../helpers/db";
 import { createProjectWithMembers } from "../helpers/factories";
 
@@ -98,5 +100,57 @@ describe("slots", () => {
     await slots.deleteSlot(scope, first.id);
     expect(await slots.listSlots(scope, a.id)).toHaveLength(1);
     await expect(slots.addSlot(scope, { accountId: a.id, weekday: 9, localTime: "09:00" })).rejects.toThrow();
+  });
+
+  it("moves a slot, preserving its id and refusing a taken target, a forbidden caller, bad ids and bad shapes", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+    const moving = await slots.addSlot(scope, { accountId: a.id, weekday: 1, localTime: "09:00" });
+    await slots.addSlot(scope, { accountId: a.id, weekday: 3, localTime: "18:00" });
+
+    const moved = await slots.moveSlot(scope, { id: moving.id, weekday: 4, localTime: "12:30" });
+    expect(moved.id).toBe(moving.id);
+    expect(moved.weekday).toBe(4);
+    expect(moved.localTime).toMatch(/^12:30/);
+
+    const conflict = await slots.moveSlot(scope, { id: moved.id, weekday: 3, localTime: "18:00" }).catch((e) => e);
+    expect(conflict).toBeInstanceOf(ConflictError);
+    expect(conflict.message).toBe("That account already has a slot at that time.");
+
+    const editor = await as(ctx, ctx.editor);
+    await expect(slots.moveSlot(editor, { id: moved.id, weekday: 2, localTime: "10:00" })).rejects.toBeInstanceOf(ForbiddenError);
+
+    const other = await createProjectWithMembers();
+    const theirs = await accounts.connectMock(await as(other, other.owner), { displayName: "Theirs" });
+    const theirSlot = await slots.addSlot(await as(other, other.owner), { accountId: theirs.id, weekday: 1, localTime: "09:00" });
+    await expect(slots.moveSlot(scope, { id: theirSlot.id, weekday: 2, localTime: "10:00" })).rejects.toBeInstanceOf(NotFoundError);
+
+    for (const bad of [
+      { id: moved.id, weekday: 0, localTime: "10:00" },
+      { id: moved.id, weekday: 8, localTime: "10:00" },
+      { id: moved.id, weekday: 2, localTime: "9:00" },
+      { id: moved.id, weekday: 2, localTime: "24:00" },
+      { id: moved.id, weekday: 2, localTime: "09:00:00" },
+    ]) {
+      await expect(slots.moveSlot(scope, bad)).rejects.toThrow();
+    }
+  });
+
+  it("keeps a queued target's scheduled time and slot_id after the slot it points to moves", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+    const slot = await slots.addSlot(scope, { accountId: a.id, weekday: 1, localTime: "09:00" });
+    const draft = await posts.createDraft(scope, { baseText: "hi", targets: [{ accountId: a.id }] });
+    await atTime(new Date("2026-10-05T00:00:00Z"), () => posts.addToQueue(scope, draft.post.id));
+    const before = await scope.targets.get(draft.targets[0]!.id);
+    expect(before!.slotId).toBe(slot.id);
+    expect(before!.scheduledAt).not.toBeNull();
+
+    await slots.moveSlot(scope, { id: slot.id, weekday: 4, localTime: "15:00" });
+    const after = await scope.targets.get(draft.targets[0]!.id);
+    expect(after!.slotId).toBe(slot.id);
+    expect(after!.scheduledAt?.getTime()).toBe(before!.scheduledAt?.getTime());
   });
 });

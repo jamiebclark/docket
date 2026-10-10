@@ -96,7 +96,7 @@ pipeline's human-task rule this is scheduled **last** and blocks nothing; report
 
 | # | Do this | Expect |
 |---|---|---|
-| 1 | Click in the Monday column at about a third of its height | A chip appears on Monday at the 30-minute boundary the hover readout showed; it is announced |
+| 1 | Click in the Monday column at about a third of its height | A chip appears on Monday at the 30-minute boundary that click position rounds to, named by the announcement |
 | 2 | Repeat in Tue–Fri | Five slots from five clicks, no form submitted (SC-001, SC-002) |
 | 3 | Click a position that rounds onto an existing time | Refused in text, "already has a slot at that time", no second chip (FR-016) |
 | 4 | Drag the Friday chip into Saturday near the top | It lands on Saturday at the dropped time; Friday no longer shows it (FR-013) |

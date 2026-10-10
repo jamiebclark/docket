@@ -60,8 +60,9 @@ drawn from the same formula as the hit test, what is drawn is always what a clic
 grows.
 
 **Trade-off accepted**: a chip does not sit at the y the click happened at — it drops into sort order.
-Mitigated by the hover readout, by the announcement naming the day and time (FR-044), and by FR-012 (a rounded
-time is never one you are stuck with). This is a judgement call and goes in `docs/decisions.md`.
+Mitigated by the announcement naming the day and time (FR-044), and by FR-012 (a rounded time is never one you
+are stuck with). This is a judgement call and goes in `docs/decisions.md`. The hover readout once mitigated
+this too but was dropped — see `docs/decisions.md`'s 035 entry — so do not re-derive it from this note.
 
 **Alternatives considered**: (a) absolutely positioned chips on a 24 h track — rejected above; (b) an
 internally scrolling 24 h track at 48 px/hour — rejected, violates SC-010; (c) a 48-row half-hour CSS grid —

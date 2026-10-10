@@ -3,92 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
-import { Field } from "@/components/ui/Field";
 import { mockBehaviours } from "@/providers/mock/settings";
-import { addSlotAction, deleteSlotAction, reconnectMockAction, setMockBehaviourAction, setSlotPausedAction } from "./actions";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { reconnectMockAction, setMockBehaviourAction } from "./actions";
 import { ChoiceField } from "@/components/ui/ChoiceField";
-
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-/** Add-slot form: weekday buttons plus a 24-hour time input. A duplicate comes back as a field error. */
-export function SlotEditor({ slug, accountId }: { slug: string; accountId: string }) {
-  const [weekday, setWeekday] = useState("1");
-  const [time, setTime] = useState("09:00");
-  const [error, setError] = useState("");
-  const [pending, start] = useTransition();
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    start(async () => {
-      const res = await addSlotAction(slug, { accountId, weekday: Number(weekday), localTime: time });
-      if (!res.ok) setError(res.fieldErrors?.localTime ?? res.message);
-    });
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-3" aria-label="Add a posting slot">
-      <SegmentedControl
-        name={`slot-day-${accountId}`}
-        label="Weekday"
-        value={weekday}
-        onChange={setWeekday}
-        options={DAYS.map((d, i) => ({ value: String(i + 1), label: d }))}
-      />
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-40">
-          <Field id={`slot-time-${accountId}`} type="time" label="Time" value={time} onChange={(e) => setTime(e.target.value)} required error={error} />
-        </div>
-        <Button type="submit" pending={pending} pendingLabel="Adding…" className="mb-5">
-          Add slot
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/** Pause/resume, and delete behind a confirm step. */
-export function SlotRowActions({ slug, id, paused, label }: { slug: string; id: string; paused: boolean; label: string }) {
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState("");
-  const [pending, start] = useTransition();
-
-  function run(fn: () => ReturnType<typeof deleteSlotAction>) {
-    setError("");
-    start(async () => {
-      const res = await fn();
-      if (!res.ok) setError(res.message);
-      else setConfirming(false);
-    });
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button variant="secondary" disabled={pending} onClick={() => run(() => setSlotPausedAction(slug, { id, paused: !paused }))}>
-        {paused ? "Resume" : "Pause"}
-        <span className="sr-only"> {label}</span>
-      </Button>
-      {confirming ? (
-        <>
-          <Button variant="danger" pending={pending} pendingLabel="Deleting…" onClick={() => run(() => deleteSlotAction(slug, { id }))}>
-            Confirm delete {label}
-          </Button>
-          <Button variant="secondary" onClick={() => setConfirming(false)}>
-            Cancel
-          </Button>
-        </>
-      ) : (
-        <Button variant="danger" onClick={() => setConfirming(true)}>
-          Delete<span className="sr-only"> {label}</span>
-        </Button>
-      )}
-      <span role="alert" className="text-xs text-danger">
-        {error}
-      </span>
-    </div>
-  );
-}
 
 export function ReconnectMockButton({ slug, id }: { slug: string; id: string }) {
   const router = useRouter();

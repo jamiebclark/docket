@@ -3,6 +3,7 @@ import {
   atSchema,
   externalUrlSchema,
   localTimeSchema,
+  moveSlotSchema,
   postInputSchema,
   publishLimitSchema,
   weekdaySchema,
@@ -20,6 +21,19 @@ describe("localTimeSchema", () => {
   it.each(["24:00", "9:00", "09:60", "09:00:00", "", "0900"])("rejects %j", (t) =>
     expect(localTimeSchema.safeParse(t).success).toBe(false),
   );
+});
+
+describe("moveSlotSchema", () => {
+  it("accepts a valid id, weekday and localTime", () => {
+    expect(moveSlotSchema.safeParse({ id, weekday: 4, localTime: "12:30" }).success).toBe(true);
+  });
+  it.each([
+    { id, weekday: 0, localTime: "12:30" },
+    { id, weekday: 8, localTime: "12:30" },
+    { id, weekday: 4, localTime: "9:00" },
+    { id, weekday: 4, localTime: "24:00" },
+    { id, weekday: 4, localTime: "09:00:00" },
+  ])("rejects %j", (v) => expect(moveSlotSchema.safeParse(v).success).toBe(false));
 });
 
 describe("publishLimitSchema", () => {

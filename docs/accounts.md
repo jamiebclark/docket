@@ -61,6 +61,21 @@ The person who clicks **Connect** needs two things:
 | Threads | To be logged in to Threads **as that account**, and that account must be a Threads Tester on your app |
 | X | To be logged in to X **as that account**, with your X developer app set up ([x-setup.md](x-setup.md)) |
 
+## Posting slots
+
+Each connected account has a week grid of posting slots on the Accounts screen, one column per weekday. Owners and
+admins can:
+
+- **Click or tap an empty spot** in a column to add a slot there, or use that column's **Add a slot on \<Day\>** button
+  to add one at the next free half-hour from 09:00.
+- **Drag a slot** to a new day or time, or open its **Move** control for a day-and-time dialog.
+- **Click a slot** to pause or resume it; a paused slot is skipped by "Add to queue".
+- **Delete a slot** with its Delete control — one click, no confirmation, since a slot holds no content and is one
+  click to re-add.
+
+Editors see the same grid read-only. See [getting-started.md](getting-started.md#2-add-posting-slots) for the
+first-time flow.
+
 ## Posting instructions
 
 Each connected account has an optional **Posting instructions** field (up to 2,000 characters) on the Accounts screen, in a collapsed section below its posting slots (summary: "Posting instructions · Set" or "· None"). It tells the generator how posts for that account are written: hashtags, links, how a post opens. The brand voice stays on the voice profile; see [generator.md](generator.md#posting-instructions) for how the instructions are used.
