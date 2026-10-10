@@ -134,6 +134,43 @@ describe("WeekSlotGrid pending addition", () => {
     expect(html).not.toContain("Move Monday 08:00");
     expect(html).not.toContain("Delete Monday 08:00");
     expect(html).not.toContain('draggable="true"');
-    expect(html).toMatch(/<button[^>]*aria-label="Monday 08:00, active"[^>]*aria-disabled="true"/);
+    // The toggle button is named for its action; the slot's day, time and state stay in the chip's
+    // own text and on the `<li>`.
+    expect(html).toMatch(/<button[^>]*aria-label="Pause Monday 08:00"[^>]*aria-disabled="true"/);
+  });
+
+  it("names the toggle button for the action it performs, in both states", () => {
+    const active = render({
+      canManage: true,
+      slots: [{ id: "s1", weekday: 1, localTime: "08:00", paused: false }],
+    });
+    expect(active).toContain('aria-label="Pause Monday 08:00"');
+
+    const paused = render({
+      canManage: true,
+      slots: [{ id: "s1", weekday: 1, localTime: "08:00", paused: true }],
+    });
+    expect(paused).toContain('aria-label="Resume Monday 08:00, paused"');
+    // The chip still carries the plain day/time/state name for the row itself.
+    expect(paused).toContain('aria-label="Monday 08:00, paused"');
+  });
+
+  it("shows the empty message only when the rendered grid is empty", () => {
+    const empty = render({ canManage: true, slots: [] });
+    expect(empty).toContain("No posting slots yet.");
+
+    const populated = render({
+      canManage: true,
+      slots: [{ id: "s1", weekday: 1, localTime: "08:00", paused: false }],
+    });
+    expect(populated).not.toContain("No posting slots yet.");
+  });
+
+  it("shows a refusal as plain text, not as a second live region", () => {
+    const html = render({
+      canManage: true,
+      slots: [{ id: "s1", weekday: 1, localTime: "08:00", paused: false }],
+    });
+    expect(html).not.toContain('role="alert"');
   });
 });

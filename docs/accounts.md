@@ -66,7 +66,7 @@ The person who clicks **Connect** needs two things:
 Each connected account has a week grid of posting slots on the Accounts screen, one column per weekday. Owners and
 admins can:
 
-- **Click or tap an empty spot** in a column to add a slot there, or use that column's **Add a slot on \<Day\>** button
+- **Click or tap an empty spot** in a column to add a slot there, or use that column's **Add slot** button
   to add one at the next free half-hour from 09:00.
 - **Drag a slot** to a new day or time, or open its **Move** control for a day-and-time dialog.
 - **Click a slot** to pause or resume it; a paused slot is skipped by "Add to queue".

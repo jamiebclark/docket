@@ -10,6 +10,7 @@ import {
   announceRetimed,
   applyOverrides,
   clampToDay,
+  clearResolved,
   conflictAt,
   DUPLICATE_REFUSAL,
   hhmm,
@@ -20,7 +21,10 @@ import {
   slotsByWeekday,
   timeAtPosition,
   timeOfMinutes,
+  type Addition,
   type GridSlotState,
+  type Override,
+  type Weekday,
 } from "./week-slot-grid-logic";
 
 function slot(overrides: Partial<GridSlotState> = {}): GridSlotState {
@@ -132,17 +136,22 @@ describe("isNoOpMove", () => {
 describe("conflictAt", () => {
   it("finds a same-weekday same-time slot", () => {
     const slots = [slot({ id: "other", weekday: 1, localTime: "10:00" })];
-    expect(conflictAt(slots, { id: "moving", weekday: 1, localTime: "10:00" })?.id).toBe("other");
+    expect(conflictAt(slots, { weekday: 1, localTime: "10:00" })?.id).toBe("other");
   });
 
   it("ignores the chip being moved via exceptId", () => {
     const slots = [slot({ id: "self", weekday: 1, localTime: "10:00" })];
-    expect(conflictAt(slots, { id: "self", weekday: 1, localTime: "10:00" }, "self")).toBeNull();
+    expect(conflictAt(slots, { weekday: 1, localTime: "10:00" }, "self")).toBeNull();
   });
 
   it("returns null when free", () => {
     const slots = [slot({ id: "other", weekday: 1, localTime: "10:00" })];
-    expect(conflictAt(slots, { id: "moving", weekday: 2, localTime: "10:00" })).toBeNull();
+    expect(conflictAt(slots, { weekday: 2, localTime: "10:00" })).toBeNull();
+  });
+
+  it("refuses an add onto an occupied time, with no id to except", () => {
+    const slots = [slot({ id: "other", weekday: 3, localTime: "09:30" })];
+    expect(conflictAt(slots, { weekday: 3, localTime: "09:30" })?.id).toBe("other");
   });
 });
 
@@ -200,5 +209,47 @@ describe("announcements", () => {
 
   it("DUPLICATE_REFUSAL matches the server's ConflictError message verbatim", () => {
     expect(DUPLICATE_REFUSAL).toBe("That account already has a slot at that time.");
+  });
+});
+
+describe("clearResolved", () => {
+  const patch = (seq: number): Override => ({ kind: "patch", seq, weekday: 1, localTime: "10:00", paused: false });
+  const addition = (seq: number, weekday: Weekday = 1): Addition => ({
+    tempId: `pending-${seq}`,
+    seq,
+    weekday,
+    localTime: "12:00",
+  });
+
+  it("drops only the overrides whose seq the server confirmed", () => {
+    const next = clearResolved(new Map([["a", patch(1)], ["b", patch(2)]]), [], new Set([1]));
+    expect([...next.overrides.keys()]).toEqual(["b"]);
+  });
+
+  it("drops only the additions whose seq the server confirmed", () => {
+    const next = clearResolved(new Map(), [addition(1), addition(2, 2)], new Set([2]));
+    expect(next.additions.map((a) => a.seq)).toEqual([1]);
+  });
+
+  it("keeps a still-pending mutation while clearing a resolved one", () => {
+    const next = clearResolved(new Map([["a", patch(1)], ["b", patch(3)]]), [addition(2)], new Set([1, 2]));
+    expect([...next.overrides.keys()]).toEqual(["b"]);
+    expect(next.additions).toEqual([]);
+  });
+
+  it("is a no-op when nothing has resolved", () => {
+    const next = clearResolved(new Map([["a", patch(1)]]), [addition(2)], new Set());
+    expect([...next.overrides.keys()]).toEqual(["a"]);
+    expect(next.additions).toHaveLength(1);
+  });
+
+  it("never mutates its inputs, so a snapshot survives the caller clearing its own set", () => {
+    const overrides = new Map([["a", patch(1)]]);
+    const additions = [addition(1)];
+    const done = new Set([1]);
+    clearResolved(overrides, additions, done);
+    expect(overrides.size).toBe(1);
+    expect(additions).toHaveLength(1);
+    expect(done.has(1)).toBe(true);
   });
 });
