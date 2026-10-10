@@ -35,22 +35,30 @@ In the [Meta for Developers](https://developers.facebook.com/apps) dashboard cho
 
 Add the **Facebook Login for Business** use case. Docket's "Connect with Facebook" button uses it.
 
-Optionally create a **login configuration** with the five permissions in step 3, choosing **User access token** as the
+Optionally create a **login configuration** with the seven permissions in step 3, choosing **User access token** as the
 token type (not System-user access token). Copy its id into `META_LOGIN_CONFIG_ID`; Docket then sends `config_id` with
 the login request instead of a list of scopes. Leaving it empty is fine: Docket requests the scopes directly.
 
+A configuration replaces Docket's scope list rather than adding to it, so any permission you leave out of it is a
+permission the login will not ask for. Leave `ads_management` and `ads_read` out and Pages owned by a Business
+Portfolio stop being connectable, with no error beyond an empty chooser.
+
 ## 3. Permissions
 
-Docket requests these five:
+Docket requests these seven:
 
 - `pages_show_list`
 - `pages_manage_posts`
 - `pages_read_engagement`
 - `instagram_basic`
 - `instagram_content_publish`
+- `ads_management`
+- `ads_read`
 
-Docket does **not** request `ads_management` or `ads_read`. Meta requires those when the connecting person's access to
-a Page comes only through a Business Portfolio (Business Manager); see
+The last two are not used to run ads. Meta requires them before it will hand back a **Page access token** for a Page the
+connecting person reaches through a Business Portfolio (Business Manager) rather than directly on the Page. Without
+them such a Page comes back from `/me/accounts` with no token, Docket drops it, and the chooser looks empty even though
+the Page appeared in Facebook's own login dialog; see
 [accounts.md](accounts.md#scheduling-for-someone-elses-accounts).
 
 ## 4. App roles
@@ -68,21 +76,35 @@ They also need access to what they connect:
 
 Do not submit for App Review. Standard Access covers everyone with a role from step 4.
 
+**Unverified:** this is established for the five Page and Instagram permissions. Whether Standard Access also covers
+`ads_management` and `ads_read` for people with an app role has not been confirmed against a live install. If a connect
+fails only for Pages owned by a Business Portfolio, check whether the dashboard is asking for Advanced Access on those
+two before changing anything else.
+
 Meta's documentation says Business apps have no Development/Live mode and use access levels only, but some dashboard
 pages still describe a mode toggle (**unverified** which one you will see). If your dashboard shows a toggle, people with
 app roles can connect in either mode. Going Live may ask for a privacy policy URL, an app icon and a category; Business
 Verification is not needed while only people with roles connect.
 
-## 6. Valid OAuth redirect URIs
+## 6. App domains and valid OAuth redirect URIs
 
-Open **Facebook Login for Business → Settings** and, under **Client OAuth Settings**, add your callback to **Valid OAuth
-Redirect URIs** (**unverified**: Meta moves dashboard labels around):
+Two separate fields, in two separate places. Both are required, and missing either one fails the login.
+
+**App domains.** Under **App settings → Basic**, add the host Docket runs at to **App domains** — the bare hostname, no
+scheme and no path, for example `docket.example.com`. Leave it empty and Facebook refuses the login before any consent
+screen with *"Can't load URL: The domain of this URL isn't included in the app's domains."*
+
+**Valid OAuth redirect URIs.** Open **Facebook Login for Business → Settings** and, under **Client OAuth Settings**, add
+your callback to **Valid OAuth Redirect URIs** (**unverified**: Meta moves dashboard labels around):
 
 - Your install: `<BETTER_AUTH_URL>/connect/callback`, for example `https://docket.example.com/connect/callback`.
 - Local development, if you want it: `http://localhost:3000/connect/callback`. **Unverified:** Meta documents an
   exception for `localhost` only for apps in development mode, and Business apps may not have one.
 
 You can register several addresses at once (production, local), so switching does not mean editing the dashboard.
+
+That same settings page has a **Redirect URI Validator**: paste your callback and it answers whether the app accepts it.
+Use it to check both fields at once before trying a real connect.
 
 **To test the localhost address:** start Docket locally, choose Connect with Facebook and sign in. If you land back on
 Docket's chooser, it works. If Meta says "URL blocked" or "redirect URI is not whitelisted", use step 7 or step 10.
