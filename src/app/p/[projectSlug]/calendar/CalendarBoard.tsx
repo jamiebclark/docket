@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { Menu } from "@/components/ui/Menu";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ProviderIcon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import type { CalendarDay, CalendarItem, CalendarView } from "@/server/services/calendar";
 import {
@@ -33,7 +34,55 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
   const [dialog, setDialog] = useState<Dialog>(null);
   const dragging = useRef<{ targetId: string; accountId: string } | null>(null);
   const focusId = useRef<string | null>(null);
-  const accountName = (id: string) => calendar.accounts.find((a) => a.id === id)?.displayName ?? "Account";
+  const accountOf = (id: string) => calendar.accounts.find((a) => a.id === id);
+  const accountName = (id: string) => accountOf(id)?.displayName ?? "Account";
+
+  /**
+   * The detail that used to sit on the face of every card. A month of slots repeated the account's
+   * handle on every one of them, which crowded out the thing worth scanning for — what is going out.
+   * The face keeps the provider's mark and the time; the rest is one hover or focus away.
+   *
+   * One card for the whole board, positioned `fixed`, rather than an absolutely positioned box inside
+   * each cell: the grid scrolls horizontally, and `overflow-x: auto` computes `overflow-y: auto` too,
+   * so a box anchored inside a cell is clipped on the top and bottom rows. Fixed positioning escapes
+   * that, and it is one node instead of one per slot.
+   */
+  const [hover, setHover] = useState<{ accountId: string; localTime: string; lines: string[]; x: number; y: number } | null>(null);
+
+  function detailHandlers(accountId: string, localTime: string, lines: string[] = []) {
+    const show = (e: { currentTarget: HTMLElement }) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      setHover({ accountId, localTime, lines, x: r.left, y: r.top });
+    };
+    const hide = () => setHover(null);
+    return { onMouseEnter: show, onMouseLeave: hide, onFocus: show, onBlur: hide };
+  }
+
+  /** `aria-hidden`: every word here is already in the card's own accessible name. */
+  function detailCard() {
+    if (!hover) return null;
+    const a = accountOf(hover.accountId);
+    // Above the card when there is room, below it when there is not, so it never leaves the viewport.
+    const above = hover.y > 140;
+    return (
+      <div
+        aria-hidden
+        className="pointer-events-none fixed z-50 flex w-max max-w-64 flex-col gap-0.5 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs shadow-overlay"
+        style={{ left: Math.min(hover.x, (typeof window === "undefined" ? 1024 : window.innerWidth) - 272), top: above ? hover.y - 8 : hover.y + 32, transform: above ? "translateY(-100%)" : undefined }}
+      >
+        <span className="font-medium text-foreground">{a?.displayName ?? "Account"}</span>
+        <span className="text-muted-foreground">
+          {a?.providerName ? `${a.providerName} · ` : ""}
+          {hm(hover.localTime)}
+        </span>
+        {hover.lines.map((line) => (
+          <span key={line} className="text-muted-foreground">
+            {line}
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   // After a refresh brings the new cells, focus goes back to the chip that moved.
   useEffect(() => {
@@ -85,10 +134,18 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
     "block w-full rounded-lg border border-accent bg-accent/30 px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
   function chip(item: TargetItem) {
+    // The account's handle moves to the hover detail with everything else; the face keeps the mark,
+    // the time, the status and the excerpt — the excerpt being the one thing a month view is scanned for.
     const body = (
       <>
-        <span className="font-medium">{hm(item.localTime)}</span> <span>{accountName(item.accountId)}</span>{" "}
-        <StatusBadge status={item.status} />
+        <span className="flex items-center gap-1.5">
+          <ProviderIcon providerKey={accountOf(item.accountId)?.providerKey ?? ""} size={16} />
+          <span className="font-medium tabular-nums">{hm(item.localTime)}</span>
+          <StatusBadge status={item.status} />
+        </span>
+        {/* The provider's note stays on the face. It is a per-post disclosure — an unaudited TikTok app
+            must say a post goes out private — so it cannot sit behind a hover, which never renders on
+            the server and never appears on touch. Unlike the handle it also differs between posts. */}
         {item.note ? <span className="block text-xs text-muted-foreground">{item.note}</span> : null}
         <span className="block truncate text-xs text-muted-foreground">{item.excerpt}</span>
       </>
@@ -96,7 +153,15 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
     const open = `/p/${slug}/posts/${item.postId}`;
     if (!canSchedule || !item.movable) {
       return (
-        <Link key={item.targetId} data-target-id={item.targetId} href={open} className={chipClass}>
+        <Link
+          key={item.targetId}
+          data-target-id={item.targetId}
+          href={open}
+          // The handle left the face, so name the link explicitly rather than let it read as time plus excerpt.
+          aria-label={`${hm(item.localTime)} on ${accountName(item.accountId)}: ${item.excerpt}`}
+          className={chipClass}
+          {...detailHandlers(item.accountId, item.localTime, [item.excerpt])}
+        >
           {body}
         </Link>
       );
@@ -114,6 +179,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
         onDragEnd={() => {
           dragging.current = null;
         }}
+        {...detailHandlers(item.accountId, item.localTime, [item.excerpt])}
       >
         <Menu
           triggerClassName={chipClass}
@@ -152,10 +218,12 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
           void dropOn(item);
         }}
         onClick={() => say("To place a post here, open its menu and choose Move to slot…")}
-        className="block w-full rounded-lg border border-dashed border-input/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        aria-label={`Empty slot · ${accountName(item.accountId)} · ${hm(item.localTime)}`}
+        className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-input/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        {...detailHandlers(item.accountId, item.localTime, ["Empty slot"])}
       >
-        Empty slot · {accountName(item.accountId)} · {hm(item.localTime)}
-      </button>
+        <ProviderIcon providerKey={accountOf(item.accountId)?.providerKey ?? ""} size={16} />
+        <span className="tabular-nums">{hm(item.localTime)}</span>      </button>
     );
   }
 
@@ -187,6 +255,7 @@ export function CalendarBoard({ slug, calendar, canSchedule }: { slug: string; c
   return (
     <div className="flex flex-col gap-3">
       <LiveRegion message={announcement} />
+      {detailCard()}
       {error ? (
         <p role="alert" className="text-sm text-danger">
           {error}
