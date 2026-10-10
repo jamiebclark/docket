@@ -124,8 +124,10 @@ export function WeekSlotGrid({
   const draggingId = useRef<string | null>(null);
   const focusTarget = useRef<string | null>(null);
   const [moveDialog, setMoveDialog] = useState<{ id: string; weekday: Weekday; localTime: string } | null>(null);
-  // The day column the pointer is over mid-drag, so that column can show it will accept the drop.
-  const [dragOverWeekday, setDragOverWeekday] = useState<Weekday | null>(null);
+  // Where the chip would land if released now: the column shows it will accept the drop, and the time
+  // the drop would set. Without this the time a drag will produce is invisible until after it happens,
+  // and a column is 30 rem of unlabelled space between hour rules.
+  const [dragPreview, setDragPreview] = useState<{ weekday: Weekday; localTime: string; taken: boolean } | null>(null);
 
   function resolveSeq(seq: number) {
     resolvedSeqsRef.current.add(seq);
@@ -289,12 +291,21 @@ export function WeekSlotGrid({
   function columnDragOverHandler(weekday: Weekday) {
     if (!canManage) return undefined;
     return (e: DragEvent<HTMLDivElement>) => {
-      if (!draggingId.current) return;
+      const id = draggingId.current;
+      if (!id) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       // Calling preventDefault is what makes this a valid drop target, so say so on screen: without it
-      // the only feedback that a day will accept the chip is the cursor.
-      setDragOverWeekday((prev) => (prev === weekday ? prev : weekday));
+      // the only feedback that a day will accept the chip is the cursor. The time comes from the same
+      // `timeAtPosition` the drop itself will use, so the preview cannot promise a different time.
+      const rect = e.currentTarget.getBoundingClientRect();
+      const localTime = timeAtPosition(e.clientY - rect.top, rect.height);
+      const taken = conflictAt(view, { weekday, localTime }, id) !== null;
+      setDragPreview((prev) =>
+        prev && prev.weekday === weekday && prev.localTime === localTime && prev.taken === taken
+          ? prev // same position: keep the object so dragover, which fires continuously, renders nothing new
+          : { weekday, localTime, taken },
+      );
     };
   }
 
@@ -303,7 +314,7 @@ export function WeekSlotGrid({
     return (e: DragEvent<HTMLDivElement>) => {
       // Leaving for a child of the same column is not leaving the column.
       if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-      setDragOverWeekday((prev) => (prev === weekday ? null : prev));
+      setDragPreview((prev) => (prev?.weekday === weekday ? null : prev));
     };
   }
 
@@ -311,7 +322,7 @@ export function WeekSlotGrid({
     if (!canManage) return undefined;
     return (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
-      setDragOverWeekday(null);
+      setDragPreview(null);
       const id = draggingId.current;
       draggingId.current = null;
       if (!id) return;
@@ -365,7 +376,7 @@ export function WeekSlotGrid({
           confirmed
             ? () => {
                 draggingId.current = null;
-                setDragOverWeekday(null);
+                setDragPreview(null);
               }
             : undefined
         }
@@ -452,7 +463,13 @@ export function WeekSlotGrid({
                   </div>
                 ))}
                 <div
-                  className={`absolute inset-x-1 top-0 bottom-6 transition-colors ${dragOverWeekday === weekday ? "rounded-md bg-primary/10 ring-2 ring-primary/50" : ""}`}
+                  className={`absolute inset-x-1 top-0 bottom-6 transition-colors ${
+                    dragPreview?.weekday === weekday
+                      ? dragPreview.taken
+                        ? "rounded-md bg-danger/10 ring-2 ring-danger/50"
+                        : "rounded-md bg-primary/10 ring-2 ring-primary/50"
+                      : ""
+                  }`}
                   onClick={columnClickHandler(weekday)}
                   onDragOver={columnDragOverHandler(weekday)}
                   onDragLeave={columnDragLeaveHandler(weekday)}
@@ -461,6 +478,30 @@ export function WeekSlotGrid({
                   <ul className="absolute inset-0">
                     {dayItems.map((slot) => (canManage ? managedChip(slot, weekday) : readOnlyChip(slot, weekday)))}
                   </ul>
+                  {/* The time the drop would set, at the position it would set it. Pointer-only and
+                      decorative — `aria-hidden`, since the keyboard path goes through the move dialog,
+                      which shows and edits the same time as a real field. */}
+                  {dragPreview?.weekday === weekday ? (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-0 z-10"
+                      style={{ top: `${topPercentOf(dragPreview.localTime)}%` }}
+                    >
+                      <div className={`border-t-2 ${dragPreview.taken ? "border-danger" : "border-primary"}`} />
+                      <span
+                        className={`absolute left-0 top-0 -translate-y-1/2 rounded border px-1 py-px text-[0.625rem] font-medium leading-tight tabular-nums ${
+                          // The danger trio flips together between themes, as Alert and Badge use it;
+                          // `text-danger` on its own background is the only pairing that stays legible in both.
+                          dragPreview.taken
+                            ? "border-danger-border bg-danger-bg text-danger"
+                            : "border-primary bg-primary text-primary-foreground"
+                        }`}
+                      >
+                        {hhmm(dragPreview.localTime)}
+                        {dragPreview.taken ? " · taken" : ""}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               {canManage ? (
