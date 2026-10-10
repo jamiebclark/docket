@@ -174,10 +174,12 @@ access. If you lose your role on the Page, or change your Facebook password, the
 The owner does not need a role on your Meta app in this setup. Alternatively, add the owner as a tester on your app, make
 them an admin in the Docket project, and let them connect it themselves.
 
-**Pages in a Business Portfolio (Business Manager).** If your access to the Page comes only through a Business Portfolio
-and not directly on the Page, the Page may be missing from the chooser, and Instagram publishing may fail. Docket does not
-request the `ads_management` and `ads_read` permissions that Meta requires in that case. Ask the owner to give you access
-on the Page itself. (**Unverified**: Meta does not document exactly when such a Page is left out.)
+**Pages in a Business Portfolio (Business Manager).** A Page owned by a Business Portfolio is only connectable when the
+login also grants `ads_management` and `ads_read`; Docket requests both. Meta withholds the Page access token without
+them, and a Page that arrives with no token is dropped, so the chooser comes back empty even though Facebook listed the
+Page in its own login dialog. Having **full control** of the Page is not enough on its own when that control is held
+through the portfolio. (Verified against a portfolio-owned Page: present in Facebook's Page picker, absent from Docket's
+chooser, with the login granting only the five Page and Instagram scopes.)
 
 **Threads.** Threads offers no way to let someone else manage an account: the person who logs in during **Connect** is
 the account that gets connected. So the owner must do this step. The simplest way:
