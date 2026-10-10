@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
@@ -54,29 +55,29 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
   return (
     <AnnounceProvider focusFallbackId="page-title">
     <article className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm">
-            <Link href={`/p/${projectSlug}/posts`} className="underline">
-              Posts
-            </Link>
-          </p>
-          <h1 id="page-title" tabIndex={-1} className="mt-1 text-2xl font-semibold">
-            Post
-          </h1>
-          <p className="mt-1">
-            <StatusBadge status={view.post.status} />
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {!started && scope.can({ post: ["edit"] }) ? (
-            <Link href={`/p/${projectSlug}/compose/${view.post.id}`} className={buttonStyles({ variant: "secondary" })}>
-              Edit
-            </Link>
-          ) : null}
-          <DeletePostButton slug={projectSlug} postId={view.post.id} canDelete={canDelete} deleteBlocked={view.deleteBlocked} />
-        </div>
-      </header>
+      <div>
+        <p className="mb-2 text-sm">
+          <Link href={`/p/${projectSlug}/posts`} className="underline">
+            Posts
+          </Link>
+        </p>
+        <PageHeader
+          title="Post"
+          titleId="page-title"
+          description="Where this post goes, its status on each account, and every publish attempt."
+          aside={<StatusBadge status={view.post.status} />}
+          actions={
+            <>
+              {!started && scope.can({ post: ["edit"] }) ? (
+                <Link href={`/p/${projectSlug}/compose/${view.post.id}`} className={buttonStyles({ variant: "secondary" })}>
+                  Edit
+                </Link>
+              ) : null}
+              <DeletePostButton slug={projectSlug} postId={view.post.id} canDelete={canDelete} deleteBlocked={view.deleteBlocked} />
+            </>
+          }
+        />
+      </div>
 
       <section aria-labelledby="content">
         <h2 id="content" className="text-lg font-semibold">

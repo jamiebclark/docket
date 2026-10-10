@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
@@ -70,7 +71,7 @@ export default async function EndpointPage({ params }: { params: Params }) {
           All webhooks
         </Link>
       </p>
-      <h1 className="text-2xl font-semibold">Webhook: {dto.host}</h1>
+      <PageHeader title={`Webhook: ${dto.host}`} description="Where this webhook sends events, and its recent deliveries." />
       <EndpointDetail slug={scope.project.slug} timeZone={scope.project.timezone} endpoint={dto} deliveries={deliveries} />
     </div>
   );

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { forProject, NotFoundError } from "@/server/dal";
@@ -49,7 +50,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-2xl font-semibold">Members &amp; invitations</h1>
+      <PageHeader title="Members & invitations" description="Who works in this project, and invitations that haven't been accepted yet." />
       <MembersPanel
         slug={scope.project.slug}
         members={memberList.map((m) => ({

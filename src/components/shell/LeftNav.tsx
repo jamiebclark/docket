@@ -8,18 +8,18 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 export const NAV_GROUPS = ["Publish", "Create", "Project"] as const;
 
 export const NAV_SECTIONS = [
+  { slug: "compose", label: "Compose", group: "Publish", icon: "compose" },
   { slug: "calendar", label: "Calendar", group: "Publish", icon: "calendar" },
   { slug: "posts", label: "Posts", group: "Publish", icon: "posts" },
-  { slug: "compose", label: "Compose", group: "Publish", icon: "compose" },
   { slug: "review", label: "Review", group: "Publish", icon: "review" },
   { slug: "failures", label: "Failures", group: "Publish", icon: "failures" },
-  { slug: "activity", label: "Activity", group: "Publish", icon: "activity" },
   { slug: "generate", label: "Generate", group: "Create", icon: "generate" },
-  { slug: "jobs", label: "Jobs", group: "Create", icon: "jobs" },
+  { slug: "voice", label: "Brand voice", group: "Create", icon: "voice" },
   { slug: "media", label: "Media", group: "Create", icon: "media" },
-  { slug: "voice", label: "Voice", group: "Create", icon: "voice" },
+  { slug: "jobs", label: "Batch jobs", group: "Create", icon: "jobs" },
   { slug: "accounts", label: "Accounts", group: "Project", icon: "accounts" },
   { slug: "settings", label: "Settings", group: "Project", icon: "settings" },
+  { slug: "activity", label: "Activity", group: "Project", icon: "activity" },
 ] as const satisfies readonly { slug: string; label: string; group: (typeof NAV_GROUPS)[number]; icon: IconName }[];
 
 /** Overview matches only `/p/{slug}` itself (trailing slash allowed); every other item matches its prefix. */

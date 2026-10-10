@@ -245,7 +245,10 @@ export function Composer({
   if (accounts.length === 0) {
     return (
       <section className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">Compose</h1>
+        <PageHeader
+          title={initial ? "Edit post" : "Compose"}
+          description="Write once, tailor per account, then queue, schedule or publish."
+        />
         {emptyAccountsAudience(canManageAccounts) === "manage" ? (
           <EmptyState
             message="No accounts are connected yet. Connect an account to start composing posts."

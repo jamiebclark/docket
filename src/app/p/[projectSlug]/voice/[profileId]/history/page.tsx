@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -41,7 +42,7 @@ export default async function VoiceHistoryPage({ params, searchParams }: Props) 
   const c = selected?.content;
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{profile.name}: history</h1>
+      <PageHeader title={`${profile.name}: history`} description="Earlier versions of this voice profile." />
       <Link href={base} className="text-sm underline">
         Back to the profile
       </Link>

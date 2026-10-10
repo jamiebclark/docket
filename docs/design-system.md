@@ -152,19 +152,20 @@ text/UI pairs in both themes.
 ├──────────────┬─────────────────────────────────────────────────────┤
 │ ◫ Overview   │  (banners: scheduler stale = danger, reauth = warning) │
 │ PUBLISH      │                                                     │
-│ ▣ Calendar   │                                                     │
-│ ☰ Posts      │   Page title                         [Secondary][Primary]
-│ ✎ Compose    │   One-line description                              │
+│ ✎ Compose    │                                                     │
+│ ▣ Calendar   │   Page title                         [Secondary][Primary]
+│ ☰ Posts      │   One-line description                              │
 │ ✓ Review  3  │                                                     │
 │ ⚠ Failures 1 │   ┌ Card ────────────────────────────────────────┐  │
 │ CREATE       │   │                                              │  │
 │ ✦ Generate   │   └──────────────────────────────────────────────┘  │
-│ ≡ Jobs       │                                                     │
+│ 🎙 Brand voice│                                                     │
 │ ▢ Media      │                 max-w-6xl, centred                  │
-│ 🎙 Voice      │                                                     │
+│ ≡ Batch jobs │                                                     │
 │ PROJECT      │                                                     │
 │ 👥 Accounts   │                                                     │
 │ ⚙ Settings   │                                                     │
+│ ◷ Activity   │                                                     │
 └──────────────┴─────────────────────────────────────────────────────┘
 ```
 
@@ -174,8 +175,8 @@ text/UI pairs in both themes.
   display name, never from their email).
 - **Sidebar:** 240 px, sticky below the header, grouped by job: **Overview** first
   (the project home, ungrouped), then **Publish**
-  (Calendar, Posts, Compose, Review, Failures), **Create** (Generate, Jobs,
-  Media, Voice), **Project** (Accounts, Settings). Review stays directly above
+  (Compose, Calendar, Posts, Review, Failures), **Create** (Generate, Brand
+  voice, Media, Batch jobs), **Project** (Accounts, Settings, Activity). Review stays directly above
   Failures (tested). Active item: `bg-accent/60`, purple icon, 4 px purple
   indicator bar, `aria-current="page"`. Counts render as pills (magenta for
   Review, danger tint for Failures) and the accessible name still reads
@@ -192,7 +193,7 @@ text/UI pairs in both themes.
 
 ### Page anatomy
 
-1. `PageHeader` — `title`, optional `description`, `actions` (primary last). The project home (overview) uses it too.
+1. `PageHeader` — `title`, optional `description`, `actions` (primary last). Every page in the project shell has one, with a one-line description (the project home too).
 2. Optional `FilterTabs` (segmented control) and toolbar.
 3. Content in `Card`s / `Table` / `EmptyState`; one topic per card.
 4. `Pagination` at the bottom of lists.

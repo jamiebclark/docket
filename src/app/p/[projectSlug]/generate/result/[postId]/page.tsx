@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -57,10 +58,11 @@ export default async function ResultPage({ params }: { params: Promise<{ project
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">Generated post</h1>
-        <StatusBadge status={detail.post.status} />
-      </div>
+      <PageHeader
+        title="Generated post"
+        description="What was generated, and what it was generated from."
+        aside={<StatusBadge status={detail.post.status} />}
+      />
       <p className="text-sm" data-testid="decision">
         {decisionText ?? (
           <>

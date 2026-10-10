@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { docsUrl } from "@/lib/docs";
@@ -25,10 +26,8 @@ export default async function ApiKeysPage({ params }: { params: Promise<{ projec
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">API keys</h1>
-      <p className="text-sm">
-        Keys let tools like n8n use this project&apos;s API. Each key works only in this project, only for the permissions you tick.
-      </p>
+      <PageHeader title="API keys" description="Keys let tools like n8n use this project's API." />
+      <p className="text-sm">Each key works only in this project, only for the permissions you tick.</p>
       <p className="flex gap-4 text-sm">
         <a href="/api/v1/openapi.json" className="underline">
           API reference (OpenAPI)

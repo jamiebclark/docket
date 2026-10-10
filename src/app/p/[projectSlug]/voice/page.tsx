@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -11,7 +12,7 @@ import { listVoiceProfiles } from "@/server/services/voice";
 import { scopeOrNotFound } from "./scope";
 import { buttonStyles } from "@/components/ui/Button";
 
-export const metadata: Metadata = { title: "Voice" };
+export const metadata: Metadata = { title: "Brand voice" };
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -31,14 +32,17 @@ export default async function VoicePage({ params, searchParams }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Voice</h1>
-        {manage ? (
-          <Link href={`${base}/new`} className={buttonStyles({ variant: "primary" })}>
-            New voice profile
-          </Link>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Brand voice"
+        description="How generated posts should sound."
+        actions={
+          manage ? (
+            <Link href={`${base}/new`} className={buttonStyles({ variant: "primary" })}>
+              New voice profile
+            </Link>
+          ) : null
+        }
+      />
       {anyProfile ? (
         <FilterTabs
           label="Profiles"

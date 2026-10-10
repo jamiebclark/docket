@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { NotFoundError } from "@/server/dal";
@@ -24,7 +25,7 @@ export default async function VoiceProfilePage({ params }: Props) {
   const manage = scope.can({ voice: ["manage"] }) && !found.profile.archivedAt;
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{found.profile.name}</h1>
+      <PageHeader title={found.profile.name} description="One voice profile: how generated posts should sound, with examples." />
       {found.profile.archivedAt ? (
         <ArchivedBanner slug={projectSlug} profileId={profileId} canManage={scope.can({ voice: ["manage"] })} />
       ) : null}

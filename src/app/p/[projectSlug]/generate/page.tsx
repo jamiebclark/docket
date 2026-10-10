@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Checklist } from "@/components/ui/Checklist";
@@ -35,7 +36,7 @@ export default async function GeneratePage({ params, searchParams }: Props) {
   const base = `/p/${projectSlug}/generate`;
   const heading = (
     <>
-      <h1 className="text-2xl font-semibold">Generate</h1>
+      <PageHeader title="Generate" description="Draft one post, or a series of related posts, in your brand voice." />
       <FilterTabs
         label="Generation mode"
         tabs={[

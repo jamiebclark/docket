@@ -66,7 +66,7 @@ export function NewProjectForm() {
         }}
         error={errors.slug}
       />
-      <TimeZoneField id="timezone" name="timezone" defaultValue="UTC" value={timezone} onChange={setTimezone} error={errors.timezone} />
+      <TimeZoneField id="timezone" hint="Posting times and the calendar use this zone." name="timezone" defaultValue="UTC" value={timezone} onChange={setTimezone} error={errors.timezone} />
       <button
         type="submit"
         disabled={pending}

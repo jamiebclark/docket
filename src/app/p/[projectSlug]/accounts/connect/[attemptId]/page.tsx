@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -31,7 +32,7 @@ export default async function ConnectChooserPage({ params }: { params: Promise<{
   if (!choice) {
     return (
       <section className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">Connect accounts</h1>
+        <PageHeader title="Connect accounts" description="Choose which accounts to add to this project." />
         <p role="alert">This connection attempt has expired or is not valid. Start again.</p>
         <Link href={`/p/${projectSlug}/accounts`} className="underline">
           Back to accounts
@@ -41,9 +42,9 @@ export default async function ConnectChooserPage({ params }: { params: Promise<{
   }
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Connect {choice.groupDisplayName}</h1>
+      <PageHeader title={`Connect ${choice.groupDisplayName}`} description="Choose which accounts to add to this project." />
       <p className="text-sm text-muted-foreground">
-        Choose what to connect. This choice is available until <LocalTime value={choice.expiresAt} timeZone={scope.project.timezone} />.
+        This choice is available until <LocalTime value={choice.expiresAt} timeZone={scope.project.timezone} />.
       </p>
       {choice.notices.map((n) => (
         <p key={n} role="status" className="text-sm">
