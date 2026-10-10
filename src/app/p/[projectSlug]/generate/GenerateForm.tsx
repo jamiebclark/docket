@@ -25,6 +25,7 @@ import {
 } from "./generate-logic";
 import { controlStyles } from "@/components/ui/controls";
 import { ChoiceField } from "@/components/ui/ChoiceField";
+import { TextareaField } from "@/components/ui/TextareaField";
 import { ActionBar } from "@/components/ui/ActionBar";
 import { AccountPicker } from "@/components/accounts/AccountPicker";
 
@@ -58,30 +59,20 @@ function TextArea(props: {
   required?: boolean;
   onChange: (v: string) => void;
 }) {
-  const hintId = `${props.id}-hint`;
-  const countId = `${props.id}-count`;
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={props.id} className="text-sm font-medium">
-        {props.label}
-      </label>
-      <p id={hintId} className="text-xs text-muted-foreground">
-        {props.hint}
-      </p>
-      <textarea
-        id={props.id}
-        name={props.id}
-        rows={props.rows}
-        required={props.required}
-        value={props.value}
-        aria-describedby={`${hintId} ${countId}`}
-        onChange={(e) => props.onChange(e.target.value)}
-        className={controlStyles}
-      />
-      <p id={countId} className={`text-right text-xs ${props.value.length > props.max ? "text-danger" : "text-muted-foreground"}`}>
-        {counterLabel(props.value.length, props.max)}
-      </p>
-    </div>
+    <TextareaField
+      id={props.id}
+      name={props.id}
+      label={props.label}
+      hint={props.hint}
+      minRows={props.rows}
+      mono
+      required={props.required}
+      value={props.value}
+      onChange={(e) => props.onChange(e.target.value)}
+      counter={counterLabel(props.value.length, props.max)}
+      counterClassName={`text-right text-xs ${props.value.length > props.max ? "text-danger" : "text-muted-foreground"}`}
+    />
   );
 }
 

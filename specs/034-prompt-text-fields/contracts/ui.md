@@ -42,7 +42,7 @@ in [data-model.md](./data-model.md) §2; the paragraph changes are §4.
 |---|---|
 | Every field has a programmatic name | `<label htmlFor>` at 13 of 13, `sr-only` only where it already was |
 | Every hint and error is announced | one `aria-describedby`, one `aria-live="polite"` region, from the primitive |
-| Tab order is unchanged | the markup order is label, hint, control, counter, error — no focusable element is added |
+| Tab order is unchanged | the markup order is label, hint, `beforeControl` (only the jobs template's chip row), control, counter, error — no new element enters `aria-describedby` |
 | Focus is visible | `controlStyles`' `focus-visible:ring-2` now applies at the voice fields too, which had their own weaker ring |
 | Nothing is conveyed by colour alone | the counter still spells out "`n / limit`" and "too long"; `aria-invalid` carries the invalid state |
 | No scripting | the floor, the ceiling and every label and hint are in the server-rendered markup |

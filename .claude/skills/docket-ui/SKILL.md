@@ -16,8 +16,9 @@ over fancy.** Every screen must be fully usable from the keyboard.
 - Reuse components in `src/components/ui/` before adding new ones (`Button` /
   `buttonStyles()`, `Field`, `Select`, `controlStyles`, `Card`, `PageHeader`,
   `Table`, `Badge`/`StatusBadge`, `Alert`, `EmptyState`, `FilterTabs`,
-  `Dialog`, `Menu`, `Pagination`, `Skeleton`, `Icon`). If you add one, put it
-  there with a short JSDoc comment on its props and list it in the design doc.
+  `Dialog`, `Menu`, `Pagination`, `Skeleton`, `Icon`). Multi-line text uses
+  `TextareaField`, never a raw `<textarea>`. If you add one, put it there with
+  a short JSDoc comment on its props and list it in the design doc.
 - In interactive sessions, delegate UI work to the `docket-ui-designer` agent.
   Pipeline phases cannot spawn agents, so they follow this skill and the design
   doc directly.

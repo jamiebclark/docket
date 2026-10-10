@@ -1365,3 +1365,39 @@ Walked every empty route as an owner and an editor. Editors are told who to ask 
 - **No `docker-compose.yml`, env, schema or dependency change.**
 
 **Open item (needs a human):** the sandbox refused writes to `.claude/skills/docket-ui/SKILL.md`. Make this edit: in the "Reuse components" list, add `SetupNotice` after `EmptyState`, and add the sentence "Prerequisite gates (you can't do this yet) use `SetupNotice`; `Checklist` is for progress lists only." This supersedes the "prerequisite lists use `Checklist`" wording owed from 028/029.
+
+## 034 — Auto-growing, monospace prompt and instruction fields (2026-10-10)
+
+- **`Example N` classification contradiction (R12).** The voice editor's `Example N` field renders mono per
+  FR-018, even though an example post is post copy and FR-019's own rule would call for proportional. Kept as
+  specified rather than silently reclassified, because the voice editor's five textareas share one wrapper and
+  splitting it for one field would re-introduce the per-site divergence this entry exists to remove. A later
+  review can revisit this as a decision, not an oversight.
+- **`PostingInstructionsForm`'s hint id changes `-help` → `-hint` (R8).** Nothing in the test suite asserts
+  `-help` for that field. `TextareaField` keeps `Field`'s `aria-describedby` order
+  (`[hint, counter, errorId].filter(Boolean).join(" ")`), which is also why the voice fields' describedby grows
+  from `"…-hint"` to `"…-hint …-error"` (FR-041) — the error id is always present, exactly as it is on `Field`.
+- **Supporting-copy rule (R13).** A paragraph drops to `text-xs text-muted-foreground` only when it is inside a
+  form or field group, explains a field/group/list, and the reader never typed or generated it. Labels, control
+  text, typed/saved/generated values, dialog body copy, anything with `role="alert"`/`"status"`/`"note"`, and
+  `PageHeader` descriptions/table typography/headings/`loading.tsx` stay at their current size.
+- **Two accepted visual changes (R14).** The voice editor's five textareas lose their private `box` styling and
+  gain the shared `controlStyles` chrome (hover border, focus ring, `aria-invalid`/disabled states) — the
+  divergence this entry exists to end. Six fields (`Composer` ×2, `SeriesPlanEditor`, `MediaEditDialog`,
+  `TryItPanel`, `MediaPicker`) had no `aria-describedby` before and now gain the reserved error line, adding
+  16 px under each.
+- **No `docker-compose.yml`, env, schema or dependency change.**
+- **Review remediation (F1–F3).** `TextareaField`'s scripted fallback now releases `style.height` (sets it to
+  `"auto"`) before reading `scrollHeight` in `resize()`, so a shrink is measured from content rather than the
+  previous clamp (F1). The composer's post text now forces `!text-base`, so it actually renders at the 16 px
+  `docs/design-system.md` §4 prescribes for long-form text and `ROW_REM_COMPOSER`'s floor/ceiling are correct
+  against that real size, rather than silently computing bounds for a 14 px row; the now-dead `min-h-40` is
+  removed (F2, F6). `JobForm`'s `{{field}}` chip row moved back out from inside the hint paragraph onto its own
+  `beforeControl` slot in `TextareaField`, rendered after the hint and before the `<textarea>` and excluded from
+  `aria-describedby`, restoring the one-sentence accessible description (F3).
+
+**Open item (needs a human):** T032's browser walk-through (quickstart.md §6) was not run — this execution
+environment has no running `pnpm dev` server and no browser tool. A human needs to sign in, run the
+walk-through table (growth, ceiling/scroll, shrink, saved-value-at-load, the collapsed `<details>`, the
+`Dialog` cases, monospace vs. proportional, read-only full height, the voice screen's caption-size copy,
+keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.

@@ -8,7 +8,7 @@ import { counterText, fetchCheck, groupIssues, isOverLimit, SEVERITY_LABEL, type
 import { approveAction } from "../../../review/actions";
 import { updatePostVariantsAction } from "../../actions";
 import { CHECK_DEBOUNCE_MS, cardCheck, checkInputFor, createDebounce, editsFor, liveCards, type VariantCard } from "./variant-logic";
-import { controlStyles } from "@/components/ui/controls";
+import { TextareaField } from "@/components/ui/TextareaField";
 
 export interface VariantEditorProps {
   slug: string;
@@ -104,22 +104,23 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
             <h3 id={`${id}-title`} className="text-base font-semibold">
               {c.providerName}: {c.accountNames.join(", ")}
             </h3>
-            <label htmlFor={id} className="sr-only">
-              {c.providerName}: {c.accountNames.join(", ")} text
-            </label>
-            <textarea
+            <TextareaField
               id={id}
-              rows={5}
+              label={`${c.providerName}: ${c.accountNames.join(", ")} text`}
+              hideLabel
+              minRows={5}
+              maxRows={20}
               value={c.text}
               readOnly={!canEdit}
-              aria-describedby={`${id}-count`}
               onChange={(e) => edit(c.key, e.target.value)}
-              className={controlStyles}
+              counter={
+                <>
+                  {t ? counterText(t) : ""}
+                  {over ? " (too long)" : ""}
+                </>
+              }
+              counterClassName={`text-right text-xs ${over ? "font-semibold text-danger" : "text-muted-foreground"}`}
             />
-            <p id={`${id}-count`} className={`text-right text-xs ${over ? "font-semibold text-danger" : "text-muted-foreground"}`}>
-              {t ? counterText(t) : ""}
-              {over ? " (too long)" : ""}
-            </p>
             {t
               ? groupIssues(t.issues).map((g) => (
                   <div key={g.severity}>

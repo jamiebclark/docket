@@ -77,7 +77,7 @@ export default async function VoiceHistoryPage({ params, searchParams }: Props) 
               value={Object.entries(c.platformGuidance).map(([k, v]) => `${k}: ${v}`).join("\n")}
             />
             {Object.keys(c.platformGuidance).length > 0 ? (
-              <p className="text-sm">
+              <p className="text-xs text-muted-foreground">
                 Guidance is now set per account.{" "}
                 <Link href={`/p/${projectSlug}/accounts`} className="underline">
                   Go to Accounts

@@ -7,7 +7,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { counterLabel } from "../generate/generate-logic";
 import { rejectAction } from "./actions";
 import { REJECT_NAME_MAX, truncate } from "./review-logic";
-import { controlStyles } from "@/components/ui/controls";
+import { TextareaField } from "@/components/ui/TextareaField";
 
 export const REJECT_REASON_MAX = 500;
 
@@ -39,20 +39,15 @@ export function RejectDialog({ slug, postId, text }: { slug: string; postId: str
         <p className="mb-3 text-sm">
           Reject “{truncate(text, REJECT_NAME_MAX)}”? It stays in Posts as rejected and will not be scheduled.
         </p>
-        <label htmlFor={id} className="text-sm font-medium">
-          Reason (optional)
-        </label>
-        <textarea
+        <TextareaField
           id={id}
-          rows={3}
+          label="Reason (optional)"
+          minRows={3}
+          maxRows={10}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          aria-describedby={`${id}-count`}
-          className={`${controlStyles} mt-1 w-full`}
+          counter={counterLabel(reason.length, REJECT_REASON_MAX)}
         />
-        <p id={`${id}-count`} className="text-right text-xs text-muted-foreground">
-          {counterLabel(reason.length, REJECT_REASON_MAX)}
-        </p>
         {error ? (
           <p role="alert" className="mt-2 text-sm text-danger">
             Error: {error}

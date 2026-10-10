@@ -17,6 +17,7 @@ import {
 } from "./series-logic";
 import { controlStyles } from "@/components/ui/controls";
 import { ActionBar } from "@/components/ui/ActionBar";
+import { TextareaField } from "@/components/ui/TextareaField";
 
 export interface SeriesPlanEditorProps {
   slug: string;
@@ -54,7 +55,7 @@ export function SeriesPlanEditor({ slug, request, initialAngles, initial }: Seri
       }}
     >
       <h2 className="text-lg font-semibold">Plan</h2>
-      <p className="text-sm text-muted-foreground">Edit, reorder, remove or add angles. One post is written for each, in this order.</p>
+      <p className="text-xs text-muted-foreground">Edit, reorder, remove or add angles. One post is written for each, in this order.</p>
       <ol className="flex flex-col gap-4">
         {angles.map((angle, i) => (
           <li key={i} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
@@ -68,16 +69,15 @@ export function SeriesPlanEditor({ slug, request, initialAngles, initial }: Seri
               onChange={(e) => setAngles((a) => editAngle(a, i, { title: e.target.value }))}
               className={controlStyles}
             />
-            <label htmlFor={`${uid}-description-${i}`} className="text-sm font-medium">
-              Angle {i + 1} description
-            </label>
-            <textarea
+            <TextareaField
               id={`${uid}-description-${i}`}
-              rows={2}
+              label={`Angle ${i + 1} description`}
+              minRows={2}
+              maxRows={10}
+              mono
               value={angle.description}
               maxLength={DESCRIPTION_MAX}
               onChange={(e) => setAngles((a) => editAngle(a, i, { description: e.target.value }))}
-              className={controlStyles}
             />
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" disabled={i === 0 || busy} onClick={() => setAngles((a) => moveAngle(a, i, -1))}>

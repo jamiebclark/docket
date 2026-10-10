@@ -117,6 +117,8 @@ export function TextareaField({
   label: ReactNode;
   hideLabel?: boolean;
   hint?: ReactNode;
+  /** Rendered after the hint and before the control; excluded from aria-describedby (e.g. a chip row). */
+  beforeControl?: ReactNode;
   error?: string;
   /** Counter / limit text between the control and the error line. Gets `${id}-count` and is linked. */
   counter?: ReactNode;
@@ -136,12 +138,14 @@ In this order, inside `<div className="flex flex-col gap-1.5">` — `Field`'s ow
 
 1. `<label htmlFor={id}>` with `labelStyles`, or `sr-only` when `hideLabel`;
 2. `<p id="${id}-hint" className={hintStyles}>` — only when `hint` is set;
-3. `<textarea id={id} rows … style={{ minHeight, maxHeight }} …>`;
-4. `<p id="${id}-count" className={counterClassName ?? "text-right text-xs text-muted-foreground"}>{counter}</p>`
+3. `{beforeControl}` — rendered as-is, only when set; never part of `aria-describedby` (e.g. `JobForm`'s
+   `{{field}}` chip row, which must stay outside the field's accessible description);
+4. `<textarea id={id} rows … style={{ minHeight, maxHeight }} …>`;
+5. `<p id="${id}-count" className={counterClassName ?? "text-right text-xs text-muted-foreground"}>{counter}</p>`
    — only when `counter` is set. The primitive owns the paragraph and its id; `counter` is the text inside it, so
    a caller never nests a `<p>` in a `<p>`. A site whose counter is coloured or aligned differently today passes
    `counterClassName` (only `PostingInstructionsForm`, which is left-aligned);
-5. `<p id="${id}-error" aria-live="polite" className={errorStyles}>` — **always**, so the line is reserved.
+6. `<p id="${id}-error" aria-live="polite" className={errorStyles}>` — **always**, so the line is reserved.
 
 ### Attribute contract
 
@@ -161,6 +165,7 @@ In this order, inside `<div className="flex flex-col gap-1.5">` — `Field`'s ow
 | Passes `name`, `value`, `defaultValue`, `onChange`, `onBlur`, `required`, `readOnly`, `disabled`, `maxLength`, `placeholder` and the ref through untouched | FR-004 |
 | With `field-sizing: content` supported, the component never writes `style.height` | FR-014, R4 |
 | Without it, a layout effect, an `onInput` handler and a one-shot `ResizeObserver` each re-measure through `measureHeight` | FR-011, FR-012, FR-013 |
+| Without it, every re-measure first releases the element's previously assigned `style.height` (sets it to `"auto"`) before reading `scrollHeight`, so a shrink is measured from the content, not from the last clamp | FR-010, FR-038, spec edge case "Shrinking" |
 | A caller's `onInput` still runs; the primitive's handler calls it | FR-004 |
 | `mono` changes the face only; the field stays `text-sm` from `controlStyles`, and the counter is never mono | FR-021 |
 | No scripting: the `rows` attribute, `min-height` and `max-height` are all in the server-rendered markup | FR-015, FR-040 |

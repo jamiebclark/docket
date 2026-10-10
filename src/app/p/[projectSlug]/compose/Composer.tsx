@@ -33,7 +33,8 @@ import {
 import { AddToQueueDialog, PublishNowDialog, ScheduleAtDialog } from "./ScheduleDialogs";
 import { alertStyles } from "@/components/ui/Alert";
 import { cardStyles } from "@/components/ui/Card";
-import { controlStyles, labelStyles } from "@/components/ui/controls";
+import { TextareaField } from "@/components/ui/TextareaField";
+import { ROW_REM_COMPOSER } from "@/components/ui/textarea-sizing";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ActionBar } from "@/components/ui/ActionBar";
 import { AccountPicker } from "@/components/accounts/AccountPicker";
@@ -363,16 +364,16 @@ export function Composer({
 
           <fieldset className={section}>
             <legend className={legend}>Text</legend>
-            <label htmlFor={`${ids}-text`} className={labelStyles}>
-              Post text
-            </label>
-            <textarea
+            <TextareaField
               id={`${ids}-text`}
-              rows={6}
+              label="Post text"
+              minRows={6}
+              maxRows={14}
+              rowHeightRem={ROW_REM_COMPOSER}
               value={baseText}
               readOnly={!canSave}
               onChange={(e) => setBaseText(e.target.value)}
-              className={`${controlStyles} min-h-40 text-base leading-relaxed`}
+              className="!text-base leading-relaxed"
             />
           </fieldset>
 
@@ -410,17 +411,15 @@ export function Composer({
                   <details key={accountId} className="rounded-lg border border-border bg-surface p-3" open={!!overrides[accountId]}>
                     <summary className="cursor-pointer text-sm font-medium">{names[accountId]}</summary>
                     <div className="mt-2 flex flex-col gap-2">
-                      <label htmlFor={`${ids}-ov-${accountId}`} className="text-sm">
-                        Text for {names[accountId]}
-                      </label>
-                      <textarea
+                      <TextareaField
                         id={`${ids}-ov-${accountId}`}
-                        rows={4}
+                        label={`Text for ${names[accountId]}`}
+                        minRows={4}
+                        maxRows={20}
                         value={overrides[accountId] ?? ""}
                         readOnly={!canSave}
                         aria-invalid={over || undefined}
                         onChange={(e) => setOverrides((cur) => ({ ...cur, [accountId]: e.target.value }))}
-                        className={controlStyles}
                       />
                       <div>
                         <Button
@@ -441,7 +440,7 @@ export function Composer({
 
         <fieldset className={`${section} lg:sticky lg:top-[calc(var(--sticky-top)+1.5rem)]`}>
           <legend className={legend}>Preview</legend>
-          {selected.length === 0 ? <p className="text-sm text-muted-foreground">Choose an account to see what it will receive.</p> : null}
+          {selected.length === 0 ? <p className="text-xs text-muted-foreground">Choose an account to see what it will receive.</p> : null}
           <div aria-live="polite" className="flex flex-col gap-3">
             {selected.map((accountId) => {
               const t = byAccount.get(accountId);

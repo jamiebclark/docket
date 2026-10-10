@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import type { MediaView } from "@/server/services/media";
 import { updateMediaAction } from "./actions";
 import { controlStyles } from "@/components/ui/controls";
+import { TextareaField } from "@/components/ui/TextareaField";
 
 export function MediaEditDialog({ slug, item, open, onClose }: { slug: string; item: MediaView; open: boolean; onClose: () => void }) {
   const [alt, setAlt] = useState(item.altText);
@@ -32,19 +33,15 @@ export function MediaEditDialog({ slug, item, open, onClose }: { slug: string; i
           save();
         }}
       >
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`alt-${item.id}`} className="text-sm font-medium">
-            Alt text
-          </label>
-          <textarea
-            id={`alt-${item.id}`}
-            value={alt}
-            maxLength={2000}
-            rows={3}
-            onChange={(e) => setAlt(e.target.value)}
-            className={controlStyles}
-          />
-        </div>
+        <TextareaField
+          id={`alt-${item.id}`}
+          label="Alt text"
+          value={alt}
+          maxLength={2000}
+          minRows={3}
+          maxRows={10}
+          onChange={(e) => setAlt(e.target.value)}
+        />
         <div className="flex flex-col gap-1">
           <label htmlFor={`tags-${item.id}`} className="text-sm font-medium">
             Tags
