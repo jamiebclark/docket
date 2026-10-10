@@ -1337,3 +1337,20 @@ Walked every empty route as an owner and an editor. Editors are told who to ask 
 
 - **Posts with no account** offered "New post" and "Write a post", both to a Compose page that cannot post. Owners now get "Connect an account first", editors "Ask {names} to connect an account first", and the header button waits for an account.
 - **Failures with no posts** drops its "Write a post" button: the page explains what will appear there, and writing is not its job.
+
+## 029 — Terminology, page descriptions and nav order (2026-10-09)
+
+- **Nav order and groups.** Overview first, then Publish (Compose, Calendar, Posts, Review, Failures), Create (Generate, Brand voice, Media, Batch jobs), Project (Accounts, Settings, Activity). Review stays directly above Failures. Slugs and URLs are unchanged. *Why:* order follows the job a person does; Activity is project housekeeping, not publishing.
+- **One name per thing.** "Voice" is "Brand voice" and "Jobs" is "Batch jobs" in the nav, headings and tab titles; the `## Jobs` heading in `docs/generator.md` stays because doc anchors are pinned by a test.
+- **Every project page has a `PageHeader`** with one title and a one-line description; status badges sit beside the title through a small `aside` prop.
+- **Roles have one source**, `src/lib/roles/roles.ts` (editor, admin, owner, with descriptions), used by the members panel, the invite form and the invitations page.
+- **Invite and signup/Invitations copy** use those role names; Voice editor hints are linked to their fields with `aria-describedby`; the posting-slot definition is stated once.
+- **`/p/new`** says what comes next (connect an account, choose when it posts) and the time zone field explains what the zone is for.
+- **Readable target statuses** on the posts list; calendar title shows the project time zone.
+- **No `docker-compose.yml` or env change.**
+
+**Open item (needs a human):** the sandbox refused writes to `.claude/skills/docket-ui/SKILL.md`. Make these edits:
+1. App-shell bullet: replace the nav list with "left nav — Overview first, then Publish (Compose, Calendar, Posts, Review, Failures), Create (Generate, Brand voice, Media, Batch jobs), Project (Accounts, Settings, Activity)".
+2. After the "**populated**." bullet in "States", add: "Empty-state actions use `buttonStyles`; unfiltered empty lists hide their filters; prerequisite lists use `Checklist`; 'ask' copy names owners/admins by display name." (owed from 028)
+3. Add a bullet: "Every route has a one-line `PageHeader` description. Role names and descriptions come from `src/lib/roles/roles.ts`."
+- **Pinned assertion changed (review F1).** The Accounts ordering test in `tests/integration/accounts-ui.test.ts` now looks for the card heading `Posting slots (` rather than the bare words, because the new posting-slot definition mentions them earlier on the page.

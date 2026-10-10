@@ -52,13 +52,13 @@ Posts waiting for a decision appear under Review. Reviewers can approve (singly 
 
 ## Jobs
 
-A job generates one post per item, in the background, so a person can hand the generator many images or spreadsheet rows at once. Start one from **Media** (select images, then "Generate posts") or from **Jobs → New job** (upload a CSV). The Jobs screens show live progress, per-item failures, retry and cancel.
+A job generates one post per item, in the background, so a person can hand the generator many images or spreadsheet rows at once. Start one from **Media** (select images, then "Generate posts") or from **Batch jobs → New batch job from CSV**. The Batch jobs screens show live progress, per-item failures, retry and cancel.
 
 - **Sources.** Media items (pick images, use the current filter, or all unused images) and CSV rows. Each item's fields fill `{{placeholders}}` in the instructions; the values reach the model as marked data, not as instructions.
 - **Runner.** The worker's tick claims due items, runs each with one bounded model call, and saves the post through the same save helper and policies as single posts. A correction retry that cannot fit in the tick is deferred to a later tick without counting an attempt.
 - **Throughput.** At the defaults (worker interval 60 s, `GENERATION_TICK_MAX_ITEMS=2`) about **120 items an hour**, so a 500-item job takes about 4 hours. Raise `GENERATION_TICK_MAX_ITEMS` (1–10) to go faster, within your provider's rate limits. Claims rotate across jobs, so a large job does not starve a small one.
 - **Limits.** 500 items per job; CSV up to 1 MB, UTF-8, 500 data rows, 50,000 characters per row; instructions up to 2,000 characters; 3 automatic attempts for temporary failures (backoff 60 s growing to 15 min). Lasting failures (refused, invalid output, deleted image) are not retried automatically.
-- **Tick budget.** A call needs at least 8 s plus a 3 s save reserve. If `SCHEDULER_TICK_BUDGET_SECONDS` is below 11, no item can start; startup logs it and the Jobs screen says so.
+- **Tick budget.** A call needs at least 8 s plus a 3 s save reserve. If `SCHEDULER_TICK_BUDGET_SECONDS` is below 11, no item can start; startup logs it and the Batch jobs screen says so.
 - **Slot order.** Under "add to queue", slots follow claim order, but two items finishing in the same tick can swap slots.
 - **Template fields.** Media items expose `{{alt_text}}`, `{{tags}}` (comma-separated) and `{{filename}}`. CSV items expose one field per column header.
 - **CSV rules.** The first line is the header. Headers must be non-empty and unique (ignoring case and spaces) and use letters, numbers, spaces, `-` or `_`. Every problem is reported with its file line number ("row" means the line in the file, header = line 1). CSV items are text-only: they attach no image.
