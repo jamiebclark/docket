@@ -87,6 +87,56 @@ describe("slots", () => {
   });
 });
 
+describe("accounts page slot grid", () => {
+  it("renders the week grid in place of the slot table and the add-slot form", async () => {
+    const env = await postsEnv();
+    const a = await env.account();
+    const html = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    const card = html.slice(html.indexOf(`id="account-${a.id}"`));
+    expect(card).not.toContain("<table");
+    expect(card).not.toContain('aria-label="Add a posting slot"');
+    expect(card).toContain(`aria-label="Posting slots for ${a.displayName}"`);
+    expect(card).toContain(`id="account-${a.id}-add-slot"`);
+    expect(card).toContain(">Monday<");
+    expect(card).toContain(">Sunday<");
+  });
+
+  it("gates the grid's editing affordances on slot:manage rather than account:manage, for owner and editor", async () => {
+    const env = await postsEnv();
+    const a = await env.account();
+    const ownerHtml = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    const ownerCard = ownerHtml.slice(ownerHtml.indexOf(`id="account-${a.id}"`));
+    expect(ownerCard).toContain(`id="account-${a.id}-add-slot"`);
+    expect(ownerCard).toMatch(/draggable/);
+
+    const editorHtml = await renderAs(env.editor.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    const editorCard = editorHtml.slice(editorHtml.indexOf(`id="account-${a.id}"`));
+    expect(editorCard).not.toContain(`id="account-${a.id}-add-slot"`);
+    expect(editorCard).not.toMatch(/draggable/);
+    expect(editorCard).not.toContain("<button");
+    expect(editorCard).toContain("09:00");
+    expect(editorCard).toContain("Active");
+  });
+
+  it("still renders the mock reconnect button and behaviour form, unaffected by the slot grid", async () => {
+    const env = await postsEnv();
+    const a = await env.account({}, false);
+    await flag(env.project.id, a.id, "needs_reauth", "expired");
+    const html = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    const card = html.slice(html.indexOf(`id="account-${a.id}"`));
+    expect(card).toContain(">Reconnect<");
+    expect(card).toContain("Mock behaviour");
+  });
+});
+
 describe("credentials connect section", () => {
   it("lists Bluesky as credential-connectable with its declared fields, and nothing secret", async () => {
     const env = await postsEnv();

@@ -269,6 +269,7 @@ full width, size `lg`.
 | `RelativeTime` | `value`, `timeZone`, `now` | "12 min ago" text; the absolute time and zone are the tooltip and screen-reader text. Pure: `now` is a prop. Used by the bell panel and the notifications list. |
 | `NotificationList` | `items`, `now` | Rows of outcome badge, project, platform/account, message and `RelativeTime`; unread rows carry a "New" badge. Shared by the panel and `/notifications`. |
 | `ProblemsCallout` | `scope` | "Problems since you last looked" line on a project's home and Posts; shows only when the count is above zero. |
+| `WeekSlotGrid` | `slots`, `timeZoneLabel`, `canManage`, `label`, `emptyMessage`, `addButtonId`, `onAdd`/`onMove`/`onToggle`/`onDelete` | Seven-day grid for posting slots (Accounts). Click/tap an empty column to place a slot; drag a chip to move it, or use its Move control for a Mon–Sun + time dialog; click a chip to toggle active/paused; its Delete control deletes on one activation with **no confirm dialog** — a deliberate exception to the `danger` rule above, since a slot holds no content and costs one click to re-add (see `docs/decisions.md` 035). Keyboard: add button → `Enter`/`Space` adds at the next free boundary and focuses the new chip; a chip is `Tab`-order body → Move → Delete; the Move control opens a dialog (segmented weekday, then time, then Move/Cancel) and returns focus to the chip on commit or `Escape`/Cancel; Delete moves focus to the next chip or the column's add button. |
 | `Logo`, `LogoMark`, `AuthShell` | — | §2, §6. |
 
 ### Choosing a control for one-of-many

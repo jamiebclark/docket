@@ -11,8 +11,10 @@ belongs to someone else.
 
 ## 2. Add posting slots
 
-A posting slot is a weekly time for one account, for example Tuesdays at 9:00. Add slots on the **Accounts** page.
-**Add to queue** puts a post in the next free slot. **Schedule** and **Publish now** don't need any slots.
+A posting slot is a weekly time for one account, for example Tuesdays at 9:00. On the **Accounts** page, each
+account has a week grid: click an empty spot in a day's column to add a slot there, or drag an existing slot to a
+new day or time. **Add to queue** puts a post in the next free slot. **Schedule** and **Publish now** don't need any
+slots.
 
 ## 3. Write your first post
 

@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { Cell, Row, Table } from "@/components/ui/Table";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
@@ -22,7 +21,9 @@ import { ConnectMockForm } from "./ConnectMockForm";
 import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
 import { PostingInstructionsForm } from "./PostingInstructionsForm";
-import { MockBehaviourForm, ReconnectMockButton, SlotEditor, SlotRowActions } from "./SlotEditor";
+import { MockBehaviourForm, ReconnectMockButton } from "./SlotEditor";
+import { AccountSlotGrid } from "./AccountSlotGrid";
+import type { Weekday } from "@/components/schedule/week-slot-grid-logic";
 import { alertStyles } from "@/components/ui/Alert";
 import { buttonStyles } from "@/components/ui/Button";
 import { Icon, ProviderIcon } from "@/components/ui/Icon";
@@ -30,8 +31,6 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = { title: "Accounts" };
 export const dynamic = "force-dynamic";
-
-const WEEKDAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
 const STATUS: Record<accounts.AccountView["status"], { label: string; tone: "success" | "danger" | "neutral" }> = {
   active: { label: "Connected", tone: "success" },
@@ -67,6 +66,7 @@ export default async function AccountsPage({
     throw error;
   }
   const canManage = scope.can({ account: ["manage"] });
+  const canManageSlots = scope.can({ slot: ["manage"] });
   const isOwner = scope.membership.role === "owner";
   const timeZone = scope.project.timezone;
   const [list, providers] = await Promise.all([accounts.listAccounts(scope), accounts.listConnectableProviders(scope)]);
@@ -127,7 +127,7 @@ export default async function AccountsPage({
       {landing ? (
         <ConnectLanding
           scrollId={landing.target === "slots" ? `account-${landing.account.id}-slots` : `account-${landing.account.id}`}
-          focusSelector={landing.target === "slots" ? `input[name="slot-day-${landing.account.id}"]:checked` : `#account-${landing.account.id}-name`}
+          focusSelector={landing.target === "slots" ? `#account-${landing.account.id}-add-slot` : `#account-${landing.account.id}-name`}
           message={landing.message}
         />
       ) : null}
@@ -240,27 +240,20 @@ export default async function AccountsPage({
                   {landing?.target === "slots" && landing.account.id === account.id ? (
                     <p className={alertStyles("success")}>{landing.message}</p>
                   ) : null}
-                  {rows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No posting slots yet.</p>
-                  ) : (
-                    <Table caption={`Posting slots for ${account.displayName}`} columns={canManage ? ["Day", "Time", "Status", "Actions"] : ["Day", "Time", "Status"]}>
-                      {rows.map((slot) => (
-                        <Row key={slot.id}>
-                          <Cell>{WEEKDAYS[slot.weekday]}</Cell>
-                          <Cell>
-                            {slot.localTime.slice(0, 5)} {timeZone}
-                          </Cell>
-                          <Cell>{slot.paused ? <Badge tone="warning">Paused</Badge> : <Badge>Active</Badge>}</Cell>
-                          {canManage ? (
-                            <Cell>
-                              <SlotRowActions slug={projectSlug} id={slot.id} paused={slot.paused} label={`${WEEKDAYS[slot.weekday]} ${slot.localTime.slice(0, 5)}`} />
-                            </Cell>
-                          ) : null}
-                        </Row>
-                      ))}
-                    </Table>
-                  )}
-                  {canManage ? <SlotEditor slug={projectSlug} accountId={account.id} /> : null}
+                  <AccountSlotGrid
+                    slug={projectSlug}
+                    accountId={account.id}
+                    slots={rows.map((s) => ({ id: s.id, weekday: s.weekday as Weekday, localTime: s.localTime, paused: s.paused }))}
+                    timeZoneLabel={timeZone}
+                    canManage={canManageSlots}
+                    label={`Posting slots for ${account.displayName}`}
+                    emptyMessage={
+                      canManageSlots
+                        ? "No posting slots yet. Click a day to add one."
+                        : `No posting slots yet. Ask ${askManagers(managers, "or")} to add one.`
+                    }
+                    addButtonId={`account-${account.id}-add-slot`}
+                  />
                 </div>
                 <details className="flex flex-col gap-3">
                   <summary className="cursor-pointer rounded-md text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">

@@ -94,6 +94,13 @@ export async function addSlotAction(
   return mutate(slug, (scope) => slots.addSlot(scope, input));
 }
 
+export async function moveSlotAction(
+  slug: string,
+  input: { id: string; weekday: number; localTime: string },
+): Promise<ActionResult<slots.SlotView>> {
+  return mutate(slug, (scope) => slots.moveSlot(scope, input));
+}
+
 export async function setSlotPausedAction(slug: string, input: { id: string; paused: boolean }): Promise<ActionResult<null>> {
   return mutate(slug, async (scope) => {
     await slots.setSlotPaused(scope, input?.id, input?.paused === true);

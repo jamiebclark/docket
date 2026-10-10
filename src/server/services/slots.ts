@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addSlotSchema } from "@/lib/validation/scheduling";
+import { addSlotSchema, moveSlotSchema } from "@/lib/validation/scheduling";
 import { ForbiddenError, NotFoundError } from "../dal/errors";
 import { listAccounts } from "./accounts";
 import type { SlotRow } from "../dal/slots";
@@ -23,6 +23,17 @@ export async function addSlot(scope: ProjectScope, input: unknown): Promise<Slot
     if (!tx.can({ slot: ["manage"] })) throw new ForbiddenError();
     if (!(await tx.accounts.get(accountId))) throw new NotFoundError();
     return tx.slots.insert(accountId, weekday, localTime);
+  });
+}
+
+/** Changes a slot's weekday and time in place. Targets keep their times: nothing reads `slot_id` here. */
+export async function moveSlot(scope: ProjectScope, input: unknown): Promise<SlotView> {
+  const { id, weekday, localTime } = moveSlotSchema.parse(input);
+  if (!scope.can({ slot: ["manage"] })) throw new ForbiddenError();
+  return scope.transaction(async (tx) => {
+    if (!tx.can({ slot: ["manage"] })) throw new ForbiddenError();
+    if (!(await tx.slots.get(id))) throw new NotFoundError();
+    return tx.slots.move(id, weekday, localTime);
   });
 }
 

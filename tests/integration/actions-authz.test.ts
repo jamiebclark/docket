@@ -260,6 +260,7 @@ const CASES: Case[] = [
   { name: "removeAccountAction", manage: true, run: (s, f) => accountActions.removeAccountAction(s, { id: f.accountId }) },
   { name: "accountRemovalImpactAction", run: (s, f) => accountActions.accountRemovalImpactAction(s, { id: f.accountId }) },
   { name: "addSlotAction", manage: true, run: (s, f) => accountActions.addSlotAction(s, { accountId: f.accountId, weekday: 3, localTime: "11:00" }) },
+  { name: "moveSlotAction", manage: true, run: (s, f) => accountActions.moveSlotAction(s, { id: f.slotId, weekday: 4, localTime: "12:30" }) },
   { name: "setSlotPausedAction", manage: true, run: (s, f) => accountActions.setSlotPausedAction(s, { id: f.slotId, paused: true }) },
   { name: "deleteSlotAction", manage: true, run: (s, f) => accountActions.deleteSlotAction(s, { id: f.slotId }) },
 ];

@@ -75,6 +75,11 @@ over fancy.** Every screen must be fully usable from the keyboard.
   zone name). Empty slots render as dashed placeholders per account; a post
   can be dropped onto one, and every drag action has a keyboard equivalent
   (select post → "Move to slot…" menu).
+- Posting slots (Accounts) are edited through `WeekSlotGrid`, a seven-column
+  week grid: click/tap to place, drag or a Move dialog to move, click to
+  toggle active/paused, and a Delete control with no confirm dialog (see
+  `docs/design-system.md` §7). Every drag action has a keyboard equivalent,
+  same as the calendar above.
 - Per-platform character counts in the composer show `used / limit` and turn
   to an error state past the limit, using each provider's own counting rule
   (graphemes for Bluesky, etc.) from provider capabilities — never re-implement
