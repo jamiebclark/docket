@@ -5,6 +5,7 @@ import { generationRequestIdFor, hashBody } from "../../../src/server/api/idempo
 import { defineOperation, OPERATIONS } from "../../../src/server/api/operations";
 import { posts } from "../../../src/server/db/schema";
 import { generateSingle } from "../../../src/server/services/generation/single";
+import { revokeApiKey } from "../../../src/server/services/api-keys";
 import { api, createKey } from "../../helpers/api";
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
@@ -27,7 +28,13 @@ const op = defineOperation({
   idempotencyMode: "generate",
   body: {
     kind: "json",
-    schema: z.object({ voiceProfileId: z.uuid(), brief: z.string().min(1), targetAccountIds: z.array(z.uuid()) }),
+    schema: z.object({
+      voiceProfileId: z.uuid(),
+      brief: z.string().min(1),
+      targetAccountIds: z.array(z.uuid()),
+      externalId: z.string().optional(),
+      sourceKey: z.string().optional(),
+    }),
   },
   async run(scope, { body, requestId, idempotencyRecordId }) {
     const res = await generateSingle(
@@ -65,7 +72,8 @@ async function setup(steps: FakeStep[]) {
   const body = { voiceProfileId: profile.id, brief: "Announce it", targetAccountIds: [account.id] };
   const countPosts = async () =>
     Number((await testDb().select({ n: sql`count(*)` }).from(posts).where(eq(posts.projectId, env.project.id)))[0]!.n);
-  const call = (idem: string) => api("POST", "/test/generate", { key: key.secret, idem, body });
+  const call = (idem: string, extra: Record<string, unknown> = {}, k = key.secret) =>
+    api("POST", "/test/generate", { key: k, idem, body: { ...body, ...extra } });
   return { env, account, key, body, countPosts, call };
 }
 
@@ -131,6 +139,37 @@ describe("idempotent generate", () => {
     expect(llm.requests.length).toBeGreaterThanOrEqual(1);
     expect(llm.requests.length).toBe(calls);
     expect(await t.countPosts()).toBe(0);
+  });
+
+  it("tagged and keyed: a retry replays, a different request on the same id answers from the ledger, and the ledger outlives the key (FR-011, SC-004)", async () => {
+    const t = await setup([]);
+    llm = createFakeLlm([good(t.account.providerKey)]);
+    const first = await t.call("tagged-1", { externalId: "glen-42", sourceKey: "weird-glens" });
+    expect(first.status).toBe(201);
+    expect(llm.requests).toHaveLength(1);
+
+    const replay = await t.call("tagged-1", { externalId: "glen-42", sourceKey: "weird-glens" });
+    expect(replay.headers.get("idempotent-replayed")).toBe("true");
+    expect(replay.json.postId).toBe(first.json.postId);
+    expect(llm.requests).toHaveLength(1);
+
+    const differentRequest = await t.call("tagged-2", { externalId: "glen-42", sourceKey: "weird-glens" });
+    expect(differentRequest.status).toBe(200);
+    expect(differentRequest.json.postId).toBe(first.json.postId);
+    expect(llm.requests).toHaveLength(1);
+
+    const eightDaysLater = new Date(Date.now() + 8 * 24 * 60 * 60_000);
+    const laterCall = await atTime(eightDaysLater, () => t.call("tagged-3", { externalId: "glen-42", sourceKey: "weird-glens" }));
+    expect(laterCall.status).toBe(200);
+    expect(laterCall.json.postId).toBe(first.json.postId);
+
+    await revokeApiKey(t.env.scope, t.key.id);
+    const replacement = await createKey(t.env.scope, ["read", "generate"], { rateLimitPerMinute: 1000 });
+    const fromReplacement = await t.call("tagged-4", { externalId: "glen-42", sourceKey: "weird-glens" }, replacement.secret);
+    expect(fromReplacement.status).toBe(200);
+    expect(fromReplacement.json.postId).toBe(first.json.postId);
+    expect(llm.requests).toHaveLength(1);
+    expect(await t.countPosts()).toBe(1);
   });
 
   it("does not store a timeout (503), so the same key runs again", async () => {

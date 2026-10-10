@@ -7,6 +7,7 @@ import { closeDb, testDb } from "../../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../../helpers/fake-llm";
 import { createVoiceProfile } from "../../../helpers/factories";
 import { setPostingInstructions } from "../../../../src/server/services/accounts";
+import { deletePost } from "../../../../src/server/services/posts";
 import { postsEnv } from "../../../helpers/posts-env";
 
 afterAll(closeDb);
@@ -110,6 +111,33 @@ describe("POST /generate", () => {
     const r = await call({}, undefined, readOnly);
     expect(r.status).toBe(403);
     expect(r.json.error.details).toEqual({ permission: "generate" });
+  });
+
+  it("reports alreadyPosted and the post's source, and 409s once the post is deleted", async () => {
+    const { call, env, key } = await setup();
+    const first = await call({ externalId: "glen-42", sourceKey: "weird-glens" });
+    expect(first.status).toBe(201);
+    expect(first.json.alreadyPosted).toBe(false);
+
+    const read = await api("GET", `/posts/${first.json.post.id}`, { key });
+    expect(read.json.source).toEqual({ key: "weird-glens", externalId: "glen-42" });
+
+    const second = await call({ externalId: "glen-42", sourceKey: "weird-glens" });
+    expect(second.status).toBe(200);
+    expect(second.json.alreadyPosted).toBe(true);
+    expect(second.json.post.id).toBe(first.json.post.id);
+
+    await deletePost(env.scope, first.json.post.id);
+    const third = await call({ externalId: "glen-42", sourceKey: "weird-glens" });
+    expect(third.status).toBe(409);
+    expect(third.json.error).toMatchObject({ code: "conflict", details: { reason: "already_posted_post_deleted" } });
+  });
+
+  it("leaves source null for an untagged post", async () => {
+    const { call, key } = await setup();
+    const r = await call();
+    const read = await api("GET", `/posts/${r.json.post.id}`, { key });
+    expect(read.json.source).toBeNull();
   });
 
   it("groups accounts with different posting instructions and labels problems by group", async () => {

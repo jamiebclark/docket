@@ -136,6 +136,72 @@ describe("open jobs over HTTP", () => {
     expect(r.status).toBe(409);
   });
 
+  it("skips an already-posted item silently and surfaces the skip over the API", async () => {
+    const e = await setup((user) => (user.includes("Widget 1") ? modelOk("One") : modelOk("Other")));
+    const made = await e.create();
+    const jobId = made.json.id as string;
+    const first = await e.add(jobId, [item(1, { externalId: "already-posted" })]);
+    expect(first.status).toBe(201);
+    await api("POST", `/jobs/${jobId}/close`, { key: e.key });
+    for (let i = 0; i < 40; i++) {
+      await runTick({ config: { jobMaxItems: 3 } });
+      if ((await e.scope.jobs.get(jobId))?.status === "completed") break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    const second = await e.create();
+    const secondId = second.json.id as string;
+    const added = await e.add(secondId, [item(1, { externalId: "already-posted" }), item(2)]);
+    expect(added.status).toBe(201);
+    expect(added.json).toMatchObject({ added: 1, skippedAlreadyPosted: 1, itemCount: 1 });
+    await api("POST", `/jobs/${secondId}/close`, { key: e.key });
+
+    for (let i = 0; i < 40; i++) {
+      await runTick({ config: { jobMaxItems: 3 } });
+      if ((await e.scope.jobs.get(secondId))?.status === "completed") break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const done = await api("GET", `/jobs/${secondId}`, { key: e.key });
+    expect(done.json.status).toBe("completed");
+    expect(done.json.counts).toMatchObject({ skipped: 0, done: 1 });
+
+    const skippedOnly = await api("GET", `/jobs/${jobId}/items?status=skipped`, { key: e.key });
+    expect(skippedOnly.json.data).toEqual([]);
+  }, 60_000);
+
+  it("ends an item skipped when its id is claimed between ingest and execution, visible on the API", async () => {
+    const e = await setup();
+    const made = await e.create({ source: { kind: "api", fields: ["product", "price"], open: true } });
+    const jobId = made.json.id as string;
+    const added = await e.add(jobId, [item(99, { externalId: "already-there" })]);
+    expect(added.status).toBe(201);
+    const [row] = added.json.items as [{ id: string }];
+
+    const other = await e.scope.posts.insert({ baseText: "Already posted elsewhere" });
+    await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "already-there", postId: other.id, claimedAt: new Date() });
+
+    for (let i = 0; i < 40; i++) {
+      await runTick({ config: { jobMaxItems: 3 } });
+      const refreshed = await api("GET", `/jobs/${jobId}/items/${row.id}`, { key: e.key });
+      if (refreshed.json.status === "skipped") break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const itemRead = await api("GET", `/jobs/${jobId}/items/${row.id}`, { key: e.key });
+    expect(itemRead.json).toMatchObject({
+      status: "skipped",
+      externalId: "already-there",
+      error: null,
+      skipped: { externalId: "already-there", postId: other.id },
+    });
+    expect(typeof itemRead.json.skipped.reason).toBe("string");
+
+    const list = await api("GET", `/jobs/${jobId}/items?status=skipped`, { key: e.key });
+    expect(list.json.data.map((i: { id: string }) => i.id)).toEqual([row.id]);
+
+    const jobRead = await api("GET", `/jobs/${jobId}`, { key: e.key });
+    expect(jobRead.json.counts.skipped).toBe(1);
+  }, 60_000);
+
   it("creates media jobs from unused images and refuses csv", async () => {
     const e = await setup();
     await e.assets(2);

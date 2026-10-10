@@ -47,7 +47,8 @@ export default async function JobPage({ params, searchParams }: Props) {
   const { projectSlug, jobId } = await params;
   const raw = await searchParams;
   const { scope, job } = await load(projectSlug, jobId);
-  const tab = one(raw.status) === "failed" ? "failed" : one(raw.status) === "done" ? "done" : "all";
+  const tab =
+    one(raw.status) === "failed" ? "failed" : one(raw.status) === "done" ? "done" : one(raw.status) === "skipped" ? "skipped" : "all";
   const page = Math.max(1, Number.parseInt(one(raw.page) ?? "1", 10) || 1);
   const { items, total } = await listJobItems(scope, jobId, { page, ...(tab === "all" ? {} : { status: tab }) });
   const tz = scope.project.timezone;
@@ -141,6 +142,7 @@ export default async function JobPage({ params, searchParams }: Props) {
             ["Running", c.running],
             ["Done", c.done],
             ["Failed", c.failed],
+            ["Skipped", c.skipped],
             ["Cancelled", c.cancelled],
           ] as const
         ).map(([label, n]) => (
@@ -166,6 +168,7 @@ export default async function JobPage({ params, searchParams }: Props) {
           { label: "All", href: base, active: tab === "all" },
           { label: "Failed", href: `${base}?status=failed`, active: tab === "failed" },
           { label: "Done", href: `${base}?status=done`, active: tab === "done" },
+          { label: "Skipped", href: `${base}?status=skipped`, active: tab === "skipped" },
         ]}
       />
       <JobItemsTable slug={projectSlug} jobId={jobId} items={items} canRetry={canRun && job.status !== "cancelled"} />

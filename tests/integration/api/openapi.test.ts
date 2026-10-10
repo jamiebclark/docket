@@ -192,6 +192,28 @@ describe("openapi.json", () => {
     expect(Object.keys(doc().components.schemas)).toEqual(expect.arrayContaining(["ApiActivityEvent", "ApiActivityPage"]));
   });
 
+  it("documents externalId/sourceKey/alreadyPosted/source/skipped and the generate 409 (FR-026)", () => {
+    const generate = operations().find((o) => o.op.operationId === "generatePost")!.op;
+    expect(JSON.stringify(generate)).toContain("externalId");
+    expect(JSON.stringify(generate)).toContain("sourceKey");
+    expect(JSON.stringify(generate)).toContain("alreadyPosted");
+    expect(generate.responses["409"]).toBeTruthy();
+    expect(generate.responses["409"].description).toContain("already posted");
+
+    const post = doc().components.schemas.Post;
+    expect(post.properties.source.description ?? JSON.stringify(post.properties.source)).toBeTruthy();
+    expect(JSON.stringify(post.properties.source)).toContain("externalId");
+
+    const createJob = operations().find((o) => o.op.operationId === "createJob")!.op;
+    expect(JSON.stringify(createJob)).toContain("skippedAlreadyPosted");
+    const addJobItems = operations().find((o) => o.op.operationId === "addJobItems")!.op;
+    expect(JSON.stringify(addJobItems)).toContain("skippedAlreadyPosted");
+
+    const jobItem = doc().components.schemas.JobItem;
+    expect(JSON.stringify(jobItem)).toContain("externalId");
+    expect(JSON.stringify(jobItem.properties.skipped)).toContain("reason");
+  });
+
   it("documents the Recovery operations with request schemas, examples and every 409 reason", () => {
     const ids = ["retryPostTarget", "resolvePostTarget", "retryFailedTargets"];
     const found = operations().filter(({ op }) => ids.includes(op.operationId));

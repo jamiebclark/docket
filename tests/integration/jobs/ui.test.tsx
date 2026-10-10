@@ -151,6 +151,28 @@ describe("Job page", () => {
     expect(find((await jobElement(e, jobId)) as never, AutoRefresh)!.props).toMatchObject({ active: false });
   }, 60_000);
 
+  it("renders a skipped item with a neutral badge, its reason, no failure styling and no retry (FR-025)", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    const { jobId } = await createJob(
+      e.scope,
+      e.input({ source: { kind: "api", fields: ["product"], items: [{ fields: { product: "Widget" }, externalId: "glen-1" }] }, template: "Announce {{product}}." }),
+    );
+    const other = await e.scope.posts.insert({ baseText: "Already posted" });
+    await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "glen-1", postId: other.id, claimedAt: new Date() });
+    for (let i = 0; i < 20; i++) {
+      await runTick({ config: { jobMaxItems: 5 } });
+      if ((await e.scope.jobs.get(jobId))!.status === "completed") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("Skipped");
+    expect(html).not.toContain("Completed with failures");
+    expect(html).not.toContain(">Retry<");
+    expect(html).toMatch(/View post/);
+  }, 30_000);
+
   it("explains that items wait when generation is not configured", async () => {
     const e = await jobsEnv();
     setLlmForTests(createFakeLlm([]));

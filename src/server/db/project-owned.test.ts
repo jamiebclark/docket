@@ -26,4 +26,10 @@ describe("project-owned registry", () => {
       expect(tables).toContain(name);
     }
   });
+
+  it("registers external_item_claims exactly once, scoped by project_id", () => {
+    const hits = projectOwnedTables.filter((t) => t.table === "external_item_claims");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ table: "external_item_claims", scopeColumn: "project_id" });
+  });
 });

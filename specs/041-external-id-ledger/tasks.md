@@ -125,28 +125,28 @@ Single Next.js web app plus worker (the layout of 001–040): `src/`, `tests/`, 
 
 ### Tests for User Story 3
 
-- [ ] T041 [P] [US3] Extend `tests/integration/api/endpoints/generate.test.ts`: `alreadyPosted` on `201` and `200`; `409 conflict` with `details.reason: "already_posted_post_deleted"` after the post is deleted (FR-010); `Post.source` on the read-back (FR-023); `source: null` for an untagged post (AS3.3)
-- [ ] T042 [P] [US3] Extend `tests/integration/api/endpoints/jobs.test.ts`: `JobItem.externalId`, `status: "skipped"`, `skipped.reason`/`.postId`, `error: null`; `?status=skipped` filtering; `JobCounts.skipped` (FR-024)
-- [ ] T043 [P] [US3] Extend `tests/integration/jobs/ui.test.tsx`: a skipped item renders the "Skipped" badge with a neutral tone and its reason in the Detail column, is not styled or counted as a failure, and offers no retry action (FR-025)
-- [ ] T044 [P] [US3] Extend `tests/integration/api/openapi.test.ts`: `externalId`, `sourceKey`, `alreadyPosted`, `source`, `skipped` and the new `409` appear in the generated document with descriptions (FR-026)
-- [ ] T045 [P] [US3] Extend `tests/integration/webhooks/emission.test.ts` (and the relevant sibling in `tests/integration/webhooks/`): a `post.published` body carries `source`, and a `job.finished` body carries `counts.skipped` (F9)
-- [ ] T046 [P] [US3] Extend `tests/integration/api/scope-enforcement.test.ts`: a key for another project sees nothing of this project's ledger; the global scope recorder proves every claim query is project-pinned (FR-012)
-- [ ] T047 [P] [US3] Extend `src/server/db/project-owned.test.ts`: `external_item_claims` is registered exactly once (depends on T005)
-- [ ] T048 [P] [US3] Extend `tests/integration/api/idempotency-generate.test.ts`: the "tagged and keyed" case — a retry of the exact request replays the stored answer, a different request carrying an already-posted id is answered from the ledger; the ledger still holds 8 days later (`atTime` clock) and after the original key is revoked and replaced (FR-011, SC-004)
-- [ ] T049 [P] [US3] Extend `tests/integration/jobs/no-secrets.test.ts` and `tests/integration/generation/no-secrets.test.ts`: no credential appears in the new responses, rows, log lines or views
-- [ ] T050 [P] [US3] Write `tests/integration/docs/external-id.test.ts`: the fenced `http` blocks of the new `docs/n8n.md` section are replayed against the real API and produce the documented statuses and bodies (FR-026; F19 — the existing `n8n-flow` test stops before section 7)
+- [X] T041 [P] [US3] Extend `tests/integration/api/endpoints/generate.test.ts`: `alreadyPosted` on `201` and `200`; `409 conflict` with `details.reason: "already_posted_post_deleted"` after the post is deleted (FR-010); `Post.source` on the read-back (FR-023); `source: null` for an untagged post (AS3.3)
+- [X] T042 [P] [US3] Extend `tests/integration/api/endpoints/jobs.test.ts`: `JobItem.externalId`, `status: "skipped"`, `skipped.reason`/`.postId`, `error: null`; `?status=skipped` filtering; `JobCounts.skipped` (FR-024)
+- [X] T043 [P] [US3] Extend `tests/integration/jobs/ui.test.tsx`: a skipped item renders the "Skipped" badge with a neutral tone and its reason in the Detail column, is not styled or counted as a failure, and offers no retry action (FR-025)
+- [X] T044 [P] [US3] Extend `tests/integration/api/openapi.test.ts`: `externalId`, `sourceKey`, `alreadyPosted`, `source`, `skipped` and the new `409` appear in the generated document with descriptions (FR-026)
+- [X] T045 [P] [US3] Extend `tests/integration/webhooks/emission.test.ts` (and the relevant sibling in `tests/integration/webhooks/`): a `post.published` body carries `source`, and a `job.finished` body carries `counts.skipped` (F9)
+- [X] T046 [P] [US3] Extend `tests/integration/api/scope-enforcement.test.ts`: a key for another project sees nothing of this project's ledger; the global scope recorder proves every claim query is project-pinned (FR-012)
+- [X] T047 [P] [US3] Extend `src/server/db/project-owned.test.ts`: `external_item_claims` is registered exactly once (depends on T005)
+- [X] T048 [P] [US3] Extend `tests/integration/api/idempotency-generate.test.ts`: the "tagged and keyed" case — a retry of the exact request replays the stored answer, a different request carrying an already-posted id is answered from the ledger; the ledger still holds 8 days later (`atTime` clock) and after the original key is revoked and replaced (FR-011, SC-004)
+- [X] T049 [P] [US3] Extend `tests/integration/jobs/no-secrets.test.ts` and `tests/integration/generation/no-secrets.test.ts`: no credential appears in the new responses, rows, log lines or views
+- [X] T050 [P] [US3] Write `tests/integration/docs/external-id.test.ts`: the fenced `http` blocks of the new `docs/n8n.md` section are replayed against the real API and produce the documented statuses and bodies (FR-026; F19 — the existing `n8n-flow` test stops before section 7)
 
 ### Implementation for User Story 3
 
-- [ ] T051 [P] [US3] Add `source: { key: string; externalId: string } | null` to `PostViewInput`/`PostSchema`; resolve it in `loadApiPost` (`src/server/services/views/load.ts`) and `webhooks/emit.ts`'s `postData` via `externalClaims.findByPostId`, added to the existing `Promise.all`; pass it through in `toApiPost` (`src/server/services/views/post.ts`) (D11, F9) (depends on T011, T012, T018)
-- [ ] T052 [P] [US3] Add `externalId: string | null` and `skipped: { externalId, reason, postId } | null` to `JobItemView`/`JobItemSchema`; in `toItemView` (`src/server/services/jobs/read.ts`), fill `skipped` only when `status === "skipped"`, using `alreadyPostedReason` from `src/lib/jobs/skipped.ts` and resolving `postId` via `posts.get(claim.postId)` (null if the post was deleted); map the fields in `toApiJobItem` (depends on T009, T011, T038)
-- [ ] T053 [US3] Add `"externalClaims"` to `EmitRepos` in `src/server/services/webhooks/emit.ts` and ensure `createSchedulingRepos` supplies it (depends on T012, T051)
-- [ ] T054 [P] [US3] Add `skipped: { label: "Skipped", tone: "neutral" }` to `StatusBadge`'s table in `src/components/ui/StatusBadge.tsx` (read the `docket-ui` skill first; FR-025) (depends on T052)
-- [ ] T055 [US3] In `src/app/p/[projectSlug]/jobs/[jobId]/JobItemsTable.tsx`: rename the last-but-one column from `Error` to `Detail`, rendering the error message for a failed item or the skip reason (linking to `skipped.postId` when present) for a skipped item; keep retry limited to `failed` (depends on T052, T054)
-- [ ] T056 [US3] In `src/app/p/[projectSlug]/jobs/[jobId]/page.tsx`: add a `Skipped` counter to the counts row and a `Skipped` tab to `FilterTabs` (depends on T052)
-- [ ] T057 [US3] Add `externalId`/`sourceKey`/`alreadyPosted`/`source`/`skipped` descriptions (`.meta({ description, example })`) and extend `generatePost`/`createJob`/`addJobItems` operation descriptions in the OpenAPI generation (`src/server/api/operations/openapi.ts`) (FR-026) (depends on T024, T040, T051, T052)
-- [ ] T058 [US3] Write the "9. Post each record once" section of `docs/n8n.md`: how to tag submissions, what a duplicate answer looks like, which failures leave an id re-submittable, and that a deleted post does not free its id (FR-026) (depends on T050)
-- [ ] T059 [P] [US3] Add the skipped item state to `docs/generator.md` § Jobs
+- [X] T051 [P] [US3] Add `source: { key: string; externalId: string } | null` to `PostViewInput`/`PostSchema`; resolve it in `loadApiPost` (`src/server/services/views/load.ts`) and `webhooks/emit.ts`'s `postData` via `externalClaims.findByPostId`, added to the existing `Promise.all`; pass it through in `toApiPost` (`src/server/services/views/post.ts`) (D11, F9) (depends on T011, T012, T018)
+- [X] T052 [P] [US3] Add `externalId: string | null` and `skipped: { externalId, reason, postId } | null` to `JobItemView`/`JobItemSchema`; in `toItemView` (`src/server/services/jobs/read.ts`), fill `skipped` only when `status === "skipped"`, using `alreadyPostedReason` from `src/lib/jobs/skipped.ts` and resolving `postId` via `posts.get(claim.postId)` (null if the post was deleted); map the fields in `toApiJobItem` (depends on T009, T011, T038)
+- [X] T053 [US3] Add `"externalClaims"` to `EmitRepos` in `src/server/services/webhooks/emit.ts` and ensure `createSchedulingRepos` supplies it (depends on T012, T051)
+- [X] T054 [P] [US3] Add `skipped: { label: "Skipped", tone: "neutral" }` to `StatusBadge`'s table in `src/components/ui/StatusBadge.tsx` (read the `docket-ui` skill first; FR-025) (depends on T052)
+- [X] T055 [US3] In `src/app/p/[projectSlug]/jobs/[jobId]/JobItemsTable.tsx`: rename the last-but-one column from `Error` to `Detail`, rendering the error message for a failed item or the skip reason (linking to `skipped.postId` when present) for a skipped item; keep retry limited to `failed` (depends on T052, T054)
+- [X] T056 [US3] In `src/app/p/[projectSlug]/jobs/[jobId]/page.tsx`: add a `Skipped` counter to the counts row and a `Skipped` tab to `FilterTabs` (depends on T052)
+- [X] T057 [US3] Add `externalId`/`sourceKey`/`alreadyPosted`/`source`/`skipped` descriptions (`.meta({ description, example })`) and extend `generatePost`/`createJob`/`addJobItems` operation descriptions in the OpenAPI generation (`src/server/api/operations/openapi.ts`) (FR-026) (depends on T024, T040, T051, T052)
+- [X] T058 [US3] Write the "9. Post each record once" section of `docs/n8n.md`: how to tag submissions, what a duplicate answer looks like, which failures leave an id re-submittable, and that a deleted post does not free its id (FR-026) (depends on T050)
+- [X] T059 [P] [US3] Add the skipped item state to `docs/generator.md` § Jobs
 
 **Checkpoint**: All user stories are independently functional — a post, a job item and the API/webhook/UI surfaces all trace an id back to its record.
 
@@ -156,7 +156,7 @@ Single Next.js web app plus worker (the layout of 001–040): `src/`, `tests/`, 
 
 **Purpose**: Documentation of the decision, and the final whole-suite gate.
 
-- [ ] T060 [P] Add a `## 041` entry to `docs/decisions.md` summarizing the ledger design (per plan.md "Commits, docs and decisions")
+- [X] T060 [P] Add a `## 041` entry to `docs/decisions.md` summarizing the ledger design (per plan.md "Commits, docs and decisions")
 - [ ] T061 Run `pnpm lint && pnpm typecheck && pnpm test`, `pnpm db:check`, and `pnpm build` as the final whole-suite gate (quickstart.md "Running it"; depends on all prior tasks)
 - [ ] T062 Human-owned, needs a signed-in browser session: on the job page of a job with a late-skipped item, confirm the neutral **Skipped** badge, the Detail column's explanation and link to the already-posted post, the Skipped counter, the Skipped filter tab, no retry button, and full keyboard navigability with visible focus (quickstart.md "Manual browser check", constitution § Accessibility). Park this task last — it needs a human at a browser and must never block the implement loop. If the window for this check closes before a human runs it (e.g. the feature is superseded or the UI changes again before anyone looks), mark this task as unachievable here and state why, rather than leaving it open indefinitely.
 
