@@ -89,14 +89,20 @@ export function Dialog({
         if (pressedBackdrop.current && onBackdrop(e)) ref.current?.close();
         pressedBackdrop.current = false;
       }}
-      className={`m-auto w-[calc(100%-2rem)] rounded-2xl border border-border bg-surface p-6 text-foreground shadow-overlay ${
-        size === "lg" ? "max-h-[calc(100dvh-4rem)] max-w-3xl overflow-y-auto" : "max-w-md"
+      className={`m-auto w-[calc(100%-2rem)] rounded-2xl border border-border bg-surface text-foreground shadow-overlay ${
+        size === "lg" ? "max-h-[calc(100dvh-4rem)] max-w-3xl overflow-y-auto p-0" : "max-w-md p-6"
       }`}
     >
-      {/* In a scrolling dialog the header stays put, so Close is always one click away. */}
+      {/*
+       * In a scrolling dialog the header stays put, so Close is always one click away. The padding
+       * lives on the header and the body rather than on the <dialog>: a scroll container with its
+       * own top padding leaves a band above a `top-0` sticky child that content scrolls through, so
+       * cards slid visibly over the title. With no padding on the scrollport the header really does
+       * sit at the top.
+       */}
       <div
-        className={`mb-3 flex items-start justify-between gap-3 ${
-          size === "lg" ? "sticky top-0 z-10 -mx-6 -mt-6 border-b border-border bg-surface px-6 pt-6 pb-3" : ""
+        className={`flex items-start justify-between gap-3 ${
+          size === "lg" ? "sticky top-0 z-10 border-b border-border bg-surface px-6 pt-6 pb-3" : "mb-3"
         }`}
       >
         <h2 id={titleId} className="text-lg font-semibold text-heading">
@@ -111,7 +117,7 @@ export function Dialog({
           <span className="sr-only">Close</span>
         </button>
       </div>
-      {children}
+      {size === "lg" ? <div className="px-6 pt-4 pb-6">{children}</div> : children}
     </dialog>
   );
 }
