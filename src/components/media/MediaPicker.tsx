@@ -11,6 +11,7 @@ import { Dialog } from "../ui/Dialog";
 import { LiveRegion } from "../ui/LiveRegion";
 import { checkStyles, controlStyles, labelStyles } from "@/components/ui/controls";
 import { ChoiceField } from "@/components/ui/ChoiceField";
+import { TextareaField } from "@/components/ui/TextareaField";
 import { FitBadges } from "./FitBadges";
 import { UploadPanel } from "./upload/UploadPanel";
 
@@ -35,13 +36,12 @@ function AltEditor({ slug, item, onSaved }: { slug: string; item: MediaView; onS
   const id = `picker-alt-${item.id}`;
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-xs font-medium">
-        Alt text
-      </label>
-      <textarea
+      <TextareaField
         id={id}
+        label="Alt text"
         value={alt}
-        rows={2}
+        minRows={2}
+        maxRows={8}
         maxLength={2000}
         onChange={(e) => setAlt(e.target.value)}
         onBlur={() => {
@@ -54,7 +54,6 @@ function AltEditor({ slug, item, onSaved }: { slug: string; item: MediaView; onS
             } else setState(res.message);
           });
         }}
-        className={controlStyles}
       />
       <p aria-live="polite" className="min-h-4 text-xs">
         {state}
@@ -95,7 +94,7 @@ export function MediaPicker({
   return (
     <div className="flex flex-col gap-3">
       <LiveRegion message={announce} />
-      {value.length === 0 ? <p className="text-sm">No images attached.</p> : null}
+      {value.length === 0 ? <p className="text-xs text-muted-foreground">No images attached.</p> : null}
       <ol className="flex flex-col gap-3">
         {value.map((m, i) => (
           <li key={m.id} className="flex gap-3 rounded-lg border border-border p-2">

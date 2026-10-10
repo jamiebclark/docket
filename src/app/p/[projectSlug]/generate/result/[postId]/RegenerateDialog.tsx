@@ -7,7 +7,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { INSTRUCTIONS_MAX } from "@/lib/validation/generation";
 import { regenerateAction } from "../../actions";
 import { counterLabel } from "../../generate-logic";
-import { controlStyles } from "@/components/ui/controls";
+import { TextareaField } from "@/components/ui/TextareaField";
 
 export function RegenerateDialog({ slug, postId }: { slug: string; postId: string }) {
   const router = useRouter();
@@ -36,20 +36,16 @@ export function RegenerateDialog({ slug, postId }: { slug: string; postId: strin
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} title="Regenerate this post">
         <p className="mb-3 text-sm">The text is written again from the same brief. Your edits to the text will be replaced.</p>
-        <label htmlFor={id} className="text-sm font-medium">
-          Extra instruction (optional)
-        </label>
-        <textarea
+        <TextareaField
           id={id}
-          rows={3}
+          label="Extra instruction (optional)"
+          minRows={3}
+          maxRows={12}
+          mono
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
-          aria-describedby={`${id}-count`}
-          className={`${controlStyles} mt-1 w-full`}
+          counter={counterLabel(instruction.length, INSTRUCTIONS_MAX)}
         />
-        <p id={`${id}-count`} className="text-right text-xs text-muted-foreground">
-          {counterLabel(instruction.length, INSTRUCTIONS_MAX)}
-        </p>
         {error ? (
           <p role="alert" className="mt-2 text-sm text-danger">
             Error: {error}

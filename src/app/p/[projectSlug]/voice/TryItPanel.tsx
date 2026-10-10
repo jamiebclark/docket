@@ -9,7 +9,8 @@ import type { TryItResult } from "@/server/services/voice";
 import { GROUP_LIMIT, groupLimitMessage, groupTargets } from "@/lib/generation/groups";
 import { tryVoiceAction } from "./actions";
 import type { AccountOption } from "./VoiceEditor";
-import { checkStyles, controlStyles } from "@/components/ui/controls";
+import { checkStyles } from "@/components/ui/controls";
+import { TextareaField } from "@/components/ui/TextareaField";
 
 /** Accounts in list order, as many as fit in one generation. */
 function defaultSelection(accounts: AccountOption[]): string[] {
@@ -95,19 +96,15 @@ export function TryItPanel({ slug, canManage, versionId, draft, accounts, initia
           {groupLimitMessage(groupCount)}
         </p>
       ) : null}
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${uid}-brief`} className="text-sm font-medium">
-          Brief
-        </label>
-        <textarea
-          id={`${uid}-brief`}
-          rows={3}
-          required
-          value={brief}
-          onChange={(e) => setBrief(e.target.value)}
-          className={controlStyles}
-        />
-      </div>
+      <TextareaField
+        id={`${uid}-brief`}
+        label="Brief"
+        minRows={3}
+        maxRows={12}
+        required
+        value={brief}
+        onChange={(e) => setBrief(e.target.value)}
+      />
       <div>
         <Button pending={pending} pendingLabel="Trying…" disabled={pending || chosen.length === 0 || overLimit || brief.trim() === ""} onClick={run}>
           Try it

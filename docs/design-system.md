@@ -117,6 +117,9 @@ text/UI pairs in both themes.
 | Caption, hint, table header | Inter | 12 px | `text-xs` (+ `uppercase tracking-wide` for table headers and nav groups) |
 | Code, slugs, keys | System mono | 12–14 px | `font-mono` |
 
+- The monospace face (`font-mono`, via `TextareaField`'s `mono` prop) applies to
+  a text field holding a prompt, an instruction or a source document — not to
+  post copy or other short prose.
 - `h1`–`h4` get Poppins and `-0.01em` tracking from the base layer; `h1` is
   also coloured `heading`. Utilities still override.
 - Fonts are vendored in `src/app/fonts/` (OFL, licences alongside) and loaded
@@ -237,7 +240,8 @@ full width, size `lg`.
 |---|---|---|
 | `Button`, `buttonStyles()` | `primary`, `cta`, `secondary`, `ghost`, `danger`; sizes `sm`/`md`/`lg`; `pending` + `pendingLabel` | Use `buttonStyles()` on `<Link>` so links and buttons match. **One** `primary` per form; **at most one** `cta` per screen (Schedule / Publish now). `danger` always confirms in a `Dialog` that names the thing. |
 | `Field`, `Select` | `label`, `hint`, `error`; `Select` also `compact` | Errors in an `aria-live` region; invalid styling from `aria-invalid`. `compact` (toolbars) drops the reserved empty error line. Prefer the choice controls below to `Select`. |
-| `controlStyles`, `labelStyles`, `hintStyles`, `errorStyles`, `checkStyles` | — | For raw `<input>`, `<textarea>`, checkboxes (brand `accent-color`). Every checkbox uses `checkStyles`. |
+| `TextareaField` | `label`, `hint`, `error`, `counter`, `mono`, `minRows`, `maxRows`, `hideLabel` | Labelled, auto-growing multi-line text control. Grows with content between `minRows` and `maxRows` (scrolls internally past the ceiling); `mono` for prompts, instructions and source documents; `counter` renders a character-count line linked by `aria-describedby`. Never a raw `<textarea>`. |
+| `controlStyles`, `labelStyles`, `hintStyles`, `errorStyles`, `checkStyles` | — | For raw `<input>`, checkboxes (brand `accent-color`). Every checkbox uses `checkStyles`. |
 | `SegmentedControl` | `name`, `label`, `options` (`value`, `label`, `description`, `disabled`), `layout` `pills`/`cards`, `size`, `hideLabel` | Short exclusive choices as a button row on native radios (arrow keys, form submit, no JS needed). `cards` stacks options with an explanation each. |
 | `Combobox` | `id`, `name`, `label`, `options`, `value`/`defaultValue`, `onChange`, `compact` | Autocomplete for long or growing lists: type to filter (every word, `_ / -` read as spaces), ↑/↓, Enter, Escape restores. Submits through a hidden input. Options render only while open. |
 | `ChoiceField` | `Combobox` props + `autoSubmit` | Lists of unknown length (accounts, voice profiles, tags): ≤ 5 short options → `SegmentedControl`, otherwise `Combobox`. `autoSubmit` applies GET filters on choice; keep a `<noscript>` submit button. |

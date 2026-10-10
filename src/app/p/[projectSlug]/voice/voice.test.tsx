@@ -157,14 +157,15 @@ describe("voice editor", () => {
         expect(out).toContain(text);
         const id = new RegExp(`id="([^"]*-${key}-hint)"`).exec(out)?.[1];
         expect(id).toBeTruthy();
-        expect(out).toMatch(new RegExp(`<textarea[^>]*aria-describedby="${id}"`));
+        const errorId = id?.replace(/-hint$/, "-error");
+        expect(out).toMatch(new RegExp(`<textarea[^>]*aria-describedby="${id} ${errorId}"`));
       }
     }
   });
 
   it("still shows a field error beside its hint", async () => {
-    const { Area } = await import("./VoiceEditor");
-    const out = renderToStaticMarkup(createElement(Area, { id: "x", label: "L", value: "", readOnly: false, hint: "H", error: "Too long", onChange: () => {} }));
+    const { TextareaField } = await import("@/components/ui/TextareaField");
+    const out = renderToStaticMarkup(createElement(TextareaField, { id: "x", label: "L", value: "", readOnly: false, hint: "H", error: "Too long", onChange: () => {} }));
     expect(out).toContain("Too long");
     expect(out).toContain('aria-describedby="x-hint x-error"');
   });

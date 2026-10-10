@@ -9,8 +9,8 @@ import { createJobAction } from "../actions";
 import { ACCOUNTS_HINT, groupLimitNotice, imageWarning, counterLabel, type AccountOption, APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { PolicyPicker, UNREVIEWED_QUEUE_LABEL, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
-import { controlStyles } from "@/components/ui/controls";
 import { ChoiceField } from "@/components/ui/ChoiceField";
+import { TextareaField } from "@/components/ui/TextareaField";
 import { ActionBar } from "@/components/ui/ActionBar";
 import { AccountPicker } from "@/components/accounts/AccountPicker";
 
@@ -147,39 +147,36 @@ export function JobForm(props: JobFormProps) {
       />
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${uid}-template`} className="text-sm font-medium">
-          Instructions template
-        </label>
-        <p id={`${uid}-template-hint`} className="text-xs text-muted-foreground">
-          Written once, used for every item. Available fields:
-        </p>
-        <ul className="flex flex-wrap gap-1" aria-label="Available fields">
-          {fields.map((f) => (
-            <li key={f}>
-              <button
-                type="button"
-                onClick={() => insertField(f)}
-                className="rounded-full border border-input px-2 py-0.5 font-mono text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                {`{{${f}}}`}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <textarea
+        <TextareaField
           id={`${uid}-template`}
+          label="Instructions template"
           ref={templateRef}
-          rows={5}
+          minRows={5}
+          maxRows={20}
+          mono
           required
           value={template}
-          aria-describedby={`${uid}-template-hint ${uid}-template-count`}
+          hint="Written once, used for every item. Available fields:"
+          beforeControl={
+            <ul className="flex flex-wrap gap-1" aria-label="Available fields">
+              {fields.map((f) => (
+                <li key={f}>
+                  <button
+                    type="button"
+                    onClick={() => insertField(f)}
+                    className="rounded-full border border-input px-2 py-0.5 font-mono text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {`{{${f}}}`}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          }
           aria-invalid={fieldErrors.template ? true : undefined}
           onChange={(e) => setTemplate(e.target.value)}
-          className={controlStyles}
+          counter={counterLabel(template.length, INSTRUCTIONS_MAX)}
+          counterClassName={`text-right text-xs ${template.length > INSTRUCTIONS_MAX ? "text-danger" : "text-muted-foreground"}`}
         />
-        <p id={`${uid}-template-count`} className={`text-right text-xs ${template.length > INSTRUCTIONS_MAX ? "text-danger" : "text-muted-foreground"}`}>
-          {counterLabel(template.length, INSTRUCTIONS_MAX)}
-        </p>
         {fieldErrors.template ? <p className={red}>{fieldErrors.template}</p> : null}
         {unknown.map((name) => (
           <p key={name} role="note" className={red}>

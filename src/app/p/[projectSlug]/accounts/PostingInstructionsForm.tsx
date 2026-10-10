@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { normaliseInstructions, POSTING_INSTRUCTIONS_MAX } from "@/lib/generation/groups";
 import { setPostingInstructionsAction } from "./actions";
-import { controlStyles, errorStyles, hintStyles } from "@/components/ui/controls";
+import { TextareaField } from "@/components/ui/TextareaField";
 
 const HELP =
   "How posts for this account are written: for example where hashtags go and how many, whether to include the link and where, how a post opens. The brand voice still applies.";
@@ -48,30 +48,25 @@ export function PostingInstructionsForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-1" aria-label={`Posting instructions for ${accountName}`}>
-      <label htmlFor={id} className="text-sm font-medium">
-        Posting instructions for {accountName}
-      </label>
-      <textarea
+      <TextareaField
         ref={field}
         id={id}
-        rows={5}
+        label={`Posting instructions for ${accountName}`}
+        hint={HELP}
+        minRows={5}
+        maxRows={20}
+        mono
         value={text}
         onChange={(e) => setText(e.target.value)}
+        error={error}
         aria-invalid={error || tooLong ? true : undefined}
-        aria-describedby={`${id}-help ${id}-count ${id}-error`}
-        className={controlStyles}
+        counter={
+          tooLong
+            ? `${length} / ${POSTING_INSTRUCTIONS_MAX.toLocaleString("en-US")}, too long`
+            : `${length} / ${POSTING_INSTRUCTIONS_MAX.toLocaleString("en-US")}`
+        }
+        counterClassName={`text-xs ${tooLong ? "text-danger" : "text-muted-foreground"}`}
       />
-      <p id={`${id}-help`} className={hintStyles}>
-        {HELP}
-      </p>
-      <p id={`${id}-count`} className={`text-xs ${tooLong ? "text-danger" : "text-muted-foreground"}`}>
-        {tooLong
-          ? `${length} / ${POSTING_INSTRUCTIONS_MAX.toLocaleString("en-US")}, too long`
-          : `${length} / ${POSTING_INSTRUCTIONS_MAX.toLocaleString("en-US")}`}
-      </p>
-      <p id={`${id}-error`} aria-live="polite" className={errorStyles}>
-        {error}
-      </p>
       <div className="flex justify-end">
         <Button type="submit" pending={pending} pendingLabel="Saving…">
           Save

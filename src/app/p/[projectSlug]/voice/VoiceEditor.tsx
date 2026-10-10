@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { LiveRegion } from "@/components/ui/LiveRegion";
+import { TextareaField } from "@/components/ui/TextareaField";
 import type { VoiceContent } from "@/lib/validation/voice";
 import { archiveVoiceAction, createVoiceAction, saveVoiceAction, setDefaultVoiceAction } from "./actions";
 import { TryItPanel } from "./TryItPanel";
@@ -39,45 +40,6 @@ export interface VoiceEditorProps {
   accounts: AccountOption[];
   /** Starting state for server rendering and tests. */
   initial?: { conflict?: boolean; message?: string };
-}
-
-const box =
-  "rounded-md border border-input bg-surface px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
-
-export function Area(props: {
-  id: string;
-  label: string;
-  value: string;
-  rows?: number;
-  readOnly: boolean;
-  max?: number;
-  hint?: string;
-  error?: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={props.id} className="text-sm font-medium">
-        {props.label}
-      </label>
-      {props.hint ? (
-        <p id={`${props.id}-hint`} className="text-xs text-muted-foreground">
-          {props.hint}
-        </p>
-      ) : null}
-      <textarea
-        id={props.id}
-        rows={props.rows ?? 3}
-        value={props.value}
-        readOnly={props.readOnly}
-        maxLength={props.max ? props.max * 2 : undefined}
-        onChange={(e) => props.onChange(e.target.value)}
-        aria-describedby={[props.hint ? `${props.id}-hint` : "", props.error ? `${props.id}-error` : ""].filter(Boolean).join(" ") || undefined}
-        className={box}
-      />
-      {props.error ? <p id={`${props.id}-error`} className="text-xs text-danger">{props.error}</p> : null}
-    </div>
-  );
 }
 
 function Group({ legend, children }: { legend: string; children: ReactNode }) {
@@ -184,7 +146,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
             {...(fieldErrors.name ? { error: fieldErrors.name } : {})}
           />
           {profile ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Version {version}
               {isDefault ? " · Default profile" : ""}
             </p>
@@ -192,17 +154,71 @@ export function VoiceEditor(props: VoiceEditorProps) {
         </Group>
 
         <Group legend="Voice">
-          <Area id={`${uid}-tone`} label="Voice and tone" hint="How posts sound, e.g. 'warm, plain-spoken, a little dry'." value={form.voiceAndTone} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("voiceAndTone", v)} {...(fieldErrors["content.voiceAndTone"] ? { error: fieldErrors["content.voiceAndTone"] } : {})} />
-          <Area id={`${uid}-audience`} label="Audience" hint="Who reads this, e.g. 'indie game developers'." value={form.audience} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("audience", v)} />
-          <Area id={`${uid}-topics`} label="Topics and pillars" hint="What posts are about, e.g. 'release notes, behind the scenes, tips'." value={form.topicsAndPillars} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("topicsAndPillars", v)} />
-          <Area id={`${uid}-avoid`} label="Avoid" hint="Words, topics or styles to leave out, e.g. 'hype, exclamation marks, competitor names'." value={form.avoid} readOnly={readOnly} max={FIELD_MAX} onChange={(v) => set("avoid", v)} />
+          <TextareaField
+            id={`${uid}-tone`}
+            label="Voice and tone"
+            hint="How posts sound, e.g. 'warm, plain-spoken, a little dry'."
+            value={form.voiceAndTone}
+            readOnly={readOnly}
+            maxLength={FIELD_MAX * 2}
+            minRows={3}
+            maxRows={20}
+            mono
+            onChange={(e) => set("voiceAndTone", e.target.value)}
+            {...(fieldErrors["content.voiceAndTone"] ? { error: fieldErrors["content.voiceAndTone"] } : {})}
+          />
+          <TextareaField
+            id={`${uid}-audience`}
+            label="Audience"
+            hint="Who reads this, e.g. 'indie game developers'."
+            value={form.audience}
+            readOnly={readOnly}
+            maxLength={FIELD_MAX * 2}
+            minRows={3}
+            maxRows={20}
+            mono
+            onChange={(e) => set("audience", e.target.value)}
+          />
+          <TextareaField
+            id={`${uid}-topics`}
+            label="Topics and pillars"
+            hint="What posts are about, e.g. 'release notes, behind the scenes, tips'."
+            value={form.topicsAndPillars}
+            readOnly={readOnly}
+            maxLength={FIELD_MAX * 2}
+            minRows={3}
+            maxRows={20}
+            mono
+            onChange={(e) => set("topicsAndPillars", e.target.value)}
+          />
+          <TextareaField
+            id={`${uid}-avoid`}
+            label="Avoid"
+            hint="Words, topics or styles to leave out, e.g. 'hype, exclamation marks, competitor names'."
+            value={form.avoid}
+            readOnly={readOnly}
+            maxLength={FIELD_MAX * 2}
+            minRows={3}
+            maxRows={20}
+            mono
+            onChange={(e) => set("avoid", e.target.value)}
+          />
         </Group>
 
         <Group legend="Examples">
           <p className="text-xs text-muted-foreground">Up to {EXAMPLES_MAX} posts that sound right.</p>
           {form.examplePosts.map((text, i) => (
             <div key={i} className="flex flex-col gap-1">
-              <Area id={`${uid}-ex-${i}`} label={`Example ${i + 1}`} value={text} rows={3} readOnly={readOnly} onChange={(v) => set("examplePosts", form.examplePosts.map((x, j) => (j === i ? v : x)))} />
+              <TextareaField
+                id={`${uid}-ex-${i}`}
+                label={`Example ${i + 1}`}
+                value={text}
+                minRows={3}
+                maxRows={20}
+                mono
+                readOnly={readOnly}
+                onChange={(e) => set("examplePosts", form.examplePosts.map((x, j) => (j === i ? e.target.value : x)))}
+              />
               {canManage ? (
                 <Button variant="secondary" className="self-start" onClick={() => set("examplePosts", form.examplePosts.filter((_, j) => j !== i))}>
                   Remove example {i + 1}
@@ -215,7 +231,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
               Add example
             </Button>
           ) : null}
-          {readOnly && form.examplePosts.length === 0 ? <p className="text-sm text-muted-foreground">No examples.</p> : null}
+          {readOnly && form.examplePosts.length === 0 ? <p className="text-xs text-muted-foreground">No examples.</p> : null}
         </Group>
 
         <Group legend="Links and hashtags">
@@ -244,7 +260,7 @@ export function VoiceEditor(props: VoiceEditorProps) {
             onChange={(e) => set("hashtags", e.target.value)}
             onBlur={() => set("hashtags", normaliseHashtags(form.hashtags))}
           />
-          <p className="text-sm">
+          <p className="text-xs text-muted-foreground">
             Per-platform guidance now lives on each account.{" "}
             <Link href={`/p/${slug}/accounts`} className="underline">
               Edit it on Accounts
