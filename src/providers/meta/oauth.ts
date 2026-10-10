@@ -10,12 +10,6 @@ export const META_SCOPES = [
   "pages_read_engagement",
   "instagram_basic",
   "instagram_content_publish",
-  // Meta withholds the Page access token from /me/accounts when the connecting person's access to a
-  // Page comes through a Business Portfolio rather than the Page itself. Such a Page then arrives
-  // without `access_token` and listPageCandidates drops it, so the chooser looks empty. These two
-  // make those Pages connectable; see docs/accounts.md#scheduling-for-someone-elses-accounts.
-  "ads_management",
-  "ads_read",
 ] as const;
 
 export type TokenResult = { ok: true; userToken: string } | { ok: false; message: string };

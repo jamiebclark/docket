@@ -35,30 +35,25 @@ In the [Meta for Developers](https://developers.facebook.com/apps) dashboard cho
 
 Add the **Facebook Login for Business** use case. Docket's "Connect with Facebook" button uses it.
 
-Optionally create a **login configuration** with the seven permissions in step 3, choosing **User access token** as the
+Optionally create a **login configuration** with the five permissions in step 3, choosing **User access token** as the
 token type (not System-user access token). Copy its id into `META_LOGIN_CONFIG_ID`; Docket then sends `config_id` with
 the login request instead of a list of scopes. Leaving it empty is fine: Docket requests the scopes directly.
 
 A configuration replaces Docket's scope list rather than adding to it, so any permission you leave out of it is a
-permission the login will not ask for. Leave `ads_management` and `ads_read` out and Pages owned by a Business
-Portfolio stop being connectable, with no error beyond an empty chooser.
+permission the login will not ask for.
 
 ## 3. Permissions
 
-Docket requests these seven:
+Docket requests these five:
 
 - `pages_show_list`
 - `pages_manage_posts`
 - `pages_read_engagement`
 - `instagram_basic`
 - `instagram_content_publish`
-- `ads_management`
-- `ads_read`
 
-The last two are not used to run ads. Meta requires them before it will hand back a **Page access token** for a Page the
-connecting person reaches through a Business Portfolio (Business Manager) rather than directly on the Page. Without
-them such a Page comes back from `/me/accounts` with no token, Docket drops it, and the chooser looks empty even though
-the Page appeared in Facebook's own login dialog; see
+Docket does **not** request `ads_management` or `ads_read`. Meta requires those when the connecting person's access to
+a Page comes only through a Business Portfolio (Business Manager); see
 [accounts.md](accounts.md#scheduling-for-someone-elses-accounts).
 
 ## 4. App roles
@@ -75,11 +70,6 @@ They also need access to what they connect:
 ## 5. App mode and Standard Access
 
 Do not submit for App Review. Standard Access covers everyone with a role from step 4.
-
-**Unverified:** this is established for the five Page and Instagram permissions. Whether Standard Access also covers
-`ads_management` and `ads_read` for people with an app role has not been confirmed against a live install. If a connect
-fails only for Pages owned by a Business Portfolio, check whether the dashboard is asking for Advanced Access on those
-two before changing anything else.
 
 Meta's documentation says Business apps have no Development/Live mode and use access levels only, but some dashboard
 pages still describe a mode toggle (**unverified** which one you will see). If your dashboard shows a toggle, people with

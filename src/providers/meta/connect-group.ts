@@ -12,7 +12,8 @@ async function candidatesFromUserToken(
   const app = metaApp(cfg);
   const long = await exchangeLongLived(app, cfg, { token: userToken, signal });
   if (!long.ok) return { ok: false, message: long.message };
-  return listPageCandidates(app, { userToken: long.userToken, signal });
+  // appId/appSecret let the listing recover Pages owned by a Business Portfolio (docs/accounts.md).
+  return listPageCandidates(app, { userToken: long.userToken, appId: cfg.appId, appSecret: cfg.appSecret, signal });
 }
 
 export const metaConnectGroup: OAuthConnectGroup = {
@@ -21,7 +22,7 @@ export const metaConnectGroup: OAuthConnectGroup = {
   setupDoc: docsUrl("meta-setup"),
   // Appended to the no-accounts / sign-in banners: name what the login must grant (re-review F1).
   callbackHint:
-    "Facebook must grant pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic, instagram_content_publish, ads_management and ads_read, and at least one Page must be selected in the login dialog. A Page owned by a Business Portfolio needs the two ads permissions: without them Facebook returns no Page token for it.",
+    "Facebook must grant pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic and instagram_content_publish, and at least one Page must be selected in the login dialog.",
   environment: {
     variables: [
       { name: "META_APP_ID", secret: false, required: false },
@@ -47,7 +48,7 @@ export const metaConnectGroup: OAuthConnectGroup = {
   },
   pasteToken: {
     field: { name: "userToken", label: "User access token", secret: true },
-    help: "Generate a user access token in Graph API Explorer with pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic, instagram_content_publish, ads_management and ads_read, then paste it here.",
+    help: "Generate a user access token in Graph API Explorer with pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic and instagram_content_publish, then paste it here.",
     async exchange({ token, signal }) {
       return candidatesFromUserToken(requireMetaConfig(), token, signal);
     },
