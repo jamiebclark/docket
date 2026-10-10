@@ -67,10 +67,15 @@ beforeAll(async () => {
   await writeFile(journalPath, JSON.stringify(journal));
 
   admin = new pg.Pool({ connectionString: urlFor("postgres"), max: 1 });
+  // `drop ... with (force)` terminates whatever is still attached, and a client closing at that
+  // moment reports 57P01. Without a listener pg raises that as an unhandled error and fails the
+  // run even though every test passed, so swallow it: the database is being dropped either way.
+  admin.on("error", () => {});
   await admin.query(`drop database if exists ${q(DB)} with (force)`);
   await admin.query(`create database ${q(DB)}`);
   await runMigrations(urlFor(DB), folder);
   pool = new pg.Pool({ connectionString: urlFor(DB), max: 1 });
+  pool.on("error", () => {});
 
   const a = await project("mig-a");
   await profile(a, "Default", [{ instagram: "Old insta" }, { bluesky: "Short.\r\nNo hashtags.", facebook: "Warm." }], true);
