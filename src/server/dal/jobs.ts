@@ -29,7 +29,7 @@ export type JobPatch = Partial<
   >
 >;
 export type NewJobItem = Pick<typeof generationJobItems.$inferInsert, "position" | "label" | "payload"> &
-  Partial<Pick<typeof generationJobItems.$inferInsert, "mediaAssetId" | "nextAttemptAt">>;
+  Partial<Pick<typeof generationJobItems.$inferInsert, "mediaAssetId" | "nextAttemptAt" | "externalId">>;
 export type JobItemPatch = Partial<
   Pick<
     typeof generationJobItems.$inferInsert,
@@ -52,9 +52,17 @@ export interface JobCounts {
   done: number;
   failed: number;
   cancelled: number;
+  skipped: number;
 }
 
-const emptyCounts = (): JobCounts => ({ queued: 0, running: 0, done: 0, failed: 0, cancelled: 0 });
+const emptyCounts = (): JobCounts => ({
+  queued: 0,
+  running: 0,
+  done: 0,
+  failed: 0,
+  cancelled: 0,
+  skipped: 0,
+});
 
 export interface JobsRepo {
   insert(input: NewJob): Promise<JobRecord>;

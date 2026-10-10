@@ -170,3 +170,40 @@ describe("createJob with a CSV (US4)", () => {
     expect(err?.message).toMatch(/^Row 2: x+: the instructions would be \d+ characters; the limit is/);
   });
 });
+
+describe("createJob with already-posted external ids (US2)", () => {
+  const apiInput = (e: Awaited<ReturnType<typeof setup>>, items: { fields: Record<string, string>; externalId?: string }[], open = false) =>
+    e.input({ source: { kind: "api", fields: ["product"], open, items }, template: "Announce {{product}}." });
+
+  const claim = async (e: Awaited<ReturnType<typeof setup>>, id: string) => {
+    const post = await e.scope.posts.insert({ baseText: "Already posted" });
+    await e.scope.externalClaims.insert({ sourceKey: "default", externalId: id, postId: post.id, claimedAt: new Date() });
+  };
+
+  it("reports skippedAlreadyPosted and writes nothing for a dropped id (FR-016)", async () => {
+    const e = await setup();
+    await claim(e, "old-1");
+    const result = await createJob(e.scope, apiInput(e, [{ fields: { product: "A" }, externalId: "old-1" }, { fields: { product: "B" }, externalId: "new-1" }]));
+    expect(result).toMatchObject({ itemCount: 1, skippedAlreadyPosted: 1 });
+    const items = await e.scope.jobItems.listForJob(result.jobId);
+    expect(items.map((i) => i.externalId)).toEqual(["new-1"]);
+  });
+
+  it("refuses a non-open job whose items are all already posted, naming the count (FR-020, AS2.5)", async () => {
+    const e = await setup();
+    await claim(e, "old-1");
+    await claim(e, "old-2");
+    const err = await messageOf(createJob(e.scope, apiInput(e, [{ fields: { product: "A" }, externalId: "old-1" }, { fields: { product: "B" }, externalId: "old-2" }])));
+    expect(err).toBeInstanceOf(ValidationIssuesError);
+    expect((err as ValidationIssuesError).issues).toEqual([expect.objectContaining({ code: "already_posted", message: "All 2 items were already posted." })]);
+    expect((await e.scope.jobs.list({ limit: 10, offset: 0 })).total).toBe(0);
+  });
+
+  it("an open job with everything skipped is created empty and stays open (AS2.4, edge case)", async () => {
+    const e = await setup();
+    await claim(e, "old-1");
+    const result = await createJob(e.scope, apiInput(e, [{ fields: { product: "A" }, externalId: "old-1" }], true));
+    expect(result).toMatchObject({ itemCount: 0, skippedAlreadyPosted: 1 });
+    expect((await e.scope.jobs.get(result.jobId))!.open).toBe(true);
+  });
+});

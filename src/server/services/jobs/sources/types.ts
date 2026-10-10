@@ -8,6 +8,8 @@ export interface SourceItem {
   mediaAssetId: string | null;
   /** Shown in the items table: "sunset.jpg" or "Row 12: Blue mug". At most 200 characters. */
   label: string;
+  /** The source record's own id, within the job's `sourceKey` namespace. `null` for sources that never claim one. */
+  externalId: string | null;
 }
 
 export interface PreparedSource {

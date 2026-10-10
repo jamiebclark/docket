@@ -82,6 +82,25 @@ export const API_ITEMS_PER_CALL_MAX = 100;
 export const API_FIELDS_MAX = 50;
 export const API_LABEL_MAX = 200;
 
+export const EXTERNAL_ID_MAX = 200;
+export const SOURCE_KEY_MAX = 64;
+export const DEFAULT_SOURCE_KEY = "default";
+
+/** A source record's own id: present, non-blank after trimming, length-capped (FR-004). */
+export const externalIdSchema = z
+  .string()
+  .trim()
+  .min(1, { error: "externalId cannot be blank" })
+  .max(EXTERNAL_ID_MAX, { error: `externalId is at most ${EXTERNAL_ID_MAX} characters` });
+
+/** The source namespace an external id is claimed within (D2). */
+export const sourceKeySchema = z
+  .string()
+  .trim()
+  .min(1, { error: "sourceKey cannot be blank" })
+  .max(SOURCE_KEY_MAX, { error: `sourceKey is at most ${SOURCE_KEY_MAX} characters` })
+  .regex(/^[a-z0-9][a-z0-9._:-]*$/, { error: "sourceKey must start with a lowercase letter or digit, and contain only lowercase letters, digits, '.', '_', ':' or '-'" });
+
 /** A template field name: what `{{ … }}` may hold (1–64 characters, no braces or line breaks). */
 export const fieldNameSchema = z
   .string()
@@ -96,11 +115,13 @@ export const apiSourceSchema = z.object({
     .array(fieldNameSchema)
     .max(API_FIELDS_MAX)
     .refine((f) => new Set(f).size === f.length, { error: "Field names must be unique" }),
+  sourceKey: sourceKeySchema.default(DEFAULT_SOURCE_KEY),
 });
 
 export const apiItemSchema = z.object({
   label: z.string().trim().max(API_LABEL_MAX).optional(),
   mediaId: z.uuid().optional(),
+  externalId: externalIdSchema.optional(),
   fields: z
     .record(z.string(), z.string())
     .refine((v) => Object.values(v).every((s) => s.length <= JOB_ITEM_DATA_MAX), {
@@ -113,6 +134,12 @@ export const apiSourceInputSchema = apiSourceSchema.extend({
   open: z.boolean().optional(),
 });
 export type ApiSourceInput = z.infer<typeof apiSourceInputSchema>;
+
+/** `generation_jobs.source_meta` for an `api`-sourced job: its namespace and whether it stays open (D12). */
+export const apiSourceMetaSchema = z.object({
+  open: z.boolean().default(false),
+  sourceKey: sourceKeySchema.default(DEFAULT_SOURCE_KEY),
+});
 
 export const appendItemsSchema = z.object({
   items: z.array(apiItemSchema).min(1).max(API_ITEMS_PER_CALL_MAX),

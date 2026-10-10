@@ -110,6 +110,7 @@ export const csvSource: ItemSource<{ kind: "csv" }> = {
     const items: SourceItem[] = result.rows.map((row) => ({
       fields: row.values,
       mediaAssetId: null,
+      externalId: null,
       label: clip(`Row ${row.line}: ${row.values[result.columns[0]!] ?? ""}`.trimEnd()),
     }));
     return {

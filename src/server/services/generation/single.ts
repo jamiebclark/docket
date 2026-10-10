@@ -10,6 +10,7 @@ import {
   TARGET_ACCOUNTS_MAX,
   type GenerationRecord,
 } from "@/lib/validation/generation";
+import { DEFAULT_SOURCE_KEY, externalIdSchema, sourceKeySchema } from "@/lib/validation/api";
 import { voiceContentSchema, type VoiceContent } from "@/lib/validation/voice";
 import { POST_MEDIA_MAX } from "@/lib/validation/scheduling";
 import type { AccountRecord } from "../../dal/accounts";
@@ -29,7 +30,9 @@ import type { VariantGroup } from "@/lib/generation/groups";
 export { fillEmptyAltTexts } from "./save";
 import { applyApprovalPolicy, resolvePolicies, type PolicyDecision, type ResolvedPolicies } from "./policy";
 
-export const generateSingleSchema = z.object({
+// Kept separate from `generateSingleSchema` because `.omit()` cannot be used on an object with a check
+// (planSeriesSchema needs to omit requestId/externalId/sourceKey from the unchecked shape).
+export const generateSingleObjectSchema = z.object({
   requestId: z.uuid(),
   voiceProfileId: z.uuid(),
   brief: z
@@ -48,6 +51,14 @@ export const generateSingleSchema = z.object({
   approval: approvalPolicySchema.nullish(),
   scheduling: schedulingPolicySchema.nullish(),
   confirmUnreviewedQueue: z.boolean().default(false),
+  externalId: externalIdSchema.optional(),
+  sourceKey: sourceKeySchema.default(DEFAULT_SOURCE_KEY),
+});
+
+export const generateSingleSchema = generateSingleObjectSchema.check((ctx) => {
+  if (ctx.value.externalId === undefined && ctx.value.sourceKey !== DEFAULT_SOURCE_KEY) {
+    ctx.issues.push({ code: "custom", path: ["sourceKey"], message: "sourceKey needs an externalId", input: ctx.value.sourceKey });
+  }
 });
 export type GenerateSingleInput = z.infer<typeof generateSingleSchema>;
 
@@ -191,6 +202,19 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
   const existing = await scope.posts.findByRequestId(parsed.requestId);
   if (existing) return existingResult(existing);
 
+  if (parsed.externalId) {
+    const claim = await scope.externalClaims.find(parsed.sourceKey, parsed.externalId);
+    if (claim) {
+      const post = await scope.posts.get(claim.postId);
+      if (!post) {
+        throw new ConflictError(`${parsed.externalId} was already posted, and that post was deleted.`, {
+          reason: "already_posted_post_deleted",
+        });
+      }
+      return existingResult(post);
+    }
+  }
+
   const voice = await takeVoice(scope, parsed.voiceProfileId);
   const accounts = await loadAccounts(scope, parsed.targetAccountIds);
   const assets = await loadAssets(scope, parsed.mediaIds);
@@ -251,10 +275,18 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
         createdByUserId: tx.membership.userId,
         createdByApiKeyId: actorColumns(tx).createdByApiKeyId,
         link: { generationRequestId: parsed.requestId },
+        external: parsed.externalId ? { sourceKey: parsed.sourceKey, externalId: parsed.externalId } : undefined,
       });
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
+    if (parsed.externalId) {
+      const claim = await scope.externalClaims.find(parsed.sourceKey, parsed.externalId);
+      if (claim) {
+        const post = await scope.posts.get(claim.postId);
+        if (post) return existingResult(post);
+      }
+    }
     const winner = await scope.posts.findByRequestId(parsed.requestId);
     if (!winner) throw error;
     return existingResult(winner);

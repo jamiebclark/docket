@@ -9,18 +9,19 @@ import { toApiJob } from "../views/job";
 import { toApiPost } from "../views/post";
 
 /** What an emitting transaction must carry: scheduler repos suffice for posts and accounts. */
-export type EmitRepos = Pick<ProjectScope, "webhooks" | "posts" | "targets" | "accounts" | "media">;
+export type EmitRepos = Pick<ProjectScope, "webhooks" | "posts" | "targets" | "accounts" | "media" | "externalClaims">;
 export type EmitSubject = { postId: string } | { jobId: string } | { accountId: string };
 
 async function postData(tx: EmitRepos, postId: string): Promise<{ data: ApiPost; subjectId: string }> {
   const post = await tx.posts.get(postId);
   if (!post) throw new NotFoundError();
   const mediaIds = await tx.posts.listMediaIds(postId);
-  const [targets, accounts, media, timeZone] = await Promise.all([
+  const [targets, accounts, media, timeZone, claim] = await Promise.all([
     tx.targets.listForPost(postId),
     tx.accounts.list(),
     tx.media.getMany(mediaIds),
     tx.webhooks.projectTimeZone(),
+    tx.externalClaims.findByPostId(postId),
   ]);
   const byId = new Map(media.map((m) => [m.id, m]));
   const views = await Promise.all(
@@ -36,6 +37,7 @@ async function postData(tx: EmitRepos, postId: string): Promise<{ data: ApiPost;
     media: views,
     timeZone,
     createdBy: post.createdByApiKeyId ? { type: "api_key", name: "API key" } : null,
+    source: claim ? { key: claim.sourceKey, externalId: claim.externalId } : null,
   });
   return { data, subjectId: postId };
 }

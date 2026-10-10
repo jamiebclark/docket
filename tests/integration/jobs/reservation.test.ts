@@ -62,4 +62,25 @@ describe("reservation (US3)", () => {
     const third = await createJob(e.scope, e.input());
     expect(third.itemCount).toBe(3);
   });
+
+  it("a skipped item's image is left unreserved and another job can take it (FR-018, AS2.6)", async () => {
+    const e = await setup();
+    const [image] = await e.assets(1);
+    const post = await e.scope.posts.insert({ baseText: "Already posted" });
+    await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "old-1", postId: post.id, claimedAt: new Date() });
+
+    const job = await createJob(
+      e.scope,
+      e.input({
+        source: { kind: "api", fields: ["product"], open: true, items: [{ fields: { product: "A" }, externalId: "old-1", mediaId: image!.id }] },
+        template: "Announce {{product}}.",
+      }),
+    );
+    expect(job.itemCount).toBe(0);
+    expect(await e.scope.media.reservedAmong([image!.id])).toEqual([]);
+
+    const other = await createJob(e.scope, e.input({ source: { kind: "media", selection: { mode: "pick", ids: [image!.id] }, includeUsed: false } }));
+    expect(other.itemCount).toBe(1);
+    expect(await e.scope.media.reservedAmong([image!.id])).toEqual([image!.id]);
+  });
 });

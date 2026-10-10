@@ -15,6 +15,8 @@ export interface PostViewInput {
   timeZone: string;
   /** `null` when the creator is unknown (a former member, or no record). */
   createdBy: ApiPost["createdBy"];
+  /** The source record this post came from, or null for an untagged or app-composed post. */
+  source: ApiPost["source"];
 }
 
 export function toApiTarget(
@@ -65,5 +67,6 @@ export function toApiPost(input: PostViewInput): ApiPost {
     createdAt: post.createdAt.toISOString(),
     updatedAt: post.updatedAt.toISOString(),
     targets: input.targets.map((t) => toApiTarget(t, input.accounts.get(t.socialAccountId), input.timeZone, input.media)),
+    source: input.source,
   };
 }

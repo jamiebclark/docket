@@ -11,7 +11,7 @@ import { emitEvent } from "../webhooks/emit";
  */
 export function deriveJobStatus(current: JobStatus, counts: JobCounts, started: boolean, open = false): JobStatus {
   if (current === "cancelled") return "cancelled";
-  const worked = started || counts.running > 0 || counts.done + counts.failed > 0;
+  const worked = started || counts.running > 0 || counts.done + counts.failed + counts.skipped > 0;
   if (counts.queued + counts.running > 0) return worked ? "running" : "queued";
   if (open) return worked ? "running" : "queued";
   return counts.failed > 0 ? "completed_with_failures" : "completed";

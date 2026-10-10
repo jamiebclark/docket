@@ -136,4 +136,40 @@ describe("cancelling a job (SC-007)", () => {
     expect(again).toMatchObject({ changed: false, message: "This job is already cancelled." });
     expect((await e.scope.jobItems.countByStatus(other.jobId)).cancelled).toBe(2);
   }, 60_000);
+
+  it("leaves a skipped item alone, not reverted to cancelled (F6)", async () => {
+    const e = await jobsEnv();
+    const apiInput = (items: { fields: Record<string, string>; externalId?: string }[]) =>
+      e.input({ source: { kind: "api", fields: ["product"], items }, template: "Announce {{product}}." });
+    setLlmForTests(createFakeLlm([modelOk("Only", 1)]));
+    const { jobId } = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-skip" }]));
+    const other = await e.scope.posts.insert({ baseText: "Already posted" });
+    await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "ext-skip", postId: other.id, claimedAt: new Date() });
+    await runTick({ config: { jobMaxItems: 5 } });
+    expect((await e.scope.jobItems.countByStatus(jobId)).skipped).toBe(1);
+
+    await cancelJob(e.scope, jobId);
+    const [item] = await e.scope.jobItems.listForJob(jobId);
+    expect(item).toMatchObject({ status: "skipped" });
+  }, 30_000);
+
+  it("a cancelled or permanently failed item's external id is re-submittable (AS2.8)", async () => {
+    const e = await jobsEnv();
+    const apiInput = (items: { fields: Record<string, string>; externalId?: string; mediaId?: string }[], open = true) =>
+      e.input({ source: { kind: "api", fields: ["product"], items, open }, template: "Announce {{product}}." });
+    setLlmForTests(createFakeLlm([]));
+
+    const cancelled = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-cancel" }]));
+    await cancelJob(e.scope, cancelled.jobId);
+    const resubmitted = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-cancel" }], false));
+    expect(resubmitted).toMatchObject({ itemCount: 1, skippedAlreadyPosted: 0 });
+
+    const img = await e.asset();
+    const failJob = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-fail", mediaId: img.id }], false));
+    await e.scope.media.softDelete(img.id, new Date());
+    await runTick({ config: { jobMaxItems: 5 } });
+    expect((await e.scope.jobItems.countByStatus(failJob.jobId)).failed).toBe(1);
+    const afterFail = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-fail" }], false));
+    expect(afterFail).toMatchObject({ itemCount: 1, skippedAlreadyPosted: 0 });
+  }, 30_000);
 });

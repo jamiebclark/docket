@@ -42,6 +42,8 @@ export async function saveGeneratedPost(
     createdByUserId: string | null;
     createdByApiKeyId?: string | null;
     link: GeneratedPostLink;
+    /** Claims this source record for the new post, in this transaction. Omit for untagged saves. */
+    external?: { sourceKey: string; externalId: string };
   },
 ): Promise<string> {
   const now = await clock.now();
@@ -66,5 +68,6 @@ export async function saveGeneratedPost(
   );
   await fillEmptyAltTexts(tx, args.assets, args.imageAltTexts);
   await applyDerivedStatus(tx, post.id);
+  if (args.external) await tx.externalClaims.insert({ ...args.external, postId: post.id, claimedAt: now });
   return post.id;
 }

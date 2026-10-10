@@ -99,6 +99,13 @@ export const PostSchema = z
     createdAt: iso,
     updatedAt: iso,
     targets: z.array(TargetSchema),
+    source: z
+      .object({
+        key: z.string().meta({ description: "Which source system the id belongs to.", example: "weird-glens" }),
+        externalId: z.string().meta({ description: "The id of this record in the caller's own system.", example: "glen-42" }),
+      })
+      .nullable()
+      .meta({ description: "The source record this post came from; null for an untagged or app-composed post." }),
   })
   .meta({ id: "Post" });
 
@@ -152,6 +159,7 @@ const JobCountsSchema = z.object({
   done: z.number().int(),
   failed: z.number().int(),
   cancelled: z.number().int(),
+  skipped: z.number().int(),
 });
 
 const jobSummaryShape = {
@@ -190,9 +198,14 @@ export const JobItemSchema = z
     label: z.string(),
     status: z.string(),
     attempts: z.number().int(),
+    externalId: z.string().nullable().meta({ description: "The item's source record id, or null when untagged." }),
     mediaId: z.uuid().nullable(),
     post: z.object({ id: z.uuid(), reviewState: z.string() }).nullable(),
     error: z.object({ kind: z.string(), message: z.string() }).nullable(),
+    skipped: z
+      .object({ externalId: z.string(), reason: z.string(), postId: z.uuid().nullable() })
+      .nullable()
+      .meta({ description: "Set only when status is skipped: the record that had already been posted." }),
     finishedAt: isoOrNull,
   })
   .meta({ id: "JobItem" });

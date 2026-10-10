@@ -8,6 +8,7 @@ import { createActivityRepo, type ActivityRepo } from "./activity";
 import { createAttemptsRepo, type AttemptsRepo } from "./attempts";
 import { createAuditRepo, type AuditRepo } from "./audit";
 import { createConnectAttemptsRepo, type ConnectAttemptsRepo } from "./connect-attempts";
+import { createExternalClaimsRepo, type ExternalClaimsRepo } from "./external-claims";
 import {
   countRequest,
   createApiKeysRepo,
@@ -128,6 +129,7 @@ export interface ProjectScope {
   readonly apiKeys: ApiKeysRepo;
   readonly idempotency: IdempotencyRepo;
   readonly webhooks: WebhooksRepo;
+  readonly externalClaims: ExternalClaimsRepo;
   /** The caller's own reading position and mute setting; job-runner and API-key scopes throw `ForbiddenError`. */
   readonly notifications: NotificationsRepo;
   readonly projects: {
@@ -187,6 +189,7 @@ export function createSchedulingRepos(exec: Database, projectId: string) {
     attempts: createAttemptsRepo(exec, projectId),
     activity: createActivityRepo(exec, projectId),
     webhooks: createWebhooksRepo(exec, projectId),
+    externalClaims: createExternalClaimsRepo(exec, projectId),
   };
 }
 

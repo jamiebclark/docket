@@ -1,6 +1,8 @@
 // jobs/read: list jobs, one job, and a job's items (contracts/services.md § Read).
 import { z } from "zod";
+import { apiSourceMetaSchema } from "@/lib/validation/api";
 import { jobInstructionsSnapshotSchema } from "@/lib/validation/jobs";
+import { alreadyPostedReason } from "@/lib/jobs/skipped";
 import { getEnv } from "../../env";
 import { NotFoundError } from "../../dal/errors";
 import type { JobCounts, JobItemRecord, JobRecord, JobStatus, JobItemStatus } from "../../dal/jobs";
@@ -99,7 +101,14 @@ export async function listJobs(
     keyNames(scope, rows.map((r) => r.createdByApiKeyId)),
   ]);
   return {
-    items: rows.map((r) => toListItem(r, counts.get(r.id) ?? { queued: 0, running: 0, done: 0, failed: 0, cancelled: 0 }, names, keys)),
+    items: rows.map((r) =>
+      toListItem(
+        r,
+        counts.get(r.id) ?? { queued: 0, running: 0, done: 0, failed: 0, cancelled: 0, skipped: 0 },
+        names,
+        keys,
+      ),
+    ),
     total,
     page,
   };
@@ -164,10 +173,12 @@ export interface JobItemView {
   label: string;
   status: JobItemStatus;
   attemptCount: number;
+  externalId: string | null;
   mediaId: string | null;
   media: { id: string; thumbnailUrl: string | null; altText: string } | null;
   post: { id: string; reviewState: string; status: string } | null;
   error: { kind: ItemErrorKind; message: string } | null;
+  skipped: { externalId: string; reason: string; postId: string | null } | null;
   finishedAt: Date | null;
 }
 
@@ -182,7 +193,7 @@ export async function listJobItems(
       page: z.number().int().min(1).max(10_000).optional(),
       limit: z.number().int().min(1).max(500).optional(),
       offset: z.number().int().min(0).optional(),
-      status: z.enum(["queued", "running", "done", "failed", "cancelled"]).optional(),
+      status: z.enum(["queued", "running", "done", "failed", "cancelled", "skipped"]).optional(),
     })
     .parse(input ?? {});
   const job = await getJobRow(scope, jobId);
@@ -194,24 +205,33 @@ export async function listJobItems(
   const counts = await scope.jobItems.countByStatus(job.id);
   const total = status ? counts[status] : job.itemCount;
 
-  const items = await Promise.all(rows.map((row) => toItemView(scope, row)));
+  const items = await Promise.all(rows.map((row) => toItemView(scope, job, row)));
   return { items, total, page };
 }
 
-async function toItemView(scope: ProjectScope, row: JobItemRecord): Promise<JobItemView> {
+async function toItemView(scope: ProjectScope, job: JobRecord, row: JobItemRecord): Promise<JobItemView> {
   const asset = row.mediaAssetId ? await scope.media.getIncludingDeleted(row.mediaAssetId) : null;
   const view = asset ? await toView(asset) : null;
   const post = await scope.posts.findByJobItemId(row.id);
+  let skipped: JobItemView["skipped"] = null;
+  if (row.status === "skipped" && row.externalId) {
+    const { sourceKey } = apiSourceMetaSchema.parse(job.sourceMeta);
+    const claim = await scope.externalClaims.find(sourceKey, row.externalId);
+    const claimedPost = claim ? await scope.posts.get(claim.postId) : null;
+    skipped = { externalId: row.externalId, reason: alreadyPostedReason(row.externalId), postId: claimedPost ? claimedPost.id : null };
+  }
   return {
     id: row.id,
     position: row.position,
     label: row.label,
     status: row.status,
     attemptCount: row.attemptCount,
+    externalId: row.externalId,
     mediaId: row.mediaAssetId,
     media: view ? { id: view.id, thumbnailUrl: view.thumbnailUrl, altText: view.altText } : null,
     post: post ? { id: post.id, reviewState: post.reviewState, status: post.status } : null,
     error: row.lastErrorKind && row.lastError && row.status !== "done" ? { kind: row.lastErrorKind, message: row.lastError } : null,
+    skipped,
     finishedAt: row.finishedAt,
   };
 }
@@ -224,7 +244,7 @@ export async function getJobItem(scope: ProjectScope, jobId: string, itemId: str
   if (!id.success) throw new NotFoundError();
   const row = await scope.jobItems.get(id.data);
   if (!row || row.jobId !== job.id) throw new NotFoundError();
-  return toItemView(scope, row);
+  return toItemView(scope, job, row);
 }
 
 async function getJobRow(scope: ProjectScope, jobId: string): Promise<JobRecord> {

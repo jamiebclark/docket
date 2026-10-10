@@ -25,11 +25,12 @@ async function creatorOf(scope: ProjectScope, post: PostRecord): Promise<ApiPost
 /** The `Post` shape of the public API, built from the same reads the UI uses. */
 export async function loadApiPost(scope: ProjectScope, postId: string): Promise<ApiPost> {
   const { post, mediaIds } = await getPost(scope, postId);
-  const [targets, accountList, media, createdBy] = await Promise.all([
+  const [targets, accountList, media, createdBy, claim] = await Promise.all([
     scope.targets.listForPost(post.id),
     scope.accounts.list(),
     scope.media.getMany(mediaIds),
     creatorOf(scope, post),
+    scope.externalClaims.findByPostId(post.id),
   ]);
   const byId = new Map(media.map((m) => [m.id, m]));
   const views = await Promise.all(
@@ -45,6 +46,7 @@ export async function loadApiPost(scope: ProjectScope, postId: string): Promise<
     media: views,
     timeZone: scope.project.timezone,
     createdBy,
+    source: claim ? { key: claim.sourceKey, externalId: claim.externalId } : null,
   });
 }
 
