@@ -89,7 +89,7 @@ describe("accounts banner hint", () => {
   it("names the needed Meta permissions when a Meta login found no Pages (re-review F1)", async () => {
     const html = await renderAccounts({ connect: "no_candidates", group: "meta" });
     expect(html).toContain("No accounts were found for this login.");
-    for (const scope of ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "instagram_basic", "instagram_content_publish", "ads_management", "ads_read"]) {
+    for (const scope of ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "instagram_basic", "instagram_content_publish"]) {
       expect(html).toContain(scope);
     }
   });

@@ -24,12 +24,6 @@ describe("dialogUrl", () => {
     expect(u.searchParams.get("response_type")).toBe("code");
     expect(u.toString()).not.toContain(cfg.appSecret);
   });
-  it("asks for the ads scopes a Business Portfolio Page needs for its Page token", () => {
-    const u = new URL(dialogUrl(cfg, { state: "st", redirectUri: "https://x.test/connect/callback" }));
-    const scopes = (u.searchParams.get("scope") ?? "").split(",");
-    expect(scopes).toContain("ads_management");
-    expect(scopes).toContain("ads_read");
-  });
   it("uses config_id instead of scope when set", () => {
     const u = new URL(dialogUrl({ ...cfg, loginConfigId: "777" }, { state: "s", redirectUri: "https://x.test/cb" }));
     expect(u.searchParams.get("config_id")).toBe("777");

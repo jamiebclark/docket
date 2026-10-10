@@ -174,12 +174,27 @@ access. If you lose your role on the Page, or change your Facebook password, the
 The owner does not need a role on your Meta app in this setup. Alternatively, add the owner as a tester on your app, make
 them an admin in the Docket project, and let them connect it themselves.
 
-**Pages in a Business Portfolio (Business Manager).** A Page owned by a Business Portfolio is only connectable when the
-login also grants `ads_management` and `ads_read`; Docket requests both. Meta withholds the Page access token without
-them, and a Page that arrives with no token is dropped, so the chooser comes back empty even though Facebook listed the
-Page in its own login dialog. Having **full control** of the Page is not enough on its own when that control is held
-through the portfolio. (Verified against a portfolio-owned Page: present in Facebook's Page picker, absent from Docket's
-chooser, with the login granting only the five Page and Instagram scopes.)
+**Pages in a Business Portfolio (Business Manager).** A Page owned by a Business Portfolio can fail to connect even
+when everything looks correct. Reproduced on a live install: the Page was listed under **Pages you manage**, the
+connecting person held **full control** of it, and Facebook offered and accepted the Page in its own login dialog — yet
+Docket's chooser came back empty. Facebook returns such a Page from `/me/accounts` without a Page access token, and a
+Page with no token is dropped (`src/providers/meta/candidates.ts`), so the chooser is empty and the banner can only say
+no accounts were found.
+
+**Known not to fix it.** Each of these was tried against that install and the Page still arrived without a token:
+
+- granting `ads_management` and `ads_read` in addition to the five permissions (Meta accepted both under Standard
+  Access, so this is not an App Review problem);
+- adding the Docket app to the Page's Business Portfolio, which makes the portfolio the app's owner;
+- re-running the login with **Edit settings** so the grant was issued fresh rather than reused from cache.
+
+**Still unknown.** Whether `/me/accounts` omits the Page entirely or returns it without `access_token` has not been
+observed directly, and the two call for different fixes. Check with
+`GET /me/accounts?fields=id,name,access_token` in Graph API Explorer before changing anything else.
+
+**What works today.** Pages the connecting person holds directly, outside a Business Portfolio, connect normally with
+the five permissions. If you control the Page, moving it out of the portfolio — or using a Page that was never in one —
+is the only route confirmed to work.
 
 **Threads.** Threads offers no way to let someone else manage an account: the person who logs in during **Connect** is
 the account that gets connected. So the owner must do this step. The simplest way:
