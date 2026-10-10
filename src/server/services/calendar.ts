@@ -43,7 +43,7 @@ export interface CalendarView {
   prev: string;
   next: string;
   today: string;
-  accounts: { id: string; displayName: string; providerName: string; status: string }[];
+  accounts: { id: string; displayName: string; providerKey: string; providerName: string; status: string }[];
   days: CalendarDay[];
 }
 
@@ -171,7 +171,7 @@ export async function getCalendar(scope: ProjectScope, input: unknown = {}): Pro
     prev: prev.toString(),
     next: next.toString(),
     today: today.toString(),
-    accounts: accounts.map((a) => ({ id: a.id, displayName: a.displayName, providerName: a.providerName, status: a.status })),
+    accounts: accounts.map((a) => ({ id: a.id, displayName: a.displayName, providerKey: a.providerKey, providerName: a.providerName, status: a.status })),
     days,
   };
 }

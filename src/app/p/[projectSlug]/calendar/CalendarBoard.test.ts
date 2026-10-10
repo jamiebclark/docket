@@ -26,8 +26,8 @@ const calendar = (view: "month" | "week" = "week"): CalendarView => ({
   next: "2026-10-26",
   today: "2026-10-14",
   accounts: [
-    { id: "a1", displayName: "Main", providerName: "Mock", status: "active" },
-    { id: "a2", displayName: "Side", providerName: "Mock", status: "active" },
+    { id: "a1", displayName: "Main", providerKey: "mock", providerName: "Mock", status: "active" },
+    { id: "a2", displayName: "Side", providerKey: "mock", providerName: "Mock", status: "active" },
   ],
   days: Array.from({ length: 7 }, (_, i) => ({
     date: `2026-10-${19 + i}`,
@@ -59,7 +59,9 @@ describe("CalendarBoard markup", () => {
 
   it("renders an empty slot as a dashed button and a live region", () => {
     const html = render(calendar());
-    expect(html).toContain("Empty slot · Main · 10:00");
+    // The handle no longer sits on the face of the card; it is the accessible name and the hover detail.
+    expect(html).toContain('aria-label="Empty slot · Main · 10:00"');
+    expect(html).toContain(">10:00<");
     expect(html).toContain("border-dashed");
     expect(html).toContain('aria-live="polite"');
   });
