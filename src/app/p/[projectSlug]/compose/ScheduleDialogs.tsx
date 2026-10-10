@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { explicitTimeText } from "@/components/schedule/explicit-time-text";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonStyles } from "@/components/ui/Button";
+import { firstPostCalendarHref } from "@/lib/compose/first-post";
 import { Dialog } from "@/components/ui/Dialog";
 import { formatLocal } from "@/components/ui/LocalTime";
 import { Field } from "@/components/ui/Field";
@@ -33,6 +35,7 @@ export function AddToQueueDialog({
   slug,
   postId,
   timeZone,
+  firstPostDone = true,
   names,
   onQueued,
 }: {
@@ -41,12 +44,14 @@ export function AddToQueueDialog({
   slug: string;
   postId: string;
   timeZone: string;
+  firstPostDone?: boolean;
   /** accountId → display name. */
   names: Record<string, string>;
   onQueued: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [pending, setPending] = useState(false);
+  const [wasFirst, setWasFirst] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -65,6 +70,7 @@ export function AddToQueueDialog({
   }, [open, slug, postId]);
 
   async function confirm(rows: QueueTarget[]) {
+    setWasFirst(firstPostDone === false);
     setPending(true);
     const expected = Object.fromEntries(rows.filter((r) => r.ok && r.scheduledAt).map((r) => [r.targetId, r.scheduledAt!]));
     const res = await addToQueueAction(slug, { postId, expected });
@@ -81,6 +87,7 @@ export function AddToQueueDialog({
       open={open}
       onClose={() => {
         setPhase({ kind: "loading" });
+        setWasFirst(false);
         onClose();
       }}
       title={phase.kind === "done" ? "Added to the queue" : "Add to queue"}
@@ -111,6 +118,7 @@ export function AddToQueueDialog({
         <Button variant="secondary" onClick={onClose}>
           {phase.kind === "done" ? "Close" : "Cancel"}
         </Button>
+        {phase.kind === "done" ? <CalendarLink show={wasFirst} slug={slug} kind="queue" rows={phase.rows} timeZone={timeZone} /> : null}
         {phase.kind === "preview" ? (
           <Button pending={pending} pendingLabel="Adding…" disabled={!anyQueueable} onClick={() => confirm(phase.rows)}>
             Add to queue
@@ -138,6 +146,16 @@ interface Outcome {
   warnings?: { message: string }[];
 }
 
+/** The one-time "See it on the calendar" button: only when this confirm made the first post and something succeeded. */
+export function CalendarLink({ show, slug, kind, rows, timeZone }: { show: boolean; slug: string; kind: "queue" | "schedule" | "now"; rows: readonly { ok: boolean; scheduledAt?: string }[]; timeZone: string }) {
+  if (!show || !rows.some((r) => r.ok)) return null;
+  return (
+    <Link className={buttonStyles({ variant: "primary" })} href={firstPostCalendarHref({ slug, kind, rows, timeZone })}>
+      See it on the calendar
+    </Link>
+  );
+}
+
 function Outcomes({ rows, names, timeZone, verb }: { rows: Outcome[]; names: Record<string, string>; timeZone: string; verb: string }) {
   return (
     <ul className="flex flex-col gap-2">
@@ -163,6 +181,7 @@ export function ScheduleAtDialog({
   slug,
   postId,
   timeZone,
+  firstPostDone = true,
   names,
   accountIds,
   onScheduled,
@@ -172,6 +191,7 @@ export function ScheduleAtDialog({
   slug: string;
   postId: string;
   timeZone: string;
+  firstPostDone?: boolean;
   names: Record<string, string>;
   accountIds: string[];
   onScheduled: () => void;
@@ -183,6 +203,7 @@ export function ScheduleAtDialog({
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState<Outcome[] | null>(null);
+  const [wasFirst, setWasFirst] = useState(false);
 
   useEffect(() => {
     if (!open || !date || !time) return;
@@ -204,6 +225,7 @@ export function ScheduleAtDialog({
 
   async function confirm() {
     if (!preview || preview.inPast) return;
+    setWasFirst(firstPostDone === false);
     setPending(true);
     const res = await scheduleAtAction(slug, { postId, at: preview.instant });
     setPending(false);
@@ -214,6 +236,7 @@ export function ScheduleAtDialog({
 
   function close() {
     setDone(null);
+    setWasFirst(false);
     setPreview(null);
     setError("");
     onClose();
@@ -244,6 +267,7 @@ export function ScheduleAtDialog({
         <Button variant="secondary" onClick={close}>
           {done ? "Close" : "Cancel"}
         </Button>
+        {done ? <CalendarLink show={wasFirst} slug={slug} kind="schedule" rows={done} timeZone={timeZone} /> : null}
         {done ? null : (
           <Button pending={pending} pendingLabel="Scheduling…" disabled={!preview || preview.inPast} onClick={confirm}>
             Schedule
@@ -261,6 +285,7 @@ export function PublishNowDialog({
   slug,
   postId,
   timeZone,
+  firstPostDone = true,
   names,
   accountIds,
   onPublished,
@@ -270,6 +295,7 @@ export function PublishNowDialog({
   slug: string;
   postId: string;
   timeZone: string;
+  firstPostDone?: boolean;
   names: Record<string, string>;
   accountIds: string[];
   onPublished: () => void;
@@ -277,8 +303,10 @@ export function PublishNowDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<Outcome[] | null>(null);
+  const [wasFirst, setWasFirst] = useState(false);
 
   async function confirm() {
+    setWasFirst(firstPostDone === false);
     setPending(true);
     const res = await publishNowAction(slug, { postId });
     setPending(false);
@@ -289,6 +317,7 @@ export function PublishNowDialog({
 
   function close() {
     setDone(null);
+    setWasFirst(false);
     setError("");
     onClose();
   }
@@ -314,6 +343,7 @@ export function PublishNowDialog({
         <Button variant="secondary" onClick={close}>
           {done ? "Close" : "Cancel"}
         </Button>
+        {done ? <CalendarLink show={wasFirst} slug={slug} kind="now" rows={done} timeZone={timeZone} /> : null}
         {done ? null : (
           <Button pending={pending} pendingLabel="Publishing…" onClick={confirm}>
             Publish now

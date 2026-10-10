@@ -1354,3 +1354,14 @@ Walked every empty route as an owner and an editor. Editors are told who to ask 
 2. After the "**populated**." bullet in "States", add: "Empty-state actions use `buttonStyles`; unfiltered empty lists hide their filters; prerequisite lists use `Checklist`; 'ask' copy names owners/admins by display name." (owed from 028)
 3. Add a bullet: "Every route has a one-line `PageHeader` description. Role names and descriptions come from `src/lib/roles/roles.ts`."
 - **Pinned assertion changed (review F1).** The Accounts ordering test in `tests/integration/accounts-ui.test.ts` now looks for the card heading `Posting slots (` rather than the bare words, because the new posting-slot definition mentions them earlier on the page.
+
+## 033 — Accounts restructure and first-post flow (2026-10-09)
+
+- **Navigation, not behaviour (FR-019).** Where the browser lands after a successful connect (the chooser action and the two in-page forms) changed. The callback route's redirects, data, permissions, activity entries and notifications did not. *Why:* success already went to the chooser; only the post-save destination moved.
+- **Intl, not Temporal (research R10).** The first-post calendar link and local-time formatting use `Intl.DateTimeFormat`; Temporal is not relied on. One rule, `countsTowardFirstPost`, serves both the overview checklist and the Composer.
+- **Prerequisite gates use `SetupNotice`**, an `EmptyState` variant; `Checklist` is for progress lists and gained a `footer`.
+- **Not included (FR-062):** dismissible checklist, deep links from activity entries, focus moves for other slot links, a calendar link outside the Composer, and any change to connect data, permissions, activity, notifications or callback targets. No later roadmap entry owns them.
+- **Intentionally changed assertions** in `tests/integration/accounts-ui.test.ts`: `Posting instructions</h4>` is now `Posting instructions · Set`, and the order test expects Posting slots before Posting instructions (instructions moved into a collapsed `<details>` below the slots).
+- **No `docker-compose.yml`, env, schema or dependency change.**
+
+**Open item (needs a human):** the sandbox refused writes to `.claude/skills/docket-ui/SKILL.md`. Make this edit: in the "Reuse components" list, add `SetupNotice` after `EmptyState`, and add the sentence "Prerequisite gates (you can't do this yet) use `SetupNotice`; `Checklist` is for progress lists only." This supersedes the "prerequisite lists use `Checklist`" wording owed from 028/029.

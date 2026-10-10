@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Checklist } from "@/components/ui/Checklist";
+import { SetupNotice } from "@/components/ui/SetupNotice";
 import { PREREQUISITES_TITLE } from "@/lib/roles/prerequisites";
 import { loadPrerequisites } from "../../../generate/prerequisites";
 import { forProject, NotFoundError } from "@/server/dal";
@@ -31,7 +31,7 @@ export default async function CsvJobPage({ params }: Props) {
     <div className="space-y-4">
       <PageHeader title="New batch job from CSV" description="Generate one post for each row of a CSV file." />
       {prerequisites || !form ? (
-        <Checklist title={PREREQUISITES_TITLE} items={prerequisites ?? []} />
+        <SetupNotice title={PREREQUISITES_TITLE} items={prerequisites ?? []} icon="jobs" />
       ) : (
         <CsvJobForm slug={projectSlug} form={form} />
       )}

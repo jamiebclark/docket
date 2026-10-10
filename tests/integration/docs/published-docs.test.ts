@@ -35,6 +35,7 @@ const calls = sourceFiles("src").flatMap((file) =>
 describe("links to the published docs", () => {
   it("builds URLs under the site_url in mkdocs.yml", () => {
     expect(mkdocs).toContain(`site_url: ${DOCS_BASE_URL}`);
+    expect(docsUrl("getting-started")).toBe(`${DOCS_BASE_URL}getting-started/`);
     expect(docsUrl("n8n", "6-verifying-webhook-signatures")).toBe(`${DOCS_BASE_URL}n8n/#6-verifying-webhook-signatures`);
   });
 

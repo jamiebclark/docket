@@ -14,11 +14,18 @@ import { getSchedulerHealth } from "./scheduler-health";
 import { listSlotCounts } from "./slots";
 import { listVoiceProfiles } from "./voice";
 import { managersOf } from "@/lib/roles/names";
-import type { OverviewAccount, OverviewFacts, PostStatusKey, UpcomingPost } from "@/lib/overview/derive";
+import { countsTowardFirstPost, type OverviewAccount, type OverviewFacts, type PostStatusKey, type UpcomingPost } from "@/lib/overview/derive";
 
 export type * from "@/lib/overview/derive";
 
 const UPCOMING_MAX = 5;
+
+/** Read-only: whether any post counts toward the overview's first-post step. Requires view. */
+export async function hasFirstPost(scope: ProjectScope): Promise<boolean> {
+  if (!scope.can({ project: ["view"] })) throw new ForbiddenError();
+  const { needs_decision: _needsDecision, ...counts } = await scope.posts.counts();
+  return countsTowardFirstPost(counts as Partial<Record<PostStatusKey, number>>);
+}
 
 /**
  * Everything the project overview shows, gathered through the existing services (each enforces its own

@@ -11,6 +11,8 @@ import * as accounts from "../../../src/server/services/accounts";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
 import { postsEnv } from "../../helpers/posts-env";
+
+vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 
 const CREATE_SESSION = "/xrpc/com.atproto.server.createSession";

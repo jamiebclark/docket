@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Badge } from "./Badge";
+import { Checklist, checklistStatusText } from "./Checklist";
 import { FilterTabs } from "./FilterTabs";
 import { LiveRegion } from "./LiveRegion";
 import { formatLocal, LocalTime } from "./LocalTime";
@@ -107,5 +108,23 @@ describe("FilterTabs, LocalTime, LiveRegion", () => {
   it("announces politely by default", () => {
     expect(html(createElement(LiveRegion, { message: "Saved" }))).toContain('aria-live="polite"');
     expect(html(createElement(LiveRegion, { message: "Oops", assertive: true }))).toContain('role="alert"');
+  });
+});
+
+describe("Checklist", () => {
+  const items = [{ key: "a", title: "Step", description: "Do it.", status: { kind: "todo" } as const }];
+  it("renders unchanged without a footer and adds one outside the collapsed details", () => {
+    const plain = html(createElement(Checklist, { title: "T", items }));
+    expect(plain).toContain("Step");
+    expect(plain).toContain("To do");
+    expect(html(createElement(Checklist, { title: "T", items, footer: createElement("p", null, "Foot") }))).toBe(
+      plain.replace("</div></section>", "<p>Foot</p></div></section>"),
+    );
+    const folded = html(createElement(Checklist, { title: "T", items, collapsedSummary: "Sum", footer: createElement("p", null, "Foot") }));
+    expect(folded.indexOf("</details>")).toBeLessThan(folded.indexOf("Foot"));
+  });
+  it("words every status", () => {
+    expect(checklistStatusText({ kind: "done" })).toBe("Done");
+    expect(checklistStatusText({ kind: "waiting", on: "Ana" })).toBe("Waiting on Ana");
   });
 });

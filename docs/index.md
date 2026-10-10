@@ -20,6 +20,7 @@ they always match `main`.
 
 | Topic | Page |
 |---|---|
+| A short walk from an empty project to your first post | [Getting started](getting-started.md) |
 | Members, roles and connecting accounts (including other people's) | [Members and accounts](accounts.md) |
 | Voice profiles, the generator, review and batch jobs | [Generator and jobs](generator.md) |
 | The public API, webhooks and rebuilding an n8n flow | [n8n and the public API](n8n.md) |

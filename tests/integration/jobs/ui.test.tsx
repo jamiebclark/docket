@@ -67,6 +67,7 @@ describe("Jobs list", () => {
     expect(html).toContain("New batch job from CSV");
     expect(html).toContain("Choose images in Media");
     expect(html).not.toContain("Before you can generate");
+    expect(html).not.toContain('aria-labelledby="setup-notice-title"');
   });
 
   it("not ready: the checklist replaces the header actions and the empty state (scenario 11)", async () => {
@@ -74,6 +75,8 @@ describe("Jobs list", () => {
     setLlmForTests(null);
     const html = await jobsHtml(e);
     expect(html).toContain("Before you can generate");
+    expect(html).toContain('aria-labelledby="setup-notice-title"');
+    expect(html).toContain("border-dashed");
     expect(html).not.toContain("New batch job from CSV");
     expect(html).not.toContain("No generation jobs yet");
   });
@@ -99,6 +102,8 @@ describe("Jobs list", () => {
     setLlmForTests(null);
     const html = await jobsHtml(e);
     expect(html).toContain("Before you can generate");
+    expect(html).toContain('aria-labelledby="setup-notice-title"');
+    expect(html).toContain("border-dashed");
     expect(html).toContain("Generation jobs");
   });
 

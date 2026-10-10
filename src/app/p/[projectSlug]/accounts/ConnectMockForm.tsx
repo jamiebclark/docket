@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -9,6 +10,7 @@ import { connectMockAction } from "./actions";
 export function ConnectMockForm({ slug }: { slug: string }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const router = useRouter();
   const [pending, start] = useTransition();
 
   function submit(e: React.FormEvent) {
@@ -16,8 +18,10 @@ export function ConnectMockForm({ slug }: { slug: string }) {
     setError("");
     start(async () => {
       const res = await connectMockAction(slug, { displayName: name });
-      if (res.ok) setName("");
-      else setError(res.fieldErrors?.displayName ?? res.message);
+      if (res.ok) {
+        setName("");
+        router.push(res.data.landing);
+      } else setError(res.fieldErrors?.displayName ?? res.message);
     });
   }
 

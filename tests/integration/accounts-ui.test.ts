@@ -230,14 +230,62 @@ describe("posting instructions on the accounts page", () => {
       renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
     );
     expect(html).toContain("<h3");
-    expect(html).toContain("Posting instructions</h4>");
+    expect(html).toContain("Posting instructions · Set");
     expect(html).toContain(`Posting instructions for ${a.displayName}`);
     expect(html).toContain("<textarea");
     expect(html).toContain("One hashtag.");
     expect(html).toContain("12 / 2,000");
     expect(html).toContain("How posts for this account are written");
     expect(html).toContain("Save");
-    expect(html.indexOf("Posting instructions</h4>")).toBeLessThan(html.indexOf("Posting slots ("));
+    expect(html.indexOf("Posting slots (")).toBeLessThan(html.indexOf("Posting instructions ·"));
+  });
+
+  it("orders the card status, slots, instructions, Remove for managers (closed details)", async () => {
+    const env = await postsEnv();
+    const a = await env.account({}, false);
+    const html = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    const name = html.indexOf(`id="account-${a.id}-name"`);
+    const slots = html.indexOf(`id="account-${a.id}-slots"`);
+    const instr = html.indexOf("Posting instructions ·");
+    const remove = html.indexOf("Remove", instr);
+    expect(name).toBeGreaterThan(-1);
+    expect(name).toBeLessThan(slots);
+    expect(slots).toBeLessThan(instr);
+    expect(instr).toBeLessThan(remove);
+    expect(html).toContain("Posting instructions · None");
+    expect(html).toContain(`id="account-${a.id}"`);
+    expect(html).toContain('id="add-account"');
+    expect(html).not.toMatch(/<details[^>]*\sopen/);
+    expect(html.split('id="posting-slots-definition"').length - 1).toBe(1);
+  });
+
+  it("puts the needs-reconnect badge and Reconnect before the slots", async () => {
+    const env = await postsEnv();
+    const a = await env.account({}, false);
+    await flag(env.project.id, a.id, "needs_reauth", "expired");
+    const html = await renderAs(env.owner.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    const slots = html.indexOf(`id="account-${a.id}-slots"`);
+    expect(html.indexOf("Needs reconnecting")).toBeLessThan(slots);
+    expect(html.indexOf("Reconnect")).toBeLessThan(slots);
+  });
+
+  it("editors see no form, Remove, Actions column or mock controls in the card", async () => {
+    const env = await postsEnv();
+    const a = await env.account({}, false);
+    await flag(env.project.id, a.id, "needs_reauth", "expired");
+    const html = await renderAs(env.editor.id, async () =>
+      renderToStaticMarkup(await AccountsPage({ params: Promise.resolve({ projectSlug: env.project.slug }) })),
+    );
+    const card = html.slice(html.indexOf(`id="account-${a.id}"`));
+    expect(card).not.toContain("<form");
+    expect(card).not.toContain("Remove");
+    expect(card).not.toContain("Actions");
+    expect(card).not.toContain("Reconnect");
+    expect(card).toContain(`id="account-${a.id}-slots"`);
   });
 
   it("shows editors read-only text and no form control", async () => {

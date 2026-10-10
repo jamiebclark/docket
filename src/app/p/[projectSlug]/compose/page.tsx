@@ -8,6 +8,7 @@ import { hasActiveSlot } from "@/lib/roles/slots";
 import { askManagers } from "@/lib/roles/names";
 import { listManagers } from "@/server/services/members";
 import { listSlotCounts } from "@/server/services/slots";
+import { hasFirstPost } from "@/server/services/overview";
 import { Composer } from "./Composer";
 
 export const metadata: Metadata = { title: "Compose" };
@@ -29,6 +30,8 @@ export default async function ComposePage({ params }: { params: Promise<{ projec
   const canManageSlots = scope.can({ slot: ["manage"] });
   const managersToAsk =
     canManageAccounts && canManageSlots ? undefined : askManagers(await listManagers(scope), "or");
+  const canSchedule = scope.can({ post: ["schedule"] });
+  const firstPostDone = canSchedule ? await hasFirstPost(scope) : true;
   return (
     <Composer
       slug={projectSlug}
@@ -46,7 +49,8 @@ export default async function ComposePage({ params }: { params: Promise<{ projec
       canManageSlots={canManageSlots}
       managersToAsk={managersToAsk}
       canEdit={scope.can({ post: ["edit"] })}
-      canSchedule={scope.can({ post: ["schedule"] })}
+      canSchedule={canSchedule}
+      firstPostDone={firstPostDone}
       mediaEnabled={getStorage() !== null}
     />
   );

@@ -14,6 +14,8 @@ import { openBannerMessage } from "@/server/services/connect-banner";
 import * as slots from "@/server/services/slots";
 import { askManagers, askOwners } from "@/lib/roles/names";
 import { listManagers } from "@/server/services/members";
+import { parseLanding, landingMessage } from "@/lib/accounts/connect-landing";
+import { ConnectLanding } from "./ConnectLanding";
 import { ConnectGroupSection } from "./ConnectGroupSection";
 import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
@@ -41,7 +43,7 @@ export default async function AccountsPage({
   searchParams,
 }: {
   params: Promise<{ projectSlug: string }>;
-  searchParams?: Promise<{ connect?: string | string[]; group?: string | string[]; notice?: string | string[] }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { projectSlug } = await params;
   const query = await searchParams;
@@ -95,6 +97,17 @@ export default async function AccountsPage({
       unavailable={g.unavailable}
     />
   );
+  // A landing is honoured only for a manager and an account this page lists; anything else renders as no query.
+  const parsedLanding = canManage ? parseLanding(query) : null;
+  const landed = parsedLanding ? list.find((a) => a.id === parsedLanding.accountId) : undefined;
+  const landing =
+    parsedLanding && landed
+      ? {
+          account: landed,
+          target: parsedLanding.connected > 0 ? ("slots" as const) : ("card" as const),
+          message: landingMessage(parsedLanding, landed.displayName),
+        }
+      : null;
   const withSlots = await Promise.all(list.map(async (account) => ({ account, slots: await slots.listSlots(scope, account.id) })));
 
   return (
@@ -111,6 +124,13 @@ export default async function AccountsPage({
           ) : null
         }
       />
+      {landing ? (
+        <ConnectLanding
+          scrollId={landing.target === "slots" ? `account-${landing.account.id}-slots` : `account-${landing.account.id}`}
+          focusSelector={landing.target === "slots" ? `input[name="slot-day-${landing.account.id}"]:checked` : `#account-${landing.account.id}-name`}
+          message={landing.message}
+        />
+      ) : null}
       {banner ? (
         <p role="alert" className={alertStyles("warning")}>
           {banner}
@@ -149,7 +169,11 @@ export default async function AccountsPage({
                 <header className="flex flex-wrap items-center gap-3">
                   <ProviderIcon providerKey={account.providerKey} size={40} />
                   <div className="flex min-w-0 flex-col">
-                    <h3 id={`account-${account.id}-name`} className="text-lg font-semibold">
+                    <h3
+                      id={`account-${account.id}-name`}
+                      tabIndex={landing?.target === "card" && landing.account.id === account.id ? -1 : undefined}
+                      className="text-lg font-semibold"
+                    >
                       {account.displayName}
                     </h3>
                     <span className="text-sm text-muted-foreground">{account.providerName}</span>
@@ -208,46 +232,58 @@ export default async function AccountsPage({
                         </details>
                       ))
                   : null}
-                <h4 className="text-sm font-semibold">Posting instructions</h4>
-                {canManage ? (
-                  <PostingInstructionsForm
-                    slug={projectSlug}
-                    accountId={account.id}
-                    accountName={account.displayName}
-                    initial={account.postingInstructions}
-                  />
-                ) : account.postingInstructions ? (
-                  <p className="whitespace-pre-wrap text-sm">{account.postingInstructions}</p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No posting instructions.</p>
-                )}
-                <h4 id={`account-${account.id}-slots`} className="scroll-mt-[calc(var(--sticky-top)+1rem)] text-sm font-semibold">Posting slots ({timeZone})</h4>
-                {rows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No posting slots yet.</p>
-                ) : (
-                  <Table caption={`Posting slots for ${account.displayName}`} columns={canManage ? ["Day", "Time", "Status", "Actions"] : ["Day", "Time", "Status"]}>
-                    {rows.map((slot) => (
-                      <Row key={slot.id}>
-                        <Cell>{WEEKDAYS[slot.weekday]}</Cell>
-                        <Cell>
-                          {slot.localTime.slice(0, 5)} {timeZone}
-                        </Cell>
-                        <Cell>{slot.paused ? <Badge tone="warning">Paused</Badge> : <Badge>Active</Badge>}</Cell>
-                        {canManage ? (
+                {landing?.target === "card" && landing.account.id === account.id ? (
+                  <p className={alertStyles("success")}>{landing.message}</p>
+                ) : null}
+                <div className="flex flex-col gap-3">
+                  <h4 id={`account-${account.id}-slots`} className="scroll-mt-[calc(var(--sticky-top)+1rem)] text-sm font-semibold">Posting slots ({timeZone})</h4>
+                  {landing?.target === "slots" && landing.account.id === account.id ? (
+                    <p className={alertStyles("success")}>{landing.message}</p>
+                  ) : null}
+                  {rows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No posting slots yet.</p>
+                  ) : (
+                    <Table caption={`Posting slots for ${account.displayName}`} columns={canManage ? ["Day", "Time", "Status", "Actions"] : ["Day", "Time", "Status"]}>
+                      {rows.map((slot) => (
+                        <Row key={slot.id}>
+                          <Cell>{WEEKDAYS[slot.weekday]}</Cell>
                           <Cell>
-                            <SlotRowActions slug={projectSlug} id={slot.id} paused={slot.paused} label={`${WEEKDAYS[slot.weekday]} ${slot.localTime.slice(0, 5)}`} />
+                            {slot.localTime.slice(0, 5)} {timeZone}
                           </Cell>
-                        ) : null}
-                      </Row>
-                    ))}
-                  </Table>
-                )}
+                          <Cell>{slot.paused ? <Badge tone="warning">Paused</Badge> : <Badge>Active</Badge>}</Cell>
+                          {canManage ? (
+                            <Cell>
+                              <SlotRowActions slug={projectSlug} id={slot.id} paused={slot.paused} label={`${WEEKDAYS[slot.weekday]} ${slot.localTime.slice(0, 5)}`} />
+                            </Cell>
+                          ) : null}
+                        </Row>
+                      ))}
+                    </Table>
+                  )}
+                  {canManage ? <SlotEditor slug={projectSlug} accountId={account.id} /> : null}
+                </div>
+                <details className="flex flex-col gap-3">
+                  <summary className="cursor-pointer rounded-md text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                    Posting instructions · {account.postingInstructions ? "Set" : "None"}
+                  </summary>
+                  <div className="mt-3">
+                    {canManage ? (
+                      <PostingInstructionsForm
+                        slug={projectSlug}
+                        accountId={account.id}
+                        accountName={account.displayName}
+                        initial={account.postingInstructions}
+                      />
+                    ) : account.postingInstructions ? (
+                      <p className="whitespace-pre-wrap text-sm">{account.postingInstructions}</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No posting instructions.</p>
+                    )}
+                  </div>
+                </details>
                 {canManage ? (
-                  <div className="flex flex-col gap-4 border-t border-border pt-4">
-                    <SlotEditor slug={projectSlug} accountId={account.id} />
-                    <div className="flex justify-end">
-                      <RemoveAccountDialog slug={projectSlug} id={account.id} name={account.displayName} />
-                    </div>
+                  <div className="flex justify-end border-t border-border pt-4">
+                    <RemoveAccountDialog slug={projectSlug} id={account.id} name={account.displayName} />
                   </div>
                 ) : null}
               </section>

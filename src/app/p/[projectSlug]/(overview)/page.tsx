@@ -9,6 +9,7 @@ import { ProblemsCallout } from "@/components/notifications/ProblemsCallout";
 import { buttonStyles } from "@/components/ui/Button";
 import { Checklist, type ChecklistItem } from "@/components/ui/Checklist";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { docsUrl } from "@/lib/docs";
 import { deriveOverview, type ChecklistStep, type ServerSetupItem } from "@/lib/overview/derive";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
@@ -89,6 +90,16 @@ export default async function ProjectOverview({ params }: Props) {
           title="Getting started"
           items={[...checklist.steps.map(toItem), ...(checklist.serverSetup ? [serverSetupItem(checklist.serverSetup)] : [])]}
           {...(checklist.mode === "collapsed" ? { collapsedSummary: "Setup complete" } : {})}
+          footer={
+            <a
+              href={docsUrl("getting-started")}
+              className="mt-3 inline-block text-sm underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Read the getting-started guide
+            </a>
+          }
         />
       ) : null}
       {view.needsAttention ? (

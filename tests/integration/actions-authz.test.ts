@@ -27,7 +27,11 @@ import * as media from "../../src/server/services/media";
 import { setStorageForTests } from "../../src/server/storage";
 import { actAs, RedirectSignal } from "../helpers/actions";
 import { atTime } from "../helpers/clock";
-import { closeDb } from "../helpers/db";
+import { closeDb, testDb } from "../helpers/db";
+import { activityEvents } from "../../src/server/db/schema/activity";
+import * as connectService from "../../src/server/services/connect";
+import * as accountService from "../../src/server/services/accounts";
+import { eq } from "drizzle-orm";
 import { createFakeLlm } from "../helpers/fake-llm";
 import { createPostInReview, createSession, createUser, createVoiceProfile } from "../helpers/factories";
 import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterThrowaway } from "../helpers/connect-group";
@@ -439,4 +443,73 @@ describe("job actions (008)", () => {
     ];
     for (const r of results) expect(r).toMatchObject({ ok: false, error: "not_found" });
   }, 60_000);
+});
+
+describe("connect landing (033)", () => {
+  async function chooser(env: Awaited<ReturnType<typeof postsEnv>>, candidates: ReturnType<typeof pageCandidate>, selected: string[]) {
+    const session = await sessionFor(env.owner.id);
+    const attemptId = await readyAttempt(env.scope, session, candidates);
+    actAs(env.owner, session.sessionId);
+    try {
+      await accountActions.chooseConnectCandidatesAction(env.project.slug, { attemptId, selected });
+    } catch (e) {
+      if (e instanceof RedirectSignal) return e.to;
+      throw e;
+    }
+    throw new Error("expected a redirect");
+  }
+  const idOf = async (env: Awaited<ReturnType<typeof postsEnv>>, name: string) =>
+    (await accountService.listAccounts(env.scope)).find((a) => a.displayName === name)!.id;
+  const activityCount = async (projectId: string) =>
+    (await testDb().select().from(activityEvents).where(eq(activityEvents.projectId, projectId))).length;
+
+  it("lands two new accounts on the first listed one's slots", async () => {
+    const env = await postsEnv();
+    const to = await chooser(env, pageCandidate("land1", "Land One"), ["tw-page:land1", "tw-photo:land19"]);
+    const id = await idOf(env, "Land One");
+    expect(to).toBe(`/p/${env.project.slug}/accounts?landed=${id}&connected=2&reconnected=0#account-${id}-slots`);
+  });
+
+  it("lands one new and one reconnected account on the new one", async () => {
+    const env = await postsEnv();
+    await chooser(env, pageCandidate("land2", "Land Two", false), ["tw-page:land2"]);
+    const to = await chooser(env, pageCandidate("land2", "Land Two"), ["tw-page:land2", "tw-photo:land29"]);
+    const photo = await idOf(env, "Land Two · Photos");
+    expect(to).toBe(`/p/${env.project.slug}/accounts?landed=${photo}&connected=1&reconnected=1#account-${photo}-slots`);
+  });
+
+  it("lands a refresh-only connect on the card", async () => {
+    const env = await postsEnv();
+    await chooser(env, pageCandidate("land3", "Land Three", false), ["tw-page:land3"]);
+    const to = await chooser(env, pageCandidate("land3", "Land Three", false), ["tw-page:land3"]);
+    const id = await idOf(env, "Land Three");
+    expect(to).toBe(`/p/${env.project.slug}/accounts?landed=${id}&connected=0&reconnected=1#account-${id}`);
+  });
+
+  it("returns a landing from the mock and credentials actions, and none on failure", async () => {
+    const env = await postsEnv();
+    actAs(env.owner);
+    const mock = await accountActions.connectMockAction(env.project.slug, { displayName: "Landing mock" });
+    if (!mock.ok) throw new Error("mock connect failed");
+    expect(mock.data.landing).toBe(`/p/${env.project.slug}/accounts?landed=${mock.data.id}&connected=1&reconnected=0#account-${mock.data.id}-slots`);
+    const again = await accountActions.reconnectMockAction(env.project.slug, { id: mock.data.id });
+    if (!again.ok) throw new Error("mock reconnect failed");
+    expect(again.data.landing).toBe(`/p/${env.project.slug}/accounts?landed=${mock.data.id}&connected=0&reconnected=1#account-${mock.data.id}`);
+    const creds = await accountActions.connectCredentialsAction(env.project.slug, { providerKey: "bluesky", fields: {} });
+    expect(creds.ok).toBe(false);
+    expect(JSON.stringify(creds)).not.toContain("landing");
+    const bad = await accountActions.connectMockAction(env.project.slug, { displayName: "" });
+    expect(bad.ok).toBe(false);
+    expect(JSON.stringify(bad)).not.toContain("landing");
+  });
+
+  it("records the same activity as the service alone (FR-017)", async () => {
+    const viaAction = await postsEnv();
+    await chooser(viaAction, pageCandidate("land4", "Land Four"), ["tw-page:land4", "tw-photo:land49"]);
+    const viaService = await postsEnv();
+    const session = await sessionFor(viaService.owner.id);
+    const attemptId = await readyAttempt(viaService.scope, session, pageCandidate("land4", "Land Four"));
+    await connectService.chooseConnectCandidates(viaService.scope, { attemptId, selected: ["tw-page:land4", "tw-photo:land49"] }, session);
+    expect(await activityCount(viaAction.project.id)).toBe(await activityCount(viaService.project.id));
+  });
 });

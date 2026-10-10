@@ -17,26 +17,16 @@ export interface ChecklistItem {
   children?: ReactNode;
 }
 
-function statusText(status: ChecklistStatus): string {
+/** Status in words; the icon is decoration. */
+export function checklistStatusText(status: ChecklistStatus): string {
   if (status.kind === "done") return "Done";
   if (status.kind === "waiting") return `Waiting on ${status.on}`;
   return "To do";
 }
 
-/**
- * Ordered setup steps. Status is always text (the icon is decoration), each row has one line and at most
- * one action. `collapsedSummary` folds the list into a closed native `<details>`. Server-compatible.
- */
-export function Checklist({
-  title,
-  items,
-  collapsedSummary,
-}: {
-  title: string;
-  items: readonly ChecklistItem[];
-  collapsedSummary?: string;
-}) {
-  const list = (
+/** The ordered rows. Shared by Checklist and SetupNotice so they can't drift. */
+export function ChecklistRows({ items }: { items: readonly ChecklistItem[] }) {
+  return (
     <ol className="flex flex-col divide-y divide-border">
       {items.map((item) => (
         <li key={item.key} className="flex flex-wrap items-start gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0">
@@ -48,7 +38,7 @@ export function Checklist({
             <p className="flex flex-wrap items-baseline gap-x-2 text-sm font-medium text-heading">
               <span>{item.title}</span>
               {item.optional ? <span className="text-xs font-normal text-muted-foreground">Optional</span> : null}
-              <span className="text-xs font-normal text-muted-foreground">{statusText(item.status)}</span>
+              <span className="text-xs font-normal text-muted-foreground">{checklistStatusText(item.status)}</span>
             </p>
             <p className="text-sm text-muted-foreground">{item.description}</p>
             {item.children}
@@ -64,6 +54,26 @@ export function Checklist({
       ))}
     </ol>
   );
+}
+
+/**
+ * Ordered setup steps. Status is always text (the icon is decoration), each row has one line and at most
+ * one action. `collapsedSummary` folds the list into a closed native `<details>`. Server-compatible.
+ * Prerequisite gates use SetupNotice instead.
+ */
+export function Checklist({
+  title,
+  items,
+  collapsedSummary,
+  footer,
+}: {
+  title: string;
+  items: readonly ChecklistItem[];
+  collapsedSummary?: string;
+  /** Rendered after the list and outside the collapsed `<details>`, so it shows in both forms. */
+  footer?: ReactNode;
+}) {
+  const list = <ChecklistRows items={items} />;
 
   return (
     <Card title={title}>
@@ -77,6 +87,7 @@ export function Checklist({
       ) : (
         list
       )}
+      {footer}
     </Card>
   );
 }
