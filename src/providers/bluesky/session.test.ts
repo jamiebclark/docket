@@ -42,6 +42,16 @@ describe("connectAccount", () => {
     expect(pds.requests[0]!.body).toEqual({ identifier: "alice.bsky.social", password: PASSWORD });
   });
 
+  it("trims whitespace around a pasted app password", async () => {
+    // Copying the password out of Bluesky's settings can carry a newline; the PDS answers 401 for
+    // it, which reads to the person connecting as a wrong password.
+    pds.route("POST", CREATE, { json: session() });
+    const result = await connect(fields({ appPassword: `  ${PASSWORD}
+` }));
+    expect(result.ok).toBe(true);
+    expect(pds.requests[0]!.body).toEqual({ identifier: "alice.bsky.social", password: PASSWORD });
+  });
+
   it("uses a custom PDS and falls back to now + 60 d when the refresh JWT has no exp", async () => {
     pds.route("POST", CREATE, { json: session({ refreshJwt: "opaque" }) });
     const result = await connect(fields({ pdsUrl: "https://pds.example.com/" }));

@@ -199,8 +199,12 @@ Without App Review, only Threads Testers can connect. Going beyond testers needs
 Docket does not cover.
 
 1. Under **App roles → Roles → Add People**, choose **Threads Tester** and add each Threads account that will connect.
-2. Each account's owner accepts the invite in Threads under **Website permissions** in account settings (**unverified**:
-   the exact menu path; it has been seen as Settings → Account → Website permissions).
+2. Each account's owner accepts the invite in Threads under **Website permissions** in account settings. The dashboard
+   says the same beside each Threads Tester: "Threads Users can manage invitations in the Website permissions section
+   of their profile."
+
+Until the invite is accepted the login fails with *"Invalid Request: The user has not accepted the invite to test the
+app."* (error code 1349245). An account that is missing from the **Threads Testers** tab was never invited.
 
 There is no delegated access on Threads: the person who logs in during Connect is the account that gets connected. To
 connect a Threads account you do not own, see [accounts.md](accounts.md#scheduling-for-someone-elses-accounts).
