@@ -59,6 +59,23 @@ pnpm dev                 # http://localhost:3000, or the PORT in .env
 `docker run -d --name docket-pg -p 5432:5432 -e POSTGRES_USER=docket -e POSTGRES_PASSWORD=docket -e POSTGRES_DB=docket postgres:17`.
 Set `RUN_WORKER_IN_PROCESS=true` in `.env` so the dev server also runs the scheduler, or scheduled posts never go out.
 
+### Demo data
+
+An empty database makes most screens impossible to judge — the composer needs connected
+accounts to render at all, and the calendar, Posts and Failures views need posts in states
+only the scheduler reaches. `pnpm seed` fills a local database with a project, three
+accounts on the `mock` provider (which publishes nowhere and needs no credentials), six
+weeks' worth of posting slots, a voice profile, and posts covering every status:
+
+```bash
+pnpm seed                # create the demo project
+pnpm seed --reset        # delete it and make it again
+pnpm seed --slug demo2   # use a different URL name
+```
+
+It signs you in as `demo@localhost.test`. The script refuses to run unless `DATABASE_URL`
+points at a loopback host, so it can never write demo rows into a shared database.
+
 ## Configuration
 
 `.env.example` documents every variable: whether it is required, optional or part of an all-or-none group, its format and its
