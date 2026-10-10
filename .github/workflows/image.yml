@@ -136,8 +136,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version || '0.0.0' }},enable=${{ !inputs.edge }}
             type=semver,pattern={{major}},value=v${{ inputs.version || '0.0.0' }},enable=${{ !inputs.edge }}
             type=raw,value=latest,enable=${{ !inputs.edge && inputs.latest }}
-            type=raw,value=edge,enable=${{ inputs.edge }}
-            type=sha,prefix=sha-,format=short,enable=${{ inputs.edge }}
+            type=raw,value=edge,enable=${{ inputs.edge == true }}
+            type=sha,prefix=sha-,format=short,enable=${{ inputs.edge == true }}
       - name: Tag the manifest list
         working-directory: ${{ runner.temp }}/digests
         env:
