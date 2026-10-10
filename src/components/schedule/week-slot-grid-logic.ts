@@ -72,6 +72,21 @@ export function timeAtPosition(offsetY: number, height: number): string {
 }
 
 /** Seven buckets, each ascending by localTime, ties broken by id. */
+/**
+ * Where a time sits down the column, as a percentage of the day. The inverse of `timeAtPosition`, so a
+ * chip dropped at a position renders back at that same position — without this the column maps clicks to
+ * times spatially but then renders the chips as a plain ordered list, and dragging one down changes its
+ * time while leaving it exactly where it was.
+ */
+export function topPercentOf(localTime: string): number {
+  return (clampToDay(minutesOf(localTime)) / MINUTES_PER_DAY) * 100;
+}
+
+/** Hour boundaries down the column, for the background rules and the gutter labels. */
+export function hourTicks(): { hour: number; topPercent: number }[] {
+  return Array.from({ length: 24 }, (_, hour) => ({ hour, topPercent: (hour / 24) * 100 }));
+}
+
 export function slotsByWeekday(slots: GridSlotState[]): GridSlotState[][] {
   const buckets: GridSlotState[][] = [[], [], [], [], [], [], []];
   for (const slot of slots) {
