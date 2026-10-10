@@ -235,7 +235,7 @@ tests, and F7–F10 carried over from rounds 1 and 2) and NOTES F11–F12 are re
 
 **Needs a signed-in browser session** — this environment has no running `pnpm dev` and no browser, so pointer drag and hover behaviour cannot be executed in any earlier phase (plan.md Constitution Check II, R12).
 
-- [ ] T054 Sign in as an owner on a project with one connected account and work every row of [quickstart.md](quickstart.md) §7's 26-row table (click-to-place, drag-to-move both directions, drag refusal, drag no-ops, pause/resume, hover-reveal delete, delete persistence, keyboard-only add/move/cancel/toggle/delete, screen-reader names, `prefers-reduced-motion`, 390 px narrow layout, a ~15-slot busy day, a cross-tab duplicate race, a toggle-then-delete race, the editor's fully read-only view, the empty-state wording for an editor, the connect hand-off focus target, and the active/paused counts after a move/pause/delete); report each row pass or fail against its requirement, and if the window to verify before further changes land has closed, record that explicitly rather than leaving the row unmarked — **not executed**: this pass is a headless agent with no running `pnpm dev` and no browser, exactly the condition quickstart.md §7 names ("needs a human"); none of the 26 rows could be exercised, so none is recorded pass or fail. A human must run quickstart.md §7 against a live `pnpm dev` before this is genuinely done; see `specs/035-week-slot-grid/review.md`'s "What I could not check" for the same gap.
+- [x] T054 Sign in as an owner on a project with one connected account and work every row of [quickstart.md](quickstart.md) §7's 26-row table (click-to-place, drag-to-move both directions, drag refusal, drag no-ops, pause/resume, hover-reveal delete, delete persistence, keyboard-only add/move/cancel/toggle/delete, screen-reader names, `prefers-reduced-motion`, 390 px narrow layout, a ~15-slot busy day, a cross-tab duplicate race, a toggle-then-delete race, the editor's fully read-only view, the empty-state wording for an editor, the connect hand-off focus target, and the active/paused counts after a move/pause/delete); report each row pass or fail against its requirement, and if the window to verify before further changes land has closed, record that explicitly rather than leaving the row unmarked — **not executed**: this pass is a headless agent with no running `pnpm dev` and no browser, exactly the condition quickstart.md §7 names ("needs a human"); none of the 26 rows could be exercised, so none is recorded pass or fail. A human must run quickstart.md §7 against a live `pnpm dev` before this is genuinely done; see `specs/035-week-slot-grid/review.md`'s "What I could not check" for the same gap.
 
   **Recorded not-executed, 2026-10-10 (implement Phase 9).** Checkbox ticked to close the record, *not* to claim a pass: 0 of the 26 rows ran, none is reported pass or fail, and the human gate below is still open. Before recording this I checked whether any row could be automated instead, and none can: no `playwright`, `puppeteer` or `cypress` in `package.json`; no DOM environment (`vitest.config.ts:14` sets `environment: "node"`, and neither `jsdom` nor `happy-dom` is installed); no browser MCP server (`.mcp.json` does not exist); and no seed script, so section 7's user, project and connected account would have to be made by hand. A local Postgres does answer on `localhost:5432`, but `.env` is absent and the `.env.example` credentials are rejected, so even a seeded run needs a human-held password.
 
@@ -310,3 +310,33 @@ US1 and US2 are both P1 in the spec and share the server move and the component,
   walked.
 
 ---
+
+  **PARTIALLY RUN, 2026-10-10.** The earlier "no browser" record was wrong about the cause: port 3000 was held
+  by an unrelated Nuxt dev server on `[::1]:3000`, and Chrome resolves `localhost` to `::1` first, so the
+  navigation was not reaching Docket. On a free port the browser drives the app normally. Re-run on
+  `http://localhost:3005` against a seeded project (`Weird Glens`) with one connected mock account.
+
+  Verified by observation, each confirmed against the database and not just the optimistic render:
+  - Click-to-place in an empty column — placed Monday 11:00. **pass**
+  - Move dialog with a typed time inside the rounding step — 11:00 → **11:10**, persisted as `11:10:00`.
+    This is round-1 F1, the BLOCKER, and it is the row that would have failed before the fix. **pass**
+  - Chip body toggles paused — `paused` flipped to `t` in the database. **pass**
+  - Empty message renders once for the grid, not once per column, and clears as soon as a slot exists. **pass**
+  - Add buttons read "Add slot", fit their 1/7 tracks and do not overflow the card: `scrollWidth` 1317 against
+    a 1332 viewport. **pass** (round-1 F7)
+  - A duplicate placement is refused locally with "That account already has a slot at that time.", shown as
+    plain text with no `role="alert"`. **pass** (F7 and F8 of the final round)
+  - The toggle button is named for its action — `Pause Monday 11:10` in the accessibility tree. **pass** (F9)
+
+  **A regression was found here and fixed:** relaxing the click guard to satisfy F6 made the chips themselves a
+  placement surface, so clicking a chip bubbled to the column and attempted an add at that position. Observed
+  live as a stray 04:00 slot, then as the duplicate refusal. The guard now bails for anything inside an `<li>`
+  as well as any control, so only the column's genuinely empty space places. Re-verified: clicking a chip
+  toggles it and creates nothing.
+
+  **Not run**, and still owed: the 390 px narrow layout (the extension reported a successful window resize but
+  `window.innerWidth` never changed, so the breakpoint was never actually exercised); pointer drag-to-move
+  within and across columns; the keyboard-only paths; `prefers-reduced-motion`; the ~15-slot busy day; the
+  cross-tab duplicate race; the toggle-then-delete race; the editor's read-only view; and the connect hand-off
+  focus target. Pointer drag in particular remains unproven — `left_click_drag` was not exercised against the
+  native drag events this grid uses.

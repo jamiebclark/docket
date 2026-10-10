@@ -20,10 +20,6 @@ export interface Addition {
   localTime: string;
 }
 
-export interface GridPermissions {
-  canManage: boolean;
-}
-
 export interface MoveIntent {
   id: string;
   weekday: Weekday;
@@ -115,13 +111,35 @@ export function isNoOpMove(slot: GridSlot, intent: MoveIntent, exact = false): b
 }
 
 /** The local duplicate check: finds a same-weekday same-time slot, ignoring the chip being moved. */
+/**
+ * The slot already occupying `intent`'s day and time, or null. Takes only the day and the time so
+ * the add path — which has no slot id yet — can refuse a duplicate before the round trip, the same
+ * way the move path does.
+ */
 export function conflictAt(
   slots: GridSlotState[],
-  intent: MoveIntent,
+  intent: Pick<MoveIntent, "weekday" | "localTime">,
   exceptId?: string,
 ): GridSlotState | null {
   const target = hhmm(intent.localTime);
   return slots.find((s) => s.id !== exceptId && s.weekday === intent.weekday && hhmm(s.localTime) === target) ?? null;
+}
+
+/**
+ * Drop every optimistic override and addition whose sequence number the server has confirmed.
+ *
+ * Extracted from the clearing effect because this rule is what three separate review findings turned
+ * on, and an effect is not testable here — the repository has no DOM harness. `doneSeqs` is read, never
+ * mutated, so a caller may hand over a snapshot and clear its own set afterwards.
+ */
+export function clearResolved(
+  overrides: ReadonlyMap<string, Override>,
+  additions: readonly Addition[],
+  doneSeqs: ReadonlySet<number>,
+): { overrides: Map<string, Override>; additions: Addition[] } {
+  const nextOverrides = new Map<string, Override>();
+  for (const [id, override] of overrides) if (!doneSeqs.has(override.seq)) nextOverrides.set(id, override);
+  return { overrides: nextOverrides, additions: additions.filter((a) => !doneSeqs.has(a.seq)) };
 }
 
 /** Pure function of (slots, overrides, additions), with no clock and no randomness. */

@@ -18,6 +18,7 @@ import {
   announceResumed,
   announceRetimed,
   applyOverrides,
+  clearResolved,
   conflictAt,
   DUPLICATE_REFUSAL,
   hhmm,
@@ -77,6 +78,15 @@ function chipName(weekday: Weekday, localTime: string, paused: boolean): string 
 }
 
 /**
+ * The toggle button's own name. A control is named for what activating it does, so this leads with
+ * the verb; the slot's day, time and state stay in the chip's text and on the `<li>`.
+ */
+function chipToggleName(weekday: Weekday, localTime: string, paused: boolean): string {
+  const when = `${WEEKDAY_NAMES[weekday - 1]} ${hhmm(localTime)}`;
+  return paused ? `Resume ${when}, paused` : `Pause ${when}`;
+}
+
+/**
  * Reusable, presentational grid of posting slots: seven weekday columns, click/drag to place and move,
  * pause/resume and delete. Knows about slots, callbacks and a time-zone label — nothing about an account,
  * a route or a server action.
@@ -118,12 +128,8 @@ export function WeekSlotGrid({
     // nothing here can be emptied out from under one.
     const done = new Set(resolvedSeqsRef.current);
     if (done.size === 0) return;
-    setOverrides((prev) => {
-      const next = new Map(prev);
-      for (const [id, ov] of prev) if (done.has(ov.seq)) next.delete(id);
-      return next;
-    });
-    setAdditions((prev) => prev.filter((a) => !done.has(a.seq)));
+    setOverrides((prev) => clearResolved(prev, [], done).overrides);
+    setAdditions((prev) => clearResolved(new Map(), prev, done).additions);
     for (const seq of done) resolvedSeqsRef.current.delete(seq);
   }, [resolveTick, additions]);
 
@@ -172,6 +178,13 @@ export function WeekSlotGrid({
 
   async function handleAdd(weekday: Weekday, localTime: string) {
     setError("");
+    // Refuse a duplicate locally, as the move path does, so a click onto an occupied time costs no
+    // round trip and shows no chip that flashes in and out again.
+    if (conflictAt(view, { weekday, localTime })) {
+      setError(DUPLICATE_REFUSAL);
+      say(announceRefused(weekday, localTime, DUPLICATE_REFUSAL));
+      return;
+    }
     const seq = ++seqRef.current;
     const tempId = `pending-${seq}`;
     setAdditions((prev) => [...prev, { tempId, seq, weekday, localTime }]);
@@ -247,7 +260,11 @@ export function WeekSlotGrid({
   function columnClickHandler(weekday: Weekday) {
     if (!canManage) return undefined;
     return (e: MouseEvent<HTMLDivElement>) => {
-      if (e.target !== e.currentTarget) return;
+      // A click on the column's own empty space places a slot, wherever in that space it lands —
+      // matching the drop path, which is honoured anywhere in the column. A chip is not empty space:
+      // bail for anything inside an `<li>` (its padding as well as its controls, and a pending chip
+      // whose own handler is absent and would otherwise bubble to here) and for any control.
+      if (e.target instanceof Element && e.target.closest("li, button, a, input, select, textarea")) return;
       const rect = e.currentTarget.getBoundingClientRect();
       void handleAdd(weekday, timeAtPosition(e.clientY - rect.top, rect.height));
     };
@@ -294,6 +311,9 @@ export function WeekSlotGrid({
     return (
       <li
         key={slot.id}
+        // The row keeps the plain day/time/state name (G3), as the read-only chip does; the body
+        // button inside it is named for the action it performs instead.
+        aria-label={name}
         className="group relative"
         draggable={confirmed}
         aria-busy={slot.pending || undefined}
@@ -311,7 +331,7 @@ export function WeekSlotGrid({
         <button
           type="button"
           id={`slot-${slot.id}`}
-          aria-label={name}
+          aria-label={chipToggleName(weekday, slot.localTime, slot.paused)}
           className={slot.paused ? pausedChipStyles : activeChipStyles}
           aria-disabled={!confirmed || undefined}
           onClick={
@@ -363,13 +383,13 @@ export function WeekSlotGrid({
   return (
     <div className="flex flex-col gap-2">
       {!announceCtx ? <LiveRegion message={localMessage} /> : null}
-      {error ? (
-        <p role="alert" className="text-xs text-danger">
-          {error}
-        </p>
-      ) : null}
+      {/* Visible text only. Every refusal is already announced politely through `say`, with the day
+          and time included; a `role="alert"` here would interrupt and then repeat it. */}
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
       <p className="text-xs text-muted-foreground">Times are shown in {timeZoneLabel}.</p>
-      {slots.length === 0 ? <p className="text-xs text-muted-foreground">{emptyMessage}</p> : null}
+      {/* Keyed on the rendered view, not the `slots` prop: an optimistic addition must clear the
+          empty line immediately, and deleting the last slot must keep it until the server confirms. */}
+      {view.length === 0 ? <p className="text-xs text-muted-foreground">{emptyMessage}</p> : null}
       <div role="group" aria-label={label} className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-7">
         {columns.map((dayItems, i) => {
           const weekday = (i + 1) as Weekday;

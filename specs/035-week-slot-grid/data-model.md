@@ -64,7 +64,6 @@ FR-003.
 | `GridSlotState` | `GridSlot & { pending: boolean }` | `pending` is true while an override for it is unresolved; it drives nothing but a subdued style and `aria-busy` |
 | `Override` | `{ kind: "patch"; seq: number; weekday; localTime; paused } \| { kind: "deleted"; seq: number }` | One per slot id, R6 |
 | `Addition` | `{ tempId: string; seq: number; weekday: Weekday; localTime: string }` | An optimistic chip with no server id yet; always `paused: false` |
-| `GridPermissions` | `{ canManage: boolean }` | The only permission the component knows about; the page computes it from `slot:["manage"]` (FR-040) |
 | `MoveIntent` | `{ id: string; weekday: Weekday; localTime: string }` | What a drag, a drop or the dialog produces, and what `onMove` receives |
 
 **Invariants**
@@ -94,7 +93,9 @@ Named here because the contracts and the task list refer to them; all live in
 | `timeAtPosition` | `(offsetY: number, height: number) => string` | R2's mapping, then `roundToStep`, then `clampToDay`; one function for click and for drop so they cannot diverge (FR-009) |
 | `slotsByWeekday` | `(slots: GridSlotState[]) => GridSlotState[][]` | seven buckets, each sorted; FR-001, FR-002 |
 | `nextFreeTime` | `(day: GridSlotState[], from = "09:00") => string \| null` | the keyboard add's target time; `null` when the day has no free boundary (R3) |
-| `isNoOpMove` | `(slot: GridSlot, intent: MoveIntent) => boolean` | same weekday and same rounded time → send nothing, announce nothing (FR-014) |
+| `isNoOpMove` | `(slot: GridSlot, intent: MoveIntent, exact?: boolean) => boolean` | Same weekday and same time → send nothing, announce nothing (FR-014). With `exact` false (the drop path) the time is compared rounded to the step, since `timeAtPosition` has already rounded it; with `exact` true (a time typed in the move dialog) it is compared as typed, so a correction inside the step is not swallowed |
+| `additionFocusId` | `(createdId: string | undefined, addButtonId: string) => string` | Where focus goes after an add: the created slot's chip (`slot-<id>`) when the action returned an id, else that column's add button. Pure, so the rule is testable — a `slots`-prop lookup here cannot work, because the effect that would run it closes over the pre-add props (G8) |
+| `clearResolved` | `(overrides, additions, doneSeqs) => { overrides, additions }` | Drops every optimistic override and addition whose seq the server confirmed. Reads `doneSeqs` without mutating it, so a caller may pass a snapshot and clear its own set afterwards |
 | `conflictAt` | `(slots: GridSlotState[], intent: MoveIntent, exceptId?) => GridSlotState \| null` | the local duplicate check, used to refuse before a round trip; the server's check stays authoritative (FR-016) |
 | `applyOverrides` | `(slots, overrides, additions) => GridSlotState[]` | R6 |
 | `announceAdded` / `announceMoved` / `announceRetimed` / `announceDeleted` / `announcePaused` / `announceResumed` / `announceRefused` | `(…) => string` | every string in FR-044 / SC-006, each naming the weekday and time |

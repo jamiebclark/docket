@@ -42,6 +42,16 @@ export function Dialog({
     }
   }, [open]);
 
+  // A caller that stops rendering the dialog instead of setting `open` to false unmounts the
+  // element while it is still open, and an unmounted `<dialog>` fires no `close` event — so the
+  // restore above never runs and focus falls to `<body>`. Restore it here on the way out.
+  useEffect(() => {
+    const el = ref.current;
+    return () => {
+      if (el?.open && returnFocusRef.current) returnTo.current?.focus();
+    };
+  }, []);
+
   return (
     <dialog
       ref={ref}

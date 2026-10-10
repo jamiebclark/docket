@@ -29,8 +29,11 @@ export interface WeekSlotGridProps {
   onDelete(input: { id: string }): Promise<SlotActionOutcome>;
 }
 
-/** Narrower than `ActionResult<T>` on purpose: the grid needs the outcome and the words, nothing more. */
-export type SlotActionOutcome = { ok: true } | { ok: false; message: string };
+/** Narrower than `ActionResult<T>` on purpose: the grid needs the outcome and the words, nothing more.
+ *  On a successful `onAdd`, `id` is the created slot's id. That id is what makes G8's focus-the-new-chip
+ *  guarantee possible — the chip mounts as `slot-<id>` whichever render brings it in — and omitting it
+ *  falls back to focusing that column's add button. */
+export type SlotActionOutcome = { ok: true; id?: string } | { ok: false; message: string };
 ```
 
 `GridSlot`, `Weekday` and `MoveIntent` are defined in [data-model.md](../data-model.md) §3 and exported from
@@ -47,7 +50,7 @@ through `onMove` (FR-019 gets the same duplicate refusal as FR-016 for free).
 | G2 | Each column lists that day's chips ascending by time, ties broken by id; DOM order equals visual order, so tab order is time order | FR-002, FR-043 |
 | G3 | Every chip shows `HH:MM` and `Active`/`Paused`, and carries `aria-label="<Weekday> <HH:MM>, active\|paused"` | FR-004, FR-005, FR-026 |
 | G4 | Seconds never reach the DOM; `timeZoneLabel` is rendered exactly once for the grid | FR-005, FR-006 |
-| G5 | With `slots` empty, the seven columns still render and still accept a placement; `emptyMessage` shows in place of chips | FR-007 |
+| G5 | With the rendered grid empty — `slots` plus any optimistic additions and deletions, not the `slots` prop alone — the seven columns still render and still accept a placement; `emptyMessage` shows in place of chips | FR-007 |
 | G6 | With `canManage: false`, the grid renders **no** button, **no** input, **no** `draggable` and **no** `disabled` control; chips are plain list items | FR-037, FR-038 |
 | G7 | A click or tap in a column's empty area calls `onAdd` with that column's weekday and `timeAtPosition(...)` — rounded to 30 minutes and clamped into the day | FR-008, FR-009, FR-010 |
 | G8 | Each column has an `Add a slot on <Day>` button; it calls `onAdd` with `nextFreeTime(day)` and moves focus to the new chip. A day with no free boundary disables it and says why | FR-011 |
@@ -59,7 +62,7 @@ through `onMove` (FR-019 gets the same duplicate refusal as FR-016 for free).
 | G14 | Activating a chip's body calls `onToggle` with the inverse of its current `paused` | FR-024 |
 | G15 | Paused chips differ by text, by border style and by tone — never by hue alone | FR-025, FR-026 |
 | G16 | Every call is reflected in the rendered grid before its promise settles | FR-034 |
-| G17 | An `{ ok: false }` outcome removes that optimistic change, restores the pre-operation render, writes `message` into a `role="alert"` line and announces it | FR-035 |
+| G17 | An `{ ok: false }` outcome removes that optimistic change, restores the pre-operation render, shows `message` as visible text and announces it exactly once, politely. The visible line is deliberately not a live region: a `role="alert"` there would interrupt with the bare message and then repeat it with the day and time | FR-035, SC-006 |
 | G18 | With several calls outstanding, the settled render is the caller's `slots` plus only the still-unresolved overrides, never an accumulation of applied ones | FR-036 |
 | G19 | Every change and every refusal produces exactly one polite announcement naming the weekday and time, through `useAnnounce()` when a provider is above it and through its own mounted `LiveRegion` when not | FR-044, SC-006 |
 | G20 | Emits no `transition-transform`, `animate-*` or `duration-*` class outside a `motion-safe:` variant | FR-045 |

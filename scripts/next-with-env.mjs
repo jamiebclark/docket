@@ -4,9 +4,13 @@
 // flags to its child through NODE_OPTIONS, where Node rejects --env-file.
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 const nextBin = createRequire(import.meta.url).resolve("next/dist/bin/next");
 process.argv = [process.argv[0], nextBin, ...process.argv.slice(2)];
-await import(nextBin);
+// `resolve` returns a filesystem path, and on Windows that is `C:\…`, which the ESM loader
+// rejects as an unsupported URL scheme ("protocol 'c:'"). argv keeps the plain path; only the
+// import needs the file:// form.
+await import(pathToFileURL(nextBin).href);
