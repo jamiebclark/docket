@@ -11,6 +11,8 @@ export interface GenerationCounts {
   claimed: number;
   done: number;
   failed: number;
+  /** Already-posted ids caught before or during the model call. */
+  skipped: number;
   /** Temporary failures sent back to `queued` with backoff. */
   retried: number;
   /** Correction retries deferred to a later tick (no attempt counted). */
@@ -34,6 +36,7 @@ export const emptyGenerationCounts = (): GenerationCounts => ({
   claimed: 0,
   done: 0,
   failed: 0,
+  skipped: 0,
   retried: 0,
   deferred: 0,
   released: 0,

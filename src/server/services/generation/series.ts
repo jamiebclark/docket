@@ -22,7 +22,7 @@ import {
   buildRecord,
   distinctProviderKeys,
   existingResult,
-  generateSingleSchema,
+  generateSingleObjectSchema,
   isUniqueViolation,
   loadAccounts,
   loadAssets,
@@ -50,7 +50,9 @@ const countSchema = z
   .min(SERIES_COUNT_MIN, { error: `Choose between ${SERIES_COUNT_MIN} and ${SERIES_COUNT_MAX} posts` })
   .max(SERIES_COUNT_MAX, { error: `Choose between ${SERIES_COUNT_MIN} and ${SERIES_COUNT_MAX} posts` });
 
-export const planSeriesSchema = generateSingleSchema.omit({ requestId: true }).extend({ count: countSchema });
+export const planSeriesSchema = generateSingleObjectSchema
+  .omit({ requestId: true, externalId: true, sourceKey: true })
+  .extend({ count: countSchema });
 
 export const startSeriesSchema = planSeriesSchema.extend({
   angles: z

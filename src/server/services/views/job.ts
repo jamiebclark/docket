@@ -65,9 +65,11 @@ export function toApiJobItem(item: JobItemView): ApiJobItem {
     label: item.label,
     status: item.status,
     attempts: item.attemptCount,
+    externalId: item.externalId,
     mediaId: item.mediaId,
     post: item.post ? { id: item.post.id, reviewState: item.post.reviewState } : null,
     error: item.error,
+    skipped: item.skipped,
     finishedAt: item.finishedAt ? item.finishedAt.toISOString() : null,
   };
 }

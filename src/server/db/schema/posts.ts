@@ -82,6 +82,7 @@ export const posts = pgTable(
       .notNull(),
   },
   (t) => [
+    unique("posts_project_id_uq").on(t.projectId, t.id),
     index("posts_project_status_idx")
       .on(t.projectId, t.status)
       .where(sql`${t.deletedAt} IS NULL`),

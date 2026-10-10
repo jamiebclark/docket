@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import { JOB_RENDERED_INSTRUCTIONS_MAX, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
+import { apiSourceMetaSchema, DEFAULT_SOURCE_KEY } from "@/lib/validation/api";
 import { createJobSchema, jobSourceSchema, type JobInstructionsSnapshot } from "@/lib/validation/jobs";
 import * as clock from "../../dal/clock";
 import { ConflictError, ValidationIssuesError } from "../../dal/errors";
@@ -11,6 +12,7 @@ import { getLlmStatus, LlmNotConfiguredError } from "../../llm";
 import { resolvePolicies } from "../generation/policy";
 import { assertGroupLimit, groupsForAccounts } from "../generation/groups";
 import { assertMediaFits, distinctProviderKeys, isUniqueViolation, loadAccounts, need, takeVoice } from "../generation/single";
+import { dropAlreadyPosted } from "./claims";
 import { refreshJobStatus } from "./status";
 import { sourceFor } from "./sources";
 import { assertApiMediaAvailable } from "./sources/api";
@@ -21,6 +23,7 @@ export interface CreateJobResult {
   itemCount: number;
   excluded: { reason: "already_used" | "deleted"; count: number }[];
   skippedReserved: number;
+  skippedAlreadyPosted: number;
 }
 
 type FileCtx = { file?: { name: string; bytes: Buffer } };
@@ -78,7 +81,7 @@ export function assertRenderedFits(
 /** Appends items to a job, numbering positions from the current count. Call inside a transaction. */
 export async function insertItems(tx: ProjectScope, job: JobRecord, items: readonly SourceItem[]): Promise<number> {
   const counts = await tx.jobItems.countByStatus(job.id);
-  const base = counts.queued + counts.running + counts.done + counts.failed + counts.cancelled;
+  const base = counts.queued + counts.running + counts.done + counts.failed + counts.cancelled + counts.skipped;
   const now = await clock.now();
   await tx.jobItems.insertMany(
     job.id,
@@ -87,6 +90,7 @@ export async function insertItems(tx: ProjectScope, job: JobRecord, items: reado
       label: item.label.slice(0, 200),
       payload: { v: 1, fields: item.fields },
       mediaAssetId: item.mediaAssetId,
+      externalId: item.externalId,
       nextAttemptAt: now,
     })),
   );
@@ -122,7 +126,9 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
   const prepared = await source.prepare(scope, source.inputSchema.parse(parsed.source), ctx);
   const includeUsed = parsed.source.kind === "media" && parsed.source.includeUsed;
   const mode = parsed.source.kind === "media" ? parsed.source.selection.mode : undefined;
-  const open = kind === "api" && (prepared.meta as { open?: boolean }).open === true;
+  const apiMeta = kind === "api" ? apiSourceMetaSchema.parse(prepared.meta) : null;
+  const open = apiMeta?.open === true;
+  const sourceKey = apiMeta?.sourceKey ?? DEFAULT_SOURCE_KEY;
   const rules = prepared.mediaRules ?? { onReserved: "skip" as const, skipUsed: !includeUsed };
 
   if (prepared.items.some((i) => i.mediaAssetId !== null)) {
@@ -163,7 +169,18 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
           return true;
         });
       }
-      if (items.length === 0 && !open) throw issue("selection", emptyMessage(kind, mode), "selection");
+
+      const { kept, skipped: skippedAlreadyPosted } = await dropAlreadyPosted(tx, sourceKey, items);
+      if (kept.length === 0 && !open) {
+        if (skippedAlreadyPosted > 0) {
+          throw new ValidationIssuesError(
+            [{ code: "already_posted", field: "source.items", message: `All ${skippedAlreadyPosted} items were already posted.` }],
+            `All ${skippedAlreadyPosted} items were already posted.`,
+          );
+        }
+        throw issue("selection", emptyMessage(kind, mode), "selection");
+      }
+      items = kept;
 
       const job = await tx.jobs.insert({
         sourceKind: kind,
@@ -186,7 +203,7 @@ export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCt
         ...actorColumns(tx),
       });
       await insertItems(tx, job, items);
-      return { jobId: job.id, itemCount: items.length, excluded, skippedReserved } satisfies CreateJobResult;
+      return { jobId: job.id, itemCount: items.length, excluded, skippedReserved, skippedAlreadyPosted } satisfies CreateJobResult;
     });
 
   try {

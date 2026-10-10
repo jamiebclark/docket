@@ -57,6 +57,7 @@ export const mediaSource: ItemSource<MediaSourceInput> = {
     const items: SourceItem[] = kept.map((row, position) => ({
       fields: { alt_text: row.altText, tags: row.tags.join(", "), filename: row.originalFilename ?? "" },
       mediaAssetId: row.id,
+      externalId: null,
       label: labelOf(row, position),
     }));
 

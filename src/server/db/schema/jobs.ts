@@ -34,6 +34,7 @@ export const generationJobItemStatus = pgEnum("generation_job_item_status", [
   "done",
   "failed",
   "cancelled",
+  "skipped",
 ]);
 export const generationJobItemError = pgEnum("generation_job_item_error", [
   "timeout",
@@ -145,6 +146,7 @@ export const generationJobItems = pgTable(
     label: text("label").notNull(),
     payload: jsonb("payload").notNull(),
     mediaAssetId: uuid("media_asset_id").references(() => mediaAssets.id, { onDelete: "restrict" }),
+    externalId: text("external_id"),
     status: generationJobItemStatus("status").default("queued").notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).defaultNow().notNull(),
@@ -174,6 +176,10 @@ export const generationJobItems = pgTable(
       .where(sql`${t.mediaAssetId} IS NOT NULL AND ${t.status} IN ('queued','running','failed')`),
     check("generation_job_items_position_nonneg", sql`${t.position} >= 0`),
     check("generation_job_items_label_len", sql`char_length(${t.label}) <= 200`),
+    check(
+      "generation_job_items_external_id_len",
+      sql`${t.externalId} IS NULL OR (char_length(${t.externalId}) BETWEEN 1 AND 200 AND btrim(${t.externalId}) = ${t.externalId})`,
+    ),
     check("generation_job_items_last_error_len", sql`${t.lastError} IS NULL OR char_length(${t.lastError}) <= 500`),
     check("generation_job_items_lease_pair", sql`(${t.leaseUntil} IS NULL) = (${t.leaseOwner} IS NULL)`),
     check("generation_job_items_running_leased", sql`(${t.status} = 'running') = (${t.leaseOwner} IS NOT NULL)`),

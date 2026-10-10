@@ -213,10 +213,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # semantic-release tags HEAD when it cuts a release. A re-run on an already released commit
       # finds the tag from the earlier run, which only rebuilds the same version.
+      #
+      # The fetch is load-bearing. This repo runs @semantic-release/github with no
+      # @semantic-release/git, so the tag is created through the GitHub API and never reaches this
+      # clone — and `actions/checkout` fetched before the release existed. Without the fetch
+      # `--points-at` finds nothing, `version` comes back empty, and the `image` job below is
+      # skipped: releases are cut but `latest` never moves, so only `edge` carries new code.
       - id: released
         run: |
+          git fetch --force --tags origin
           tag=$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1)
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Release tag at HEAD: ${tag:-<none>}"
 
   # Publishes every green main commit as ghcr.io/<owner>/docket:edge (and :sha-<short>), whether
   # or not it cuts a release. `latest` stays on the last release; `edge` is for following main.

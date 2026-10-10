@@ -46,7 +46,7 @@ const createBody = z.object({
 });
 
 const itemsQuery = pageQuerySchema.extend({
-  status: z.enum(["queued", "running", "done", "failed", "cancelled"]).optional(),
+  status: z.enum(["queued", "running", "done", "failed", "cancelled", "skipped"]).optional(),
 });
 
 export const jobOperations = [
@@ -76,11 +76,11 @@ export const jobOperations = [
     tag: "Jobs",
     summary: "Create a generation job",
     description:
-      "`source.kind: \"api\"` takes declared `fields` and optional first `items`; with `open: true` more items can be added later and the job finishes once it is closed. `media` takes an image selection. CSV jobs are created in the app. `approvalPolicy: auto_approve` also needs `auto_approve`.",
+      "`source.kind: \"api\"` takes declared `fields` and optional first `items`; with `open: true` more items can be added later and the job finishes once it is closed. `media` takes an image selection. CSV jobs are created in the app. `approvalPolicy: auto_approve` also needs `auto_approve`. An `api` item's `externalId` tags it with a record id in `source.sourceKey`'s namespace; an id already posted is silently dropped and counted in `skippedAlreadyPosted`.",
     body: { kind: "json", schema: createBody },
     responses: {
-      201: { description: "The job", schema: JobSchema },
-      400: { description: "Invalid request" },
+      201: { description: "The job", schema: JobSchema.extend({ skippedAlreadyPosted: z.number().int() }) },
+      400: { description: "Invalid request, or every item was already posted" },
       409: { description: "An image is reserved by another job" },
       503: { description: "No model configured" },
     },
@@ -97,7 +97,8 @@ export const jobOperations = [
         scheduling: b.schedulingPolicy,
         confirmUnreviewedQueue: b.confirmUnreviewedQueue ?? false,
       });
-      return { status: 201, body: await loadApiJob(scope, result.jobId) };
+      const job = await loadApiJob(scope, result.jobId);
+      return { status: 201, body: { ...job, skippedAlreadyPosted: result.skippedAlreadyPosted } };
     },
   }),
   defineOperation({
@@ -161,7 +162,8 @@ export const jobOperations = [
     permission: "manage_jobs",
     tag: "Jobs",
     summary: "Add items to an open job",
-    description: "1–100 items per call, at most 500 per job. All items are added or none are.",
+    description:
+      "1–100 items per call, at most 500 per job. All items are added or none are. An item's `externalId` is checked against the job's namespace; an id already posted is silently dropped and counted in `skippedAlreadyPosted` rather than appended.",
     params: jobIdParams,
     body: { kind: "json", schema: appendItemsSchema },
     resourceParams: ["jobId"],
@@ -170,6 +172,7 @@ export const jobOperations = [
         description: "The items added",
         schema: z.object({
           added: z.number().int(),
+          skippedAlreadyPosted: z.number().int(),
           itemCount: z.number().int(),
           items: z.array(z.object({ id: z.uuid(), position: z.number().int() })),
         }),

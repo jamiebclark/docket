@@ -30,6 +30,7 @@ export const projectOwnedTables = [
   { table: "generation_failures", scopeColumn: "project_id" },
   { table: "generation_jobs", scopeColumn: "project_id" },
   { table: "generation_job_items", scopeColumn: "project_id" },
+  { table: "external_item_claims", scopeColumn: "project_id" },
   { table: "api_keys", scopeColumn: "project_id" },
   { table: "api_idempotency_keys", scopeColumn: "project_id" },
   { table: "webhook_endpoints", scopeColumn: "project_id" },

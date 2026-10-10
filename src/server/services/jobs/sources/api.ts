@@ -35,7 +35,12 @@ export function prepareApiItems(declared: readonly string[], items: readonly Api
         message: `The values total ${total} characters; the limit is ${JOB_ITEM_DATA_MAX.toLocaleString("en-US")}`,
       });
     }
-    return { fields, mediaAssetId: item.mediaId ?? null, label: (item.label?.trim() || `Item ${base + i + 1}`).slice(0, 200) };
+    return {
+      fields,
+      mediaAssetId: item.mediaId ?? null,
+      externalId: item.externalId ?? null,
+      label: (item.label?.trim() || `Item ${base + i + 1}`).slice(0, 200),
+    };
   });
   if (issues.length > 0) throw new ValidationIssuesError(issues, issues[0]!.message);
   return out;
@@ -86,7 +91,7 @@ export const apiSource: ItemSource<ApiSourceInput> = {
       fields: input.fields,
       items,
       summary: "Items sent through the API",
-      meta: { open: input.open === true },
+      meta: { open: input.open === true, sourceKey: input.sourceKey },
       excluded: [],
       brief: BRIEF,
       // An image the caller named is used even if used before, but never one another job holds.

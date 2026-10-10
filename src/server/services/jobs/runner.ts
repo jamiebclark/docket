@@ -1,6 +1,7 @@
 // jobs/runner: process one claimed job item (contracts/runner.md). Every write after the claim is lease-checked
 // and holds the job lock first; no model, storage or sharp work happens inside a held transaction.
 import { renderTemplate } from "@/lib/jobs/template";
+import { apiSourceMetaSchema } from "@/lib/validation/api";
 import { itemPayloadSchema, jobInstructionsSnapshotSchema } from "@/lib/validation/jobs";
 import type { GenerationRecord } from "@/lib/validation/generation";
 import { voiceContentSchema } from "@/lib/validation/voice";
@@ -81,6 +82,8 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
   const t0 = Date.now();
   let outcome = "stale";
   let scope: ProjectScope | null = null;
+  const sourceKey = item.externalId ? apiSourceMetaSchema.parse(job.sourceMeta).sourceKey : null;
+  const external = item.externalId && sourceKey ? { sourceKey, externalId: item.externalId } : undefined;
 
   const remaining = async () => ctx.deadline - (await clock.now()).getTime();
 
@@ -137,6 +140,21 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     if (await commit({ status: "queued", ...UNLEASED })) {
       counts.released++;
       outcome = "released";
+    }
+  }
+
+  async function skip(): Promise<void> {
+    const ok = await commit({
+      status: "skipped",
+      ...UNLEASED,
+      pendingRetry: null,
+      finishedAt: await clock.now(),
+      lastErrorKind: null,
+      lastError: null,
+    });
+    if (ok) {
+      counts.skipped++;
+      outcome = "skipped";
     }
   }
 
@@ -246,6 +264,8 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       if (!prepared.ok) return await fail("image_unavailable", prepared.message);
     }
 
+    if (external && (await s.externalClaims.find(external.sourceKey, external.externalId))) return await skip();
+
     const window = Math.min(llmTimeoutMs(), (await remaining()) - cfg.persistReserveMs);
     if (window < cfg.minCallMs) return await release();
 
@@ -340,12 +360,17 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
           createdByUserId: job.createdByUserId,
           createdByApiKeyId: job.createdByApiKeyId,
           link: { generationJobItemId: item.id },
+          external,
         });
         await refreshJobStatus(tx, job.id);
         return id;
       });
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
+      if (external && (await s.externalClaims.find(external.sourceKey, external.externalId))) {
+        await skip();
+        return;
+      }
       const winner = await s.posts.findByJobItemId(item.id, { includeDeleted: true });
       if (!winner) throw error;
       postId = winner.id;

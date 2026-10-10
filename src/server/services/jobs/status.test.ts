@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { JobCounts, JobStatus } from "../../dal/jobs";
 import { deriveJobStatus } from "./status";
 
-const c = (over: Partial<JobCounts>): JobCounts => ({ queued: 0, running: 0, done: 0, failed: 0, cancelled: 0, ...over });
+const c = (over: Partial<JobCounts>): JobCounts => ({
+  queued: 0,
+  running: 0,
+  done: 0,
+  failed: 0,
+  cancelled: 0,
+  skipped: 0,
+  ...over,
+});
 
 describe("deriveJobStatus", () => {
   const rows: [string, JobStatus, Partial<JobCounts>, boolean, JobStatus][] = [
@@ -18,6 +26,9 @@ describe("deriveJobStatus", () => {
     ["cancelled stays cancelled", "cancelled", { queued: 1 }, true, "cancelled"],
     ["cancelled stays cancelled with all settled", "cancelled", { done: 1, cancelled: 2 }, true, "cancelled"],
     ["cancelled items alone complete a job that was never cancelled", "running", { done: 1, cancelled: 1 }, true, "completed"],
+    ["skipped counts as worked and finished, not failed", "running", { skipped: 3 }, false, "completed"],
+    ["skipped and failed still reads as failed", "running", { skipped: 1, failed: 1 }, true, "completed_with_failures"],
+    ["skipped and queued is still running", "queued", { skipped: 1, queued: 1 }, false, "running"],
   ];
   it.each(rows)("%s", (_name, current, counts, started, expected) => {
     expect(deriveJobStatus(current, c(counts), started, false)).toBe(expected);

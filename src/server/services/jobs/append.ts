@@ -1,10 +1,11 @@
 // jobs/append: add items to an open job (research D18). All-or-nothing: a bad item refuses the whole request.
-import { appendItemsSchema, API_ITEMS_PER_CALL_MAX } from "@/lib/validation/api";
+import { apiSourceMetaSchema, appendItemsSchema, API_ITEMS_PER_CALL_MAX } from "@/lib/validation/api";
 import { JOB_ITEMS_MAX } from "@/lib/validation/jobs";
 import { z } from "zod";
 import { ConflictError, JobClosedError, JobItemLimitError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
 import { assertMediaFits, distinctProviderKeys, isUniqueViolation, loadAccounts, need } from "../generation/single";
+import { dropAlreadyPosted } from "./claims";
 import { assertRenderedFits, insertItems } from "./create";
 import { assertApiMediaAvailable, prepareApiItems } from "./sources/api";
 
@@ -12,6 +13,7 @@ export interface AppendResult {
   added: number;
   itemCount: number;
   items: { id: string; position: number }[];
+  skippedAlreadyPosted: number;
 }
 
 export { API_ITEMS_PER_CALL_MAX };
@@ -29,11 +31,13 @@ export async function appendItems(scope: ProjectScope, jobId: string, input: unk
       if (!job) throw new NotFoundError("Job not found");
       if (job.status === "cancelled") throw new JobClosedError("This job was cancelled and accepts no more items.");
       if (!job.open) throw new JobClosedError();
-      if (job.itemCount + parsed.items.length > JOB_ITEMS_MAX) {
+      const { sourceKey } = apiSourceMetaSchema.parse(job.sourceMeta);
+      const prepared = prepareApiItems(job.templateFields, parsed.items, job.itemCount);
+      assertRenderedFits(job.template, prepared, (i) => `items.${i}`, "too_long");
+      const { kept: items, skipped: skippedAlreadyPosted } = await dropAlreadyPosted(tx, sourceKey, prepared);
+      if (job.itemCount + items.length > JOB_ITEMS_MAX) {
         throw new JobItemLimitError(`A job can have at most ${JOB_ITEMS_MAX} items; this one has ${job.itemCount}.`);
       }
-      const items = prepareApiItems(job.templateFields, parsed.items, job.itemCount);
-      assertRenderedFits(job.template, items, (i) => `items.${i}`, "too_long");
       if (items.some((i) => i.mediaAssetId !== null)) {
         assertMediaFits(distinctProviderKeys(await loadAccounts(tx, job.targetAccountIds)), 1);
         await assertApiMediaAvailable(tx, items);
@@ -41,7 +45,12 @@ export async function appendItems(scope: ProjectScope, jobId: string, input: unk
       const base = job.itemCount;
       await insertItems(tx, job, items);
       const rows = await tx.jobItems.listForJob(job.id, { limit: items.length, offset: base });
-      return { added: items.length, itemCount: base + items.length, items: rows.map((r) => ({ id: r.id, position: r.position })) };
+      return {
+        added: items.length,
+        itemCount: base + items.length,
+        items: rows.map((r) => ({ id: r.id, position: r.position })),
+        skippedAlreadyPosted,
+      };
     });
 
   try {
