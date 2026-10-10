@@ -41,30 +41,40 @@ export function hasProviderMark(key: string): key is ProviderMarkKey {
  * A social platform's own mark (Simple Icons) on a tile in its brand colour, for telling accounts
  * apart at a glance. Decorative: show the platform name as text beside it. Providers without a
  * brand (the offline mock) get the Lucide "flask" glyph on a neutral tile.
+ *
+ * `muted` keeps the mark but drops the brand colour for the `muted` tile, so a placeholder (an empty
+ * posting slot on the calendar) recedes behind the posts that are really there.
  */
-export function ProviderIcon({ providerKey, size = 32, className = "" }: { providerKey: string; size?: number; className?: string }) {
+export function ProviderIcon({
+  providerKey,
+  size = 32,
+  muted = false,
+  className = "",
+}: {
+  providerKey: string;
+  size?: number;
+  /** Render the mark in the neutral tile instead of the platform's brand colour (placeholders). */
+  muted?: boolean;
+  className?: string;
+}) {
   const glyph = Math.round(size * 0.56);
-  if (!hasProviderMark(providerKey)) {
-    return (
-      <span
-        aria-hidden="true"
-        style={{ width: size, height: size }}
-        className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground ${className}`}
-      >
-        <Icon name="flask" size={glyph} />
-      </span>
-    );
-  }
-  const mark = PROVIDER_MARKS[providerKey];
+  const mark = hasProviderMark(providerKey) ? PROVIDER_MARKS[providerKey] : null;
+  const brand = mark && !muted ? mark.hex : null;
   return (
     <span
       aria-hidden="true"
-      style={{ width: size, height: size, backgroundColor: mark.hex }}
-      className={`inline-flex shrink-0 items-center justify-center rounded-lg text-white ring-1 ring-border ${className}`}
+      style={{ width: size, height: size, ...(brand ? { backgroundColor: brand } : {}) }}
+      className={`inline-flex shrink-0 items-center justify-center rounded-lg ${
+        brand ? "text-white ring-1 ring-border" : "bg-muted text-muted-foreground"
+      } ${className}`}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={glyph} height={glyph} fill="currentColor" focusable="false">
-        <path d={mark.path} />
-      </svg>
+      {mark ? (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={glyph} height={glyph} fill="currentColor" focusable="false">
+          <path d={mark.path} />
+        </svg>
+      ) : (
+        <Icon name="flask" size={glyph} />
+      )}
     </span>
   );
 }

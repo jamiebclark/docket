@@ -25,7 +25,7 @@ export function MediaEditDialog({ slug, item, open, onClose }: { slug: string; i
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title={item.kind === "video" ? "Edit video details" : "Edit image details"}>
+    <Dialog open={open} onClose={onClose} title={item.kind === "video" ? "Edit video details" : "Edit image details"} dismissOnBackdrop={false}>
       <form
         className="flex flex-col gap-3"
         onSubmit={(e) => {

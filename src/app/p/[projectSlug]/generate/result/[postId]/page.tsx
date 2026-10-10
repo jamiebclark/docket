@@ -130,7 +130,7 @@ export default async function ResultPage({ params }: { params: Promise<{ project
       </div>
 
       <details className="max-w-2xl text-sm">
-        <summary className="cursor-pointer font-medium">Generation details</summary>
+        <summary className="font-medium">Generation details</summary>
         <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
           <dt>Provider</dt>
           <dd>{record.provider}</dd>

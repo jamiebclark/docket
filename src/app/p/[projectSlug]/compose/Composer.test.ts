@@ -89,7 +89,7 @@ describe("fetchCheck", () => {
 describe("Composer requirements summary", () => {
   const two: AccountOption[] = [...accounts, { id: "a3", displayName: "Third", providerKey: "bluesky", providerName: "Bluesky", status: "active", providerAvailable: true }];
 
-  it("shows each selected account's summary with every field, open when one account is selected", async () => {
+  it("shows each selected account's summary with every field, closed even with one account selected", async () => {
     const html = render({ check: await checked(result([target()])) });
     expect(html).toContain("300 graphemes · up to 4 images · JPEG, PNG");
     expect(html).toContain("What Bluesky accepts");
@@ -97,7 +97,13 @@ describe("Composer requirements summary", () => {
     for (const term of ["Text", "Images", "Formats", "Maximum file size", "Width", "Height", "Aspect ratio", "Alt text", "Image required", "Text-only posts"]) {
       expect(html).toContain(`<dt class="font-medium">${term}</dt>`);
     }
-    expect(html).toContain("<details open");
+    // The spec table runs to ~25 rows: reference material, never expanded before it is asked for.
+    expect(html).not.toContain("<details open");
+  });
+
+  it("puts the spec table after the preview text, not before it", async () => {
+    const html = render({ check: await checked(result([target({ effectiveText: "the post body" })])) });
+    expect(html.indexOf("the post body")).toBeLessThan(html.indexOf("What Bluesky accepts"));
   });
 
   it("starts closed with several accounts selected, and shows one summary per account", async () => {
@@ -310,5 +316,49 @@ describe("Composer action bar when no slot is active (FR-081)", () => {
     const unknown = render({ accounts: accounts.map((a) => ({ ...a, hasActiveSlot: null })), ...(await withCheck()) });
     expect(unknown).not.toContain("needs posting slots");
     expect(unknown).not.toMatch(/<button[^>]*disabled=""[^>]*>Add to queue…/);
+  });
+});
+
+describe("Composer counts, slot and quiet start (044)", () => {
+  it("puts each count under the text box it belongs to, linked to the field, and not in the preview", async () => {
+    const html = render({ check: await checked(result([target()])) });
+    expect(html).toMatch(/<p id="[^"]*-text-count"[^>]*>[\s\S]*?5 \/ 300/);
+    expect(html).toMatch(/<textarea[^>]*aria-describedby="[^"]*-text-count/);
+    // One count per account, under the field — the preview header no longer repeats it.
+    expect(html.match(/data-testid="counter-a1"/g)).toHaveLength(1);
+  });
+
+  it("names the slot on Schedule instead of a banner, and makes Schedule the one magenta action", async () => {
+    const html = render({ scheduleFor: { local: "2026-10-10T09:15", label: "Main · 09:15" }, check: await checked(result([target()])) });
+    expect(html).not.toContain("Writing for the");
+    expect(html).toMatch(/<button[^>]*title="Opens on the Main · 09:15 slot"[^>]*>Schedule…/);
+    expect(html).toMatch(/<button[^>]*bg-cta[^>]*>Schedule…/);
+    expect(html).not.toMatch(/<button[^>]*bg-cta[^>]*>Add to queue…/);
+    const describedBy = /<button[^>]*aria-describedby="([^"]*-slot)"[^>]*>Schedule…/.exec(html)?.[1];
+    expect(describedBy).toBeTruthy();
+    expect(html).toContain(`<span id="${describedBy}" class="sr-only">Opens on the Main · 09:15 slot.`);
+  });
+
+  it("holds the empty-post verdict back until something is written", () => {
+    const empty = result([
+      target({
+        effectiveText: "",
+        count: 0,
+        canSchedule: false,
+        issues: [{ severity: "error", code: "empty_post", message: "The post has no text and no media.", field: "text" }],
+      }),
+    ]);
+    const untouched = render({ initial: undefined, initialSelected: ["a1"], check: empty });
+    expect(untouched).not.toContain("The post has no text and no media.");
+    expect(untouched).not.toContain("Errors");
+    expect(untouched).not.toContain("Fix the errors above");
+    expect(untouched).toContain("Nothing written yet.");
+    expect(untouched).toContain("Add some text or an image, then schedule.");
+    // Still blocked, and the Add to queue button still says why through the same id.
+    expect(untouched).toMatch(/<button[^>]*disabled=""[^>]*aria-describedby="[^"]*-blocked"[^>]*>Add to queue…/);
+    // With text on the post the same verdict is shown in full.
+    const touched = render({ check: empty });
+    expect(touched).toContain("The post has no text and no media.");
+    expect(touched).toContain("Errors");
   });
 });

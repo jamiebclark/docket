@@ -66,7 +66,7 @@ export function DeliveryLog({
               {EVENT_LABELS[d.eventType] ?? d.eventType} <code className="font-mono text-xs">{d.eventId.slice(0, 8)}</code>
               {d.attempts.length > 0 ? (
                 <details className="mt-1 text-xs font-normal">
-                  <summary className="cursor-pointer">Attempts</summary>
+                  <summary>Attempts</summary>
                   <ol className="mt-1 flex flex-col gap-1">
                     {d.attempts.map((a) => (
                       <li key={a.attempt}>

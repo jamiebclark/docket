@@ -136,7 +136,7 @@ export function AccountPicker({
             <li key={a.id} className="min-w-0">
               <label
                 htmlFor={id}
-                className={`group relative flex h-full items-start gap-3 rounded-xl border p-3 transition-colors has-focus-visible:ring-2 has-focus-visible:ring-focus has-focus-visible:ring-offset-2 ${
+                className={`group relative flex h-full items-start gap-2.5 rounded-xl border p-2.5 transition-colors has-focus-visible:ring-2 has-focus-visible:ring-focus has-focus-visible:ring-offset-2 ${
                   checked ? "border-primary bg-accent/40 shadow-[inset_0_0_0_1px_var(--primary)]" : "border-border bg-surface hover:border-primary/50 hover:bg-muted/40"
                 } ${off ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
               >
@@ -149,7 +149,19 @@ export function AccountPicker({
                   onChange={(e) => toggle(a.id, e.target.checked)}
                   className="peer sr-only"
                 />
-                <ProviderIcon providerKey={a.providerKey} size={36} />
+                {/* The tick rides on the platform mark: it keeps a non-colour cue for the chosen state
+                    without a checkbox column of its own, which only repeated what the card already says. */}
+                <span className="relative shrink-0">
+                  <ProviderIcon providerKey={a.providerKey} size={28} />
+                  {checked ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full border border-surface bg-primary text-primary-foreground"
+                    >
+                      <Icon name="check" size={10} className="stroke-[3]" />
+                    </span>
+                  ) : null}
+                </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate text-sm font-semibold text-foreground">{a.displayName}</span>
                   <span className="truncate text-xs text-muted-foreground">{a.providerName}</span>
@@ -163,14 +175,6 @@ export function AccountPicker({
                       {a.unavailableReason}
                     </span>
                   ) : null}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                    checked ? "border-primary bg-primary text-primary-foreground" : "border-input bg-surface text-transparent"
-                  }`}
-                >
-                  <Icon name="check" size={13} className="stroke-[3]" />
                 </span>
               </label>
             </li>

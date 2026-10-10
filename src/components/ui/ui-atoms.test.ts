@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Badge } from "./Badge";
 import { Checklist, checklistStatusText } from "./Checklist";
+import { Dialog } from "./Dialog";
 import { FilterTabs } from "./FilterTabs";
+import { ProviderIcon } from "./Icon";
 import { LiveRegion } from "./LiveRegion";
 import { formatLocal, LocalTime } from "./LocalTime";
 import { nextMenuIndex } from "./Menu";
@@ -126,5 +128,36 @@ describe("Checklist", () => {
   it("words every status", () => {
     expect(checklistStatusText({ kind: "done" })).toBe("Done");
     expect(checklistStatusText({ kind: "waiting", on: "Ana" })).toBe("Waiting on Ana");
+  });
+});
+
+describe("Dialog", () => {
+  const open = (props: Record<string, unknown> = {}) =>
+    html(createElement(Dialog, { open: true, onClose: () => {}, title: "Delete this post?", ...props } as never, createElement("p", null, "Body")));
+
+  it("titles itself and offers a labelled Close button, so Escape is not the only way out", () => {
+    const out = open();
+    expect(out).toMatch(/<h2 id="[^"]+" class="[^"]*text-heading[^"]*">Delete this post\?<\/h2>/);
+    expect(out).toMatch(/aria-labelledby="([^"]+)"[\s\S]*id="\1"/);
+    expect(out).toContain("<span class=\"sr-only\">Close</span>");
+    expect(out).toContain("ring-focus");
+  });
+
+  it("sticks the header, and only it, in a scrolling form dialog", () => {
+    expect(open({ size: "lg" })).toContain("sticky top-0");
+    expect(open()).not.toContain("sticky top-0");
+  });
+});
+
+describe("ProviderIcon", () => {
+  it("uses the platform's colour by default and the muted tile for a placeholder", () => {
+    const brand = html(createElement(ProviderIcon, { providerKey: "bluesky" }));
+    expect(brand).toContain("<path");
+    expect(brand).toContain("background-color");
+    const muted = html(createElement(ProviderIcon, { providerKey: "bluesky", muted: true }));
+    // Same mark, no brand fill: an empty slot must not read as loudly as a scheduled post.
+    expect(muted).toContain("<path");
+    expect(muted).not.toContain("background-color");
+    expect(muted).toContain("bg-muted");
   });
 });
