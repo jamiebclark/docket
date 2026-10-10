@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { listedOrder } from "@/lib/accounts/chooser-order";
 import { chooseConnectCandidatesAction } from "../../actions";
 import { buttonStyles } from "@/components/ui/Button";
 import { checkStyles } from "@/components/ui/controls";
@@ -67,8 +68,9 @@ export function ChooserForm({ slug, attemptId, candidates }: { slug: string; att
   }, [failures]);
 
   const keys = new Set(candidates.map((c) => c.key));
-  const roots = candidates.filter((c) => !c.parentKey || !keys.has(c.parentKey));
-  const childrenOf = (key: string) => candidates.filter((c) => c.parentKey === key);
+  const ordered = listedOrder(candidates);
+  const roots = ordered.filter((c) => !c.parentKey || !keys.has(c.parentKey));
+  const childrenOf = (key: string) => ordered.filter((c) => c.parentKey === key);
 
   const toggle = (key: string, on: boolean) =>
     setSelected((current) => {

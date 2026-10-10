@@ -80,11 +80,12 @@ export function ProjectSwitcher({
         type="button"
         onClick={show}
         aria-haspopup="dialog"
+        aria-keyshortcuts="Control+K Meta+K"
         className="inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-border bg-surface pr-2 pl-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:border-primary/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <span className="truncate">{currentName}</span>
         <Icon name="chevronDown" size={16} className="text-muted-foreground" />
-        <kbd className="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground sm:inline">Ctrl/⌘ K</kbd>
+        <kbd aria-hidden="true" className="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground sm:inline">Ctrl/⌘ K</kbd>
       </button>
       <dialog
         ref={dialogRef}

@@ -96,6 +96,7 @@ export function Composer({
   managersToAsk = "an owner or admin",
   canEdit,
   canSchedule,
+  firstPostDone = true,
   mediaEnabled,
   initialMedia = [],
   initial,
@@ -109,6 +110,8 @@ export function Composer({
   managersToAsk?: string;
   canEdit: boolean;
   canSchedule: boolean;
+  /** False only when no post counts toward the first-post step yet; a missing prop never shows the link. */
+  firstPostDone?: boolean;
   mediaEnabled: boolean;
   /** Views of the images already on the post, in order. */
   initialMedia?: MediaView[];
@@ -597,6 +600,7 @@ export function Composer({
           slug={slug}
           postId={postId}
           timeZone={timeZone}
+          firstPostDone={firstPostDone}
           names={names}
           onQueued={() => router.refresh()}
         />
@@ -608,6 +612,7 @@ export function Composer({
           slug={slug}
           postId={postId}
           timeZone={timeZone}
+          firstPostDone={firstPostDone}
           names={names}
           accountIds={selected}
           onScheduled={() => router.refresh()}
@@ -620,6 +625,7 @@ export function Composer({
           slug={slug}
           postId={postId}
           timeZone={timeZone}
+          firstPostDone={firstPostDone}
           names={names}
           accountIds={selected}
           onPublished={() => router.refresh()}

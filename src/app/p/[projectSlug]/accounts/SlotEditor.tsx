@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -90,6 +91,7 @@ export function SlotRowActions({ slug, id, paused, label }: { slug: string; id: 
 }
 
 export function ReconnectMockButton({ slug, id }: { slug: string; id: string }) {
+  const router = useRouter();
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   return (
@@ -101,6 +103,7 @@ export function ReconnectMockButton({ slug, id }: { slug: string; id: string }) 
           start(async () => {
             const res = await reconnectMockAction(slug, { id });
             setError(res.ok ? "" : res.message);
+            if (res.ok) router.push(res.data.landing);
           })
         }
       >

@@ -10,6 +10,7 @@ import { hasActiveSlot } from "@/lib/roles/slots";
 import { askManagers } from "@/lib/roles/names";
 import { listManagers } from "@/server/services/members";
 import { listSlotCounts } from "@/server/services/slots";
+import { hasFirstPost } from "@/server/services/overview";
 import { Composer } from "../Composer";
 
 export const metadata: Metadata = { title: "Edit post" };
@@ -30,6 +31,8 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
   const list = await accounts.listAccounts(scope);
   const counts = await listSlotCounts(scope).catch(() => null);
   const slotById = new Map((counts ?? []).map((c) => [c.accountId, hasActiveSlot(c)]));
+  const canSchedule = scope.can({ post: ["schedule"] });
+  const firstPostDone = canSchedule ? await hasFirstPost(scope) : true;
   const canManageAccounts = scope.can({ account: ["manage"] });
   const canManageSlots = scope.can({ slot: ["manage"] });
   const managersToAsk =
@@ -57,7 +60,8 @@ export default async function EditPostPage({ params }: { params: Promise<{ proje
       canManageSlots={canManageSlots}
       managersToAsk={managersToAsk}
       canEdit={scope.can({ post: ["edit"] })}
-      canSchedule={scope.can({ post: ["schedule"] })}
+      canSchedule={canSchedule}
+      firstPostDone={firstPostDone}
       mediaEnabled={getStorage() !== null}
       initialMedia={initialMedia}
       initial={{

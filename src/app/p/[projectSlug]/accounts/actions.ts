@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { classifyConnect, landingHref } from "@/lib/accounts/connect-landing";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
@@ -16,24 +17,35 @@ async function mutate<T>(slug: string, fn: Parameters<typeof runAction<T>>[1]): 
   return result;
 }
 
+export type ConnectedAccount = accounts.AccountView & { landing: string };
+
+/** Where the browser goes after a successful connect: the first new account's slots, or the card for a reconnect. */
+function landingFor(slug: string, saved: accounts.AccountView[], priorIds: ReadonlySet<string>): string {
+  const landing = classifyConnect(saved, priorIds);
+  return landing ? landingHref(slug, landing) : `/p/${encodeURIComponent(slug)}/accounts`;
+}
+
 export async function connectMockAction(
   slug: string,
   input: { displayName: string; simulateCredentialExpiryHours?: number },
-): Promise<ActionResult<accounts.AccountView>> {
-  return mutate(slug, (scope) => accounts.connectMock(scope, input));
+): Promise<ActionResult<ConnectedAccount>> {
+  return mutate(slug, async (scope) => {
+    const account = await accounts.connectMock(scope, input);
+    return { ...account, landing: landingFor(slug, [account], new Set()) };
+  });
 }
 
 /** Never echoes `input.fields`: the result carries the account view or an error message only. */
 export async function connectCredentialsAction(
   slug: string,
   input: { providerKey: string; fields: Record<string, string>; accountId?: string },
-): Promise<ActionResult<accounts.AccountView>> {
-  const result = await runAction(slug, async (scope) => ({
-    outcome: await accounts.connectWithCredentials(scope, input),
-    timeZone: scope.project.timezone,
-  }));
+): Promise<ActionResult<ConnectedAccount>> {
+  const result = await runAction(slug, async (scope) => {
+    const priorIds = new Set((await accounts.listAccounts(scope)).map((a) => a.id));
+    return { outcome: await accounts.connectWithCredentials(scope, input), timeZone: scope.project.timezone, priorIds };
+  });
   if (!result.ok) return result;
-  const { outcome, timeZone } = result.data;
+  const { outcome, timeZone, priorIds } = result.data;
   if (!outcome.ok) {
     const when = outcome.retryAt
       ? ` Try again after ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone }).format(outcome.retryAt)} (${timeZone}).`
@@ -41,11 +53,14 @@ export async function connectCredentialsAction(
     return fail("validation", `${outcome.message}${when}`, outcome.fieldErrors);
   }
   refresh();
-  return ok(outcome.account);
+  return ok({ ...outcome.account, landing: landingFor(slug, [outcome.account], priorIds) });
 }
 
-export async function reconnectMockAction(slug: string, input: { id: string }): Promise<ActionResult<accounts.AccountView>> {
-  return mutate(slug, (scope) => accounts.reconnectMock(scope, input?.id));
+export async function reconnectMockAction(slug: string, input: { id: string }): Promise<ActionResult<ConnectedAccount>> {
+  return mutate(slug, async (scope) => {
+    const account = await accounts.reconnectMock(scope, input?.id);
+    return { ...account, landing: landingFor(slug, [account], new Set([account.id])) };
+  });
 }
 
 export async function setMockBehaviourAction(
@@ -115,17 +130,19 @@ export async function chooseConnectCandidatesAction(
   const binding = await sessionBinding();
   if (!binding) return fail("unauthenticated", "Sign in to continue.");
   const result = await runAction(slug, async (scope) => {
+    const priorIds = new Set((await accounts.listAccounts(scope)).map((a) => a.id));
     const outcome = await connect.chooseConnectCandidates(
       scope,
       { attemptId: input?.attemptId, selected: Array.isArray(input?.selected) ? input.selected : [] },
       binding,
     );
-    return outcome;
+    return { outcome, priorIds };
   });
   if (!result.ok) return result;
-  if (!result.data.ok) return fail("validation", result.data.message);
+  const { outcome, priorIds } = result.data;
+  if (!outcome.ok) return fail("validation", outcome.message);
   refresh();
-  redirect(`/p/${slug}/accounts`);
+  redirect(landingFor(slug, outcome.saved, priorIds));
 }
 
 /** Never echoes `input.token`; redirects to the chooser on success. */

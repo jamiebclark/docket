@@ -8,6 +8,7 @@ export type DocPage =
   | "adding-a-provider"
   | "deployment"
   | "generator"
+  | "getting-started"
   | "limits"
   | "meta-setup"
   | "n8n"

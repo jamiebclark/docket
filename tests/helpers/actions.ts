@@ -44,4 +44,6 @@ export const navigationModule = {
   notFound: (): never => {
     throw new NotFoundSignal();
   },
+  // Client forms that render under renderToStaticMarkup call this; navigation itself is not exercised.
+  useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, forward: () => {}, prefetch: () => {} }),
 };

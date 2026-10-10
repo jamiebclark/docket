@@ -56,6 +56,7 @@ describe("project overview, new owner (US1)", () => {
     expect(empty).toContain("Connect an account");
     expect(empty).toContain(`href="/p/${env.project.slug}/accounts#add-account"`);
     expect(empty).toContain("Getting started");
+    expect(empty).toContain("Read the getting-started guide");
     expect(empty.match(/<ol[\s>]/g)).toHaveLength(1);
     // The owner's "Server setup" row is a fourth item whenever the test server has something unconfigured (US4).
     const serverRow = empty.includes("Server setup") ? 1 : 0;
@@ -428,6 +429,10 @@ describe("collapsed checklist markup (F2)", () => {
     const summary = /<summary[^>]*>([^<]*)<\/summary>/.exec(html);
     expect(summary?.[1]).toBe("Setup complete");
     expect(summary?.[0]).toContain("focus-visible:ring-2");
+    // The guide link sits after the details, so it shows while the list is collapsed.
+    const link = /<a [^>]*href="https:\/\/jamiebclark\.github\.io\/docket\/getting-started\/"[^>]*>Read the getting-started guide<\/a>/.exec(html);
+    expect(link?.[0]).toContain('target="_blank"');
+    expect(html.indexOf("</details>")).toBeLessThan(link?.index ?? -1);
     const inside = /<details>[\s\S]*<\/details>/.exec(html)?.[0] ?? "";
     expect(inside).toContain("Upload images or videos");
     expect(inside).toContain("The scheduler isn&#x27;t running");

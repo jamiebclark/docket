@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -33,6 +34,7 @@ export function ConnectCredentialsForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [announcement, setAnnouncement] = useState("");
   const [failures, setFailures] = useState(0);
+  const router = useRouter();
   const [pending, start] = useTransition();
 
   // After a failed submit, move focus to the first invalid field, or to the alert when no field is at fault.
@@ -53,6 +55,7 @@ export function ConnectCredentialsForm({
       if (res.ok) {
         setValues(initialValues(fields));
         setAnnouncement(`Connected ${res.data.displayName}`);
+        router.push(res.data.landing);
         return;
       }
       // Secrets are cleared on success (above) but kept on failure: the value is still in the field

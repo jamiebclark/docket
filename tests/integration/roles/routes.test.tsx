@@ -122,6 +122,8 @@ describe("New job prerequisites (US2)", () => {
     const env = await project({ owner: "Robin", admin: "Sam" });
     const html = await renderAs(NewJobPage as Page, env.proj.slug, env.owner.id);
     expect(html).toContain("Before you can generate");
+    expect(html).toContain('aria-labelledby="setup-notice-title"');
+    expect(html).toContain("border-dashed");
     expect(html).toContain("Set up AI generation");
     expect(html).toContain("Connect an account");
     expect(html).toContain("Create a voice profile");
@@ -134,6 +136,8 @@ describe("New job prerequisites (US2)", () => {
     const env = await project({ owner: "Robin", admin: "Sam" });
     const html = await renderAs(CsvJobPage as Page, env.proj.slug, env.owner.id);
     expect(html).toContain("Before you can generate");
+    expect(html).toContain('aria-labelledby="setup-notice-title"');
+    expect(html).toContain("border-dashed");
     expect(html).toContain("Set up AI generation");
     expect(html).toContain("Connect an account");
     expect(html).toContain("Create a voice profile");
@@ -171,6 +175,8 @@ describe("prerequisite statuses on every setup page (FR-082)", () => {
       await env.account();
       const html = await renderAs(page, env.project.slug, env.owner.id);
       expect(html).toContain("Before you can generate");
+      expect(html).toContain('aria-labelledby="setup-notice-title"');
+      expect(html).toContain("border-dashed");
       expect(count(html, "Done")).toBe(2);
       expect(count(html, "To do")).toBe(1 + extra);
       if (name === "Jobs") expect(html).not.toContain("New batch job from CSV");

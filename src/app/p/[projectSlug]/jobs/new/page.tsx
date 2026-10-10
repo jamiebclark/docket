@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Checklist } from "@/components/ui/Checklist";
+import { SetupNotice } from "@/components/ui/SetupNotice";
 import { PREREQUISITES_TITLE } from "@/lib/roles/prerequisites";
 import { getSession } from "@/server/auth/session";
 import { forProject, NotFoundError } from "@/server/dal";
@@ -72,7 +72,7 @@ export default async function NewJobPage({ params, searchParams }: Props) {
     return (
       <section className="flex flex-col gap-4">
         {heading}
-        <Checklist title={PREREQUISITES_TITLE} items={prerequisites ?? []} />
+        <SetupNotice title={PREREQUISITES_TITLE} items={prerequisites ?? []} icon="jobs" />
       </section>
     );
   }

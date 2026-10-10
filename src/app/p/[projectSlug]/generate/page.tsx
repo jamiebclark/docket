@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Checklist } from "@/components/ui/Checklist";
+import { SetupNotice } from "@/components/ui/SetupNotice";
 import { FilterTabs } from "@/components/ui/FilterTabs";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { findProvider } from "@/providers/registry";
@@ -52,7 +52,7 @@ export default async function GeneratePage({ params, searchParams }: Props) {
     return (
       <section className="flex flex-col gap-4">
         {heading}
-        <Checklist title={PREREQUISITES_TITLE} items={prerequisites} />
+        <SetupNotice title={PREREQUISITES_TITLE} items={prerequisites} icon="generate" />
       </section>
     );
   }

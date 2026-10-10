@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonStyles } from "@/components/ui/Button";
-import { Checklist } from "@/components/ui/Checklist";
+import { SetupNotice } from "@/components/ui/SetupNotice";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Pagination } from "@/components/ui/Pagination";
@@ -60,7 +60,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
   return (
     <section className="flex flex-col gap-4">
       <PageHeader title="Batch jobs" description="Generate many posts at once from images or a CSV file." actions={actions} />
-      {prerequisites ? <Checklist title={PREREQUISITES_TITLE} items={prerequisites} /> : null}
+      {prerequisites ? <SetupNotice title={PREREQUISITES_TITLE} items={prerequisites} icon="jobs" /> : null}
       {items.length === 0 ? (
         prerequisites ? null : (
           <EmptyState

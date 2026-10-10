@@ -12,6 +12,7 @@ import { sealBannerMessage } from "./connect-banner";
 import { generateInvitationToken, hashInvitationToken, isWellFormedToken } from "../crypto/tokens";
 import { getEnv } from "../env";
 import { isGroupConfigured } from "../provider-env";
+import { listedOrder } from "@/lib/accounts/chooser-order";
 import { connectBannerText, HINTED_CODES } from "@/lib/accounts/connect-banner-text";
 import type { ConnectFailCode } from "@/lib/activity/details";
 import { attemptActor } from "../dal/scope";
@@ -234,8 +235,14 @@ export async function chooseConnectCandidates(
       const payload = decryptCandidates(row.id, row.candidatesEncrypted);
       if (!entry || !payload) return { ok: false, message: NOT_VALID };
       const wanted = new Set(parsed.selected);
-      const chosen = payload.candidates.filter(
-        (c) => entry.providers.some((p) => p.key === c.providerKey) && wanted.has(candidateKey(c.providerKey, c.externalId)),
+      const chosen = listedOrder(
+        payload.candidates
+          .filter((c) => entry.providers.some((p) => p.key === c.providerKey) && wanted.has(candidateKey(c.providerKey, c.externalId)))
+          .map((c) => ({
+            ...c,
+            key: candidateKey(c.providerKey, c.externalId),
+            parentKey: c.parent ? candidateKey(c.parent.providerKey, c.parent.externalId) : null,
+          })),
       );
       if (chosen.length === 0) return { ok: false, message: "Nothing was connected." };
       const saved: AccountView[] = [];

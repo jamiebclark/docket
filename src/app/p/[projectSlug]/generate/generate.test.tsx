@@ -69,6 +69,8 @@ describe("generate page states", () => {
     const env = await postsEnv();
     const html = await render(env);
     expect(html).toContain("Before you can generate");
+    expect(html).toContain('aria-labelledby="setup-notice-title"');
+    expect(html).toContain("border-dashed");
     if (!status.configured) for (const name of missingLlmSettings(status.problems)) expect(html).toContain(name);
     expect(html).toContain("Connect an account");
     expect(html).toContain(`/p/${env.project.slug}/accounts#add-account`);
@@ -85,6 +87,8 @@ describe("generate page states", () => {
     const env = await postsEnv();
     const html = await render(env, env.editor);
     expect(html).toContain("Before you can generate");
+    expect(html).toContain('aria-labelledby="setup-notice-title"');
+    expect(html).toContain("border-dashed");
     expect(html).toContain("Waiting on");
     expect(html).not.toContain("LLM_PROVIDER");
     expect(html).not.toContain("/voice/new");

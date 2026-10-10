@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  countsTowardFirstPost,
   deriveAccounts,
   deriveChecklist,
   deriveComingUp,
@@ -429,5 +430,18 @@ describe("step status transitions and tool lines (SC-004, SC-005)", () => {
     expect(derivePostsByStatus(facts({ accounts: [account()] }, "editor"))).toEqual({ kind: "empty", action: null });
     const v = derivePostsByStatus(facts({ postCounts: { draft: 3 } }, "editor"));
     expect(v.kind).toBe("counts");
+  });
+});
+
+describe("countsTowardFirstPost", () => {
+  it.each(["scheduled", "publishing", "published", "partially_failed"] as const)("counts %s", (status) => {
+    expect(countsTowardFirstPost({ [status]: 1 })).toBe(true);
+  });
+  it.each(["draft", "needs_review", "approved", "failed", "rejected"] as const)("ignores %s", (status) => {
+    expect(countsTowardFirstPost({ [status]: 5 })).toBe(false);
+  });
+  it("is false for no posts and true for a mix with one counting status", () => {
+    expect(countsTowardFirstPost({})).toBe(false);
+    expect(countsTowardFirstPost({ draft: 3, failed: 2, published: 1 })).toBe(true);
   });
 });

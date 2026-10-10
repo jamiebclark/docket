@@ -172,6 +172,11 @@ export function serverSetupItems(facts: OverviewFacts): ServerSetupItem[] {
   return items;
 }
 
+/** The overview's "Write and schedule your first post" rule. */
+export function countsTowardFirstPost(counts: Partial<Record<PostStatusKey, number>>): boolean {
+  return (counts.scheduled ?? 0) + (counts.publishing ?? 0) + (counts.published ?? 0) + (counts.partially_failed ?? 0) >= 1;
+}
+
 /** Required steps 1–3 and the collapse rules. `null` when there is nothing left to show. */
 export function deriveChecklist(facts: OverviewFacts): ChecklistView | null {
   const base = `/p/${facts.project.slug}`;
@@ -180,7 +185,7 @@ export function deriveChecklist(facts: OverviewFacts): ChecklistView | null {
   const hasAccount = facts.accounts.length >= 1;
   const slotsDone = facts.accounts.some((a) => hasActiveSlot({ providerAvailable: a.providerAvailable, active: a.slots.active }));
   const c = facts.postCounts;
-  const postDone = (c.scheduled ?? 0) + (c.publishing ?? 0) + (c.published ?? 0) + (c.partially_failed ?? 0) >= 1;
+  const postDone = countsTowardFirstPost(c);
   const slotsAccount = facts.accounts.find((a) => a.providerAvailable) ?? facts.accounts[0];
   const needsAccount = "Needs an account first";
 
