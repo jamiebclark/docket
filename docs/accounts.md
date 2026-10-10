@@ -196,15 +196,19 @@ Page, and the Page was offered and accepted in Facebook's own login dialog.
 - Adding the Docket app to the Page's Business Portfolio (which makes that portfolio the app's owner).
 - Re-running the login through **Edit settings** so the grant is issued fresh instead of reused from cache.
 
-**The fix is to stop depending on `/me/accounts`.** The Page ids a person granted are available from `/debug_token`
-(`granular_scopes[].target_ids`), which Docket's server can call with an app token built from `META_APP_ID` and
-`META_APP_SECRET`. Each id then resolves through `GET /<page-id>?fields=id,name,access_token,instagram_business_account`,
-which is the call shown working above. This needs no permission beyond the five Docket already requests. Until that
-lands, a portfolio-owned Page cannot be connected.
+**What Docket does about it.** The listing is no longer the only source. After `/me/accounts`, Docket reads the Page
+ids the login actually granted from `/debug_token` (`granular_scopes[].target_ids`, using an app token built from
+`META_APP_ID` and `META_APP_SECRET`) and resolves any id the listing missed through
+`GET /<page-id>?fields=id,name,access_token,instagram_business_account`. Only Page scopes are read from the grant;
+Instagram scopes carry Instagram ids, not Page ids. This needs no permission beyond the five, which is why the ads
+permissions above were removed again rather than kept.
 
-**What works today.** Pages held directly by the connecting person, outside any Business Portfolio, connect normally
-with the five permissions — `/me/accounts` lists those. If you control the Page, moving it out of the portfolio is the
-only route confirmed to work.
+The recovery is best effort: if `/debug_token` fails, or a granted id cannot be read, the listing's own results still
+stand. Nothing changes for an install with no portfolio-owned Pages, which makes no extra lookups.
+
+**Unverified:** the recovery path is covered by tests against a scripted Graph, and each call it makes was run by hand
+in Graph API Explorer against a real portfolio-owned Page. The two have not yet been run together against the live
+API — the first real connect of such a Page is the check that matters.
 
 **Threads.** Threads offers no way to let someone else manage an account: the person who logs in during **Connect** is
 the account that gets connected. So the owner must do this step. The simplest way:
