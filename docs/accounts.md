@@ -174,27 +174,37 @@ access. If you lose your role on the Page, or change your Facebook password, the
 The owner does not need a role on your Meta app in this setup. Alternatively, add the owner as a tester on your app, make
 them an admin in the Docket project, and let them connect it themselves.
 
-**Pages in a Business Portfolio (Business Manager).** A Page owned by a Business Portfolio can fail to connect even
-when everything looks correct. Reproduced on a live install: the Page was listed under **Pages you manage**, the
-connecting person held **full control** of it, and Facebook offered and accepted the Page in its own login dialog — yet
-Docket's chooser came back empty. Facebook returns such a Page from `/me/accounts` without a Page access token, and a
-Page with no token is dropped (`src/providers/meta/candidates.ts`), so the chooser is empty and the banner can only say
-no accounts were found.
+**Pages in a Business Portfolio (Business Manager).** A Page owned by a Business Portfolio does not appear in Docket's
+chooser. This is a limitation in Docket, not a permission the connecting person is missing: `/me/accounts`, the only
+call Docket uses to find Pages, does not list such a Page at all.
 
-**Known not to fix it.** Each of these was tried against that install and the Page still arrived without a token:
+Measured against a live install, with the Page granted in the login dialog and the five permissions held:
 
-- granting `ads_management` and `ads_read` in addition to the five permissions (Meta accepted both under Standard
-  Access, so this is not an App Review problem);
-- adding the Docket app to the Page's Business Portfolio, which makes the portfolio the app's owner;
-- re-running the login with **Edit settings** so the grant was issued fresh rather than reused from cache.
+| Call | Result |
+|---|---|
+| `GET /me/accounts?fields=id,name,access_token` | `{"data": []}` — the Page is absent entirely |
+| `GET /<page-id>?fields=id,name,access_token,instagram_business_account` | returns the Page, **with** a Page access token and its linked Instagram account |
+| `GET /me/businesses` | `(#100) Missing Permission` — needs `business_management` |
 
-**Still unknown.** Whether `/me/accounts` omits the Page entirely or returns it without `access_token` has not been
-observed directly, and the two call for different fixes. Check with
-`GET /me/accounts?fields=id,name,access_token` in Graph API Explorer before changing anything else.
+So the Page token exists and is reachable; only the enumeration fails. The person connecting had **full control** of the
+Page, and the Page was offered and accepted in Facebook's own login dialog.
 
-**What works today.** Pages the connecting person holds directly, outside a Business Portfolio, connect normally with
-the five permissions. If you control the Page, moving it out of the portfolio — or using a Page that was never in one —
-is the only route confirmed to work.
+**Does not help, each tried and measured:**
+
+- `ads_management` and `ads_read` on top of the five. Meta grants both under Standard Access with no App Review, and
+  `/me/accounts` stays empty. An earlier version of this page claimed these were the fix; they are not.
+- Adding the Docket app to the Page's Business Portfolio (which makes that portfolio the app's owner).
+- Re-running the login through **Edit settings** so the grant is issued fresh instead of reused from cache.
+
+**The fix is to stop depending on `/me/accounts`.** The Page ids a person granted are available from `/debug_token`
+(`granular_scopes[].target_ids`), which Docket's server can call with an app token built from `META_APP_ID` and
+`META_APP_SECRET`. Each id then resolves through `GET /<page-id>?fields=id,name,access_token,instagram_business_account`,
+which is the call shown working above. This needs no permission beyond the five Docket already requests. Until that
+lands, a portfolio-owned Page cannot be connected.
+
+**What works today.** Pages held directly by the connecting person, outside any Business Portfolio, connect normally
+with the five permissions — `/me/accounts` lists those. If you control the Page, moving it out of the portfolio is the
+only route confirmed to work.
 
 **Threads.** Threads offers no way to let someone else manage an account: the person who logs in during **Connect** is
 the account that gets connected. So the owner must do this step. The simplest way:
