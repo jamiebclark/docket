@@ -208,3 +208,12 @@ describe("WeekSlotGrid vertical placement", () => {
     expect(html).toContain("top:50%");
   });
 });
+
+describe("WeekSlotGrid drag preview", () => {
+  it("renders no drop indicator when nothing is being dragged", () => {
+    const html = render({ canManage: true });
+    expect(html).not.toContain("· taken");
+    // The indicator is the only z-10 element in the grid.
+    expect(html).not.toContain("z-10");
+  });
+});
