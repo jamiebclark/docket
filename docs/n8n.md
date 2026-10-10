@@ -153,3 +153,39 @@ Each event has `outcome`, `message`, `occurredAt`, `platform`, `account`, `post`
 
 **To poll for new events**, re-read from your last `occurredAt` (`from=` takes a day, so start from that day), then drop ids you have already seen. A walk can miss an event that commits after the page it belongs to was read, so overlap rather than start exactly after the last one. Branch on `outcome`, not on the message text.
 
+## 9. Post each record once
+
+If your source system (a CRM, a spreadsheet, a CMS) has its own id for each record, tag your submission with it and Docket guarantees that record is posted at most once, ever — even if your flow re-runs the whole backlog.
+
+Add `externalId` (the record's id) and, if you pull from more than one system, `sourceKey` (which system it belongs to; defaults to `"default"`) to the generate request:
+
+```http
+POST {{base}}/api/v1/generate
+Authorization: Bearer {{key}}
+Content-Type: application/json
+Idempotency-Key: generate-{{row.id}}
+
+{"brief":"{{row.brief}}","accountIds":["{{accountId}}"],"externalId":"{{row.id}}","sourceKey":"crm"}
+```
+
+The first call for a given `(sourceKey, externalId)` generates and posts normally (`201`, `alreadyPosted: false`). Every later call for that same id — from this flow, a re-run, or a different API key entirely — answers `200` with the post Docket already made and `alreadyPosted: true`, and makes no model call. Treat `alreadyPosted: true` as success: skip step 3 (it is already queued) and move on.
+
+If the post that claimed an id is later deleted, the id does not free up: a resubmission answers `409 conflict` with `details.reason: "already_posted_post_deleted"` rather than posting again. Branch on that reason to alert a person instead of retrying.
+
+An id is only consumed once a post exists for it. A call that fails — the model's output was unusable, no model is configured, or the run was cancelled — claims nothing, so resubmitting the same `externalId` after fixing the problem posts normally; follow the retry guidance in section 4 for the underlying error.
+
+For a backlog, send the whole batch through a job instead of one generate call per row: declare `source.sourceKey` once and set `externalId` on each item. Already-posted ids are dropped silently and counted, never re-posted:
+
+```http
+POST {{base}}/api/v1/jobs
+Authorization: Bearer {{key}}
+Content-Type: application/json
+Idempotency-Key: job-{{batch.id}}
+
+{"voiceProfileId":"{{voiceProfileId}}","accountIds":["{{accountId}}"],"template":"{{brief}}","source":{"kind":"api","fields":["brief"],"sourceKey":"crm","items":[{"fields":{"brief":"Row one"},"externalId":"row-1"},{"fields":{"brief":"Row two"},"externalId":"row-2"}]}}
+```
+
+The response's `skippedAlreadyPosted` is how many of the submitted items were already claimed (including a duplicate id sent twice in the same call). Appending more items to an open job (`POST /jobs/{{jobId}}/items`) works the same way. If every item in a non-open job is already posted, the call is refused with a `400 validation_failed` naming the count — nothing is created.
+
+A job item whose id turns out to be already claimed by the time it runs (another submission won the race) finishes `status: "skipped"`, not `"failed"`: it does not count against your failure handling in section 4, and `GET /jobs/{{jobId}}/items/{{itemId}}` reports `skipped.reason` and the post it was already made as.
+

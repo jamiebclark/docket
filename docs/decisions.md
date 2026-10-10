@@ -1426,3 +1426,39 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
 - **Capability check moves from `account:["manage"]` to `slot:["manage"]`** for who sees the grid's editing
   affordances, per contracts/week-slot-grid.md and the spec's capability split.
 - **No schema, migration, `docker-compose.yml`, env or dependency change.**
+
+## 041 — External item ID ledger (2026-10-10)
+
+- **One table, `external_item_claims`, keyed by its natural key.** Primary key `(project_id, source_key,
+  external_id)` *is* the uniqueness the spec asks for, so there is no surrogate id and no second index to
+  keep in step. Rejected: a surrogate id plus a unique index (no caller needs the id); a column on `posts`
+  (cannot express "claimed id whose post was deleted", and no per-namespace uniqueness).
+- **The claim is inserted by `saveGeneratedPost` itself, from an optional `external` argument**, not by any
+  of its callers after the fact — one write path, one transaction, so no caller can save a post and forget
+  the claim. `generateSingle` passes the request's id; the job runner passes the item's id and the job's
+  namespace; series planning and the composer pass nothing and never claim an id.
+- **An already-posted generate answers `200` with `alreadyPosted: true`; a deleted post answers `409`.**
+  200-vs-201 already carries a signal callers watch, so a duplicate is not an error — except when the
+  claimed post has since been deleted, which throws `reason: "already_posted_post_deleted"` rather than
+  silently re-posting: a deleted post does not free its id.
+- **Unique-violation recovery re-reads state; it never branches on the constraint name.** Two unique
+  indexes can now fire in one transaction (generate's `request_id` and the ledger's natural key), and a
+  constraint name is only as stable as a migration's index name. The catch block asks the database what is
+  true instead: the claim first (the permanent, stronger fact), then the request id or job item.
+  Rejected: branching on `error.constraint`.
+- **A late skip is detected twice: cheaply before the model call, authoritatively at save.** The runner
+  checks the ledger once it has its voice and accounts (catches the common case before spending a model
+  call), and `saveGeneratedPost`'s claim insert is the one authority — a claim that lands mid-model-call
+  still ends as a skip through the unique-violation recovery above.
+- **`skipped` is a terminal job-item status with no reason column.** The only reason is "already posted",
+  and the winning post is reachable from the claim, so the sentence is composed once in the view layer
+  (`alreadyPostedReason`) from `external_id` plus the claim row, rather than frozen into a text column at
+  write time.
+- **Ingest filters already-claimed ids inside the existing write transaction** before the `JOB_ITEMS_MAX`
+  check, so skipped items never eat the item-count allowance; a non-open create whose every item is
+  skipped is refused naming the count, but an open job with everything skipped is created empty and stays
+  open.
+- **No release, no backfill, and no "have you posted this?" endpoint.** The ledger's permanence is the
+  feature, so there is also no scheduled pruning.
+- **One additive table, one column, one enum value, one unique constraint** (`posts_project_id_uq`); no
+  existing caller changes behaviour when it sends nothing new.

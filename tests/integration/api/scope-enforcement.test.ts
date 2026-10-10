@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OPERATIONS, type AnyApiOperation } from "../../../src/server/api/operations";
+import { ObservedQuery, queryObservers } from "../../../src/server/db/client";
 import { setStorageForTests } from "../../../src/server/storage";
 import { ALL_PERMISSIONS, api, createKey, world } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
@@ -155,6 +156,26 @@ describe("project isolation, per resource parameter", () => {
       }
     }
     expect(checked.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("keeps the external id ledger per project (FR-012)", async () => {
+    const claimedPost = await w.b.scope.posts.insert({ baseText: "Project B's post" });
+    await w.b.scope.externalClaims.insert({ sourceKey: "default", externalId: "shared-id", postId: claimedPost.id, claimedAt: new Date() });
+    expect(await w.a.scope.externalClaims.find("default", "shared-id")).toBeNull();
+    expect(await w.b.scope.externalClaims.find("default", "shared-id")).toMatchObject({ postId: claimedPost.id });
+
+    const queries: ObservedQuery[] = [];
+    const obs = (q: ObservedQuery) => queries.push(q);
+    queryObservers.add(obs);
+    try {
+      await w.a.scope.externalClaims.find("default", "shared-id");
+      await w.a.scope.externalClaims.findMany("default", ["shared-id"]);
+    } finally {
+      queryObservers.delete(obs);
+    }
+    const claimQueries = queries.filter((q) => q.sql.includes("external_item_claims"));
+    expect(claimQueries.length).toBeGreaterThan(0);
+    for (const q of claimQueries) expect(q.sql, q.sql).toMatch(/project_id/);
   });
 
   it("never lists the other project's resources", async () => {

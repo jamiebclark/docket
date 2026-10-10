@@ -7,6 +7,7 @@ import { regeneratePost } from "../../../src/server/services/generation/regenera
 import { getSeries, startSeries, writeSeriesPost } from "../../../src/server/services/generation/series";
 import { generateSingle } from "../../../src/server/services/generation/single";
 import { listReviewQueue } from "../../../src/server/services/review";
+import { loadApiPost } from "../../../src/server/services/views/load";
 import { listVersions, listVoiceProfiles, tryVoice } from "../../../src/server/services/voice";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
@@ -60,11 +61,13 @@ describe("no secrets", () => {
 
     const single = await generateSingle(
       env.scope,
-      { requestId: randomUUID(), voiceProfileId: profile.id, brief: "Sale", targetAccountIds: [bsky.id] },
+      { requestId: randomUUID(), voiceProfileId: profile.id, brief: "Sale", targetAccountIds: [bsky.id], externalId: "glen-1", sourceKey: "weird-glens" },
       createFakeLlm([ok("Single post")]),
     );
     results.push(single);
     if (!single.ok) throw new Error("setup failed");
+    results.push(await loadApiPost(env.scope, single.postId));
+    results.push(await env.scope.externalClaims.find("weird-glens", "glen-1"));
     results.push(await regeneratePost(env.scope, single.postId, { instruction: "Shorter" }, createFakeLlm([ok("Again")])));
 
     const { seriesId } = await startSeries(env.scope, {

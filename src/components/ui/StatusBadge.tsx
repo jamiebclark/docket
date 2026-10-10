@@ -22,6 +22,7 @@ const STATUSES: Record<string, { label: string; tone: Tone }> = {
   done: { label: "Done", tone: "success" },
   completed: { label: "Completed", tone: "success" },
   completed_with_failures: { label: "Completed with failures", tone: "warning" },
+  skipped: { label: "Skipped", tone: "neutral" },
 };
 
 /** Human label for a post, target or account status; unknown values read as their raw name. */

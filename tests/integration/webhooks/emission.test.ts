@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { cancelJob } from "../../../src/server/services/jobs";
 import { emitEvent, setEndpointEnabled, createEndpoint } from "../../../src/server/services/webhooks";
+import { applyDerivedStatus } from "../../../src/server/services/posts/status";
 import { closeDb } from "../../helpers/db";
 import { createJob } from "../../helpers/factories";
 import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
@@ -44,6 +45,30 @@ describe("event emission", () => {
       }),
     ).rejects.toThrow("boom");
     expect(await eventsOf(env)).toHaveLength(0);
+  });
+
+  it("carries the post's source on post.published (F9)", async () => {
+    const env = await webhookEnv(["post.published"]);
+    const account = await createMockAccount(env.project.id);
+    const { post, target } = await createDueTarget(env.project.id, account.id);
+    const repos = forSchedulerProject(env.project.id);
+    await repos.transaction(async (tx) => {
+      await tx.externalClaims.insert({ sourceKey: "weird-glens", externalId: "glen-42", postId: post.id, claimedAt: new Date() });
+      await tx.targets.update(target.id, { status: "published", externalId: "ext-1" });
+      await applyDerivedStatus(tx, post.id);
+    });
+    const events = await eventsOf(env);
+    expect(events).toHaveLength(1);
+    expect((events[0]!.body as { data: { source: unknown } }).data.source).toEqual({ key: "weird-glens", externalId: "glen-42" });
+  });
+
+  it("carries counts.skipped on job.finished (F9)", async () => {
+    const env = await webhookEnv(["job.finished"]);
+    const { job } = await createJob(env.project.id, { createdByUserId: env.owner.id });
+    await cancelJob(env.scope, job.id);
+    const events = await eventsOf(env);
+    expect(events).toHaveLength(1);
+    expect((events[0]!.body as { data: { counts: { skipped: number } } }).data.counts).toMatchObject({ skipped: 0 });
   });
 
   it("emits job.finished when a job is cancelled", async () => {

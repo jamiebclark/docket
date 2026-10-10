@@ -2,7 +2,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLlmForTests } from "../../../src/server/llm";
 import { runTick } from "../../../src/server/scheduler";
-import { cancelJob, createJob, getJob, listJobs } from "../../../src/server/services/jobs";
+import { cancelJob, createJob, getJob, listJobItems, listJobs } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
@@ -46,10 +46,14 @@ describe("no secrets in jobs", () => {
 
     const results: unknown[] = [await getJob(e.scope, jobId), await listJobs(e.scope, {}), await e.scope.jobs.get(jobId)];
     const items = await e.scope.jobItems.listForJob(jobId);
-    results.push(items);
+    results.push(items, await listJobItems(e.scope, jobId, {}));
     for (const item of items) {
       const post = await e.scope.posts.findByJobItemId(item.id);
-      if (post) results.push(post);
+      if (post) {
+        results.push(post);
+        const claim = await e.scope.externalClaims.findByPostId(post.id);
+        if (claim) results.push(claim);
+      }
     }
     results.push(await cancelJob(e.scope, jobId));
 

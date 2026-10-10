@@ -16,7 +16,7 @@ export function JobItemsTable({
   canRetry: boolean;
 }) {
   return (
-    <Table caption="Job items" columns={["#", "Item", "Status", "Attempts", "Post", "Error", "Actions"]}>
+    <Table caption="Job items" columns={["#", "Item", "Status", "Attempts", "Post", "Detail", "Actions"]}>
       {items.map((item) => (
         <Row key={item.id}>
           <Cell>{item.position + 1}</Cell>
@@ -44,7 +44,20 @@ export function JobItemsTable({
               </span>
             ) : null}
           </Cell>
-          <Cell>{item.status === "failed" && item.error ? item.error.message : null}</Cell>
+          <Cell>
+            {item.status === "failed" && item.error ? (
+              item.error.message
+            ) : item.status === "skipped" && item.skipped ? (
+              <span className="flex flex-wrap items-center gap-2">
+                {item.skipped.reason}
+                {item.skipped.postId ? (
+                  <Link href={`/p/${slug}/posts/${item.skipped.postId}`} className="underline">
+                    View post
+                  </Link>
+                ) : null}
+              </span>
+            ) : null}
+          </Cell>
           <Cell>{canRetry && item.status === "failed" ? <RetryButton slug={slug} jobId={jobId} itemId={item.id} /> : null}</Cell>
         </Row>
       ))}

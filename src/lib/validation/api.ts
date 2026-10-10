@@ -115,13 +115,15 @@ export const apiSourceSchema = z.object({
     .array(fieldNameSchema)
     .max(API_FIELDS_MAX)
     .refine((f) => new Set(f).size === f.length, { error: "Field names must be unique" }),
-  sourceKey: sourceKeySchema.default(DEFAULT_SOURCE_KEY),
+  sourceKey: sourceKeySchema
+    .default(DEFAULT_SOURCE_KEY)
+    .meta({ description: `Which source system items' ids belong to. Declared once for the job and inherited by appended items. Defaults to "${DEFAULT_SOURCE_KEY}".`, example: "weird-glens" }),
 });
 
 export const apiItemSchema = z.object({
   label: z.string().trim().max(API_LABEL_MAX).optional(),
   mediaId: z.uuid().optional(),
-  externalId: externalIdSchema.optional(),
+  externalId: externalIdSchema.optional().meta({ description: "The item's id in the caller's own system. An id already posted is silently dropped.", example: "glen-42" }),
   fields: z
     .record(z.string(), z.string())
     .refine((v) => Object.values(v).every((s) => s.length <= JOB_ITEM_DATA_MAX), {
