@@ -21,6 +21,19 @@ export interface RunLabel {
   cwd: string;
 }
 
+/**
+ * A pool that will not fail the run when its database is dropped underneath it.
+ *
+ * `drop database ... with (force)` terminates whatever is still attached, and a client closing at
+ * that moment reports 57P01. pg raises an unhandled "error" on a pool with no listener, which
+ * vitest reports as a failed run even when every test passed. The production pool does the same
+ * thing for the same reason (src/server/db/client.ts).
+ */
+export function poolTolerantOfDrops(pool: pg.Pool): pg.Pool {
+  pool.on("error", () => {});
+  return pool;
+}
+
 /** A database as the sweep sees it. */
 export interface DatabaseInfo {
   name: string;

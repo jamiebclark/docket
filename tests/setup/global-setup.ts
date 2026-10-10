@@ -11,6 +11,7 @@ import {
   runLabel,
   sweep,
   withDatabase,
+  poolTolerantOfDrops,
   type RunLabel,
 } from "./test-databases";
 import { testWorkerCount, workerDatabaseUrl } from "./worker-databases";
@@ -46,7 +47,7 @@ export default async function setup(project: TestProject): Promise<(() => Promis
   const base = runDatabaseName(configuredName, process.cwd(), runId);
   const baseUrl = withDatabase(configured, base);
 
-  const admin = new pg.Pool({ connectionString: adminUrl(configured), max: 1 });
+  const admin = poolTolerantOfDrops(new pg.Pool({ connectionString: adminUrl(configured), max: 1 }));
   try {
     const swept = await sweep(admin, {});
     if (swept.length > 0) console.log(`test databases: dropped ${swept.length} left by finished runs (${swept.map((s) => s.name).join(", ")})`);
@@ -60,7 +61,7 @@ export default async function setup(project: TestProject): Promise<(() => Promis
   // CREATE DATABASE … TEMPLATE copies files, which is far faster than migrating each,
   // and needs no other session connected to the template — hence sequential, after
   // every pool on the base database has closed.
-  const cloner = new pg.Pool({ connectionString: adminUrl(configured), max: 1 });
+  const cloner = poolTolerantOfDrops(new pg.Pool({ connectionString: adminUrl(configured), max: 1 }));
   try {
     for (let id = 1; id <= testWorkerCount(); id++) {
       await createLabelledDatabase(cloner, databaseName(workerDatabaseUrl(baseUrl, id)), label, base);
@@ -77,7 +78,7 @@ export default async function setup(project: TestProject): Promise<(() => Promis
       console.log(`test databases kept (KEEP_TEST_DB=1): ${base} and its _w<n> clones; run "pnpm db:test:clean" when done`);
       return;
     }
-    const pool = new pg.Pool({ connectionString: adminUrl(configured), max: 1 });
+    const pool = poolTolerantOfDrops(new pg.Pool({ connectionString: adminUrl(configured), max: 1 }));
     try {
       await dropRun(pool, runId);
     } finally {
