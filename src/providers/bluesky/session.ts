@@ -46,7 +46,9 @@ export async function connectAccount(input: {
 
   try {
     const res = await agentFor(pdsUrl).com.atproto.server.createSession(
-      { identifier: handle, password: input.fields.appPassword ?? "" },
+      // Trimmed like the handle: an app password pasted from Bluesky's settings often carries a
+      // trailing newline or space, and the PDS answers 401, which reads as a wrong password.
+      { identifier: handle, password: (input.fields.appPassword ?? "").trim() },
       { signal: input.signal },
     );
     const { accessJwt, refreshJwt, did, handle: returned } = res.data;

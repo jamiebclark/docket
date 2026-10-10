@@ -7,7 +7,7 @@
 //   pnpm db:test:clean --stale-hours 2       treat labelled runs older than 2 h as finished
 // Connects to the server in DATABASE_URL (any database on it; the name is ignored).
 import pg from "pg";
-import { adminUrl, DEFAULT_STALE_HOURS, listDatabases, sweep } from "../tests/setup/test-databases";
+import { adminUrl, DEFAULT_STALE_HOURS, listDatabases, poolTolerantOfDrops, sweep } from "../tests/setup/test-databases";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -29,7 +29,7 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  const admin = new pg.Pool({ connectionString: adminUrl(url), max: 1 });
+  const admin = poolTolerantOfDrops(new pg.Pool({ connectionString: adminUrl(url), max: 1 }));
   try {
     const stale = await sweep(admin, { dryRun: !yes, includeUnlabeled: flag("--include-unlabeled"), keep, staleHours });
     const staleNames = new Set(stale.map((s) => s.name));

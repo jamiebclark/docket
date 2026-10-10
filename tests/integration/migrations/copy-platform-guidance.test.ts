@@ -4,6 +4,7 @@ import { join } from "node:path";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runMigrations } from "../../../src/server/db/migrate";
+import { poolTolerantOfDrops } from "../../setup/test-databases";
 
 const DB = `docket_mig0009_${process.pid}_test`;
 const q = (n: string) => `"${n}"`;
@@ -66,11 +67,11 @@ beforeAll(async () => {
   journal.entries = journal.entries.filter((e) => e.idx <= 8);
   await writeFile(journalPath, JSON.stringify(journal));
 
-  admin = new pg.Pool({ connectionString: urlFor("postgres"), max: 1 });
+  admin = poolTolerantOfDrops(new pg.Pool({ connectionString: urlFor("postgres"), max: 1 }));
   await admin.query(`drop database if exists ${q(DB)} with (force)`);
   await admin.query(`create database ${q(DB)}`);
   await runMigrations(urlFor(DB), folder);
-  pool = new pg.Pool({ connectionString: urlFor(DB), max: 1 });
+  pool = poolTolerantOfDrops(new pg.Pool({ connectionString: urlFor(DB), max: 1 }));
 
   const a = await project("mig-a");
   await profile(a, "Default", [{ instagram: "Old insta" }, { bluesky: "Short.\r\nNo hashtags.", facebook: "Warm." }], true);

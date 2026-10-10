@@ -55,8 +55,8 @@ export function ConnectCredentialsForm({
         setAnnouncement(`Connected ${res.data.displayName}`);
         return;
       }
-      // Secrets are cleared after every submit, success or failure.
-      setValues((current) => ({ ...current, ...Object.fromEntries(fields.filter((f) => f.secret).map((f) => [f.name, ""])) }));
+      // Secrets are cleared on success (above) but kept on failure: the value is still in the field
+      // either way, and wiping it means retyping a 19-character app password to correct a typo.
       setFieldErrors(res.fieldErrors ?? {});
       setMessage(res.message);
       setFailures((n) => n + 1);
