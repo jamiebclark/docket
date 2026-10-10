@@ -102,7 +102,9 @@ describe("WeekSlotGrid manager rendering", () => {
   it("differs a paused chip by text, border style and tone, never by hue alone", () => {
     const html = render({ canManage: true });
     expect(html).toContain("border-dashed");
-    expect(html).toContain("bg-muted/50");
+    // A muted tone, at whatever strength — the requirement is that paused is not signalled by hue alone,
+    // so pinning the exact opacity only breaks the test when someone adjusts the shade.
+    expect(html).toMatch(/bg-muted\/\d+/);
     expect(html).toContain(">Paused<");
   });
 
@@ -172,5 +174,37 @@ describe("WeekSlotGrid pending addition", () => {
       slots: [{ id: "s1", weekday: 1, localTime: "08:00", paused: false }],
     });
     expect(html).not.toContain('role="alert"');
+  });
+});
+
+describe("WeekSlotGrid vertical placement", () => {
+  it("positions each chip at its own time rather than stacking them in a list", () => {
+    const html = render({
+      canManage: true,
+      slots: [
+        { id: "early", weekday: 1, localTime: "06:00", paused: false },
+        { id: "late", weekday: 1, localTime: "18:00", paused: false },
+      ],
+    });
+    // 06:00 is a quarter of the way down the day, 18:00 three quarters.
+    expect(html).toContain("top:25%");
+    expect(html).toContain("top:75%");
+  });
+
+  it("renders the hour rules the positions are read against", () => {
+    const html = render({ canManage: true });
+    expect(html).toContain("top:0%");
+    expect(html).toContain("top:50%");
+    // Labelled every six hours, not every hour, so the column stays readable.
+    expect(html).toContain(">06<");
+    expect(html).toContain(">18<");
+  });
+
+  it("keeps the read-only grid positioned too", () => {
+    const html = render({
+      canManage: false,
+      slots: [{ id: "noon", weekday: 3, localTime: "12:00", paused: false }],
+    });
+    expect(html).toContain("top:50%");
   });
 });

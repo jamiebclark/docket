@@ -14,6 +14,7 @@ import {
   conflictAt,
   DUPLICATE_REFUSAL,
   hhmm,
+  hourTicks,
   isNoOpMove,
   minutesOf,
   nextFreeTime,
@@ -21,6 +22,7 @@ import {
   slotsByWeekday,
   timeAtPosition,
   timeOfMinutes,
+  topPercentOf,
   type Addition,
   type GridSlotState,
   type Override,
@@ -251,5 +253,45 @@ describe("clearResolved", () => {
     expect(overrides.size).toBe(1);
     expect(additions).toHaveLength(1);
     expect(done.has(1)).toBe(true);
+  });
+});
+
+describe("topPercentOf", () => {
+  it("is the inverse of timeAtPosition, so a chip renders where it was dropped", () => {
+    for (const height of [200, 480, 777]) {
+      for (const offset of [0, 37, height / 3, height / 2, height - 1]) {
+        const time = timeAtPosition(offset, height);
+        // Round-trip back through the column: the rendered position must round to the same time.
+        expect(timeAtPosition((topPercentOf(time) / 100) * height, height)).toBe(time);
+      }
+    }
+  });
+
+  it("puts midnight at the top and runs monotonically down the day", () => {
+    expect(topPercentOf("00:00")).toBe(0);
+    expect(topPercentOf("12:00")).toBe(50);
+    expect(topPercentOf("06:00")).toBeLessThan(topPercentOf("18:00"));
+    expect(topPercentOf("23:30")).toBeLessThan(100);
+  });
+
+  it("accepts HH:MM:SS as stored", () => {
+    expect(topPercentOf("09:00:00")).toBe(topPercentOf("09:00"));
+  });
+});
+
+describe("hourTicks", () => {
+  it("gives 24 ticks, midnight first, each below the last and all inside the column", () => {
+    const ticks = hourTicks();
+    expect(ticks).toHaveLength(24);
+    expect(ticks[0]).toEqual({ hour: 0, topPercent: 0 });
+    for (const t of ticks) expect(t.topPercent).toBeGreaterThanOrEqual(0);
+    for (const t of ticks) expect(t.topPercent).toBeLessThan(100);
+    for (let i = 1; i < ticks.length; i++) expect(ticks[i]!.topPercent).toBeGreaterThan(ticks[i - 1]!.topPercent);
+  });
+
+  it("agrees with topPercentOf at each hour", () => {
+    for (const { hour, topPercent } of hourTicks()) {
+      expect(topPercent).toBeCloseTo(topPercentOf(`${String(hour).padStart(2, "0")}:00`), 6);
+    }
   });
 });
