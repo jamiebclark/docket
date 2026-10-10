@@ -39,6 +39,9 @@ Optionally create a **login configuration** with the five permissions in step 3,
 token type (not System-user access token). Copy its id into `META_LOGIN_CONFIG_ID`; Docket then sends `config_id` with
 the login request instead of a list of scopes. Leaving it empty is fine: Docket requests the scopes directly.
 
+A configuration replaces Docket's scope list rather than adding to it, so any permission you leave out of it is a
+permission the login will not ask for.
+
 ## 3. Permissions
 
 Docket requests these five:
@@ -73,16 +76,25 @@ pages still describe a mode toggle (**unverified** which one you will see). If y
 app roles can connect in either mode. Going Live may ask for a privacy policy URL, an app icon and a category; Business
 Verification is not needed while only people with roles connect.
 
-## 6. Valid OAuth redirect URIs
+## 6. App domains and valid OAuth redirect URIs
 
-Open **Facebook Login for Business → Settings** and, under **Client OAuth Settings**, add your callback to **Valid OAuth
-Redirect URIs** (**unverified**: Meta moves dashboard labels around):
+Two separate fields, in two separate places. Both are required, and missing either one fails the login.
+
+**App domains.** Under **App settings → Basic**, add the host Docket runs at to **App domains** — the bare hostname, no
+scheme and no path, for example `docket.example.com`. Leave it empty and Facebook refuses the login before any consent
+screen with *"Can't load URL: The domain of this URL isn't included in the app's domains."*
+
+**Valid OAuth redirect URIs.** Open **Facebook Login for Business → Settings** and, under **Client OAuth Settings**, add
+your callback to **Valid OAuth Redirect URIs** (**unverified**: Meta moves dashboard labels around):
 
 - Your install: `<BETTER_AUTH_URL>/connect/callback`, for example `https://docket.example.com/connect/callback`.
 - Local development, if you want it: `http://localhost:3000/connect/callback`. **Unverified:** Meta documents an
   exception for `localhost` only for apps in development mode, and Business apps may not have one.
 
 You can register several addresses at once (production, local), so switching does not mean editing the dashboard.
+
+That same settings page has a **Redirect URI Validator**: paste your callback and it answers whether the app accepts it.
+Use it to check both fields at once before trying a real connect.
 
 **To test the localhost address:** start Docket locally, choose Connect with Facebook and sign in. If you land back on
 Docket's chooser, it works. If Meta says "URL blocked" or "redirect URI is not whitelisted", use step 7 or step 10.

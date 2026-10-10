@@ -61,6 +61,81 @@ describe("listPageCandidates", () => {
     expect(fake.requests).toHaveLength(5);
   });
 
+  describe("Pages the listing omits (Business Portfolio-owned)", () => {
+    const withApp = () =>
+      listPageCandidates(app, {
+        userToken: "USERTOK",
+        appId: "1612880213950633",
+        appSecret: "APPSECRET",
+        signal: new AbortController().signal,
+      });
+    const debugBody = (scopes: unknown) => ({ kind: "ok" as const, body: { data: { granular_scopes: scopes } } });
+
+    it("recovers a granted Page that /me/accounts does not list", async () => {
+      // The measured shape: the listing is empty, but the Page resolves by id (docs/accounts.md).
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [] } });
+      fake.on("GET", "/v26.0/debug_token", debugBody([{ scope: "pages_manage_posts", target_ids: ["833"] }]));
+      fake.on("GET", "/v26.0/833", {
+        kind: "ok",
+        body: { id: "833", name: "Weird Glens", access_token: "PAGETOK", instagram_business_account: { id: "178" } },
+      });
+      const r = await withApp();
+      expect(r.ok && r.candidates.map((c) => [c.providerKey, c.externalId])).toEqual([
+        ["facebook", "833"],
+        ["instagram", "178"],
+      ]);
+    });
+
+    it("does not look up a Page the listing already returned", async () => {
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [{ id: "833", name: "A", access_token: "t" }] } });
+      fake.on("GET", "/v26.0/debug_token", debugBody([{ scope: "pages_show_list", target_ids: ["833"] }]));
+      const r = await withApp();
+      expect(r.ok && r.candidates).toHaveLength(1);
+      expect(fake.requests.some((q) => q.path === "/v26.0/833")).toBe(false);
+    });
+
+    it("ignores target_ids from Instagram scopes, which are not Page ids", async () => {
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [] } });
+      fake.on("GET", "/v26.0/debug_token", debugBody([{ scope: "instagram_basic", target_ids: ["178"] }]));
+      const r = await withApp();
+      expect(r).toEqual({ ok: true, candidates: [] });
+      expect(fake.requests.some((q) => q.path === "/v26.0/178")).toBe(false);
+    });
+
+    it("falls back to the listing when debug_token fails", async () => {
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [{ id: "1", name: "A", access_token: "t" }] } });
+      fake.on("GET", "/v26.0/debug_token", { kind: "graph_error", code: 190, status: 401 });
+      const r = await withApp();
+      expect(r.ok && r.candidates).toHaveLength(1);
+    });
+
+    it("skips a granted id that cannot be read, keeping the rest", async () => {
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [] } });
+      fake.on("GET", "/v26.0/debug_token", debugBody([{ scope: "pages_manage_posts", target_ids: ["1", "2"] }]));
+      fake.on("GET", "/v26.0/1", { kind: "graph_error", code: 100, status: 400 });
+      fake.on("GET", "/v26.0/2", { kind: "ok", body: { id: "2", name: "B", access_token: "t" } });
+      const r = await withApp();
+      expect(r.ok && r.candidates.map((c) => c.externalId)).toEqual(["2"]);
+    });
+
+    it("sends the app token, never the user token, to debug_token", async () => {
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [] } });
+      fake.on("GET", "/v26.0/debug_token", debugBody([]));
+      const r = await withApp();
+      expect(r.ok).toBe(true);
+      const debug = fake.requests.find((q) => q.path === "/v26.0/debug_token");
+      expect(debug?.params.input_token).toBe("USERTOK");
+      expect(debug?.params.access_token).toBe("[redacted]");
+      expect(JSON.stringify(fake.requests)).not.toContain("APPSECRET");
+    });
+
+    it("makes no debug_token call when the app credentials are absent", async () => {
+      fake.on("GET", "/v26.0/me/accounts", { kind: "ok", body: { data: [] } });
+      await run();
+      expect(fake.requests.some((q) => q.path === "/v26.0/debug_token")).toBe(false);
+    });
+  });
+
   it("reports Graph failures without the token", async () => {
     fake.on("GET", "/v26.0/me/accounts", { kind: "graph_error", code: 190, status: 401 });
     const r = await run();

@@ -174,10 +174,41 @@ access. If you lose your role on the Page, or change your Facebook password, the
 The owner does not need a role on your Meta app in this setup. Alternatively, add the owner as a tester on your app, make
 them an admin in the Docket project, and let them connect it themselves.
 
-**Pages in a Business Portfolio (Business Manager).** If your access to the Page comes only through a Business Portfolio
-and not directly on the Page, the Page may be missing from the chooser, and Instagram publishing may fail. Docket does not
-request the `ads_management` and `ads_read` permissions that Meta requires in that case. Ask the owner to give you access
-on the Page itself. (**Unverified**: Meta does not document exactly when such a Page is left out.)
+**Pages in a Business Portfolio (Business Manager).** A Page owned by a Business Portfolio does not appear in Docket's
+chooser. This is a limitation in Docket, not a permission the connecting person is missing: `/me/accounts`, the only
+call Docket uses to find Pages, does not list such a Page at all.
+
+Measured against a live install, with the Page granted in the login dialog and the five permissions held:
+
+| Call | Result |
+|---|---|
+| `GET /me/accounts?fields=id,name,access_token` | `{"data": []}` — the Page is absent entirely |
+| `GET /<page-id>?fields=id,name,access_token,instagram_business_account` | returns the Page, **with** a Page access token and its linked Instagram account |
+| `GET /me/businesses` | `(#100) Missing Permission` — needs `business_management` |
+
+So the Page token exists and is reachable; only the enumeration fails. The person connecting had **full control** of the
+Page, and the Page was offered and accepted in Facebook's own login dialog.
+
+**Does not help, each tried and measured:**
+
+- `ads_management` and `ads_read` on top of the five. Meta grants both under Standard Access with no App Review, and
+  `/me/accounts` stays empty. An earlier version of this page claimed these were the fix; they are not.
+- Adding the Docket app to the Page's Business Portfolio (which makes that portfolio the app's owner).
+- Re-running the login through **Edit settings** so the grant is issued fresh instead of reused from cache.
+
+**What Docket does about it.** The listing is no longer the only source. After `/me/accounts`, Docket reads the Page
+ids the login actually granted from `/debug_token` (`granular_scopes[].target_ids`, using an app token built from
+`META_APP_ID` and `META_APP_SECRET`) and resolves any id the listing missed through
+`GET /<page-id>?fields=id,name,access_token,instagram_business_account`. Only Page scopes are read from the grant;
+Instagram scopes carry Instagram ids, not Page ids. This needs no permission beyond the five, which is why the ads
+permissions above were removed again rather than kept.
+
+The recovery is best effort: if `/debug_token` fails, or a granted id cannot be read, the listing's own results still
+stand. Nothing changes for an install with no portfolio-owned Pages, which makes no extra lookups.
+
+**Unverified:** the recovery path is covered by tests against a scripted Graph, and each call it makes was run by hand
+in Graph API Explorer against a real portfolio-owned Page. The two have not yet been run together against the live
+API — the first real connect of such a Page is the check that matters.
 
 **Threads.** Threads offers no way to let someone else manage an account: the person who logs in during **Connect** is
 the account that gets connected. So the owner must do this step. The simplest way:

@@ -12,7 +12,8 @@ async function candidatesFromUserToken(
   const app = metaApp(cfg);
   const long = await exchangeLongLived(app, cfg, { token: userToken, signal });
   if (!long.ok) return { ok: false, message: long.message };
-  return listPageCandidates(app, { userToken: long.userToken, signal });
+  // appId/appSecret let the listing recover Pages owned by a Business Portfolio (docs/accounts.md).
+  return listPageCandidates(app, { userToken: long.userToken, appId: cfg.appId, appSecret: cfg.appSecret, signal });
 }
 
 export const metaConnectGroup: OAuthConnectGroup = {
