@@ -206,9 +206,9 @@ permissions above were removed again rather than kept.
 The recovery is best effort: if `/debug_token` fails, or a granted id cannot be read, the listing's own results still
 stand. Nothing changes for an install with no portfolio-owned Pages, which makes no extra lookups.
 
-**Unverified:** the recovery path is covered by tests against a scripted Graph, and each call it makes was run by hand
-in Graph API Explorer against a real portfolio-owned Page. The two have not yet been run together against the live
-API — the first real connect of such a Page is the check that matters.
+**Verified against the live API.** A portfolio-owned Page that had previously produced an empty chooser connected on
+the first try once the recovery landed, bringing its linked Instagram account with it, with only the five permissions
+granted.
 
 **Threads.** Threads offers no way to let someone else manage an account: the person who logs in during **Connect** is
 the account that gets connected. So the owner must do this step. The simplest way:
