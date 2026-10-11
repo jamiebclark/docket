@@ -86,7 +86,7 @@ describe("page headers (FR-012)", () => {
       ["Posts", PostsPage as Page, {}, { title: "Posts", description: "Everything written or generated in this project." }],
       ["Post", PostPage as Page, { postId: post.id }, { title: "Post", description: "Where this post goes, its status on each account, and every publish attempt." }],
       ["Review", ReviewPage as Page, {}, { title: "Review", description: "Generated posts waiting for someone to approve them." }],
-      ["Failures", FailuresPage as Page, {}, { title: "Failures", description: "Posts that didn't go out, and what you can do about them." }],
+      ["Failures", FailuresPage as Page, {}, { title: "Failures", description: `Posts that didn't go out, and what you can do about them. Times are in ${e.project.timezone}.` }],
       ["Generate", GeneratePage as Page, {}, { title: "Generate", description: "Draft one post, or a series of related posts, in your brand voice." }],
       ["Generated post", GeneratedPostPage as Page, { postId: post.id }, { title: "Generated post", description: "What was generated, and what it was generated from." }],
       ["Brand voice", VoicePage as Page, {}, { title: "Brand voice", description: "How generated posts should sound." }],

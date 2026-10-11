@@ -50,13 +50,16 @@ describe("failures page markup (FR-013)", () => {
     const html = await render(env.project.slug);
 
     expect(html).toContain('<caption class="sr-only">');
-    expect((html.match(/<th scope="col"/g) ?? []).length).toBe(7 + 2 * 6); // 7 columns plus a 6-column log per row
+    expect((html.match(/<th scope="col"/g) ?? []).length).toBe(4 + 2 * 4); // 4 columns plus a 4-column log per row
     const groups = [...html.matchAll(/<th scope="rowgroup"[^>]*>(.*?)<\/th>/g)].map((m) => m[1]!.replace(/<[^>]+>/g, ""));
     expect(groups).toEqual(["Needs your decision", "Failed"]);
     expect((html.match(/<summary[^>]*>\s*Attempt log \(/g) ?? []).length).toBe(2);
     expect(html).toContain("1 need your decision · 1 failed");
-    expect(html).toContain("Mark published");
-    expect(html).toContain("Mark not published…");
+    // One question, one joined control — not a button each (design system §7).
+    expect(html).toContain("Did this post go out to");
+    expect(html).toContain(">Published<");
+    expect(html).toContain(">Not published<");
+    expect(html).not.toContain("Mark published");
     expect(html).toContain("Retry…");
     expect(html).not.toContain(">Retry<");
     // The account filter is labelled: a legend while it is a short button row, a label once it is an autocomplete.

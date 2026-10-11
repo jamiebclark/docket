@@ -1462,3 +1462,29 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
   feature, so there is also no scheduled pruning.
 - **One additive table, one column, one enum value, one unique constraint** (`posts_project_id_uq`); no
   existing caller changes behaviour when it sends nothing new.
+
+## 049 — Table density and one control per question (2026-10-11)
+
+- **Five columns is the ceiling for an output table.** A row answers four questions — who it is about,
+  what it is, why it is in this list, what to do about it — and each gets one column; facts that only
+  qualify an answer become `Sub` lines inside that cell. Rejected: horizontal scroll and per-screen
+  column hiding, both of which hide the answer the person came for. The rule and the before/after column
+  counts are `docs/design-system.md` §7 "Column grouping" and §14.
+- **A column that is mostly "—" or mostly zero is a cell, not a column.** Batch jobs carried five
+  per-status counts side by side; failures carried "Meant to go out" and "How" as columns that were empty
+  on every seeded row. They now render only when there is something to say.
+- **Mutually exclusive answers to one question are one `ButtonGroup`.** "Mark published" beside "Mark not
+  published…" repeated the verb twice per row and wrapped onto two lines; it is now a joined
+  **Published / Not published** pair whose group label asks the question once ("Did this post go out to
+  <account>?"). The full sentence survives where it is actually needed — the dialog title and body are
+  unchanged, so `resolveAmbiguous` and its spec text (010 FR-007/FR-008) still describe what happens.
+  Rejected: a real two-state toggle, which would imply the decision is reversible, and a single
+  "Resolve…" button, which adds a click to the most common path.
+- **`Table` grew `grouped`, `RowGroup` and `DetailRow` rather than failures keeping raw markup.** The
+  failures view needs status group headings (`<th scope="rowgroup">`) and a full-width attempt-log row,
+  which the single-`<tbody>` primitive could not express — so it stayed hand-rolled and missed the card,
+  the column heads and phone stacking. The primitive now covers both, and `.stack-table` skips the
+  column label on any `td[colspan]`.
+- **One `AttemptLog`, shared.** The six-column log was duplicated between the failures view and the post
+  page, `Pairs` helper included. It is now one `text-xs`, four-column component (Time, What happened,
+  Who, Details) and the post page collapses repeated runs the way the failures view already did.

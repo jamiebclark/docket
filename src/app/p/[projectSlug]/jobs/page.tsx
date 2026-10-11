@@ -8,11 +8,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Cell, Row, Table } from "@/components/ui/Table";
+import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import { getSession } from "@/server/auth/session";
 import { forProject, NotFoundError } from "@/server/dal";
 import { PREREQUISITES_TITLE } from "@/lib/roles/prerequisites";
 import { mediaStatus } from "@/server/services/media";
+import type { JobCounts } from "@/server/dal/jobs";
 import { JOBS_PAGE_SIZE, listJobs } from "@/server/services/jobs/read";
 import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../generate/generate-logic";
 import { loadPrerequisites } from "../generate/prerequisites";
@@ -20,6 +21,22 @@ import { UNREVIEWED_QUEUE_LABEL } from "../generate/PolicyPicker";
 
 export const metadata: Metadata = { title: "Batch jobs" };
 export const dynamic = "force-dynamic";
+
+/** The per-status counts as one line, naming only the ones that are not zero. */
+const COUNT_LABEL: Record<keyof JobCounts, string> = {
+  queued: "queued",
+  running: "running",
+  done: "done",
+  failed: "failed",
+  skipped: "skipped",
+  cancelled: "cancelled",
+};
+const COUNT_KEYS = Object.keys(COUNT_LABEL) as (keyof JobCounts)[];
+const itemTotal = (c: JobCounts) => COUNT_KEYS.reduce((n, k) => n + c[k], 0);
+const itemBreakdown = (c: JobCounts) =>
+  COUNT_KEYS.filter((k) => c[k] > 0)
+    .map((k) => `${c[k]} ${COUNT_LABEL[k]}`)
+    .join(" · ") || "No items yet";
 
 type Props = {
   params: Promise<{ projectSlug: string }>;
@@ -69,20 +86,17 @@ export default async function JobsPage({ params, searchParams }: Props) {
         )
       ) : (
         <>
-          <Table
-            caption="Generation jobs"
-            columns={["Source", "Created by", "Created", "Policies", "Status", "Queued", "Running", "Done", "Failed", "Cancelled"]}
-          >
+          <Table caption="Generation jobs" columns={["Source", "Started", "Policies", "Status", "Items"]}>
             {items.map((j) => (
               <Row key={j.id}>
-                <Cell>
+                <Cell header>
                   <Link href={`${base}/jobs/${j.id}`} className="underline">
                     {j.sourceSummary}
                   </Link>
                 </Cell>
-                <Cell>{j.createdBy?.name ?? "Removed member"}</Cell>
                 <Cell>
                   <LocalTime value={j.createdAt} timeZone={scope.project.timezone} />
+                  <Sub>by {j.createdBy?.name ?? "Removed member"}</Sub>
                 </Cell>
                 <Cell>
                   {j.unreviewedQueue ? UNREVIEWED_QUEUE_LABEL : `${APPROVAL_LABEL[j.approval]} + ${SCHEDULING_LABEL[j.scheduling]}`}
@@ -90,11 +104,10 @@ export default async function JobsPage({ params, searchParams }: Props) {
                 <Cell>
                   <StatusBadge status={j.status} />
                 </Cell>
-                <Cell>{j.counts.queued}</Cell>
-                <Cell>{j.counts.running}</Cell>
-                <Cell>{j.counts.done}</Cell>
-                <Cell>{j.counts.failed}</Cell>
-                <Cell>{j.counts.cancelled}</Cell>
+                <Cell>
+                  <span className="tabular-nums">{itemTotal(j.counts)} in total</span>
+                  <Sub>{itemBreakdown(j.counts)}</Sub>
+                </Cell>
               </Row>
             ))}
           </Table>

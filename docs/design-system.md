@@ -246,6 +246,7 @@ full width, size `lg`.
 | Component | Variants / props | Notes |
 |---|---|---|
 | `Button`, `buttonStyles()` | `primary`, `cta`, `secondary`, `ghost`, `danger`; sizes `sm`/`md`/`lg`; `pending` + `pendingLabel` | Use `buttonStyles()` on `<Link>` so links and buttons match. **One** `primary` per form; **at most one** `cta` per screen (Schedule / Publish now). `danger` always confirms in a `Dialog` that names the thing. |
+| `ButtonGroup` | `label`, `ghost` buttons as children | Two or three buttons that answer **one** question, joined on a muted track — "Published / Not published", never "Mark published" beside "Mark not published…". The shared verb lives in `label` (the group's accessible name) and the full sentence in the dialog each opens, so the buttons carry only the word that tells them apart. For a value a form submits use `SegmentedControl` instead. |
 | `Field`, `Select` | `label`, `hint`, `error`; `Select` also `compact` | Errors in an `aria-live` region; invalid styling from `aria-invalid`. `compact` (toolbars) drops the reserved empty error line. Prefer the choice controls below to `Select`. |
 | `TextareaField` | `label`, `hint`, `error`, `counter`, `mono`, `minRows`, `maxRows`, `hideLabel` | Labelled, auto-growing multi-line text control. Grows with content between `minRows` and `maxRows` (scrolls internally past the ceiling); `mono` for prompts, instructions and source documents; `counter` renders a character-count line linked by `aria-describedby`. Never a raw `<textarea>`. |
 | `controlStyles`, `labelStyles`, `hintStyles`, `errorStyles`, `checkStyles` | — | For raw `<input>`, checkboxes (brand `accent-color`). Every checkbox uses `checkStyles`. |
@@ -258,7 +259,7 @@ full width, size `lg`.
 | `PageHeader` | `title`, `description`, `actions`, `eyebrow` | The route's only `h1`. |
 | `Checklist` | `title`, `items` (`key`, `title`, `description`, `optional`, `status` done/todo/waiting, `action`, `blocked`, `children`), `collapsedSummary` | Ordered setup steps, each with status as text, a decorative icon, one line and at most one action. `collapsedSummary` folds it into a native `<details>`. State comes from data, never from stored dismissal. Used by the project overview. Not for prerequisite lists (use `SetupNotice`). Optional `footer` renders after the rows. |
 | `SetupNotice` | `title`, `items` (`ChecklistItem[]`), `lead`, `icon`, `headingLevel` (2/3), `id` | A "you can't do this yet" prerequisite gate (Generate, Jobs, Compose). An `EmptyState` variant: same dashed frame and decorative icon, with the unmet prerequisites as `ChecklistRows` and one action each. Use `Checklist` for progress lists instead. Server-compatible. |
-| `Table`, `Row`, `Cell` | `caption`, `columns`, `header` cell | Card-wrapped, uppercase muted column heads, row hover. Below `sm` each row stacks into a card and every cell is labelled with its column name (CSS variables `--col-N` + `.stack-table` in globals.css, so rows can come from any server or client component). |
+| `Table`, `Row`, `Cell`, `Sub`, `RowGroup`, `DetailRow` | `caption`, `columns`, `grouped`; `header` cell; `span` | Card-wrapped, uppercase muted column heads, row hover. **Five columns or fewer** (see "Column grouping" below); `Sub` is the quiet second line inside a cell. Below `sm` each row stacks into a card and every cell is labelled with its column name (CSS variables `--col-N` + `.stack-table` in globals.css, so rows can come from any server or client component). `grouped` hands the `<tbody>` to the caller for `RowGroup` (rows under a `<th scope="rowgroup">` heading) and `DetailRow` (a full-width panel under a row, such as the failures view's attempt log). |
 | `Badge`, `StatusBadge` | tones `neutral`, `brand`, `info`, `success`, `warning`, `danger` | Tinted pill + dot + text. Status → tone map lives in `StatusBadge` (scheduled = brand, approved/publishing/running = info). |
 | `Alert`, `alertStyles()` | tones `info`, `success`, `warning`, `danger`; `banner` | `role="alert"` for danger/warning, `status` otherwise. |
 | `EmptyState` | `message`, `action`, `icon` | Dashed card, lavender icon disc, one sentence, one action. |
@@ -278,6 +279,29 @@ full width, size `lg`.
 | `ProblemsCallout` | `scope` | "Problems since you last looked" line on a project's home and Posts; shows only when the count is above zero. |
 | `WeekSlotGrid` | `slots`, `timeZoneLabel`, `canManage`, `label`, `emptyMessage`, `addButtonId`, `onAdd`/`onMove`/`onToggle`/`onDelete` | Seven-day grid for posting slots (Accounts). Click/tap an empty column to place a slot; drag a chip to move it, or use its Move control for a Mon–Sun + time dialog; click a chip to toggle active/paused; its Delete control deletes on one activation with **no confirm dialog** — a deliberate exception to the `danger` rule above, since a slot holds no content and costs one click to re-add (see `docs/decisions.md` 035). Keyboard: add button → `Enter`/`Space` adds at the next free boundary and focuses the new chip; a chip is `Tab`-order body → Move → Delete; the Move control opens a dialog (segmented weekday, then time, then Move/Cancel) and returns focus to the chip on commit or `Escape`/Cancel; Delete moves focus to the next chip or the column's add button. |
 | `Logo`, `LogoMark`, `AuthShell` | — | §2, §6. |
+
+### Column grouping
+
+A table row answers four questions: **who** it is about, **what** it is, **why**
+it is in this list, and **what to do about it**. Give each question one column
+and let the facts that answer it stack inside the cell — a first line, then
+`Sub` lines — instead of claiming a column each. Five columns is the ceiling;
+past that every column is too narrow to read and each one wraps to three lines.
+
+- **Merge, don't widen.** A qualifier belongs in the cell it qualifies: the
+  platform under the account name, "3 attempts" under the error, "Due Thu 09:00
+  · Queue slot" under the post, "by Robin" under the message.
+- **A column of counts is one cell.** Batch jobs had Queued / Running / Done /
+  Failed / Cancelled side by side, mostly zeros; it now reads "12 in total" with
+  "9 done · 2 failed · 1 skipped" under it, naming only what is not zero.
+- **Never a column of em dashes.** A fact that is usually absent is a `Sub` line
+  that renders when it exists, not a column that is "—" on every row.
+- **The time zone is said once**, in the page description ("Times are in
+  America/New_York"), never inside a column head.
+- **Log and detail tables are `text-xs` throughout** and get four columns at
+  most. They are read when something has gone wrong, not scanned.
+- **One action control per row.** Mutually exclusive answers to one question are
+  a `ButtonGroup`, not a button each.
 
 ### Choosing a control for one-of-many
 
@@ -405,3 +429,22 @@ The calendar's "write for this slot" dialog, reviewed by the owner in use.
 | C8 | Four same-weight commit actions wrapped onto two lines. | Low | Hierarchy instead of hiding: Save draft `secondary`, Publish now `ghost`, and exactly one `cta` — Schedule for a slot, otherwise Add to queue. |
 | C9 | Empty calendar slots drew the platform mark in full brand colour, so a week of placeholders read as loudly as real posts. | Medium | `ProviderIcon muted` on empty slots: same mark, `muted` tile. |
 | C10 | Tailwind 4's Preflight sets `cursor: default` on buttons, so every button in the app showed an arrow; 13 files patched it ad hoc. | Medium | One base rule in `globals.css` (§5) for buttons, `role="button"`, `summary` and checkbox/radio inputs, disabled excluded; the redundant per-`<summary>` classes are gone. |
+
+## 14. Table density audit (2026-10-11)
+
+The failures view, reviewed by the owner in use, and then every other output
+table against the same rule. Column counts are before → after.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| D1 | Failures offered **Mark published** and **Mark not published…** as two separate buttons, repeating the verb twice per row and stacking onto two lines in a narrow column. | Medium | New `ButtonGroup` primitive: one joined control reading **Published / Not published**, labelled "Did this post go out to \<account\>?". The full sentence stays in the dialog each opens. |
+| D2 | The failures table had seven columns (7 → 4). Account, Post, "Meant to go out (America/New_York)", How, Last error, Attempts, Actions — every one wrapped to three lines, and How and "Meant to go out" were "—" on every row. | High | Account · Post · Problem · Actions. When and how it was due became a `Sub` line under the post, the attempt count a `Sub` line under the error, and the zone moved to the page description. |
+| D3 | The failures table was raw `<table>` markup: no card, no uppercase heads, no phone stacking — the one list in the app most likely to be read on a phone. | Medium | It uses `Table` with the new `grouped` / `RowGroup` / `DetailRow` support, so the status groups and the attempt-log row keep working inside the shared primitive. |
+| D4 | The attempt log was six cramped columns (Time, Step, Outcome, Who, Request, Response) **duplicated** between the failures view and the post page, with its own copy of the `Pairs` helper. | Medium | One `AttemptLog` component (6 → 4 columns: Time, What happened, Who, Details), `text-xs` throughout, request and response labelled "Sent" / "Got back" in one cell. The post page now collapses repeated runs too. |
+| D5 | Batch jobs: ten columns (10 → 5), five of them per-status counts that were almost always zero, while Source, Created and Policies each wrapped to three lines. | High | Source · Started (+ who) · Policies · Status · Items ("3 in total", "1 done · 1 failed · 1 skipped"). |
+| D6 | API keys: ten columns (10 → 5) — Name, Key, Permissions, Rate limit, Created by, Created, Last used, Expires, Status, Actions. | High | Key (name + masked key) · Permissions (+ rate limit) · Created (+ by, + last used) · Status (+ expiry) · Actions. |
+| D7 | Activity: eight columns (8 → 5, 6 with Project) and raw `<table>` markup, so it never stacked on phones. | Medium | When · Account · Post · What happened (outcome badge, message, details, "by \<actor\>") · Go to, on the `Table` primitive. |
+| D8 | Job items (7 → 4), webhook deliveries (7 → 4), webhook endpoints (6 → 4), invitations (6 → 4) and members (5 → 3) each spread one subject over several thin columns. | Medium | Position merged into the item, attempts and the skip/failure reason into the status, description into the endpoint, "invited by" and expiry into the invitation, email and joined date into the member. |
+
+Posts (4), voice history (3) and the notifications project list (3) already met
+the rule and are unchanged.

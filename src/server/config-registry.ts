@@ -13,6 +13,14 @@ export const INTERNAL_VARIABLES: Readonly<Record<string, string>> = {
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "stops Corepack asking before it downloads, set in the image only",
 };
 
+/**
+ * Read by the Next.js CLI from `next.config.ts` while developing, never by the running server, so
+ * `validateConfiguration` must not see them. Documented in `.env.example` all the same.
+ */
+export const DEV_ONLY_VARIABLES: Readonly<Record<string, string>> = {
+  DEV_ORIGINS: "hostnames allowed to reach the dev server's own assets (LAN address, tunnel)",
+};
+
 /** Read by docker-compose.yml or the smoke script, never by Docket itself. */
 export const COMPOSE_ONLY_VARIABLES: Readonly<Record<string, string>> = {
   DOCKET_IMAGE: "image the web, worker and storage-init services run",

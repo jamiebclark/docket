@@ -212,5 +212,7 @@
     .stack-table td:nth-child(8)::before { content: var(--col-8, ""); }
     .stack-table td:nth-child(9)::before { content: var(--col-9, ""); }
     .stack-table td:nth-child(10)::before { content: var(--col-10, ""); }
+    /* A full-width detail cell (Table's DetailRow) belongs to no column, so it gets no label. */
+    .stack-table td[colspan]::before { content: none; }
   }
 }
