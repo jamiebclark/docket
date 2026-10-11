@@ -127,6 +127,17 @@ text/UI pairs in both themes.
   `--font-poppins` (500/600/700). Nothing is fetched at build or run time,
   which keeps decision #16 (no Google Fonts download) intact.
 - Numbers that change in place (counts, pagination) use `tabular-nums`.
+- **One date format.** Every instant a person sees is `formatLocal(instant, timeZone)` from
+  `src/lib/time/format.ts` — "Mon, Oct 12, 9:00 AM EDT" — in the **project's** zone, never the
+  viewer's and never UTC. In JSX use `LocalTime`, which wraps it in a `<time>` carrying the exact
+  instant and a full-date tooltip; `RelativeTime` shows "12 min ago" with that as its title. This
+  holds everywhere, not just in tables: dialogs, live-region announcements, server-composed messages
+  and provider account notes. `tests/lint/date-format.test.ts` fails the build on a hand-rolled
+  formatter (`toUTCString`, `toLocaleDateString`, a raw `Intl.DateTimeFormat`, an ISO slice), with a
+  short allowlist for the few places that parse or detect a zone rather than display one.
+- A service's `localTime` field (`PlannedTime`) is a **machine** wall-clock string
+  ("2026-10-11T11:30 America/New_York") that the calendar parses. It is never rendered; format the
+  `scheduledAt` instant beside it instead.
 
 ## 5. Space, shape, elevation
 

@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import type { ActionResult } from "@/lib/action-result";
 import type { EmptySlot, PullExpected, PullMove, QueuedItem } from "@/server/services/queue";
-import { formatPlanned } from "./calendar-logic";
+import { formatLocal } from "@/components/ui/LocalTime";
 import { buttonStyles } from "@/components/ui/Button";
 
 type Loaded<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; data: T };
@@ -40,12 +40,13 @@ export interface MoveToSlotProps {
   open: boolean;
   onClose: () => void;
   accountName: string;
+  timeZone: string;
   listSlots: () => Promise<ActionResult<EmptySlot[]>>;
   onPick: (slot: EmptySlot) => void;
 }
 
 /** "Move to slot…": the account's upcoming empty slots, the keyboard route to what drag and drop does. */
-export function MoveToSlotDialog({ open, onClose, accountName, listSlots, onPick }: MoveToSlotProps) {
+export function MoveToSlotDialog({ open, onClose, accountName, timeZone, listSlots, onPick }: MoveToSlotProps) {
   const loaded = useLoaded(open, listSlots);
   return (
     <Dialog open={open} onClose={onClose} title={`Move to a slot on ${accountName}`}>
@@ -59,7 +60,7 @@ export function MoveToSlotDialog({ open, onClose, accountName, listSlots, onPick
                 onClick={() => onPick(s)}
                 className="w-full rounded border border-dashed border-input px-3 py-1.5 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
-                {formatPlanned(s.localTime)}
+                {formatLocal(s.scheduledAt, timeZone)}
               </button>
             </li>
           ))}
@@ -79,12 +80,13 @@ export interface SwapProps {
   onClose: () => void;
   /** The chip being swapped is not offered. */
   exceptTargetId: string;
+  timeZone: string;
   listQueued: () => Promise<ActionResult<QueuedItem[]>>;
   onPick: (item: QueuedItem) => void;
 }
 
 /** "Swap with…": the account's other queued posts. */
-export function SwapDialog({ open, onClose, exceptTargetId, listQueued, onPick }: SwapProps) {
+export function SwapDialog({ open, onClose, exceptTargetId, timeZone, listQueued, onPick }: SwapProps) {
   const loaded = useLoaded(open, listQueued);
   const items = loaded.state === "ready" ? loaded.data.filter((i) => i.targetId !== exceptTargetId) : [];
   return (
@@ -99,7 +101,7 @@ export function SwapDialog({ open, onClose, exceptTargetId, listQueued, onPick }
                 onClick={() => onPick(i)}
                 className={buttonStyles({ variant: "secondary", className: "w-full text-left" })}
               >
-                <span className="block font-medium">{formatPlanned(i.localTime)}</span>
+                <span className="block font-medium">{formatLocal(i.scheduledAt, timeZone)}</span>
                 <span className="block truncate text-muted-foreground">{i.excerpt || "(no text)"}</span>
               </button>
             </li>
@@ -119,13 +121,14 @@ export interface PullProps {
   open: boolean;
   onClose: () => void;
   accountName: string;
+  timeZone: string;
   preview: () => Promise<ActionResult<{ moved: PullMove[] }>>;
   confirm: (expected: PullExpected[]) => Promise<ActionResult<{ moved: PullMove[] }>>;
   onDone: (moved: PullMove[]) => void;
 }
 
 /** "Pull queue forward…": lists what would move before anything does. */
-export function PullForwardDialog({ open, onClose, accountName, preview, confirm, onDone }: PullProps) {
+export function PullForwardDialog({ open, onClose, accountName, timeZone, preview, confirm, onDone }: PullProps) {
   const loaded = useLoaded(open, preview);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -137,10 +140,10 @@ export function PullForwardDialog({ open, onClose, accountName, preview, confirm
         <ul className="mb-2 flex max-h-72 flex-col gap-1 overflow-y-auto text-sm">
           {moves.map((m) => (
             <li key={m.targetId} className="flex flex-wrap items-center gap-1.5">
-              {formatPlanned(m.fromLocal)}
+              {formatLocal(m.from, timeZone)}
               <Icon name="arrowRight" size={14} className="text-muted-foreground" />
               <span className="sr-only">moves to</span>
-              {formatPlanned(m.toLocal)}
+              {formatLocal(m.to, timeZone)}
             </li>
           ))}
         </ul>

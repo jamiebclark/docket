@@ -129,6 +129,8 @@ export interface PendingInvitationRow {
   id: string;
   projectName: string;
   projectSlug: string;
+  /** The project's zone, so the invitee sees the expiry the way that project shows times. */
+  projectTimeZone: string;
   role: string;
   inviterName: string;
   expiresAt: Date;
@@ -142,6 +144,7 @@ export function listPendingForEmail(email: string, db: Database = getDb()): Prom
         id: invitation.id,
         projectName: projects.name,
         projectSlug: projects.slug,
+        projectTimeZone: projects.timezone,
         role: invitation.role,
         inviterName: user.name,
         expiresAt: invitation.expiresAt,

@@ -1488,3 +1488,25 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
 - **One `AttemptLog`, shared.** The six-column log was duplicated between the failures view and the post
   page, `Pairs` helper included. It is now one `text-xs`, four-column component (Time, What happened,
   Who, Details) and the post page collapses repeated runs the way the failures view already did.
+
+## 050 — One date format (2026-10-11)
+
+- **Every instant a person sees goes through `formatLocal(instant, timeZone)`** (`src/lib/time/format.ts`),
+  in the project's zone. Six shapes had drifted into the app: the house "Mon, Oct 12, 9:00 AM EDT"; the
+  calendar's own "Tue 6 Oct 09:00 Europe/London"; a raw `2026-10-11T11:30 America/New_York` leaking out
+  of `PlannedTime.localTime` into the resolve and retry dialogs; `toUTCString()` on the invitations and
+  audit lists (UTC, not the project's zone); an ISO slice for "Joined" and a revoked key; and an `en-GB`
+  `dateStyle` pair in the reconnect message and the scheduler tooltip.
+- **`PlannedTime.localTime` is machine data, not display.** It encodes the wall clock for the calendar's
+  own parsing (`hm()`, chip placement, the schedule dialog's prefill), so it keeps its shape; the fix is
+  that nothing renders it. Every call site had `scheduledAt` beside it already. Rejected: making
+  `localTime` the friendly string, which would have broken the calendar's parsing.
+- **`formatLocal` moved to `src/lib/time/format.ts`** so server code and providers can use it without
+  importing a React component file; `LocalTime` re-exports it, and the long tooltip form is `formatFull`
+  in the same module. That let the TikTok "Reconnect before …" note stop printing a bare ISO date — the
+  `accountNotes` provider hook now receives the project's `timeZone`, since it composes user-facing text.
+- **A lint test, not a convention.** `tests/lint/date-format.test.ts` fails the build on `toUTCString`,
+  `toLocaleDateString`/`TimeString`, `toDateString`, an `toISOString().slice(…)` or a bare
+  `Intl.DateTimeFormat`, with a five-entry allowlist for the places that detect, label or validate a zone
+  rather than display one — plus a check that the allowlist has no stale entries. Conventions drifted six
+  ways; a test does not.

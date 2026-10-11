@@ -70,13 +70,13 @@ const MAX_NOTES = 5;
 const MAX_NOTE_LENGTH = 300;
 
 /** Never decrypts credentials; a hook that throws or answers badly contributes nothing. */
-function notesFor(a: AccountRecord, now?: Date): string[] {
+function notesFor(a: AccountRecord, timeZone: string, now?: Date): string[] {
   const provider = findProvider(a.providerKey);
   if (!provider?.accountNotes) return [];
   try {
     const parsed = provider.settingsSchema.safeParse(a.settings);
     if (!parsed.success) return [];
-    const notes = provider.accountNotes({ settings: parsed.data, credentialsExpireAt: a.credentialsExpiresAt, now });
+    const notes = provider.accountNotes({ settings: parsed.data, credentialsExpireAt: a.credentialsExpiresAt, now, timeZone });
     if (!Array.isArray(notes)) return [];
     return notes
       .filter((n): n is string => typeof n === "string" && n !== "")
@@ -87,7 +87,7 @@ function notesFor(a: AccountRecord, now?: Date): string[] {
   }
 }
 
-function view(a: AccountRecord, now?: Date): AccountView {
+function view(a: AccountRecord, timeZone: string, now?: Date): AccountView {
   const provider = findProvider(a.providerKey);
   return {
     id: a.id,
@@ -105,7 +105,7 @@ function view(a: AccountRecord, now?: Date): AccountView {
     settings: a.settings,
     providerAvailable: provider !== undefined,
     connectedAt: a.createdAt,
-    notes: notesFor(a, now),
+    notes: notesFor(a, timeZone, now),
     postingInstructions: a.postingInstructions,
   };
 }
@@ -117,7 +117,7 @@ function require(scope: ProjectScope, permission: "view" | "manage"): void {
 export async function listAccounts(scope: ProjectScope): Promise<AccountView[]> {
   require(scope, "view");
   const now = await clock.now();
-  return (await scope.accounts.list()).map((a) => view(a, now));
+  return (await scope.accounts.list()).map((a) => view(a, scope.project.timezone, now));
 }
 
 /** The API's account list: capabilities, no credentials or settings (FR-024, FR-026). */
@@ -296,7 +296,7 @@ export async function saveConnectedAccountTx(tx: ProjectScope, parsed: SaveConne
     const ciphertext = encryptSecret(JSON.stringify(parsed.credentials), { aad: aad(row.id) });
     result = await tx.accounts.setCredentials(row.id, ciphertext, parsed.credentialsExpireAt ?? null);
   }
-  return view(result, await clock.now());
+  return view(result, tx.project.timezone, await clock.now());
 }
 
 /** The one upsert every connect flow uses. A reconnect updates in place, reactivates and clears `last_error`. */

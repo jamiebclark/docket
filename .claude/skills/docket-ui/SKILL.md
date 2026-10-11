@@ -118,3 +118,10 @@ Every data view handles four states explicitly:
   justifies it and it is logged in `docs/decisions.md`.
 - Dates/times always shown with the project time zone; relative times
   ("in 2 h") get the absolute time in a `title`/tooltip.
+- **One date format, everywhere:** `formatLocal(instant, timeZone)` from
+  `src/lib/time/format.ts`, or `LocalTime` in JSX — "Mon, Oct 12, 9:00 AM EDT".
+  Never `toUTCString`, `toLocaleDateString`, an ISO slice or a new
+  `Intl.DateTimeFormat`; `tests/lint/date-format.test.ts` fails the build on
+  those. It applies to dialogs, announcements and server-composed messages too,
+  not just tables. A service's `localTime` string is machine data for the
+  calendar to parse — format the `scheduledAt` instant next to it instead.

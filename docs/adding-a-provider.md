@@ -191,9 +191,10 @@ callback query in them.
 
 ### Account notes (G13)
 
-A provider may expose non-secret `accountNotes({ settings, credentialsExpireAt })` strings, shown on the account. Threads shows the estimated expiry of a
-pasted token. Keep notes plain text and free of secrets. The input also carries an optional `now` (the database clock), so a note can depend on time
-(TikTok's refresh-token warning).
+A provider may expose non-secret `accountNotes({ settings, credentialsExpireAt, now, timeZone })` strings, shown on the account. Threads shows the estimated
+expiry of a pasted token. Keep notes plain text and free of secrets. The optional `now` is the database clock, so a note can depend on time (TikTok's
+refresh-token warning), and `timeZone` is the project's zone: a note that names a date MUST render it with `formatLocal` from `src/lib/time/format.ts`, the
+app's one date format (design system §4), never an ISO string.
 
 ### Callback parameters (G28)
 

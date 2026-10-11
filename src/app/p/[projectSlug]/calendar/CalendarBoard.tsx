@@ -71,6 +71,7 @@ export function CalendarBoard({
   const focusId = useRef<string | null>(null);
   const accountOf = (id: string) => calendar.accounts.find((a) => a.id === id);
   const accountName = (id: string) => accountOf(id)?.displayName ?? "Account";
+  const timeZone = calendar.timeZone;
 
   /**
    * The detail that used to sit on the face of every card. A month of slots repeated the account's
@@ -135,6 +136,7 @@ export function CalendarBoard({
     setTimeout(() => setAnnouncement(message), 0);
   };
   const deps: MoveDeps = {
+    timeZone,
     moveToOccurrence: (input) => moveToOccurrenceAction(slug, input),
     announce: say,
     refresh: () => router.refresh(),
@@ -162,7 +164,7 @@ export function CalendarBoard({
     if (!r.ok) return failure(r.message);
     setError("");
     focusId.current = item.targetId;
-    say(announceMoved(r.data.localTime));
+    say(announceMoved(r.data.scheduledAt, timeZone));
     router.refresh();
   }
 
@@ -406,6 +408,7 @@ export function CalendarBoard({
           open
           onClose={() => setDialog(null)}
           accountName={accountName(dialog.item.accountId)}
+          timeZone={timeZone}
           listSlots={() =>
             listEmptySlotsAction(slug, { accountId: dialog.item.accountId, from: new Date().toISOString(), to: new Date(Date.now() + 30 * 86_400_000).toISOString() })
           }
@@ -422,6 +425,7 @@ export function CalendarBoard({
           open
           onClose={() => setDialog(null)}
           exceptTargetId={dialog.item.targetId}
+          timeZone={timeZone}
           listQueued={() => listQueuedForAccountAction(slug, { accountId: dialog.item.accountId })}
           onPick={async (other) => {
             const item = dialog.item;
@@ -440,6 +444,7 @@ export function CalendarBoard({
           open
           onClose={() => setDialog(null)}
           accountName={accountName(pullAccount)}
+          timeZone={timeZone}
           preview={() => previewPullForwardAction(slug, { accountId: pullAccount })}
           confirm={(expected) => pullForwardAction(slug, { accountId: pullAccount, expected })}
           onDone={(moved) => {

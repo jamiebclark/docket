@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { classifyConnect, landingHref } from "@/lib/accounts/connect-landing";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
+import { formatLocal } from "@/components/ui/LocalTime";
 import { getSession } from "@/server/auth/session";
 import * as accounts from "@/server/services/accounts";
 import * as connect from "@/server/services/connect";
@@ -48,7 +49,7 @@ export async function connectCredentialsAction(
   const { outcome, timeZone, priorIds } = result.data;
   if (!outcome.ok) {
     const when = outcome.retryAt
-      ? ` Try again after ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone }).format(outcome.retryAt)} (${timeZone}).`
+      ? ` Try again after ${formatLocal(outcome.retryAt, timeZone)}.`
       : "";
     return fail("validation", `${outcome.message}${when}`, outcome.fieldErrors);
   }

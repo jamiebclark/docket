@@ -15,7 +15,7 @@ vi.mock("./actions", () => ({
 
 import type { CalendarView } from "@/server/services/calendar";
 import { CalendarBoard } from "./CalendarBoard";
-import { announceMoved, canDrop, formatPlanned, moveChipToSlot, REFUSED_OTHER_ACCOUNT, type MoveDeps } from "./calendar-logic";
+import { announceMoved, canDrop, moveChipToSlot, REFUSED_OTHER_ACCOUNT, type MoveDeps } from "./calendar-logic";
 
 const calendar = (view: "month" | "week" = "week"): CalendarView => ({
   view,
@@ -84,13 +84,13 @@ describe("calendar logic", () => {
     expect(canDrop("a1", "a2")).toBe(false);
   });
 
-  it("formats the announcement with weekday, date, time and zone", () => {
-    expect(formatPlanned("2026-10-06T09:00 Europe/London")).toBe("Tue 6 Oct 09:00 Europe/London");
-    expect(announceMoved("2026-10-06T09:00 Europe/London")).toBe("Moved to Tue 6 Oct 09:00 Europe/London");
+  it("announces the move in the app's one date format", () => {
+    expect(announceMoved("2026-10-06T08:00:00.000Z", "Europe/London")).toBe("Moved to Tue, Oct 6, 9:00 AM GMT+1");
   });
 
   const deps = (result: Awaited<ReturnType<MoveDeps["moveToOccurrence"]>>) => {
     const d = {
+      timeZone: "Europe/London",
       moveToOccurrence: vi.fn(async () => result),
       announce: vi.fn(),
       refresh: vi.fn(),
@@ -104,7 +104,7 @@ describe("calendar logic", () => {
     const d = deps({ ok: true, data: { scheduledAt: slot.at, localTime: "2026-10-19T10:00 Europe/London", slotId: "s1" } });
     expect(await moveChipToSlot(d, { targetId: "t1", accountId: "a1" }, slot)).toEqual({ ok: true });
     expect(d.moveToOccurrence).toHaveBeenCalledWith({ targetId: "t1", slotId: "s1", scheduledAt: slot.at });
-    expect(d.announce).toHaveBeenCalledWith("Moved to Mon 19 Oct 10:00 Europe/London");
+    expect(d.announce).toHaveBeenCalledWith("Moved to Mon, Oct 19, 10:00 AM GMT+1");
     expect(d.focusAfterRefresh).toHaveBeenCalledWith("t1");
     expect(d.refresh).toHaveBeenCalled();
   });

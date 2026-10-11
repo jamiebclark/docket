@@ -1,21 +1,10 @@
 import { alertStyles } from "@/components/ui/Alert";
+import { formatLocal } from "@/components/ui/LocalTime";
 import { docsUrl } from "@/lib/docs";
 import { relativeTimeText } from "@/lib/time/relative";
 import type { SchedulerHealth as Health } from "@/server/services/scheduler-health";
 
-function absolute(at: Date, timezone: string): string {
-  return `${new Intl.DateTimeFormat("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZone: timezone,
-  }).format(at)} ${timezone}`;
-}
+const absolute = (at: Date, timezone: string): string => `${formatLocal(at, timezone)} (${timezone})`;
 
 function When({ at, now, timezone }: { at: Date; now: Date; timezone: string }) {
   return (

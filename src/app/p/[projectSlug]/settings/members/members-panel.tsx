@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Cell, Row, Sub, Table } from "@/components/ui/Table";
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { ActionResult } from "@/lib/action-result";
 import { changeMemberRole, leaveProject, removeMember, transferOwnership } from "./actions";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -29,9 +30,8 @@ type Confirm = "remove" | "leave" | "transfer";
 type Action = (prev: ActionResult<null> | null, formData: FormData) => Promise<ActionResult<null>>;
 
 const errorClass = "mt-1 text-xs text-danger";
-const joined = (iso: string) => new Date(iso).toISOString().slice(0, 10);
 
-export function MembersPanel({ slug, members }: { slug: string; members: MemberItem[] }) {
+export function MembersPanel({ slug, timeZone, members }: { slug: string; timeZone: string; members: MemberItem[] }) {
   return (
     <section aria-labelledby="members-heading" className="flex flex-col gap-4">
       <h2 id="members-heading" className="text-lg font-semibold">
@@ -39,14 +39,14 @@ export function MembersPanel({ slug, members }: { slug: string; members: MemberI
       </h2>
       <Table caption="Members" columns={["Member", "Role", "Actions"]}>
         {members.map((m) => (
-          <MemberRow key={m.userId} slug={slug} m={m} />
+          <MemberRow key={m.userId} slug={slug} timeZone={timeZone} m={m} />
         ))}
       </Table>
     </section>
   );
 }
 
-function MemberRow({ slug, m }: { slug: string; m: MemberItem }) {
+function MemberRow({ slug, timeZone, m }: { slug: string; timeZone: string; m: MemberItem }) {
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [roleState, roleAction, changing] = useActionState<ActionResult<null> | null, FormData>(changeMemberRole, null);
   const error = roleState && !roleState.ok ? roleState.message : null;
@@ -58,7 +58,7 @@ function MemberRow({ slug, m }: { slug: string; m: MemberItem }) {
         {m.isSelf ? <span className="ml-2"><Badge>You</Badge></span> : null}
         <Sub>{m.email}</Sub>
         <Sub>
-          Joined <time dateTime={m.joinedAt}>{joined(m.joinedAt)}</time>
+          Joined <LocalTime value={m.joinedAt} timeZone={timeZone} />
         </Sub>
       </Cell>
       <Cell>
