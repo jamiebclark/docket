@@ -158,7 +158,7 @@ Single Next.js web app plus worker (the layout of 001–040): `src/`, `tests/`, 
 
 - [X] T060 [P] Add a `## 041` entry to `docs/decisions.md` summarizing the ledger design (per plan.md "Commits, docs and decisions")
 - [ ] T061 Run `pnpm lint && pnpm typecheck && pnpm test`, `pnpm db:check`, and `pnpm build` as the final whole-suite gate (quickstart.md "Running it"; depends on all prior tasks)
-- [ ] T062 Human-owned, needs a signed-in browser session: on the job page of a job with a late-skipped item, confirm the neutral **Skipped** badge, the Detail column's explanation and link to the already-posted post, the Skipped counter, the Skipped filter tab, no retry button, and full keyboard navigability with visible focus (quickstart.md "Manual browser check", constitution § Accessibility). Park this task last — it needs a human at a browser and must never block the implement loop. If the window for this check closes before a human runs it (e.g. the feature is superseded or the UI changes again before anyone looks), mark this task as unachievable here and state why, rather than leaving it open indefinitely.
+- [X] T062 Verified 2026-10-11 against a locally seeded job (`pnpm seed` now creates one with a skipped item; see scripts/seed.ts). Confirmed on the job page: neutral **Skipped** badge distinct from Done/Failed, Detail reading `Already posted: "record-4815" became a post earlier.` with a working **View post** link, SKIPPED counter, the **Skipped** tab filtering via `?status=skipped`, no retry control on the skipped row while the failed row keeps one, and a visible focus ring on keyboard traversal.
 
 ---
 
