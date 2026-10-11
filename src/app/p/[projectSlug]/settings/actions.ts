@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import { fail, failFromError, fieldErrorsFromZod, ok, type ActionResult } from "@/lib/action-result";
 import { forProject, NotFoundError, NotificationsBusyError } from "@/server/dal";
-import type { MuteErrorCode } from "@/lib/notifications/text";
 import { getSession } from "@/server/auth/session";
 import * as notifications from "@/server/services/notifications";
 import * as projects from "@/server/services/projects";
@@ -38,16 +37,24 @@ export async function updateProjectSettings(
   return ok({ saved: true });
 }
 
-/** Turns the caller's own notifications for this project on or off. Any role may. */
+/** Turns one of the caller's own kind, platform or project-level switches for this project. Any role may. */
 export async function setMyProjectNotifications(_prev: ActionResult<never> | null, formData: FormData): Promise<ActionResult<never>> {
   const slug = String(formData.get("projectSlug") ?? "");
   const session = await getSession();
   if (!session) redirect(`/login?next=${encodeURIComponent(`/p/${slug}/settings`)}`);
-  let on = false;
-  let failed: MuteErrorCode | null = null;
+  let failed: "busy" | "not_found" | "invalid" | null = null;
+  let qs = "";
   try {
     const scope = await forProject(session, slug);
-    ({ on } = await notifications.setMyProjectNotifications(scope, { on: String(formData.get("on") ?? "") }));
+    const change = await notifications.setMySwitchForProject(scope, {
+      axis: formData.get("axis"),
+      key: formData.get("key") ?? undefined,
+      on: formData.get("on"),
+    });
+    const params = new URLSearchParams({ changed: "1", axis: change.axis });
+    if (change.key !== undefined) params.set("key", change.key);
+    params.set("on", change.on ? "1" : "0");
+    qs = params.toString();
   } catch (error) {
     if (error instanceof NotFoundError) failed = "not_found";
     else if (error instanceof NotificationsBusyError) failed = "busy";
@@ -55,5 +62,5 @@ export async function setMyProjectNotifications(_prev: ActionResult<never> | nul
     else return failFromError(error);
   }
   if (failed) redirect(`/p/${slug}/settings?notifications=${failed}`);
-  redirect(`/p/${slug}/settings?notifications=${on ? "on" : "off"}`);
+  redirect(`/p/${slug}/settings?${qs}`);
 }

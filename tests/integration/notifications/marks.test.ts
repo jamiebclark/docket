@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { createNotificationsRepo } from "../../../src/server/dal/notifications";
 import { closeDb, testDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
-import { markEventFor, marksFor, recordEvent, startReading } from "../../helpers/notifications";
+import { markEventFor, marksFor, muteProject, recordEvent, startReading } from "../../helpers/notifications";
 
 afterAll(async () => {
   await closeDb();
@@ -57,10 +57,10 @@ describe("FR-002 to FR-006: a mix of floor-read, individually-read, snoozed, exp
     void untouched;
   });
 
-  it("a muted project contributes nothing", async () => {
+  it("a project with every kind off contributes nothing", async () => {
     const { project, u } = await fixture();
     await recordEvent(project.id, "target_failed");
-    await repoOf(project.id, u.id).write({ muted: true, markRead: false });
+    await muteProject(project.id, u.id);
     expect(await repoOf(project.id, u.id).unreadCount()).toBe(0);
   });
 });

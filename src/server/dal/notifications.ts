@@ -1,11 +1,21 @@
 import { sql, type SQL } from "drizzle-orm";
 import { ATTENTION_MEMBER_OUTCOMES, CONNECT_FAILED, EVENT_MARK_CAP, UNREAD_CAP } from "../../lib/notifications/attention";
+import {
+  ATTENTION_KINDS,
+  OFF_SEQ,
+  compileEligibility,
+  preferencesOf,
+  thresholdOf,
+  type EligibilityPlan,
+  type PreferenceRow,
+  type ProjectPreferences,
+  type SwitchAxis,
+} from "../../lib/notifications/eligibility";
 import type { Database } from "../db/client";
 import { notificationStates } from "../db/schema";
 
 export interface NotificationStateRow {
   projectId: string;
-  muted: boolean;
   /** A bigint as a decimal string, like `ActivityRecord.seq`. */
   seenSeq: string;
   seenAt: Date;
@@ -26,19 +36,35 @@ export interface WriteOutcome {
 }
 
 /** One project, one person. Every query is pinned to `projectId` and joins `member` for `userId`. */
+export interface SwitchWriteOutcome {
+  outcome: "changed" | "unchanged" | "not_member";
+  /** Marks deleted because the new position made them redundant (FR-008). Always 0 for `on: false`. */
+  marksPruned: number;
+}
+
 export interface NotificationsRepo {
   get(): Promise<NotificationStateRow | null>;
-  /** Attention events above the floor with no mark still in the future, `muted = false` only, capped. */
+  /** This person's switches for this project (data-model.md §4.1). */
+  preferences(): Promise<ProjectPreferences>;
+  /** Attention events above the floor with no mark still in the future, eligible under the compiled plan, capped. */
   unreadCount(cap?: number): Promise<number>;
   /** Inside a transaction that already holds the project lock (membership insert). */
   createAtCurrentPosition(): Promise<void>;
   /**
    * Its own transaction: SET LOCAL lock_timeout, projects FOR UPDATE, membership re-check, newest position,
-   * GREATEST upsert. With `muted` given it also sets it; `markRead: true` moves the position, pruning every
-   * mark at or below the new floor in the same transaction and reporting how many live snoozes that cleared.
-   * Skips the lock when nothing newer is visible and `muted` is unchanged. Throws NotificationsBusyError on 55P03.
+   * GREATEST upsert. `markRead: true` moves the position, pruning every mark at or below the new floor in
+   * the same transaction and reporting how many live snoozes that cleared. Skips the lock when nothing newer
+   * is visible. Throws NotificationsBusyError on 55P03.
    */
-  write(change: { markRead: boolean; muted?: boolean }): Promise<WriteOutcome>;
+  write(change: { markRead: boolean }): Promise<WriteOutcome>;
+  /**
+   * Its own transaction, R3's order: SET LOCAL lock_timeout, projects FOR UPDATE, the test hook, membership
+   * re-check, load current switches and drop any already in the wanted state, then (for `on: true`) the
+   * newest position and the GREATEST upsert, or (for `on: false`) the NULL upsert, then (for `on: true`) the
+   * prune of marks the new position makes redundant (data-model.md §4.6, §4.7). Throws NotificationsBusyError
+   * on 55P03, having written nothing.
+   */
+  setSwitches(input: { switches: readonly { axis: SwitchAxis; key: string }[]; on: boolean }): Promise<SwitchWriteOutcome>;
   /**
    * One row action, in the same transaction order as `write` (M12). `countsAgainAt: "never"` is "Mark read";
    * a Date is a snooze. Resolves the event inside this project with the attention predicate, refuses at or
@@ -54,7 +80,11 @@ export interface NotificationsRepo {
 export interface NotificationsSetReader {
   /** One statement: UNION ALL of two mark-aware branches per project, each LIMIT cap, outer count LIMIT cap. */
   countUnread(cap?: number): Promise<number>;
-  /** Projects (muted or not) with any visible attention event newer than the position: the ones worth locking. */
+  /** This person's switches, by project (data-model.md §4.1, Q16). */
+  preferencesByProject(): Promise<Map<string, ProjectPreferences>>;
+  /** Live-account platforms, by project (data-model.md §4.9, Q17). */
+  platformsByProject(): Promise<Map<string, string[]>>;
+  /** Projects with any visible attention event newer than the position: the ones worth locking. */
   projectsWithUnread(): Promise<string[]>;
   /** The caller's attention event with this id, in one of the given projects, or null (N23, M11). */
   resolveAttentionEvent(eventId: string): Promise<{ projectId: string; seq: bigint } | null>;
@@ -108,14 +138,34 @@ function errorCode(error: unknown): string | undefined {
  * before `limit` applies within the branch (data-model.md §4.1). `projectsWithUnread` deliberately leaves
  * this off: a project whose only events above the floor are marked still needs its floor raised and pruned.
  */
-function unreadBranches(
+/**
+ * The platform clause of data-model.md §4.3: emitted only when the plan carries a platform switch, so
+ * a person who has never touched one gets the statement shipping today. `providerKeysColumn` and
+ * `seqColumn` are raw SQL identifiers, never user input.
+ */
+export function platformClauseSql(platforms: EligibilityPlan["platforms"], providerKeysColumn: string, seqColumn: string): SQL {
+  if (!platforms) return sql``;
+  const valueRows = platforms.map((p) => sql`(${p.key}, ${p.threshold.toString()}::bigint)`);
+  return sql`AND ${sql.raw(seqColumn)} > (
+      SELECT coalesce(min(coalesce(p.threshold, 0)), 0)
+        FROM unnest(${sql.raw(providerKeysColumn)}) AS pk(key)
+        LEFT JOIN (VALUES ${sql.join(valueRows, sql`, `)}) AS p(key, threshold) ON p.key = pk.key)`;
+}
+
+/**
+ * One branch per `plan.memberGroups` entry plus one for `connect_failed`, each pinned to this project
+ * and person, newer than the floor, above the group's position and the platform floor, no branch at all
+ * when both are empty (data-model.md §4.2, §4.3). `excludeMarked` adds the hidden-now anti-join (a mark
+ * whose instant is still in the future), so the exclusion runs before `limit` applies within the branch.
+ */
+function planBranches(
   projectId: string,
   userId: string,
   select: SQL,
   limit: number,
-  opts: { unmutedOnly: boolean; excludeMarked?: boolean },
+  plan: EligibilityPlan,
+  opts: { excludeMarked?: boolean } = {},
 ): SQL[] {
-  const muted = opts.unmutedOnly ? sql`AND notification_states.muted = false` : sql``;
   const markJoin = opts.excludeMarked
     ? sql`LEFT JOIN notification_event_marks hidden
         ON hidden.project_id = activity_events.project_id
@@ -124,15 +174,43 @@ function unreadBranches(
        AND hidden.counts_again_at > now()`
     : sql``;
   const markFilter = opts.excludeMarked ? sql`AND hidden.event_id IS NULL` : sql``;
-  const branch = (outcomeCond: SQL) => sql`(SELECT ${select} FROM activity_events
+  const platformClause = platformClauseSql(plan.platforms, "activity_events.provider_keys", "activity_events.seq");
+  const branch = (outcomeCond: SQL, minSeq: bigint, actorCond: SQL = sql``) => sql`(SELECT ${select} FROM activity_events
     JOIN notification_states ON notification_states.project_id = activity_events.project_id AND notification_states.user_id = ${userId}
     JOIN member ON member.organization_id = activity_events.project_id AND member.user_id = ${userId}
     ${markJoin}
-    WHERE activity_events.project_id = ${projectId} ${muted}
-      AND ${outcomeCond}
+    WHERE activity_events.project_id = ${projectId}
+      AND ${outcomeCond} ${actorCond}
       AND activity_events.seq > notification_states.seen_seq
+      ${minSeq > 0n ? sql`AND activity_events.seq > ${minSeq.toString()}::bigint` : sql``}
+      ${platformClause}
       ${markFilter}
     LIMIT ${limit})`;
+  const branches: SQL[] = [];
+  for (const group of plan.memberGroups) {
+    const outcomesLiteral = sql.raw(group.outcomes.map((o) => `'${o}'`).join(", "));
+    branches.push(branch(sql`activity_events.outcome IN (${outcomesLiteral})`, group.minSeq));
+  }
+  if (plan.connectFailed) {
+    branches.push(
+      branch(sql`activity_events.outcome = ${CONNECT_FAILED_LITERAL}`, plan.connectFailed.minSeq, sql`AND activity_events.actor_user_id = ${userId}`),
+    );
+  }
+  return branches;
+}
+
+/**
+ * Whether anything newer than the floor exists at all, ignoring every switch — `write`'s lock-skip check,
+ * and `projectsWithUnread`'s deliberately preference-blind statement (N37, Q14).
+ */
+function anyAttentionNewerBranches(projectId: string, userId: string, select: SQL = sql`1`): SQL[] {
+  const branch = (outcomeCond: SQL) => sql`(SELECT ${select} FROM activity_events
+    JOIN notification_states ON notification_states.project_id = activity_events.project_id AND notification_states.user_id = ${userId}
+    JOIN member ON member.organization_id = activity_events.project_id AND member.user_id = ${userId}
+    WHERE activity_events.project_id = ${projectId}
+      AND ${outcomeCond}
+      AND activity_events.seq > notification_states.seen_seq
+    LIMIT 1)`;
   return [
     branch(sql`activity_events.outcome IN (${MEMBER_OUTCOMES})`),
     branch(sql`activity_events.outcome = ${CONNECT_FAILED_LITERAL} AND activity_events.actor_user_id = ${userId}`),
@@ -201,6 +279,52 @@ async function pruneMarks(tx: Database, projectId: string, userId: string, newFl
   return Number(rowsOf(result)[0]?.snoozes_cleared ?? 0);
 }
 
+/** This person's switch rows for one project (data-model.md §4.1). */
+async function loadPreferenceRows(tx: Database, projectId: string, userId: string): Promise<PreferenceRow[]> {
+  const result = await tx.execute(
+    sql`SELECT axis, switch_key, on_from_seq::text AS on_from_seq FROM notification_preferences
+        WHERE project_id = ${projectId} AND user_id = ${userId}`,
+  );
+  return rowsOf(result).map((r) => ({
+    axis: r.axis as SwitchAxis,
+    switchKey: r.switch_key as string,
+    onFromSeq: r.on_from_seq === null ? null : BigInt(r.on_from_seq as string),
+  }));
+}
+
+/**
+ * Deletes every mark whose event is no longer eligible under `prefs` — one sub-branch per kind
+ * (literal outcome, `ae.seq <= threshold`), plus one for the platform axis, `UNION ALL`-ed
+ * (data-model.md §4.7). Returns how many marks that pruned.
+ */
+async function pruneIneligibleMarks(tx: Database, projectId: string, userId: string, prefs: ProjectPreferences): Promise<number> {
+  const branches: SQL[] = [];
+  for (const kind of ATTENTION_KINDS) {
+    const threshold = thresholdOf(prefs.kinds, kind);
+    if (threshold <= 0n) continue;
+    branches.push(sql`(SELECT m.event_id FROM notification_event_marks m
+      JOIN activity_events ae ON ae.project_id = m.project_id AND ae.id = m.event_id
+      WHERE m.project_id = ${projectId} AND m.user_id = ${userId}
+        AND ae.outcome = ${sql.raw(`'${kind}'`)} AND ae.seq <= ${threshold.toString()}::bigint)`);
+  }
+  if (prefs.platforms.size > 0) {
+    const valueRows = [...prefs.platforms.entries()].map(([key, threshold]) => sql`(${key}, ${threshold.toString()}::bigint)`);
+    branches.push(sql`(SELECT m.event_id FROM notification_event_marks m
+      JOIN activity_events ae ON ae.project_id = m.project_id AND ae.id = m.event_id
+      WHERE m.project_id = ${projectId} AND m.user_id = ${userId}
+        AND ae.seq <= (SELECT coalesce(min(coalesce(p.threshold, 0)), 0)
+                         FROM unnest(ae.provider_keys) AS pk(key)
+                         LEFT JOIN (VALUES ${sql.join(valueRows, sql`, `)}) AS p(key, threshold) ON p.key = pk.key))`);
+  }
+  if (branches.length === 0) return 0;
+  const result = await tx.execute(sql`
+    WITH ineligible AS (${sql.join(branches, sql` UNION ALL `)})
+    DELETE FROM notification_event_marks
+     WHERE project_id = ${projectId} AND user_id = ${userId} AND event_id IN (SELECT event_id FROM ineligible)
+    RETURNING event_id`);
+  return rowsOf(result).length;
+}
+
 /** The newest attention `seq` for this person in this project: two index probes, `GREATEST`ed. */
 export async function newestAttentionSeq(db: Database, projectId: string, userId: string): Promise<bigint> {
   const result = await db.execute(sql`SELECT GREATEST(
@@ -215,26 +339,33 @@ export async function newestAttentionSeq(db: Database, projectId: string, userId
 
 export function createNotificationsRepo(db: Database, projectId: string, userId: string): NotificationsRepo {
   async function get(): Promise<NotificationStateRow | null> {
-    const result = await db.execute(sql`SELECT notification_states.project_id AS project_id, notification_states.muted AS muted,
+    const result = await db.execute(sql`SELECT notification_states.project_id AS project_id,
         notification_states.seen_seq::text AS seen_seq,
         to_char(notification_states.seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS seen_iso
       FROM notification_states
       WHERE notification_states.project_id = ${projectId} AND notification_states.user_id = ${userId}`);
     const r = rowsOf(result)[0];
     if (!r) return null;
-    return { projectId: r.project_id as string, muted: r.muted as boolean, seenSeq: r.seen_seq as string, seenAt: new Date(r.seen_iso as string) };
+    return { projectId: r.project_id as string, seenSeq: r.seen_seq as string, seenAt: new Date(r.seen_iso as string) };
+  }
+
+  async function preferences(): Promise<ProjectPreferences> {
+    return preferencesOf(await loadPreferenceRows(db, projectId, userId));
   }
 
   async function anyNewer(): Promise<boolean> {
-    const branches = unreadBranches(projectId, userId, sql`1`, 1, { unmutedOnly: false });
+    const branches = anyAttentionNewerBranches(projectId, userId);
     const result = await db.execute(sql`SELECT count(*)::int AS n FROM (${sql.join(branches, sql` UNION ALL `)}) AS newer`);
     return Number(rowsOf(result)[0]?.n ?? 0) > 0;
   }
 
   return {
     get,
+    preferences,
     async unreadCount(cap = UNREAD_CAP) {
-      const branches = unreadBranches(projectId, userId, sql`1`, cap, { unmutedOnly: true, excludeMarked: true });
+      const plan = compileEligibility(await preferences());
+      const branches = planBranches(projectId, userId, sql`1`, cap, plan, { excludeMarked: true });
+      if (branches.length === 0) return 0;
       const result = await db.execute(
         sql`SELECT count(*)::int AS n FROM (SELECT 1 FROM (${sql.join(branches, sql` UNION ALL `)}) AS b LIMIT ${cap}) AS c`,
       );
@@ -246,8 +377,7 @@ export function createNotificationsRepo(db: Database, projectId: string, userId:
     },
     async write(change) {
       const current = await get();
-      const mutedChanges = change.muted !== undefined && (current === null || change.muted !== current.muted);
-      if (current && !mutedChanges && (!change.markRead || !(await anyNewer()))) return { outcome: "unchanged", snoozesCleared: 0 };
+      if (current && (!change.markRead || !(await anyNewer()))) return { outcome: "unchanged", snoozesCleared: 0 };
       try {
         return await db.transaction(async (raw) => {
           const tx = raw as unknown as Database;
@@ -264,13 +394,56 @@ export function createNotificationsRepo(db: Database, projectId: string, userId:
             set.seenSeq = sql`GREATEST(${notificationStates.seenSeq}, excluded.seen_seq)`;
             set.seenAt = new Date();
           }
-          if (change.muted !== undefined) set.muted = change.muted;
           await tx
             .insert(notificationStates)
-            .values({ projectId, userId, seenSeq: newest, muted: change.muted ?? false })
+            .values({ projectId, userId, seenSeq: newest })
             .onConflictDoUpdate({ target: [notificationStates.projectId, notificationStates.userId], set });
           const snoozesCleared = change.markRead ? await pruneMarks(tx, projectId, userId, newest) : 0;
           return { outcome: "changed", snoozesCleared } as const;
+        });
+      } catch (error) {
+        if (errorCode(error) === "55P03") throw new NotificationsBusyError();
+        throw error;
+      }
+    },
+    async setSwitches(input) {
+      try {
+        return await db.transaction(async (raw) => {
+          const tx = raw as unknown as Database;
+          await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${Math.max(1, Math.floor(lockTimeoutMs))}ms'`));
+          await tx.execute(sql`SELECT projects.id FROM projects WHERE projects.id = ${projectId} FOR UPDATE`);
+          if (afterLockHook) await afterLockHook();
+          const stillMember = await tx.execute(
+            sql`SELECT member.id FROM member WHERE member.organization_id = ${projectId} AND member.user_id = ${userId}`,
+          );
+          if (rowsOf(stillMember).length === 0) return { outcome: "not_member", marksPruned: 0 } as const;
+          const rows = await loadPreferenceRows(tx, projectId, userId);
+          const current = preferencesOf(rows);
+          const toWrite = input.switches.filter((s) => {
+            const map = s.axis === "kind" ? current.kinds : current.platforms;
+            const currentlyOn = thresholdOf(map, s.key) < OFF_SEQ;
+            return input.on ? !currentlyOn : currentlyOn;
+          });
+          if (toWrite.length === 0) return { outcome: "unchanged", marksPruned: 0 } as const;
+          if (input.on) {
+            const newest = await newestAttentionSeq(tx, projectId, userId);
+            const valueRows = toWrite.map((s) => sql`(${projectId}, ${userId}, ${s.axis}, ${s.key}, ${newest.toString()}::bigint)`);
+            await tx.execute(sql`
+              INSERT INTO notification_preferences (project_id, user_id, axis, switch_key, on_from_seq)
+              VALUES ${sql.join(valueRows, sql`, `)}
+              ON CONFLICT (project_id, user_id, axis, switch_key)
+              DO UPDATE SET on_from_seq = GREATEST(notification_preferences.on_from_seq, excluded.on_from_seq), updated_at = now()`);
+            const updatedRows = await loadPreferenceRows(tx, projectId, userId);
+            const marksPruned = await pruneIneligibleMarks(tx, projectId, userId, preferencesOf(updatedRows));
+            return { outcome: "changed", marksPruned } as const;
+          }
+          const valueRows = toWrite.map((s) => sql`(${projectId}, ${userId}, ${s.axis}, ${s.key}, NULL)`);
+          await tx.execute(sql`
+            INSERT INTO notification_preferences (project_id, user_id, axis, switch_key, on_from_seq)
+            VALUES ${sql.join(valueRows, sql`, `)}
+            ON CONFLICT (project_id, user_id, axis, switch_key)
+            DO UPDATE SET on_from_seq = NULL, updated_at = now()`);
+          return { outcome: "changed", marksPruned: 0 } as const;
         });
       } catch (error) {
         if (errorCode(error) === "55P03") throw new NotificationsBusyError();
@@ -335,10 +508,51 @@ export function createNotificationsRepo(db: Database, projectId: string, userId:
 }
 
 export function createNotificationsSetReader(db: Database, projectIds: readonly string[], userId: string): NotificationsSetReader {
+  async function preferencesByProject(): Promise<Map<string, ProjectPreferences>> {
+    const byProject = new Map<string, PreferenceRow[]>();
+    if (projectIds.length > 0) {
+      const branches = projectIds.map(
+        (p) => sql`(SELECT ${p}::uuid AS project_id, axis, switch_key, on_from_seq::text AS on_from_seq
+          FROM notification_preferences WHERE project_id = ${p} AND user_id = ${userId})`,
+      );
+      const result = await db.execute(sql`SELECT project_id, axis, switch_key, on_from_seq FROM (${sql.join(branches, sql` UNION ALL `)}) AS b`);
+      for (const r of rowsOf(result)) {
+        const pid = r.project_id as string;
+        const rows = byProject.get(pid) ?? [];
+        rows.push({
+          axis: r.axis as SwitchAxis,
+          switchKey: r.switch_key as string,
+          onFromSeq: r.on_from_seq === null ? null : BigInt(r.on_from_seq as string),
+        });
+        byProject.set(pid, rows);
+      }
+    }
+    return new Map(projectIds.map((p) => [p, preferencesOf(byProject.get(p) ?? [])]));
+  }
+
+  async function platformsByProject(): Promise<Map<string, string[]>> {
+    const map = new Map<string, string[]>(projectIds.map((p) => [p, []]));
+    if (projectIds.length === 0) return map;
+    const branches = projectIds.map(
+      (p) => sql`(SELECT ${p}::uuid AS project_id, provider_key FROM social_accounts WHERE project_id = ${p} AND removed_at IS NULL)`,
+    );
+    const result = await db.execute(sql`SELECT DISTINCT project_id, provider_key FROM (${sql.join(branches, sql` UNION ALL `)}) AS b`);
+    for (const r of rowsOf(result)) {
+      map.get(r.project_id as string)?.push(r.provider_key as string);
+    }
+    return map;
+  }
+
   return {
+    preferencesByProject,
+    platformsByProject,
     async countUnread(cap = UNREAD_CAP) {
       if (projectIds.length === 0) return 0;
-      const branches = projectIds.flatMap((p) => unreadBranches(p, userId, sql`1`, cap, { unmutedOnly: true, excludeMarked: true }));
+      const prefsByProject = await preferencesByProject();
+      const branches = projectIds.flatMap((p) =>
+        planBranches(p, userId, sql`1`, cap, compileEligibility(prefsByProject.get(p)!), { excludeMarked: true }),
+      );
+      if (branches.length === 0) return 0;
       const result = await db.execute(
         sql`SELECT count(*)::int AS n FROM (SELECT 1 FROM (${sql.join(branches, sql` UNION ALL `)}) AS b LIMIT ${cap}) AS c`,
       );
@@ -346,7 +560,7 @@ export function createNotificationsSetReader(db: Database, projectIds: readonly 
     },
     async projectsWithUnread() {
       if (projectIds.length === 0) return [];
-      const branches = projectIds.flatMap((p) => unreadBranches(p, userId, sql`activity_events.project_id AS project_id`, 1, { unmutedOnly: false }));
+      const branches = projectIds.flatMap((p) => anyAttentionNewerBranches(p, userId, sql`activity_events.project_id AS project_id`));
       const result = await db.execute(sql`SELECT DISTINCT project_id FROM (${sql.join(branches, sql` UNION ALL `)}) AS b`);
       return rowsOf(result).map((r) => r.project_id as string);
     },
@@ -377,11 +591,29 @@ export function createNotificationsSetReader(db: Database, projectIds: readonly 
     },
     async nextChangeAt() {
       if (projectIds.length === 0) return null;
-      const branches = projectIds.map(
-        (p) => sql`(SELECT min(counts_again_at) AS next FROM notification_event_marks
-          WHERE project_id = ${p} AND user_id = ${userId}
-            AND counts_again_at > now() AND counts_again_at < 'infinity'::timestamptz)`,
-      );
+      const prefsByProject = await preferencesByProject();
+      const branches: SQL[] = [];
+      for (const p of projectIds) {
+        const plan = compileEligibility(prefsByProject.get(p)!);
+        const platformClause = platformClauseSql(plan.platforms, "ae.provider_keys", "ae.seq");
+        const branch = (outcomeCond: SQL, minSeq: bigint) => sql`(SELECT min(m.counts_again_at) AS next
+           FROM notification_event_marks m
+           JOIN activity_events ae ON ae.project_id = m.project_id AND ae.id = m.event_id
+           JOIN notification_states ns ON ns.project_id = m.project_id AND ns.user_id = m.user_id
+          WHERE m.project_id = ${p} AND m.user_id = ${userId}
+            AND m.counts_again_at > now() AND m.counts_again_at < 'infinity'::timestamptz
+            AND ${outcomeCond}
+            AND ae.seq > ns.seen_seq
+            ${minSeq > 0n ? sql`AND ae.seq > ${minSeq.toString()}::bigint` : sql``}
+            ${platformClause})`;
+        for (const group of plan.memberGroups) {
+          branches.push(branch(sql`ae.outcome IN (${sql.raw(group.outcomes.map((o) => `'${o}'`).join(", "))})`, group.minSeq));
+        }
+        if (plan.connectFailed) {
+          branches.push(branch(sql`ae.outcome = ${CONNECT_FAILED_LITERAL} AND ae.actor_user_id = ${userId}`, plan.connectFailed.minSeq));
+        }
+      }
+      if (branches.length === 0) return null;
       const result = await db.execute(
         sql`SELECT to_char(min(next) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS next_iso
             FROM (${sql.join(branches, sql` UNION ALL `)}) AS b`,

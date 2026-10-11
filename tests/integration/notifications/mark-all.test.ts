@@ -7,7 +7,7 @@ vi.mock("next/navigation", async () => (await import("../../helpers/actions")).n
 import { markAllRead } from "../../../src/app/notifications/actions";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { setNotificationsAfterLockHookForTests, setNotificationsLockTimeoutForTests } from "../../../src/server/dal/notifications";
-import { markAllRead as markAllReadService, setNotificationsBySlug, unreadSummary } from "../../../src/server/services/notifications";
+import { markAllRead as markAllReadService, setSwitchBySlug, unreadSummary } from "../../../src/server/services/notifications";
 import { actAs, RedirectSignal } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
@@ -50,14 +50,14 @@ describe("markAllRead action", () => {
     expect(await count(u.id)).toBe(0);
   });
 
-  it("marks a muted project's backlog too, so unmuting later shows nothing old", async () => {
+  it("marks a project that's off's backlog too, so turning it back on later shows nothing old", async () => {
     const { a, b, u } = await fixture();
-    await setNotificationsBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, on: "false" });
+    await setSwitchBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, axis: "project", on: "false" });
     await recordEvent(a.id, "target_failed");
     await recordEvent(b.id, "target_failed");
     actAs(u);
     await markAllRead(null, form());
-    await setNotificationsBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, on: "true" });
+    await setSwitchBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, axis: "project", on: "true" });
     expect(await count(u.id)).toBe(0);
   });
 

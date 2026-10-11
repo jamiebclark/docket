@@ -1,20 +1,30 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { NotificationToggle } from "@/components/notifications/NotificationToggle";
+import { NotificationPreferenceGrid } from "@/components/notifications/NotificationPreferenceGrid";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import { SignedInHeader } from "@/components/shell/SignedInHeader";
 import { Button, buttonStyles } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getSession } from "@/server/auth/session";
 import { forMyProjects } from "@/server/dal";
-import { myProjectStates, recentPanel } from "@/server/services/notifications";
-import { markAllConfirmation, muteErrorText, mutedConfirmation, parseMuteError, parseRowErrorCode, rowErrorText, snoozedConfirmation } from "@/lib/notifications/text";
-import { markAllRead } from "./actions";
+import { myNotificationPreferences, recentPanel } from "@/server/services/notifications";
+import {
+  markAllConfirmation,
+  muteErrorText,
+  parseMuteError,
+  parseRowErrorCode,
+  parseSwitchChange,
+  preferenceHelpText,
+  projectSwitchConfirmation,
+  rowErrorText,
+  snoozedConfirmation,
+  switchConfirmation,
+} from "@/lib/notifications/text";
+import { markAllRead, setNotifications } from "./actions";
 
 export const metadata: Metadata = { title: "Notifications" };
 export const dynamic = "force-dynamic";
@@ -27,13 +37,22 @@ export default async function NotificationsPage({ searchParams }: Props) {
   const set = await forMyProjects(session);
   const now = new Date();
   const panel = await recentPanel(set, now);
-  const states = await myProjectStates(set);
+  const rows = await myNotificationPreferences(set);
   const raw = await searchParams;
   const muteError = parseMuteError(raw.notifications);
   const marked = raw.marked === "1";
   const busy = typeof raw.busy === "string" ? raw.busy.split(",").filter(Boolean) : [];
   const snoozesCleared = typeof raw.snoozes === "string" ? Number.parseInt(raw.snoozes, 10) || 0 : 0;
-  const changed = typeof raw.changed === "string" ? states.find((s) => s.slug === raw.changed) : undefined;
+  const changedSlug = typeof raw.changed === "string" ? raw.changed : undefined;
+  const changedRow = changedSlug ? rows.find((r) => r.slug === changedSlug) : undefined;
+  const change = changedRow ? parseSwitchChange(raw) : null;
+  const switchLookup = change
+    ? change.axis === "kind"
+      ? changedRow!.kinds.find((k) => k.key === change.key)
+      : change.axis === "platform"
+        ? changedRow!.platforms.find((k) => k.key === change.key)
+        : undefined
+    : undefined;
   const read = raw.read === "1";
   const rowError = parseRowErrorCode(raw.rowError);
   const snoozedSlug = typeof raw.snoozed === "string" ? raw.snoozed : undefined;
@@ -44,6 +63,11 @@ export default async function NotificationsPage({ searchParams }: Props) {
     const until = untilRaw ? new Date(untilRaw) : null;
     snoozedText = project && until && !Number.isNaN(until.getTime()) ? snoozedConfirmation(until, project.timeZone) : "Snoozed.";
   }
+
+  const switchAction = async (formData: FormData) => {
+    "use server";
+    await setNotifications(null, formData);
+  };
 
   return (
     <>
@@ -65,7 +89,15 @@ export default async function NotificationsPage({ searchParams }: Props) {
         ) : (
           <div className="flex flex-col gap-6">
             {muteError ? <Alert tone="danger">{muteErrorText(muteError)}</Alert> : null}
-            {changed ? <Alert tone="success">{mutedConfirmation(changed.name, changed.on)}</Alert> : null}
+            {change ? (
+              <Alert tone="success">
+                {change.axis === "project"
+                  ? projectSwitchConfirmation(changedRow!.name, change.on)
+                  : switchLookup
+                    ? switchConfirmation(changedRow!.name, switchLookup.label, change.on)
+                    : "Notifications updated."}
+              </Alert>
+            ) : null}
             {marked ? (
               <Alert tone="success">
                 {busy.length > 0
@@ -106,32 +138,9 @@ export default async function NotificationsPage({ searchParams }: Props) {
               )}
             </Card>
             <Card title="Projects" padded={false}>
-              <table className="w-full text-sm">
-                <caption className="sr-only">Notifications for each of your projects</caption>
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th scope="col" className="px-5 py-2 font-medium">Project</th>
-                    <th scope="col" className="px-5 py-2 font-medium">Notifications</th>
-                    <th scope="col" className="px-5 py-2 text-right font-medium"><span className="sr-only">Action</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {states.map((s) => (
-                    <tr key={s.slug} className="border-b border-border last:border-0">
-                      <th scope="row" className="px-5 py-3 text-left font-medium">{s.name}</th>
-                      <td className="px-5 py-3">
-                        <Badge tone={s.on ? "success" : "neutral"}>{s.on ? "On" : "Off"}</Badge>
-                      </td>
-                      <td className="px-5 py-3">
-                        <div className="flex justify-end">
-                          <NotificationToggle slug={s.slug} name={s.name} on={s.on} />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <NotificationPreferenceGrid rows={rows} action={switchAction} />
             </Card>
+            <p className="text-sm text-muted-foreground">{preferenceHelpText()}</p>
             <p className="text-sm text-muted-foreground">
               Docket only notifies you inside Docket. To get problems by email, chat or phone, send its webhooks to a tool such as n8n (see the docs).
             </p>

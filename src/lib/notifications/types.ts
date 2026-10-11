@@ -33,6 +33,7 @@ export interface UnreadSummary {
 }
 
 export interface NotificationPanel {
+  /** `all_muted` is the roll-up: no project of the caller's has any kind on (N33); the wire value is unchanged from the old mute flag. */
   state: "ok" | "all_muted" | "no_projects";
   /** Up to 10, newest first; empty unless `state` is "ok". */
   items: NotificationItem[];
