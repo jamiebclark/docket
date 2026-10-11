@@ -6,6 +6,7 @@ vi.mock("@/server/auth/session", async () => (await import("../../helpers/action
 
 import { GET as refresh } from "../../../src/app/api/me/notifications/route";
 import { EVENT_MARK_CAP } from "../../../src/lib/notifications/attention";
+import { ATTENTION_KINDS } from "../../../src/lib/notifications/eligibility";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { runCrossProject } from "../../../src/server/db/cross-project";
 import { activityEvents } from "../../../src/server/db/schema";
@@ -13,6 +14,7 @@ import { recentPanel, unreadSummary } from "../../../src/server/services/notific
 import { actAs } from "../../helpers/actions";
 import { closeDb, testDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
+import { muteProject, setSwitch } from "../../helpers/notifications";
 import { clearRecordedQueries, getRecordedQueries } from "../../setup/scope-recorder";
 
 // SC-003: the bell count, its refresh endpoint and the panel each answer in under 100 ms (median of 5 after a
@@ -61,13 +63,13 @@ async function seed(projectId: string, count: number) {
 }
 
 /** The person's reading position half-way through the project's events. */
-async function startHalfway(projectId: string, userId: string, muted: boolean) {
+async function startHalfway(projectId: string, userId: string) {
   await runCrossProject("test: seed notification state", () =>
     testDb().execute(sql`
-      INSERT INTO notification_states (project_id, user_id, seen_seq, muted)
-      SELECT ${projectId}::uuid, ${userId}::uuid, COALESCE(percentile_disc(0.5) WITHIN GROUP (ORDER BY seq), 0), ${muted}
+      INSERT INTO notification_states (project_id, user_id, seen_seq)
+      SELECT ${projectId}::uuid, ${userId}::uuid, COALESCE(percentile_disc(0.5) WITHIN GROUP (ORDER BY seq), 0)
       FROM activity_events WHERE project_id = ${projectId}::uuid
-      ON CONFLICT (project_id, user_id) DO UPDATE SET seen_seq = EXCLUDED.seen_seq, muted = EXCLUDED.muted
+      ON CONFLICT (project_id, user_id) DO UPDATE SET seen_seq = EXCLUDED.seen_seq
     `),
   );
 }
@@ -115,7 +117,7 @@ async function explainCount(projectIds: string[], userId: string) {
   const branch = (projectId: string, cond: string) => `(SELECT 1 FROM activity_events
     JOIN notification_states ON notification_states.project_id = activity_events.project_id AND notification_states.user_id = '${userId}'
     JOIN member ON member.organization_id = activity_events.project_id AND member.user_id = '${userId}'
-    WHERE activity_events.project_id = '${projectId}' AND notification_states.muted = false AND ${cond}
+    WHERE activity_events.project_id = '${projectId}' AND ${cond}
       AND activity_events.seq > notification_states.seen_seq LIMIT 100)`;
   const branches = projectIds.flatMap((p) => [
     branch(p, "activity_events.outcome IN ('failed', 'ambiguous', 'needs_reauth')"),
@@ -177,20 +179,34 @@ describe("notifications performance (SC-003)", () => {
     const p = await createProject({ name: "Perf single" });
     await addMember(p.id, me.id, "editor");
     await seed(p.id, 100_000);
-    await startHalfway(p.id, me.id, false);
+    await startHalfway(p.id, me.id);
     await seedMarksToCap(p.id, me.id);
     await runCrossProject("test: analyze", () => testDb().execute(sql`ANALYZE activity_events, notification_event_marks`));
     await measure("one project", me.id, [p.id], { partialIndexes: false });
   }, 120_000);
 
-  it("answers under 100 ms at 200k events across 20 projects, 5 of them muted", async () => {
+  it("answers under 100 ms at 200k events across 20 projects, 5 of them turned off", async () => {
     const me = await createUser();
     const projects = await Promise.all(Array.from({ length: 20 }, (_, i) => createProject({ name: `Perf ${randomUUID().slice(0, 4)} ${i}` })));
     for (const p of projects) await addMember(p.id, me.id, "editor");
     for (const p of projects) await seed(p.id, 10_000);
-    for (const [i, p] of projects.entries()) await startHalfway(p.id, me.id, i < 5);
+    for (const p of projects) await startHalfway(p.id, me.id);
+    for (const p of projects.slice(0, 5)) await muteProject(p.id, me.id);
     for (const p of projects) await seedMarksToCap(p.id, me.id);
     await runCrossProject("test: analyze", () => testDb().execute(sql`ANALYZE activity_events, notification_event_marks`));
     await measure("20 projects", me.id, projects.map((p) => p.id), { partialIndexes: true });
   }, 180_000);
+
+  it("answers under 100 ms with every platform switched off (the pathological platform clause, Q7)", async () => {
+    const me = await createUser();
+    const p = await createProject({ name: "Perf platform off" });
+    await addMember(p.id, me.id, "editor");
+    await seed(p.id, 100_000);
+    await startHalfway(p.id, me.id);
+    await seedMarksToCap(p.id, me.id);
+    for (const key of ATTENTION_KINDS) await setSwitch(p.id, me.id, "kind", key, true);
+    await setSwitch(p.id, me.id, "platform", "bluesky", false);
+    await runCrossProject("test: analyze", () => testDb().execute(sql`ANALYZE activity_events, notification_event_marks`));
+    await measure("every platform off", me.id, [p.id], { partialIndexes: false });
+  }, 120_000);
 });

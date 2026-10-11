@@ -5,7 +5,7 @@ import { recentPanel, snoozeEvent, markEventRead, projectUnread, unreadSummary }
 import { forProject } from "../../../src/server/dal/scope";
 import { closeDb, testDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
-import { recordEvent, startReading, marksFor } from "../../helpers/notifications";
+import { muteProject, recordEvent, startReading, marksFor } from "../../helpers/notifications";
 
 afterAll(async () => {
   await closeDb();
@@ -142,8 +142,8 @@ describe("snoozing a problem (N17 to N20, FR-010 to FR-014)", () => {
 
     expect(await unreadSummary(await setOf(snoozer.id))).toMatchObject({ nextChangeAt: soon.until!.toISOString() });
 
-    // Muting the soonest project's notifications drops its snooze from the window entirely.
-    await repoOf(project.id, snoozer.id).write({ markRead: false, muted: true });
+    // Turning off the soonest project's notifications drops its snooze from the window entirely.
+    await muteProject(project.id, snoozer.id);
     const afterMute = await unreadSummary(await setOf(snoozer.id));
     expect(afterMute.nextChangeAt).not.toBe(soon.until!.toISOString());
 

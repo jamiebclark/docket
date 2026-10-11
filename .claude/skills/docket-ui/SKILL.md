@@ -27,8 +27,8 @@ over fancy.** Every screen must be fully usable from the keyboard.
 - Routes: `/p/[projectSlug]/...` for everything project-scoped; `/login`,
   `/signup` (invitation token only), `/setup` (first-run), `/invitations`,
   `/activity` (all-projects activity across the user's memberships),
-  `/notifications` (recent problems and mute settings; the bell's no-JavaScript
-  target).
+  `/notifications` (recent problems and the per-project notification grid; the
+  bell's no-JavaScript target).
 - App shell (`src/app/p/[projectSlug]/layout.tsx`): grouped left nav — Publish
   (Calendar, Posts, Compose, Review, Failures, Activity), Create (Generate, Jobs, Media,
   Voice), Project (Accounts, Settings) — from `NAV_SECTIONS` in
@@ -41,7 +41,13 @@ over fancy.** Every screen must be fully usable from the keyboard.
   plus a `<details>`/`<summary>` "Snooze" disclosure of fixed-choice submits;
   see "Row actions: a list of fixed choices" in `docs/design-system.md` §7. No
   new UI primitive was needed for this — reuse the pattern rather than adding
-  one.
+  one. `/notifications` also renders `NotificationPreferenceGrid`: one
+  `RowGroup` per project with a `NotificationSwitch` per kind, a `<details>`
+  "Platforms" disclosure of per-platform switches, and the project-level "Turn
+  all off"/"Turn all on" — the same grid row (minus the project name column)
+  is the "Your notifications" card on each project's settings page. Each
+  switch is its own one-button form that saves on activation; see "A switch
+  that saves on activation" in `docs/design-system.md` §7.
 - **Server components by default.** Fetch through `src/server/services/` (never
   the DB directly). Client components (`"use client"`) only for interactivity:
   composer, calendar drag/drop, switcher, live validation. Keep them leaf-level.

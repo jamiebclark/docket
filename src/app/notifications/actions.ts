@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { fail, failFromError, ok, type ActionResult } from "@/lib/action-result";
 import { getSession } from "@/server/auth/session";
 import { forMyProjects, NotFoundError, NotificationsBusyError } from "@/server/dal";
-import type { MuteErrorCode, RowErrorCode } from "@/lib/notifications/text";
+import type { RowErrorCode } from "@/lib/notifications/text";
 import { markedReadConfirmation, rowErrorText, snoozedConfirmation } from "@/lib/notifications/text";
 import { ZodError } from "zod";
 import {
@@ -12,7 +12,7 @@ import {
   markEventRead as markEventReadService,
   snoozeEvent as snoozeEventService,
   NotificationMarkCapError,
-  setNotificationsBySlug,
+  setSwitchBySlug,
   unreadSummary as unreadSummaryService,
   type RowActionResult,
 } from "@/server/services/notifications";
@@ -127,14 +127,23 @@ export async function markAllRead(
   return ok({ unread, busy, snoozesCleared });
 }
 
-/** Turns one project's notifications on or off, then returns to the page with a confirmation, or with the reason it failed. */
+/** Turns one project's kind, platform or project-level switch, then returns to the page with a confirmation, or with the reason it failed. */
 export async function setNotifications(_prev: ActionResult<never> | null, formData: FormData): Promise<ActionResult<never>> {
   const session = await getSession();
   if (!session) redirect("/login?next=/notifications");
-  const projectSlug = String(formData.get("projectSlug") ?? "");
-  let failed: MuteErrorCode | null = null;
+  let failed: "busy" | "not_found" | "invalid" | null = null;
+  let qs = "";
   try {
-    await setNotificationsBySlug(await forMyProjects(session), { projectSlug, on: String(formData.get("on") ?? "") });
+    const change = await setSwitchBySlug(await forMyProjects(session), {
+      projectSlug: formData.get("projectSlug"),
+      axis: formData.get("axis"),
+      key: formData.get("key") ?? undefined,
+      on: formData.get("on"),
+    });
+    const params = new URLSearchParams({ changed: change.projectSlug, axis: change.axis });
+    if (change.key !== undefined) params.set("key", change.key);
+    params.set("on", change.on ? "1" : "0");
+    qs = params.toString();
   } catch (error) {
     if (error instanceof NotFoundError) failed = "not_found";
     else if (error instanceof NotificationsBusyError) failed = "busy";
@@ -142,5 +151,5 @@ export async function setNotifications(_prev: ActionResult<never> | null, formDa
     else return failFromError(error);
   }
   if (failed) redirect(`/notifications?notifications=${failed}`);
-  redirect(`/notifications?changed=${encodeURIComponent(projectSlug)}`);
+  redirect(`/notifications?${qs}`);
 }

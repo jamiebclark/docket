@@ -96,6 +96,7 @@ export function NotificationPanel({ onSummary }: { onSummary: (summary: UnreadSu
     if (panel.state === "no_projects") {
       body = <p className="text-sm text-muted-foreground">You are not a member of any project yet.</p>;
     } else if (panel.state === "all_muted") {
+      // "all_muted" now means the roll-up: no project of the caller's has any kind on (N33). Sentence unchanged.
       body = <p className="text-sm text-muted-foreground">Notifications are off for all of your projects. {settings}.</p>;
     } else {
       const items = (result ? panel.items.map((item) => ({ ...item, isNew: false })) : panel.items)

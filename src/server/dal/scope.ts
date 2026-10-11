@@ -198,7 +198,16 @@ function forbiddenNotifications(): NotificationsRepo {
   const deny = async (): Promise<never> => {
     throw new ForbiddenError();
   };
-  return { get: deny, unreadCount: deny, createAtCurrentPosition: deny, write: deny, markEvent: deny, markCount: deny };
+  return {
+    get: deny,
+    preferences: deny,
+    unreadCount: deny,
+    createAtCurrentPosition: deny,
+    write: deny,
+    setSwitches: deny,
+    markEvent: deny,
+    markCount: deny,
+  };
 }
 
 function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind: "member" }): ProjectScope {

@@ -18,6 +18,7 @@ import ProjectSettingsPage from "../../../src/app/p/[projectSlug]/settings/page"
 import { SignedInHeader } from "../../../src/components/shell/SignedInHeader";
 import { focusAfterMark } from "../../../src/components/notifications/focus";
 import { unreadDisplay, unreadLabel } from "../../../src/lib/notifications/text";
+import { ATTENTION_KINDS } from "../../../src/lib/notifications/eligibility";
 import type { NotificationItem } from "../../../src/lib/notifications/types";
 import { actAs, RedirectSignal } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
@@ -267,17 +268,33 @@ describe("/notifications snoozed confirmation (contracts/services.md §9, FR-015
 });
 
 describe("per-project notification controls", () => {
-  it("names each project's button and shows the confirmation for ?changed", async () => {
+  it("renders the grid with a switch per kind, named for the project, and the confirmation for ?changed", async () => {
     const p = await createProject({ name: "Togglable" });
     const u = await createUser();
     await addMember(p.id, u.id);
     await startReading(p.id, u.id);
     actAs(u);
-    const html = (await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ changed: p.slug }) }))).replaceAll("<!-- -->", "");
+    const html = (
+      await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ changed: p.slug, axis: "kind", key: "failed", on: "0" }) }))
+    ).replaceAll("<!-- -->", "");
     expect(html).toContain("Notifications for each of your projects");
-    expect(html).toContain(">Turn off<span class=\"sr-only\"> notifications for Togglable</span>");
-    expect(html).toContain("Notifications for Togglable are on. Earlier problems are marked as read.");
-    expect(await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ changed: "nope" }) }))).not.toContain("Earlier problems");
+    expect(html).toContain("— turn off Failed notifications for Togglable");
+    expect(html).toContain("Failed notifications for Togglable are off. Its problems still appear in Activity.");
+    expect(
+      await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ changed: "nope", axis: "kind", key: "failed", on: "0" }) })),
+    ).not.toContain("Its problems still appear");
+  });
+
+  it("shows the project-level controls and the platforms disclosure", async () => {
+    const p = await createProject({ name: "Grouped" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    const html = (await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({}) }))).replaceAll("<!-- -->", "");
+    expect(html).toContain(">Turn all off<span class=\"sr-only\"> notifications for Grouped</span>");
+    expect(html).toContain(">Turn all on<span class=\"sr-only\"> notifications for Grouped</span>");
+    expect(html).toContain("This project has no connected accounts yet.");
   });
 
   it.each([
@@ -308,13 +325,16 @@ describe("per-project notification controls", () => {
     actAs(u);
     const html = (
       await renderAsync(
-        await ProjectSettingsPage({ params: Promise.resolve({ projectSlug: p.slug }), searchParams: Promise.resolve({ notifications: "off" }) }),
+        await ProjectSettingsPage({
+          params: Promise.resolve({ projectSlug: p.slug }),
+          searchParams: Promise.resolve({ changed: "1", axis: "kind", key: "failed", on: "0" }),
+        }),
       )
     ).replaceAll("<!-- -->", "");
     expect(html).toContain("Your notifications");
-    expect(html).toContain("Turn off");
+    expect(html).toContain("On");
     expect(html).toContain("notifications for Editable");
-    expect(html).toContain("Notifications for Editable are off. Its problems still appear in Activity.");
+    expect(html).toContain("Failed notifications for Editable are off. Its problems still appear in Activity.");
   });
 });
 
@@ -356,7 +376,10 @@ describe("problems callout", () => {
     const { render } = await callout(p.id, p.slug, u.id);
     await recordEvent(p.id, "target_failed");
     expect(await render()).toContain("1 problem");
-    await (await forProject({ user: { id: u.id } }, p.slug)).notifications.write({ markRead: false, muted: true });
+    await (await forProject({ user: { id: u.id } }, p.slug)).notifications.setSwitches({
+      switches: ATTENTION_KINDS.map((key) => ({ axis: "kind" as const, key })),
+      on: false,
+    });
     expect(await render()).toBe("");
   });
 
@@ -384,7 +407,10 @@ describe("problems callout", () => {
     const snoozed = await recordEvent(p.id, "target_failed");
     await markEventFor(p.id, u.id, snoozed.id, new Date(Date.now() + 60 * 60 * 1000));
     expect(await render()).toBe("");
-    await (await forProject({ user: { id: u.id } }, p.slug)).notifications.write({ markRead: false, muted: true });
+    await (await forProject({ user: { id: u.id } }, p.slug)).notifications.setSwitches({
+      switches: ATTENTION_KINDS.map((key) => ({ axis: "kind" as const, key })),
+      on: false,
+    });
     expect(await render()).toBe("");
   });
 });

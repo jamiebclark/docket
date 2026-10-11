@@ -1,8 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { queryObservers, type ObservedQuery } from "../../../src/server/db/client";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
-import { unreadSummary } from "../../../src/server/services/notifications";
-import { setNotificationsBySlug } from "../../../src/server/services/notifications";
+import { setSwitchBySlug, unreadSummary } from "../../../src/server/services/notifications";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
 import { ALL_KINDS, markEventFor, recordEvent, startReading } from "../../helpers/notifications";
@@ -50,16 +49,16 @@ describe("unread count", () => {
     expect(await count(v.id)).toBe(1);
   });
 
-  it("drops a muted project and starts it from read on unmute", async () => {
+  it("drops a project turned off and starts it from read once turned back on", async () => {
     const { a, b, u } = await twoProjects();
     await startReading(a.id, u.id);
     await startReading(b.id, u.id);
     await recordEvent(a.id, "target_failed");
     await recordEvent(b.id, "target_failed");
     expect(await count(u.id)).toBe(2);
-    await setNotificationsBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, on: "false" });
+    await setSwitchBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, axis: "project", on: "false" });
     expect(await count(u.id)).toBe(1);
-    await setNotificationsBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, on: "true" });
+    await setSwitchBySlug(await forMyProjects({ user: { id: u.id } }), { projectSlug: b.slug, axis: "project", on: "true" });
     expect(await count(u.id)).toBe(1); // only A's
     await recordEvent(b.id, "target_failed");
     expect(await count(u.id)).toBe(2);

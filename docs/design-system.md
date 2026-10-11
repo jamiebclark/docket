@@ -288,6 +288,8 @@ full width, size `lg`.
 | `RelativeTime` | `value`, `timeZone`, `now` | "12 min ago" text; the absolute time and zone are the tooltip and screen-reader text. Pure: `now` is a prop. Used by the bell panel and the notifications list. |
 | `NotificationList` | `items`, `now`, `returnTo`, `onRowDone` | Rows of outcome badge, project, platform/account, message and `RelativeTime`; unread rows carry a "New" badge; each row renders `NotificationRowActions`. Shared by the panel and `/notifications`. |
 | `NotificationRowActions` | `eventId`, `label`, `actionsAvailable`, `returnTo`, `onRowDone` | One row's "Mark read" plus a `<details>`/`<summary>` "Snooze" disclosure holding three fixed-choice submits (`1 hour` / `Tomorrow morning` / `Next week`) — see "Row actions: a list of fixed choices" below. At the per-project cap, renders `markCapText()` and a "Mark all as read" submit instead. No new primitive: `<details>` is the same disclosure used in `accounts/page.tsx` and `Composer.tsx`. |
+| `NotificationSwitch` | `projectName`, `label`, `on`, `action` (hidden fields for `projectSlug`/`axis`/`key`/target `on`) | One switch = one `<form>` holding one state-showing submit button — "a switch that saves on activation" (see below). Accessible name names both the project and what the switch governs ("On — turn off Failed notifications for Woodwork"); state is text, not just colour; `aria-pressed` deliberately unused. Used by `NotificationPreferenceGrid` and the project settings "Your notifications" card. |
+| `NotificationPreferenceGrid` | `projects` (name, kind switches, platform switches, project-level control) | `Table grouped`: Project · four kind columns · "This project", one `RowGroup` per project holding its `NotificationSwitch`es and "Turn all off"/"Turn all on", plus a `DetailRow` with a `<details>` "Platforms (n of m on)" disclosure of platform `NotificationSwitch`es. See "Column grouping" below for why a control matrix is exempt from the five-column ceiling. Used by `/notifications`. |
 | `ProblemsCallout` | `scope` | "Problems since you last looked" line on a project's home and Posts; shows only when the count is above zero. |
 | `WeekSlotGrid` | `slots`, `timeZoneLabel`, `canManage`, `label`, `emptyMessage`, `addButtonId`, `onAdd`/`onMove`/`onToggle`/`onDelete` | Seven-day grid for posting slots (Accounts). Click/tap an empty column to place a slot; drag a chip to move it, or use its Move control for a Mon–Sun + time dialog; click a chip to toggle active/paused; its Delete control deletes on one activation with **no confirm dialog** — a deliberate exception to the `danger` rule above, since a slot holds no content and costs one click to re-add (see `docs/decisions.md` 035). Keyboard: add button → `Enter`/`Space` adds at the next free boundary and focuses the new chip; a chip is `Tab`-order body → Move → Delete; the Move control opens a dialog (segmented weekday, then time, then Move/Cancel) and returns focus to the chip on commit or `Escape`/Cancel; Delete moves focus to the next chip or the column's add button. |
 | `Logo`, `LogoMark`, `AuthShell` | — | §2, §6. |
@@ -299,6 +301,14 @@ it is in this list, and **what to do about it**. Give each question one column
 and let the facts that answer it stack inside the cell — a first line, then
 `Sub` lines — instead of claiming a column each. Five columns is the ceiling;
 past that every column is too narrow to read and each one wraps to three lines.
+
+- **Exception: a control matrix.** The five-column ceiling is about *fact*
+  columns, which wrap when they are narrow. A row of fixed-width control
+  columns that repeat the same short words on every row — the notification
+  preference grid's four kind switches beside Project and "This project" — does
+  not wrap, and narrow is the point: six columns of one-word buttons read fine
+  at any width, and `Table`'s phone behaviour still stacks each one as a
+  labelled "kind: On/Off" line.
 
 - **Merge, don't widen.** A qualifier belongs in the cell it qualifies: the
   platform under the account name, "3 attempts" under the error, "Due Thu 09:00
@@ -337,6 +347,30 @@ needing to stay reachable without opening anything.
   name (e.g. "Snooze until tomorrow morning — Instagram post failed"), so two
   rows' "1 hour" buttons are distinguishable to a screen reader even though
   their visible text is identical.
+
+### A switch that saves on activation
+
+Many-of-many usually means checkboxes under a Save (`checkStyles`, above). That
+assumes a form with a submit button of its own. When each change must save and
+confirm **with no client JavaScript** — the notification preference grid and
+the project settings "Your notifications" card — a checkbox cannot submit
+itself, and a batched Save would leave a changed switch unsaved after a partial
+submit. The answer is one switch, one `<form>`, one state-showing submit
+button:
+
+```html
+<button type="submit" class="…secondary sm…">On
+  <span class="sr-only"> — turn off Failed notifications for Woodwork</span>
+</button>
+```
+
+The visible label *is* the current state ("On" / "Off"), the hidden span names
+the project and what the switch governs, and the button's `on` input carries
+the **target** state. `aria-pressed` is deliberately not used — the label
+already says the state as text, so a pressed attribute would say it twice.
+This generalises `NotificationToggle`'s one-button-per-project shape
+(`NotificationSwitch`, above) to one button per switch, rather than inventing
+a new pattern.
 
 ### Choosing a control for one-of-many
 

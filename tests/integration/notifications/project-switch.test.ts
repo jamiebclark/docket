@@ -13,8 +13,9 @@ vi.mock("@/server/services/notifications", async () => {
   };
   return {
     ...actual,
-    setNotificationsBySlug: ((...a: Parameters<typeof actual.setNotificationsBySlug>) => (guard(), actual.setNotificationsBySlug(...a))) as typeof actual.setNotificationsBySlug,
-    setMyProjectNotifications: ((...a: Parameters<typeof actual.setMyProjectNotifications>) => (guard(), actual.setMyProjectNotifications(...a))) as typeof actual.setMyProjectNotifications,
+    setSwitchBySlug: ((...a: Parameters<typeof actual.setSwitchBySlug>) => (guard(), actual.setSwitchBySlug(...a))) as typeof actual.setSwitchBySlug,
+    setMySwitchForProject: ((...a: Parameters<typeof actual.setMySwitchForProject>) =>
+      (guard(), actual.setMySwitchForProject(...a))) as typeof actual.setMySwitchForProject,
   };
 });
 
@@ -23,7 +24,7 @@ import { setMyProjectNotifications } from "../../../src/app/p/[projectSlug]/sett
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { forProject } from "../../../src/server/dal/scope";
 import { listMyActivity } from "../../../src/server/services/activity";
-import { myProjectStates, projectUnread, recentPanel, unreadSummary } from "../../../src/server/services/notifications";
+import { myNotificationPreferences, projectUnread, recentPanel, unreadSummary } from "../../../src/server/services/notifications";
 import { actAs, RedirectSignal } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
@@ -59,21 +60,21 @@ const redirectOf = async (run: () => Promise<unknown>) => {
   return (error as RedirectSignal).to;
 };
 
-describe("per-project notifications", () => {
+describe("the project-level switch (axis: project)", () => {
   it("is on by default", async () => {
     const { a, b, u } = await fixture();
-    const states = await myProjectStates(await setFor(u.id));
-    expect(states.filter((s) => [a.slug, b.slug].includes(s.slug)).every((s) => s.on)).toBe(true);
+    const rows = await myNotificationPreferences(await setFor(u.id));
+    expect(rows.filter((r) => [a.slug, b.slug].includes(r.slug)).every((r) => r.on)).toBe(true);
   });
 
-  it("hides a muted project from count, panel and callout while Activity still lists it", async () => {
+  it("hides a turned-off project from count, panel and callout while Activity still lists it", async () => {
     const { a, b, u } = await fixture();
     await recordEvent(a.id, "target_failed", { message: "Alpha broke." });
     await recordEvent(b.id, "target_failed", { message: "Bravo broke." });
     actAs(u);
     expect(await count(u.id)).toBe(2);
-    const to = await redirectOf(() => setNotifications(null, form({ projectSlug: b.slug, on: "false" })));
-    expect(to).toBe(`/notifications?changed=${b.slug}`);
+    const to = await redirectOf(() => setNotifications(null, form({ projectSlug: b.slug, axis: "project", on: "false" })));
+    expect(to).toBe(`/notifications?changed=${b.slug}&axis=project&on=0`);
     expect(await count(u.id)).toBe(1);
     const panel = await recentPanel(await setFor(u.id), new Date());
     expect(panel.items.map((i) => i.message)).toEqual(["Alpha broke."]);
@@ -82,26 +83,26 @@ describe("per-project notifications", () => {
     expect(activity.rows.map((r) => r.message)).toContain("Bravo broke.");
   });
 
-  it("marks read on unmute: 0 straight after, then 1 for a later problem", async () => {
+  it("marks read on turning back on: 0 straight after, then 1 for a later problem", async () => {
     const { b, u } = await fixture();
     actAs(u);
-    await redirectOf(() => setNotifications(null, form({ projectSlug: b.slug, on: "false" })));
+    await redirectOf(() => setNotifications(null, form({ projectSlug: b.slug, axis: "project", on: "false" })));
     await recordEvent(b.id, "target_failed");
-    await redirectOf(() => setNotifications(null, form({ projectSlug: b.slug, on: "true" })));
+    await redirectOf(() => setNotifications(null, form({ projectSlug: b.slug, axis: "project", on: "true" })));
     expect(await count(u.id)).toBe(0);
     await recordEvent(b.id, "target_failed");
     expect(await count(u.id)).toBe(1);
   });
 
-  it("lets an editor mute from the project settings", async () => {
+  it("lets an editor turn the project switch off from the project settings", async () => {
     const { a, u } = await fixture();
     await recordEvent(a.id, "target_failed");
     actAs(u);
-    const to = await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, on: "false" })));
-    expect(to).toBe(`/p/${a.slug}/settings?notifications=off`);
+    const to = await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, axis: "project", on: "false" })));
+    expect(to).toBe(`/p/${a.slug}/settings?changed=1&axis=project&on=0`);
     expect(await count(u.id)).toBe(0);
-    expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, on: "true" })))).toBe(
-      `/p/${a.slug}/settings?notifications=on`,
+    expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, axis: "project", on: "true" })))).toBe(
+      `/p/${a.slug}/settings?changed=1&axis=project&on=1`,
     );
   });
 
@@ -109,8 +110,8 @@ describe("per-project notifications", () => {
     const { u } = await fixture();
     const foreign = await createProject({ name: "Foreign" });
     actAs(u);
-    const real = await redirectOf(() => setNotifications(null, form({ projectSlug: foreign.slug, on: "false" })));
-    const none = await redirectOf(() => setNotifications(null, form({ projectSlug: "no-such-project", on: "false" })));
+    const real = await redirectOf(() => setNotifications(null, form({ projectSlug: foreign.slug, axis: "project", on: "false" })));
+    const none = await redirectOf(() => setNotifications(null, form({ projectSlug: "no-such-project", axis: "project", on: "false" })));
     expect(real).toBe("/notifications?notifications=not_found");
     expect(none).toBe(real);
   });
@@ -118,17 +119,21 @@ describe("per-project notifications", () => {
   it("redirects with invalid for a malformed switch and busy when the write is locked, on both forms", async () => {
     const { a, u } = await fixture();
     actAs(u);
-    expect(await redirectOf(() => setNotifications(null, form({ projectSlug: a.slug, on: "maybe" })))).toBe("/notifications?notifications=invalid");
-    expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, on: "maybe" })))).toBe(
+    expect(await redirectOf(() => setNotifications(null, form({ projectSlug: a.slug, axis: "project", on: "maybe" })))).toBe(
+      "/notifications?notifications=invalid",
+    );
+    expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, axis: "project", on: "maybe" })))).toBe(
       `/p/${a.slug}/settings?notifications=invalid`,
     );
-    expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: "no-such-project", on: "false" })))).toBe(
-      "/p/no-such-project/settings?notifications=not_found",
-    );
+    expect(
+      await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: "no-such-project", axis: "project", on: "false" }))),
+    ).toBe("/p/no-such-project/settings?notifications=not_found");
     busyMode.on = true;
     try {
-      expect(await redirectOf(() => setNotifications(null, form({ projectSlug: a.slug, on: "false" })))).toBe("/notifications?notifications=busy");
-      expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, on: "false" })))).toBe(
+      expect(await redirectOf(() => setNotifications(null, form({ projectSlug: a.slug, axis: "project", on: "false" })))).toBe(
+        "/notifications?notifications=busy",
+      );
+      expect(await redirectOf(() => setMyProjectNotifications(null, form({ projectSlug: a.slug, axis: "project", on: "false" })))).toBe(
         `/p/${a.slug}/settings?notifications=busy`,
       );
     } finally {
@@ -138,7 +143,9 @@ describe("per-project notifications", () => {
 
   it("sends a signed-out caller to login", async () => {
     actAs(null);
-    expect(await redirectOf(() => setNotifications(null, form({ projectSlug: "x", on: "false" })))).toBe("/login?next=/notifications");
+    expect(await redirectOf(() => setNotifications(null, form({ projectSlug: "x", axis: "project", on: "false" })))).toBe(
+      "/login?next=/notifications",
+    );
   });
 });
 

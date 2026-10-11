@@ -9,7 +9,8 @@ import { testDb, closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
 import { checkScope, type QueryRecord } from "../../helpers/scope-check";
 import { projectOwnedTables } from "../../../src/server/db/project-owned";
-import { markEventFor, marksFor, recordEvent, startReading } from "../../helpers/notifications";
+import { createNotificationsRepo } from "../../../src/server/dal/notifications";
+import { markEventFor, marksFor, preferenceRows, recordEvent, startReading } from "../../helpers/notifications";
 
 afterAll(async () => {
   await closeDb();
@@ -165,5 +166,33 @@ describe("notification statements and the project set", () => {
     );
     expect((await set.notifications.recent(10)).length).toBe(1);
     expect(await set.notifications.nextChangeAt()).toBeNull();
+  });
+
+  it("pins preferencesByProject and platformsByProject inside the project-set section, over the caller's set", async () => {
+    const { a, b, u } = await setup();
+    const set = await forMyProjects({ user: { id: u.id } });
+    const records = await capture(async () => {
+      await set.notifications.preferencesByProject();
+      await set.notifications.platformsByProject();
+    });
+    expect(records.length).toBeGreaterThan(0);
+    for (const r of records) {
+      expect([...(r.projectSet?.projectIds ?? [])].sort()).toEqual([a.id, b.id].sort());
+    }
+    const result = checkScope(records, projectOwnedTables);
+    expect(result.violations).toEqual([]);
+    expect(result.projectSet.length).toBeGreaterThan(0);
+  });
+
+  it("pins setSwitches and preferences on notification_preferences for the caller's own project, with no scope violation", async () => {
+    const { a, u } = await setup();
+    const records = await capture(() =>
+      createNotificationsRepo(testDb(), a.id, u.id).setSwitches({ switches: [{ axis: "kind", key: "failed" }], on: false }),
+    );
+    expect(checkScope(records, projectOwnedTables).violations).toEqual([]);
+    expect(await preferenceRows(a.id, u.id)).toEqual([{ axis: "kind", switchKey: "failed", onFromSeq: null }]);
+
+    const readRecords = await capture(() => createNotificationsRepo(testDb(), a.id, u.id).preferences());
+    expect(checkScope(readRecords, projectOwnedTables).violations).toEqual([]);
   });
 });
