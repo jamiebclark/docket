@@ -34,7 +34,7 @@ export function LoginForm({ next }: { next: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={onSubmit} method="post" className="flex flex-col gap-4" noValidate>
       {error ? (
         <p role="alert" className={alertStyles("danger")}>
           {error}

@@ -67,7 +67,7 @@ export function ConnectCredentialsForm({
   }
 
   return (
-    <form ref={formRef} onSubmit={submit} className="flex max-w-md flex-col gap-2" aria-label={`${submitLabel} ${providerName} account`}>
+    <form ref={formRef} onSubmit={submit} method="post" className="flex max-w-md flex-col gap-2" aria-label={`${submitLabel} ${providerName} account`}>
       {fields.map((field) => (
         <Field
           key={field.name}
