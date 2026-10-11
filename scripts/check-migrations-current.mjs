@@ -2,15 +2,24 @@
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 const env = {
   ...process.env,
   DATABASE_URL: process.env.DATABASE_URL ?? "postgres://check:check@localhost:5432/check",
 };
 
+// Run drizzle-kit's entry file with this same node, rather than going through `pnpm exec`.
+// `pnpm` on Windows is a `.cmd` shim that CreateProcess cannot execute, so spawning it returned
+// ENOENT with `status: null` and no output. The checks below read only `status`, so that looked
+// exactly like drizzle-kit reporting an inconsistent migration history, and the error printed
+// `undefinedundefined` where its output belonged. Resolving the package and spawning node keeps
+// it shell-free, so paths containing spaces need no quoting.
+const drizzleKitBin = join(dirname(createRequire(import.meta.url).resolve("drizzle-kit")), "bin.cjs");
+
 function run(args) {
-  return spawnSync("pnpm", ["exec", "drizzle-kit", ...args], {
+  return spawnSync(process.execPath, [drizzleKitBin, ...args], {
     env,
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
@@ -19,7 +28,11 @@ function run(args) {
 
 function fail(message, result) {
   console.error(message);
-  if (result) console.error(`${result.stdout}${result.stderr}`.trim());
+  // `error` is set when the process never started; `status` is null in that case, so without
+  // this the real cause is invisible and the failure reads as a migration problem.
+  if (result?.error) console.error(`could not run drizzle-kit: ${result.error.message}`);
+  const output = `${result?.stdout ?? ""}${result?.stderr ?? ""}`.trim();
+  if (output) console.error(output);
   process.exit(1);
 }
 
@@ -31,11 +44,15 @@ const dir = mkdtempSync(join(tmpdir(), "docket-migrations-"));
 try {
   cpSync("drizzle", join(dir, "drizzle"), { recursive: true });
   const config = join(dir, "drizzle.config.mjs");
+  // drizzle-kit resolves `schema` as a glob, and a backslash is an escape there rather than a
+  // separator — so a Windows path matches nothing and it reports "No schema files found" for a
+  // directory that plainly exists. Forward slashes work on both platforms.
+  const posix = (p) => p.replaceAll("\\", "/");
   writeFileSync(
     config,
     `export default ${JSON.stringify({
-      schema: join(process.cwd(), "src/server/db/schema"),
-      out: join(dir, "drizzle"),
+      schema: posix(join(process.cwd(), "src/server/db/schema")),
+      out: posix(join(dir, "drizzle")),
       dialect: "postgresql",
     })};`,
   );
