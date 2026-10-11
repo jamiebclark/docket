@@ -22,7 +22,7 @@ import type { NotificationItem } from "../../../src/lib/notifications/types";
 import { actAs, RedirectSignal } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
-import { recordEvent, startReading } from "../../helpers/notifications";
+import { markEventFor, recordEvent, startReading } from "../../helpers/notifications";
 import { expectPageHeader } from "../../helpers/page-header";
 
 afterAll(async () => {
@@ -37,7 +37,9 @@ async function renderAsync(node: React.ReactNode): Promise<string> {
 }
 
 const bell = (count: number) =>
-  renderToStaticMarkup(createElement(NotificationBellClient, { initial: { count, display: unreadDisplay(count), label: unreadLabel(count) } }));
+  renderToStaticMarkup(
+    createElement(NotificationBellClient, { initial: { count, display: unreadDisplay(count), label: unreadLabel(count), nextChangeAt: null } }),
+  );
 
 describe("bell markup", () => {
   it("is a link to /notifications with no badge at zero", () => {
@@ -70,12 +72,14 @@ const item = (over: Partial<NotificationItem> = {}): NotificationItem => ({
   postDeleted: false,
   message: "Could not publish.",
   isNew: true,
+  actionsAvailable: true,
   link: { href: "/p/demo/failures", label: "Open in Failures" },
   ...over,
 });
 
 const NOW = new Date("2026-10-01T12:12:00.000Z");
-const list = (items: NotificationItem[]) => renderToStaticMarkup(createElement(NotificationList, { items, now: NOW }));
+const list = (items: NotificationItem[], returnTo?: "/notifications") =>
+  renderToStaticMarkup(createElement(NotificationList, { items, now: NOW, returnTo }));
 
 describe("notification list", () => {
   it("renders project, platform, account, message, relative time and New", () => {
@@ -110,6 +114,47 @@ describe("notification list", () => {
 
   it("says so when empty", () => {
     expect(list([])).toContain("No problems in your projects.");
+  });
+});
+
+describe("notification row actions (FR-015 to FR-020, SC-009)", () => {
+  it("shows 'Mark read' with an accessible name naming the problem, for read and unread rows alike", () => {
+    for (const isNew of [true, false]) {
+      const html = list([item({ isNew })]);
+      expect(html).toContain(">Mark read<");
+      expect(html).toContain("— Failed, Demo, Bluesky · @me");
+      expect(html.includes("New")).toBe(isNew);
+    }
+  });
+
+  it("renders the hidden returnTo field before hydration when given one, and omits it with none", () => {
+    expect(list([item()])).not.toContain('name="returnTo"');
+    expect(list([item()], "/notifications")).toContain('name="returnTo" value="/notifications"');
+  });
+
+  it("renders no per-row control, and the at-cap sentence instead, when actionsAvailable is false", () => {
+    const html = list([item({ actionsAvailable: false })]);
+    expect(html).not.toContain(">Mark read<");
+    expect(html).toContain("Per-problem actions are unavailable for this project until it is marked read.");
+    expect(html).toContain("Mark all as read");
+  });
+
+  it("offers the three snooze choices inside a details/summary disclosure, each naming the problem", () => {
+    const html = list([item()]);
+    expect(html).toContain("<details");
+    expect(html).toContain(">Snooze<");
+    const choiceOf: Record<string, string> = { "1 hour": "hour", "Tomorrow morning": "tomorrow", "Next week": "next_week" };
+    for (const label of ["1 hour", "Tomorrow morning", "Next week"]) {
+      expect(html).toContain(`>${label}<`);
+      expect(html).toContain(`value="${choiceOf[label]}" name="choice"`);
+    }
+    expect(html).toContain("— Failed, Demo, Bluesky · @me");
+  });
+
+  it("renders the snooze form's hidden returnTo only before hydration, same as Mark read's", () => {
+    expect(list([item()])).not.toContain('name="returnTo"');
+    const withReturn = list([item()], "/notifications");
+    expect(withReturn.match(/name="returnTo" value="\/notifications"/g)?.length).toBe(2);
   });
 });
 
@@ -163,6 +208,61 @@ describe("/notifications mark all as read", () => {
     expect(await render({ marked: "1" })).toContain("Marked as read.");
     const busy = await render({ marked: "1", busy: "Acme,Beta" });
     expect(busy).toContain("Could not mark Acme, Beta as read; try again.");
+  });
+});
+
+describe("/notifications mark all as read with snoozes cleared (FR-015 to FR-020, SC-009, scoped to US3)", () => {
+  it("renders the cleared-snoozes sentence when snoozes>0, and the plain confirmation when it is absent or zero", async () => {
+    const p = await createProject({ name: "Markable2" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    const render = async (q: Record<string, string> = {}) =>
+      (await renderAsync(await NotificationsPage({ searchParams: Promise.resolve(q) }))).replaceAll("<!-- -->", "");
+    expect(await render({ marked: "1" })).toContain("Marked as read.");
+    expect(await render({ marked: "1", snoozes: "0" })).toContain("Marked as read.");
+    const html = await render({ marked: "1", snoozes: "2" });
+    expect(html).toContain("Marked as read. 2 snoozed problems were cleared too.");
+    const one = await render({ marked: "1", snoozes: "1" });
+    expect(one).toContain("Marked as read. 1 snoozed problem was cleared too.");
+  });
+});
+
+describe("/notifications snoozed confirmation (contracts/services.md §9, FR-015 to FR-020, SC-009, scoped to US2)", () => {
+  it("renders the formatted instant in the project's own zone for a known slug and a parsable until", async () => {
+    const p = await createProject({ name: "Zoned", timezone: "America/New_York" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    const until = "2026-10-12T13:00:00.000Z";
+    const html = await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ snoozed: p.slug, until }) }));
+    expect(html).toContain("Snoozed until Mon, Oct 12, 9:00 AM EDT.");
+  });
+
+  it("falls back to the generic sentence for an unparsable until", async () => {
+    const p = await createProject({ name: "Zoned2" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    const html = await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({ snoozed: p.slug, until: "not-a-date" }) }));
+    expect(html).toContain("Snoozed.");
+    expect(html).not.toContain("Snoozed until");
+  });
+
+  it("falls back to the generic sentence for a slug outside the caller's set", async () => {
+    const p = await createProject({ name: "Mine" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    const html = await renderAsync(
+      await NotificationsPage({ searchParams: Promise.resolve({ snoozed: "someone-elses-project", until: "2026-10-12T13:00:00.000Z" }) }),
+    );
+    expect(html).toContain("Snoozed.");
+    expect(html).not.toContain("Snoozed until");
   });
 });
 
@@ -256,6 +356,34 @@ describe("problems callout", () => {
     const { render } = await callout(p.id, p.slug, u.id);
     await recordEvent(p.id, "target_failed");
     expect(await render()).toContain("1 problem");
+    await (await forProject({ user: { id: u.id } }, p.slug)).notifications.write({ markRead: false, muted: true });
+    expect(await render()).toBe("");
+  });
+
+  it("agrees with the count: hidden once everything is read or snoozed, reappears when a snooze expires", async () => {
+    const p = await createProject({ name: "Agree" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    const { render } = await callout(p.id, p.slug, u.id);
+    await recordEvent(p.id, "target_failed");
+    const read = await recordEvent(p.id, "target_failed");
+    const expired = await recordEvent(p.id, "target_failed");
+    const notYet = await recordEvent(p.id, "target_failed");
+    await markEventFor(p.id, u.id, read.id);
+    await markEventFor(p.id, u.id, expired.id, new Date(0));
+    await markEventFor(p.id, u.id, notYet.id, new Date(Date.now() + 60 * 60 * 1000));
+    const html = (await render()).replaceAll("<!-- -->", "");
+    expect(html).toContain("2 problems in Agree.");
+  });
+
+  it("stays hidden when the only events are snoozed, even for a muted project contributing nothing", async () => {
+    const p = await createProject({ name: "Hushed" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    const { render } = await callout(p.id, p.slug, u.id);
+    const snoozed = await recordEvent(p.id, "target_failed");
+    await markEventFor(p.id, u.id, snoozed.id, new Date(Date.now() + 60 * 60 * 1000));
+    expect(await render()).toBe("");
     await (await forProject({ user: { id: u.id } }, p.slug)).notifications.write({ markRead: false, muted: true });
     expect(await render()).toBe("");
   });

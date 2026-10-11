@@ -7,11 +7,11 @@ vi.mock("next/navigation", async () => (await import("../../helpers/actions")).n
 import { markAllRead } from "../../../src/app/notifications/actions";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { setNotificationsAfterLockHookForTests, setNotificationsLockTimeoutForTests } from "../../../src/server/dal/notifications";
-import { setNotificationsBySlug, unreadSummary } from "../../../src/server/services/notifications";
+import { markAllRead as markAllReadService, setNotificationsBySlug, unreadSummary } from "../../../src/server/services/notifications";
 import { actAs, RedirectSignal } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
-import { recordEvent, startReading } from "../../helpers/notifications";
+import { markEventFor, marksFor, recordEvent, startReading } from "../../helpers/notifications";
 
 afterAll(async () => {
   actAs(null);
@@ -43,7 +43,10 @@ describe("markAllRead action", () => {
     await recordEvent(b.id, "target_ambiguous");
     actAs(u);
     const result = await markAllRead(null, form());
-    expect(result).toEqual({ ok: true, data: { count: 0, busy: [] } });
+    expect(result).toEqual({
+      ok: true,
+      data: { unread: { count: 0, display: "", label: "No unread problems", nextChangeAt: null }, busy: [], snoozesCleared: 0 },
+    });
     expect(await count(u.id)).toBe(0);
   });
 
@@ -88,7 +91,10 @@ describe("markAllRead action", () => {
     try {
       actAs(u);
       const result = await markAllRead(null, form());
-      expect(result).toEqual({ ok: true, data: { count: 1, busy: ["Alpha"] } });
+      expect(result).toEqual({
+        ok: true,
+        data: { unread: { count: 1, display: "1", label: "1 unread problem", nextChangeAt: null }, busy: ["Alpha"], snoozesCleared: 0 },
+      });
       const error = await markAllRead(null, form({ returnTo: "/notifications" })).catch((e: unknown) => e);
       expect((error as RedirectSignal).to).toBe("/notifications?marked=1&busy=Alpha");
     } finally {
@@ -102,5 +108,67 @@ describe("markAllRead action", () => {
     actAs(null);
     const error = await markAllRead(null, form()).catch((e: unknown) => e);
     expect((error as RedirectSignal).to).toBe("/login?next=/notifications");
+  });
+});
+
+describe("markAllRead (service): floor move plus prune (US3)", () => {
+  it("raises the floor over individually-read and snoozed events and prunes every mark for the project, reporting snoozesCleared", async () => {
+    const { a, u } = await fixture();
+    const readEvent = await recordEvent(a.id, "target_failed");
+    const snoozedEvent = await recordEvent(a.id, "target_ambiguous");
+    await recordEvent(a.id, "account_needs_reauth");
+    await markEventFor(a.id, u.id, readEvent.id);
+    await markEventFor(a.id, u.id, snoozedEvent.id, new Date(Date.now() + 60 * 60 * 1000));
+    expect(await count(u.id)).toBe(1);
+    actAs(u);
+    const result = await markAllReadService(await forMyProjects({ user: { id: u.id } }));
+    expect(result).toEqual({ marked: 1, busy: [], snoozesCleared: 1 });
+    expect(await marksFor(a.id, u.id)).toEqual([]);
+    expect(await count(u.id)).toBe(0);
+  });
+
+  it("does not bring a cleared snooze back", async () => {
+    const { a, u } = await fixture();
+    const snoozedEvent = await recordEvent(a.id, "target_ambiguous");
+    await markEventFor(a.id, u.id, snoozedEvent.id, new Date(Date.now() + 60 * 60 * 1000));
+    actAs(u);
+    await markAllReadService(await forMyProjects({ user: { id: u.id } }));
+    expect(await count(u.id)).toBe(0);
+    expect(await marksFor(a.id, u.id)).toEqual([]);
+  });
+
+  it("an event committed a moment after the mark-all began still counts as unread", async () => {
+    const { a, u } = await fixture();
+    await recordEvent(a.id, "target_failed");
+    actAs(u);
+    await markAllReadService(await forMyProjects({ user: { id: u.id } }));
+    expect(await count(u.id)).toBe(0);
+    await recordEvent(a.id, "target_failed");
+    expect(await count(u.id)).toBe(1);
+  });
+
+  it("a busy project still reports busy and writes nothing", async () => {
+    const { a, u } = await fixture();
+    await recordEvent(a.id, "target_failed");
+    const snoozedEvent = await recordEvent(a.id, "target_ambiguous");
+    await markEventFor(a.id, u.id, snoozedEvent.id, new Date(Date.now() + 60 * 60 * 1000));
+    setNotificationsLockTimeoutForTests(150);
+    setNotificationsAfterLockHookForTests(null);
+    const { default: pg } = await import("pg");
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    await client.query("begin");
+    await client.query("select id from projects where id = $1 for update", [a.id]);
+    try {
+      actAs(u);
+      const before = await marksFor(a.id, u.id);
+      const result = await markAllReadService(await forMyProjects({ user: { id: u.id } }));
+      expect(result.busy).toEqual(["Alpha"]);
+      expect(await marksFor(a.id, u.id)).toEqual(before);
+    } finally {
+      await client.query("commit");
+      await client.end();
+      setNotificationsLockTimeoutForTests(2000);
+    }
   });
 });

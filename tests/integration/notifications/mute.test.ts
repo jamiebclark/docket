@@ -18,7 +18,7 @@ vi.mock("@/server/services/notifications", async () => {
   };
 });
 
-import { setNotifications } from "../../../src/app/notifications/actions";
+import { markEventRead, setNotifications, snoozeEvent } from "../../../src/app/notifications/actions";
 import { setMyProjectNotifications } from "../../../src/app/p/[projectSlug]/settings/actions";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { forProject } from "../../../src/server/dal/scope";
@@ -139,5 +139,43 @@ describe("per-project notifications", () => {
   it("sends a signed-out caller to login", async () => {
     actAs(null);
     expect(await redirectOf(() => setNotifications(null, form({ projectSlug: "x", on: "false" })))).toBe("/login?next=/notifications");
+  });
+});
+
+describe("row actions touch only the acting member's own state (FR-025, US7-AS1, AS2)", () => {
+  it("an editor's row actions change only their own count, panel and callout", async () => {
+    const a = await createProject({ name: "Alpha" });
+    const [editor, other] = await Promise.all([createUser(), createUser()]);
+    await Promise.all([addMember(a.id, editor.id, "editor"), addMember(a.id, other.id, "owner")]);
+    await Promise.all([startReading(a.id, editor.id), startReading(a.id, other.id)]);
+    const [toRead, toSnooze] = await Promise.all([recordEvent(a.id, "target_failed"), recordEvent(a.id, "target_failed")]);
+
+    actAs(editor);
+    const readResult = await markEventRead(null, form({ eventId: toRead.id }));
+    expect(readResult.ok).toBe(true);
+    const snoozeResult = await snoozeEvent(null, form({ eventId: toSnooze.id, choice: "hour" }));
+    expect(snoozeResult.ok).toBe(true);
+
+    expect(await count(editor.id)).toBe(0);
+    const otherPanel = await recentPanel(await setFor(other.id), new Date());
+    expect(otherPanel.items).toHaveLength(2);
+    expect(otherPanel.items.every((i) => i.isNew)).toBe(true);
+    expect((await projectUnread(await forProject({ user: { id: other.id } }, a.slug))).count).toBe(2);
+  });
+
+  it("refuses a non-member actor before writing anything", async () => {
+    const a = await createProject({ name: "Alpha" });
+    const outsider = await createUser();
+    const event = await recordEvent(a.id, "target_failed");
+
+    actAs(outsider);
+    const readResult = await markEventRead(null, form({ eventId: event.id }));
+    expect(readResult).toMatchObject({ ok: false, error: "not_found" });
+    const snoozeResult = await snoozeEvent(null, form({ eventId: event.id, choice: "hour" }));
+    expect(snoozeResult).toMatchObject({ ok: false, error: "not_found" });
+
+    actAs(null);
+    expect(await redirectOf(() => markEventRead(null, form({ eventId: event.id })))).toBe("/login?next=/notifications");
+    expect(await redirectOf(() => snoozeEvent(null, form({ eventId: event.id, choice: "hour" })))).toBe("/login?next=/notifications");
   });
 });

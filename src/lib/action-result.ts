@@ -7,7 +7,10 @@ export type ErrorCode =
   | "invitation_invalid"
   | "email_mismatch"
   | "setup_unavailable"
-  | "unauthenticated";
+  | "unauthenticated"
+  | "busy"
+  | "at_cap"
+  | "invalid";
 
 export type ActionResult<T> =
   | { ok: true; data: T }

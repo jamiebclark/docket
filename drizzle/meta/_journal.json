@@ -141,6 +141,13 @@
       "when": 1791650075041,
       "tag": "0019_external_item_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791734861810,
+      "tag": "0020_melted_mojo",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,9 @@ export interface PollEnv {
   onChanged: (listener: () => void) => () => void;
   setInterval: (fn: () => void, ms: number) => unknown;
   clearInterval: (handle: unknown) => void;
+  setTimeout: (fn: () => void, ms: number) => unknown;
+  clearTimeout: (handle: unknown) => void;
+  now: () => number;
 }
 
 export interface PollHandlers {
@@ -21,13 +24,28 @@ export interface PollHandlers {
 }
 
 /**
- * Refreshes the bell count: every 60 s while the page is visible, once on becoming visible and once when
- * the count changes elsewhere. A failure keeps the last count silently. Returns a stop function.
+ * Refreshes the bell count: every 60 s while the page is visible, once on becoming visible, once when the
+ * count changes elsewhere, and once more from a one-shot timer armed from `nextChangeAt` — so a snooze
+ * running out refreshes the bell at that instant rather than up to 60 s later (FR-022, contracts/ui.md §7).
+ * A failure keeps the last count silently. Returns a stop function.
  */
-export function startPolling(initialCount: number, env: PollEnv, handlers: PollHandlers): () => void {
-  let last = initialCount;
+export function startPolling(initial: UnreadSummary, env: PollEnv, handlers: PollHandlers): () => void {
+  let last = initial.count;
   let timer: unknown = null;
+  let oneShot: unknown = null;
   let stopped = false;
+
+  const clearOneShot = () => {
+    if (oneShot !== null) env.clearTimeout(oneShot);
+    oneShot = null;
+  };
+
+  const armOneShot = (nextChangeAt: string | null) => {
+    clearOneShot();
+    if (nextChangeAt === null || !env.isVisible()) return;
+    const delay = Math.max(0, new Date(nextChangeAt).getTime() - env.now());
+    oneShot = env.setTimeout(() => void refresh(), delay);
+  };
 
   const refresh = async () => {
     try {
@@ -37,6 +55,7 @@ export function startPolling(initialCount: number, env: PollEnv, handlers: PollH
       last = summary.count;
       handlers.onSummary(summary);
       if (rose) handlers.onAnnounce(summary);
+      armOneShot(summary.nextChangeAt);
     } catch {
       // Keep showing the last count.
     }
@@ -56,16 +75,21 @@ export function startPolling(initialCount: number, env: PollEnv, handlers: PollH
       start();
     } else {
       halt();
+      clearOneShot();
     }
   };
 
-  if (env.isVisible()) start();
+  if (env.isVisible()) {
+    start();
+    armOneShot(initial.nextChangeAt);
+  }
   const offVisibility = env.onVisibilityChange(onVisibility);
   const offChanged = env.onChanged(() => void refresh());
 
   return () => {
     stopped = true;
     halt();
+    clearOneShot();
     offVisibility();
     offChanged();
   };
@@ -90,5 +114,8 @@ export function browserPollEnv(): PollEnv {
     },
     setInterval: (fn, ms) => window.setInterval(fn, ms),
     clearInterval: (handle) => window.clearInterval(handle as number),
+    setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimeout: (handle) => window.clearTimeout(handle as number),
+    now: () => Date.now(),
   };
 }

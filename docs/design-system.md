@@ -286,7 +286,8 @@ full width, size `lg`.
 | `ProviderIcon` | `providerKey`, `size`, `muted` | Platform mark (Simple Icons, CC0) on a tile in the brand colour; the mock provider gets a neutral "flask" tile. Decorative — show the platform name as text. Used on account cards, the Accounts page and composer previews. `muted` keeps the mark but drops the brand colour for the `muted` tile, so placeholders (empty posting slots on the calendar) recede behind real posts. |
 | `AccountPicker` | `legend`, `hint`, `accounts` (with `unavailableReason`), `value`, `onChange`, `idPrefix`, `showStatus` | Many-of-many account choice as selectable cards (mark, name, platform, status, reason) on native checkboxes. Chosen = purple border, lavender fill and a small tick on the platform mark — no checkbox column of its own. "n of m selected" and Select all / Clear; a filter box past 8 accounts. Used by Compose, Generate and Jobs. |
 | `RelativeTime` | `value`, `timeZone`, `now` | "12 min ago" text; the absolute time and zone are the tooltip and screen-reader text. Pure: `now` is a prop. Used by the bell panel and the notifications list. |
-| `NotificationList` | `items`, `now` | Rows of outcome badge, project, platform/account, message and `RelativeTime`; unread rows carry a "New" badge. Shared by the panel and `/notifications`. |
+| `NotificationList` | `items`, `now`, `returnTo`, `onRowDone` | Rows of outcome badge, project, platform/account, message and `RelativeTime`; unread rows carry a "New" badge; each row renders `NotificationRowActions`. Shared by the panel and `/notifications`. |
+| `NotificationRowActions` | `eventId`, `label`, `actionsAvailable`, `returnTo`, `onRowDone` | One row's "Mark read" plus a `<details>`/`<summary>` "Snooze" disclosure holding three fixed-choice submits (`1 hour` / `Tomorrow morning` / `Next week`) — see "Row actions: a list of fixed choices" below. At the per-project cap, renders `markCapText()` and a "Mark all as read" submit instead. No new primitive: `<details>` is the same disclosure used in `accounts/page.tsx` and `Composer.tsx`. |
 | `ProblemsCallout` | `scope` | "Problems since you last looked" line on a project's home and Posts; shows only when the count is above zero. |
 | `WeekSlotGrid` | `slots`, `timeZoneLabel`, `canManage`, `label`, `emptyMessage`, `addButtonId`, `onAdd`/`onMove`/`onToggle`/`onDelete` | Seven-day grid for posting slots (Accounts). Click/tap an empty column to place a slot; drag a chip to move it, or use its Move control for a Mon–Sun + time dialog; click a chip to toggle active/paused; its Delete control deletes on one activation with **no confirm dialog** — a deliberate exception to the `danger` rule above, since a slot holds no content and costs one click to re-add (see `docs/decisions.md` 035). Keyboard: add button → `Enter`/`Space` adds at the next free boundary and focuses the new chip; a chip is `Tab`-order body → Move → Delete; the Move control opens a dialog (segmented weekday, then time, then Move/Cancel) and returns focus to the chip on commit or `Escape`/Cancel; Delete moves focus to the next chip or the column's add button. |
 | `Logo`, `LogoMark`, `AuthShell` | — | §2, §6. |
@@ -313,6 +314,29 @@ past that every column is too narrow to read and each one wraps to three lines.
   most. They are read when something has gone wrong, not scanned.
 - **One action control per row.** Mutually exclusive answers to one question are
   a `ButtonGroup`, not a button each.
+
+### Row actions: a list of fixed choices
+
+A row in a list sometimes needs a secondary action with its own small set of
+fixed choices — not a form field, and not frequent enough to earn a row of its
+own controls. "Snooze" on a notification row is the first case: three named
+durations, one row, with everything else on the row (the message, "Mark read")
+needing to stay reachable without opening anything.
+
+- **A `<details>`/`<summary>` disclosure holding one submit per choice**, each a
+  real `<button name="…" value="…">`, is the answer: natively keyboard-reachable
+  and focusable, needs no JavaScript, and does not compete with `Menu` (whose
+  items are `onSelect` callbacks that do not exist without JavaScript) or a
+  permanently visible `SegmentedControl` per row (which is the clutter this
+  guide already warns about at list density).
+- **No new primitive was needed.** `<details>` is already used for the same
+  "hidden by default, opened on demand" shape elsewhere in the app
+  (`accounts/page.tsx`, `Composer.tsx`); the notification row reuses it rather
+  than adding a disclosure component.
+- Each submit inside the disclosure carries the row's subject in its accessible
+  name (e.g. "Snooze until tomorrow morning — Instagram post failed"), so two
+  rows' "1 hour" buttons are distinguishable to a screen reader even though
+  their visible text is identical.
 
 ### Choosing a control for one-of-many
 

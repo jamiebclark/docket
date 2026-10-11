@@ -17,8 +17,10 @@ export interface NotificationItem {
   postDeleted: boolean;
   /** The stored, already-scrubbed message. */
   message: string;
-  /** Newer than the person's reading position for that project. */
+  /** Newer than the person's reading position for that project, and not individually read. */
   isNew: boolean;
+  /** False for every row of a project that has reached the per-person mark cap (FR-023). */
+  actionsAvailable: boolean;
   link: { href: string; label: string } | null;
 }
 
@@ -26,6 +28,8 @@ export interface UnreadSummary {
   count: number;
   display: string;
   label: string;
+  /** ISO 8601 UTC, the soonest live snooze over notifications-on projects, or null (M17). */
+  nextChangeAt: string | null;
 }
 
 export interface NotificationPanel {

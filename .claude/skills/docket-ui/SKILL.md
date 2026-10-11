@@ -36,7 +36,12 @@ over fancy.** Every screen must be fully usable from the keyboard.
   **project switcher** and a scheduler-health indicator (last successful tick;
   red banner when stale), then the invitations badge, the **notification bell**
   (unread problems across the user's projects, `src/components/notifications/`)
-  and the user menu. Signed-out pages use `AuthShell`.
+  and the user menu. Signed-out pages use `AuthShell`. Every row in the bell's
+  panel and on `/notifications` carries `NotificationRowActions` — "Mark read"
+  plus a `<details>`/`<summary>` "Snooze" disclosure of fixed-choice submits;
+  see "Row actions: a list of fixed choices" in `docs/design-system.md` §7. No
+  new UI primitive was needed for this — reuse the pattern rather than adding
+  one.
 - **Server components by default.** Fetch through `src/server/services/` (never
   the DB directly). Client components (`"use client"`) only for interactivity:
   composer, calendar drag/drop, switcher, live validation. Keep them leaf-level.

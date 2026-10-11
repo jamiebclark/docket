@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/server/auth/session", async () => (await import("../../helpers/actions")).sessionModule);
 
 import { GET as refresh } from "../../../src/app/api/me/notifications/route";
+import { EVENT_MARK_CAP } from "../../../src/lib/notifications/attention";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { runCrossProject } from "../../../src/server/db/cross-project";
 import { activityEvents } from "../../../src/server/db/schema";
@@ -12,7 +13,7 @@ import { recentPanel, unreadSummary } from "../../../src/server/services/notific
 import { actAs } from "../../helpers/actions";
 import { closeDb, testDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
-import { clearRecordedQueries } from "../../setup/scope-recorder";
+import { clearRecordedQueries, getRecordedQueries } from "../../setup/scope-recorder";
 
 // SC-003: the bell count, its refresh endpoint and the panel each answer in under 100 ms (median of 5 after a
 // warm-up) at 100k events in one project and 200k across a member's 20 projects. Seeded in SQL.
@@ -29,7 +30,7 @@ afterAll(async () => {
     );
   }
   await closeDb();
-});
+}, 60_000);
 
 /** ~15% problems (failed, ambiguous), the rest published. */
 async function seed(projectId: string, count: number) {
@@ -71,6 +72,34 @@ async function startHalfway(projectId: string, userId: string, muted: boolean) {
   );
 }
 
+/**
+ * Fills a person's sparse marks for a project to `EVENT_MARK_CAP`: half read (`'infinity'`), the rest
+ * snoozed, a tenth of the total (a fifth of the snoozed half) with an instant already past. Events marked
+ * are drawn from the project's newest rows, above any `startHalfway` floor, so they are legal marks.
+ */
+async function seedMarksToCap(projectId: string, userId: string) {
+  const expiredCount = Math.floor(EVENT_MARK_CAP / 10);
+  const readCount = EVENT_MARK_CAP / 2;
+  const liveSnoozeCount = EVENT_MARK_CAP - readCount - expiredCount;
+  await runCrossProject("test: seed notification marks for performance", () =>
+    testDb().execute(sql`
+      INSERT INTO notification_event_marks (project_id, user_id, event_id, event_seq, counts_again_at)
+      SELECT ${projectId}::uuid, ${userId}::uuid, id, seq,
+        CASE
+          WHEN rn <= ${readCount} THEN 'infinity'::timestamptz
+          WHEN rn <= ${readCount + liveSnoozeCount} THEN date_trunc('milliseconds', now() + interval '1 day')
+          ELSE date_trunc('milliseconds', now() - interval '1 day')
+        END
+      FROM (
+        SELECT id, seq, row_number() OVER (ORDER BY seq DESC) AS rn
+        FROM activity_events
+        WHERE project_id = ${projectId}::uuid AND outcome IN ('failed', 'ambiguous', 'needs_reauth')
+        ORDER BY seq DESC LIMIT ${EVENT_MARK_CAP}
+      ) picked
+    `),
+  );
+}
+
 async function median(run: () => Promise<unknown>): Promise<number> {
   await run(); // warm the plan and buffer caches: the budget is for a steady server
   const times: number[] = [];
@@ -104,13 +133,34 @@ async function explainCount(projectIds: string[], userId: string) {
 async function measure(label: string, userId: string, projectIds: string[], opts: { partialIndexes: boolean }) {
   actAs({ id: userId } as never);
   const set = await forMyProjects({ user: { id: userId } });
+  clearRecordedQueries();
   const summary = await median(() => unreadSummary(set));
+  const summaryQueries = getRecordedQueries();
+  clearRecordedQueries();
   const handler = await median(() => refresh());
+  const handlerQueries = getRecordedQueries();
+  clearRecordedQueries();
   const panel = await median(() => recentPanel(set, new Date()));
+  const panelQueries = getRecordedQueries();
   console.log(`[notifications perf] ${label}: count=${summary.toFixed(1)}ms refresh=${handler.toFixed(1)}ms panel=${panel.toFixed(1)}ms`);
   expect(summary, "unreadSummary").toBeLessThan(BUDGET_MS);
   expect(handler, "GET /api/me/notifications").toBeLessThan(BUDGET_MS);
   expect(panel, "recentPanel").toBeLessThan(BUDGET_MS);
+  // The count endpoints are the hot path this budget is about; `recentPanel` legitimately joins
+  // `posts`/`post_targets`/`social_accounts` already, to render each row's project, account and post text.
+  for (const [name, queries] of [["unreadSummary", summaryQueries], ["refresh", handlerQueries]] as const) {
+    for (const q of queries) {
+      expect(q.sql, `${name} must not join posts/post_targets/social_accounts`).not.toMatch(/\b(posts|post_targets|social_accounts)\b/i);
+    }
+  }
+  for (const [name, queries] of [["unreadSummary", summaryQueries], ["refresh", handlerQueries], ["recentPanel", panelQueries]] as const) {
+    for (const q of queries) {
+      if (/\bfrom\s+activity_events\b/i.test(q.sql)) {
+        expect(q.sql, `${name}'s activity_events read must stay bounded by a LIMIT`).toMatch(/\blimit\b/i);
+      }
+    }
+  }
+  clearRecordedQueries(); // the diagnostic EXPLAIN below is not an app query
   const plan = await explainCount(projectIds, userId);
   // With one project and a mid-way position the planner may read the whole-table seq index instead; that is
   // still bounded by the LIMIT, so the index names are only asserted where the plan is stable (many projects).
@@ -128,7 +178,8 @@ describe("notifications performance (SC-003)", () => {
     await addMember(p.id, me.id, "editor");
     await seed(p.id, 100_000);
     await startHalfway(p.id, me.id, false);
-    await runCrossProject("test: analyze", () => testDb().execute(sql`ANALYZE activity_events`));
+    await seedMarksToCap(p.id, me.id);
+    await runCrossProject("test: analyze", () => testDb().execute(sql`ANALYZE activity_events, notification_event_marks`));
     await measure("one project", me.id, [p.id], { partialIndexes: false });
   }, 120_000);
 
@@ -138,7 +189,8 @@ describe("notifications performance (SC-003)", () => {
     for (const p of projects) await addMember(p.id, me.id, "editor");
     for (const p of projects) await seed(p.id, 10_000);
     for (const [i, p] of projects.entries()) await startHalfway(p.id, me.id, i < 5);
-    await runCrossProject("test: analyze", () => testDb().execute(sql`ANALYZE activity_events`));
+    for (const p of projects) await seedMarksToCap(p.id, me.id);
+    await runCrossProject("test: analyze", () => testDb().execute(sql`ANALYZE activity_events, notification_event_marks`));
     await measure("20 projects", me.id, projects.map((p) => p.id), { partialIndexes: true });
   }, 180_000);
 });

@@ -1018,8 +1018,8 @@ These are fixes to existing helpers, inert for every provider before this entry.
 ### Spec decisions
 
 - **N1 — Attention events are the *Problems* preset, minus other people's connect attempts.** Failed, ambiguous and needs reauth count for every member. Connect failed counts only for the member who tried; with no recorded actor it counts for nobody. Published, retrying and resolved never count. The count, the panel and the callout use the same rule.
-- **N2 — Unread means "newer than where you last looked", not "still broken".** A problem stays unread until it is marked read, even after it has been fixed.
-- **N3 — One position per person per project, and it only moves forward.** There is no per-event read state.
+- **N2 — Unread means "newer than where you last looked", not "still broken".** A problem stays unread until it is marked read, even after it has been fixed. **Half reversed by 056's N14**: the half above still stands, but "stays unread until *the whole project* is marked read" is reversed — a person may mark or snooze one problem without touching the rest or moving the floor past anything else. Nothing written under the old rule changes: `notification_states` rows and their `seen_seq`/`muted` are untouched.
+- **N3 — One position per person per project, and it only moves forward.** There is no per-event read state. **Reversed by 056's N13**: `seen_seq` stays as a floor exactly as before, but a sparse per-event mark may now exist above it, for one person, one project and one event. No data written under the old rule changes — there was never a per-event row, so the new table simply starts empty.
 - **N4 — Exactly three things mark read**:
   1. "Mark all as read" (every project the person belongs to, muted or not);
   2. the project's Activity with the *Problems* preset and no other filter, first page;
@@ -1510,3 +1510,105 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
   `Intl.DateTimeFormat`, with a five-entry allowlist for the places that detect, label or validate a zone
   rather than display one — plus a check that the allowlist has no stale entries. Conventions drifted six
   ways; a test does not.
+
+## 056 — Per-event read state and snooze (2026-10-11)
+
+### Spec decisions (N13–N24; see N2/N3 above for the two reversals)
+
+- **N13 — Reverses N3.** `seen_seq` stays and becomes explicitly a floor: every attention event at or
+  below it is read, for ever, with no row of its own. Above the floor only, a sparse per-event mark may
+  exist for one person, one project and one event. The floor is still forward-only.
+- **N14 — Reverses half of N2.** The half that stands: unread still means "newer than where you last
+  looked", not "still broken". The half reversed: a problem no longer has to wait for the whole project to
+  be marked read — one problem can be marked read or snoozed on its own, with no effect on the floor or any
+  other event.
+- **N15 — One meaning, "hidden until".** A sparse mark carries an instant from which the event counts
+  again: `'infinity'` for "read", a finite instant for "snoozed". Every read of the state is one comparison
+  against the current time.
+- **N16 — Bounded growth.** A mark can only exist above the floor; the floor absorbs and prunes every mark
+  at or below it in the same transaction it rises in; a hard cap of 200 sparse marks per person per project
+  refuses further row actions for that project (pointing at "Mark all as read") rather than growing without
+  bound.
+- **N17 — Snooze offers three fixed choices in the project's time zone**: "1 hour" (an exact duration),
+  "Tomorrow morning" and "Next week" (09:00, resolved once with explicit DST disambiguation and stored as
+  an absolute instant — nothing recomputes it later).
+- **N18 — A snooze is on the event, not the target.** A retry, publish or resolution of the target does not
+  cancel the snooze; when it runs out the event comes back unread, linking wherever Activity links it.
+- **N19 — The floor wins over a snooze.** "Mark all as read" and the N4 problems views raise the floor over
+  everything that exists at that moment, including snoozed events, pruning their marks; the confirmation
+  names how many snoozes were cleared.
+- **N20 — A snoozed problem leaves the panel; a read one stays, without "New".** Neither action hides
+  anything from Activity, for anybody.
+- **N21 — The row actions are reachable, named and announced.** "Mark read" and "Snooze" are real controls
+  with accessible names identifying the problem, in the normal Tab order, working with no client
+  JavaScript, announced politely only on a real change.
+- **N22 — The count payload gains the next change**: the soonest instant at which one of the caller's
+  snoozes runs out, or nothing, so the bell can refresh exactly then instead of up to 60 s late.
+- **N23 — A row action names the activity event by its existing id alone.** No new identifier and no
+  internal position reaches the browser; an id in another project, a non-attention id, and an unknown id
+  are all the same "not found", changing nothing and revealing nothing.
+- **N24 — Nothing written under the old rule changes.** No per-event rows existed before this entry, so the
+  new table starts empty and reproduces today's behaviour exactly; every existing `notification_states` row
+  keeps its `seen_seq` and `muted` untouched, and the migration is safe against a live installation.
+
+### Plan decisions (M1–M18)
+
+- **M1 — One table, `notification_event_marks`**, keyed `(project_id, user_id, event_id)`, payload
+  `event_seq bigint` and `counts_again_at timestamptz`. Not columns on `activity_events`, not a JSON blob on
+  `notification_states`: the key is exactly "one person, one project, one event", so "at most one mark" is
+  a database fact and the count's probe is the primary key's full prefix.
+- **M2 — `counts_again_at` is `NOT NULL`; "read" is `'infinity'::timestamptz`.** "Hidden right now" is the
+  single predicate `counts_again_at > now()`, with no `coalesce`/`OR`. Three Postgres behaviours this leans
+  on are asserted by a test rather than trusted (`'infinity' > now()`, `'infinity' < 'infinity'` is false,
+  `date_trunc('milliseconds', 'infinity') = 'infinity'`); `node-postgres` parses an infinite `timestamptz`
+  to `Infinity`, so the column is never selected raw into TypeScript.
+- **M3 — `event_seq` is denormalised onto the mark** at write time, inside the same locked transaction that
+  read it, so the floor-follow and the prune are `WHERE event_seq <= $floor` with no join to the log — safe
+  because the log is append-only and a `seq` never changes.
+- **M4 — Two CHECKs**: `event_seq > 0` and `counts_again_at = date_trunc('milliseconds', counts_again_at)`.
+  No CHECK asserts the instant is in the future — an expired snooze is a first-class state, and the
+  future-ness of the three choices is the resolver's and the service's job, not the database's.
+- **M5 — The membership FK does all the deleting; the event FK is insurance.** The same `(project_id,
+  user_id)` → `member ON DELETE CASCADE` shape as `notification_states` makes US6 true for free, in the same
+  transaction as the membership change. No composite FK to `(project_id, id)` on the log — a mark is only
+  ever written from a row already resolved by project and id together, so the invariant is stated and
+  tested rather than enforced by a new index on the largest table.
+- **M6 — One extra index**, `notification_event_marks_floor_idx` on `(project_id, user_id, event_seq)`, for
+  the prune, the cap count and the next-change scan. No new index on `activity_events`: R4's two partial
+  indexes still drive every scan over the log.
+- **M7 — Marking read pulls the floor up to just below the oldest uncovered event**, not just to the marked
+  event's own `seq`, so any order of work — including newest-first — collapses every mark above the new
+  floor back to empty, which is what makes the 200 cap survive ordinary use.
+- **M8 — The snooze resolver is pure**, `resolveSnooze` in `src/lib/notifications/snooze.ts`, using
+  `Temporal.PlainDateTime.toZonedDateTime(timeZone, { disambiguation: "compatible" })` — the same rule the
+  scheduler already uses — truncated to whole milliseconds, with `MORNING_HOUR = 9` as one exported
+  constant.
+- **M9 — The cap refuses every row action for the project**, including an in-place replacement that would
+  not grow the table, for one truthful message on every row rather than a rule that holds for some rows and
+  not others.
+- **M10 — An event at or below the floor short-circuits to "unchanged", never an error.** The stale
+  second-tab case refreshes the count, announces nothing, shows no error.
+- **M11 — A row action names the event id alone**; `resolveAttentionEvent` resolves the project inside the
+  caller's project set with a `UNION ALL` of the attention branches per project, so no internal position or
+  project slug ever reaches the browser, and a non-attention event is indistinguishable from a missing one.
+- **M12 — Row actions reuse R3's transaction verbatim**: `SET LOCAL lock_timeout`, the project row `FOR
+  UPDATE`, the membership re-check — nothing new is lockable, so no new lock-order question.
+- **M13 — `write()` returns `{ outcome, snoozesCleared }`** so "Mark all as read" can say how many snoozes
+  it cleared, counted inside the same transaction that pruned them rather than a second, racy query after
+  commit.
+- **M14 — `now()` comes from the database**, in every comparison — the count, the panel's snooze exclusion,
+  the next-change query and the cap check — so the count, the panel and the callout cannot disagree about
+  whether a snooze has run out.
+- **M15 — Two anti-joins, so the SQL stays free of `OR`**, matching 022's SQL rules: `counts_again_at >
+  now()` for "hidden now", and the same predicate narrowed with `< 'infinity'` for "snoozed now (not
+  read)".
+- **M16 — `listAttention` does the snooze exclusion in SQL and reports readness**, returning
+  `AttentionRecord = ActivityRecord & { hiddenByMark: boolean }`; the generic Activity reader (`list`,
+  `summary`) is untouched.
+- **M17 — `nextChangeAt` lives on `UnreadSummary`**, the soonest finite `counts_again_at` strictly after
+  `now()` over the caller's notifications-on projects, so the count route, the panel and the server-rendered
+  bell all carry it from the first render.
+- **M18 — Row actions are two server actions**, `markEventRead` and `snoozeEvent`, with
+  `NotificationRowActions` a `"use client"` leaf rendering "Mark read" and a `<details>` "Snooze"
+  disclosure of three submits, hiding `returnTo` only until hydration (the same trick
+  `NotificationBellClient` already uses) so the no-JavaScript path still redirects with a confirmation.
