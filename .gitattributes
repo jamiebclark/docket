@@ -1,0 +1,22 @@
+# Line endings are LF in the repository and LF on checkout, on every platform.
+#
+# Without this, a tool that rewrites a file on Windows can flip it to CRLF, and git then
+# reports every line of that file as changed. A one-line edit becomes a whole-file diff and
+# the real change is impossible to review. It has happened twice already: #80 existed only to
+# undo it, and a composer change before that needed the same cleanup.
+#
+# `text=auto` leaves binary files alone — git detects them — and the entries below make the
+# few binaries in this repository explicit so detection never has to guess.
+* text=auto eol=lf
+
+# Shell scripts must keep LF even if a checkout is configured otherwise: a CRLF shebang line
+# makes the interpreter unfindable, and these run in CI and in the Docker image.
+*.sh text eol=lf
+
+# Windows-only scripts are the one place CRLF is correct.
+*.ps1 text eol=crlf
+
+*.png binary
+*.svg text
+*.woff binary
+*.woff2 binary
