@@ -46,9 +46,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           if [ "$EVENT" != "push" ]; then
+            # A pull request that only moves spec-kit artefacts cannot change behaviour: nothing
+            # under src, tests or scripts reads `specs/`. Everything else runs the full suite,
+            # including docs — `tests/integration/docs/` parses README.md, docs/*.md, mkdocs.yml
+            # and docker-compose.yml, so a change there can legitimately fail a test, which is the
+            # whole point of those tests.
+            #
+            # The jobs below stay gated on this output rather than on a workflow-level `paths`
+            # filter. A job skipped by `if:` still reports, so the required checks on main are
+            # satisfied; a job excluded by `paths` never reports and would block the merge.
+            if [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ]; then
+              changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+              if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qv '^specs/'; then
+                echo "pull request touches only specs/ - skipping the heavy jobs:"
+                printf '  %s\n' $changed
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
             echo "pull request: running everything"
             echo "skip=false" >> "$GITHUB_OUTPUT"
             exit 0
