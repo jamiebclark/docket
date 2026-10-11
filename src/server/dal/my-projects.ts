@@ -3,11 +3,11 @@ import { roles, type Role } from "../auth/access";
 import { getDb } from "../db/client";
 import { runForProjectSet } from "../db/cross-project";
 import { member, notificationStates, projects } from "../db/schema";
-import { createActivityReader, type ActivityRecord, type ActivityRepo } from "./activity";
+import { createActivityReader, type ActivityRepo, type AttentionRecord } from "./activity";
 import { createApiKeysRepo } from "./api-keys";
 import { NotFoundError } from "./errors";
 import { createMembersRepo } from "./members";
-import { createNotificationsRepo, createNotificationsSetReader } from "./notifications";
+import { createNotificationsRepo, createNotificationsSetReader, type MarkOutcome, type WriteOutcome } from "./notifications";
 import { crossProject, type SessionLike } from "./scope";
 
 export interface MyProject {
@@ -35,11 +35,19 @@ export interface ProjectSetScope {
     /** Unread attention events over the projects with notifications on, capped at 100. */
     countUnread(): Promise<number>;
     /** The newest attention events over the projects with notifications on. */
-    recent(limit: number): Promise<ActivityRecord[]>;
+    recent(limit: number): Promise<AttentionRecord[]>;
     /** Projects (muted or not) with something newer than the position: the ones worth locking. */
     projectsWithUnread(): Promise<string[]>;
     /** One locked transaction for one project; an id outside the set throws NotFoundError before any SQL. */
-    write(projectId: string, change: { markRead: boolean; muted?: boolean }): Promise<"changed" | "unchanged" | "not_member">;
+    write(projectId: string, change: { markRead: boolean; muted?: boolean }): Promise<WriteOutcome>;
+    /** The caller's attention event with this id, in one of their own projects, or null (N23, M11). */
+    resolveAttentionEvent(eventId: string): Promise<{ projectId: string; seq: bigint } | null>;
+    /** One row action. A projectId outside the set throws NotFoundError before any SQL, as `write` does. */
+    markEvent(projectId: string, input: { eventId: string; countsAgainAt: Date | "never" }): Promise<MarkOutcome>;
+    /** Over every project in the set, muted or not (FR-020). */
+    markCounts(): Promise<Map<string, number>>;
+    /** Over the notifications-on projects (FR-021). */
+    nextChangeAt(): Promise<Date | null>;
   };
 }
 
@@ -102,6 +110,13 @@ export async function forMyProjects(session: SessionLike | null): Promise<Projec
         check(projectId);
         return inSet(() => createNotificationsRepo(db, projectId, userId).write(change));
       },
+      resolveAttentionEvent: (eventId) => inSet(() => createNotificationsSetReader(db, projectIds, userId).resolveAttentionEvent(eventId)),
+      async markEvent(projectId, input) {
+        check(projectId);
+        return inSet(() => createNotificationsRepo(db, projectId, userId).markEvent(input));
+      },
+      markCounts: () => inSet(() => createNotificationsSetReader(db, projectIds, userId).markCounts()),
+      nextChangeAt: () => inSet(() => createNotificationsSetReader(db, unmutedIds, userId).nextChangeAt()),
     },
     async memberNames(projectId) {
       check(projectId);

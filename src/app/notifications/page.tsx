@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { getSession } from "@/server/auth/session";
 import { forMyProjects } from "@/server/dal";
 import { myProjectStates, recentPanel } from "@/server/services/notifications";
-import { muteErrorText, mutedConfirmation, parseMuteError } from "@/lib/notifications/text";
+import { markAllConfirmation, muteErrorText, mutedConfirmation, parseMuteError, parseRowErrorCode, rowErrorText, snoozedConfirmation } from "@/lib/notifications/text";
 import { markAllRead } from "./actions";
 
 export const metadata: Metadata = { title: "Notifications" };
@@ -32,7 +32,18 @@ export default async function NotificationsPage({ searchParams }: Props) {
   const muteError = parseMuteError(raw.notifications);
   const marked = raw.marked === "1";
   const busy = typeof raw.busy === "string" ? raw.busy.split(",").filter(Boolean) : [];
+  const snoozesCleared = typeof raw.snoozes === "string" ? Number.parseInt(raw.snoozes, 10) || 0 : 0;
   const changed = typeof raw.changed === "string" ? states.find((s) => s.slug === raw.changed) : undefined;
+  const read = raw.read === "1";
+  const rowError = parseRowErrorCode(raw.rowError);
+  const snoozedSlug = typeof raw.snoozed === "string" ? raw.snoozed : undefined;
+  let snoozedText: string | null = null;
+  if (snoozedSlug !== undefined) {
+    const project = set.projects.find((p) => p.slug === snoozedSlug);
+    const untilRaw = typeof raw.until === "string" ? raw.until : undefined;
+    const until = untilRaw ? new Date(untilRaw) : null;
+    snoozedText = project && until && !Number.isNaN(until.getTime()) ? snoozedConfirmation(until, project.timeZone) : "Snoozed.";
+  }
 
   return (
     <>
@@ -57,9 +68,14 @@ export default async function NotificationsPage({ searchParams }: Props) {
             {changed ? <Alert tone="success">{mutedConfirmation(changed.name, changed.on)}</Alert> : null}
             {marked ? (
               <Alert tone="success">
-                {busy.length > 0 ? `Marked as read. Could not mark ${busy.join(", ")} as read; try again.` : "Marked as read."}
+                {busy.length > 0
+                  ? `Marked as read. Could not mark ${busy.join(", ")} as read; try again.`
+                  : markAllConfirmation(snoozesCleared)}
               </Alert>
             ) : null}
+            {read ? <Alert tone="success">Marked as read.</Alert> : null}
+            {snoozedText ? <Alert tone="success">{snoozedText}</Alert> : null}
+            {rowError ? <Alert tone="danger">{rowErrorText(rowError)}</Alert> : null}
             <Card
               title="Recent problems"
               actions={
@@ -86,7 +102,7 @@ export default async function NotificationsPage({ searchParams }: Props) {
               {panel.state === "all_muted" ? (
                 <p className="text-sm text-muted-foreground">Notifications are off for all of your projects.</p>
               ) : (
-                <NotificationList items={panel.items} now={now} />
+                <NotificationList items={panel.items} now={now} returnTo="/notifications" />
               )}
             </Card>
             <Card title="Projects" padded={false}>

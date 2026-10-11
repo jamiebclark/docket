@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
+import { createNotificationsRepo, newestAttentionSeq } from "../../../src/server/dal/notifications";
 import { LastOwnerError } from "../../../src/server/dal/errors";
-import { newestAttentionSeq } from "../../../src/server/dal/notifications";
 import { forMyProjects } from "../../../src/server/dal/my-projects";
 import { forProject } from "../../../src/server/dal/scope";
 import { runCrossProject } from "../../../src/server/db/cross-project";
@@ -13,7 +13,7 @@ import { recentPanel, unreadSummary } from "../../../src/server/services/notific
 import { fakeSession } from "../../helpers/auth";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers, createUser } from "../../helpers/factories";
-import { recordEvent, startReading } from "../../helpers/notifications";
+import { markEventFor, marksFor, recordEvent, startReading } from "../../helpers/notifications";
 
 afterAll(async () => {
   await closeDb();
@@ -31,6 +31,18 @@ const stateRows = (projectId: string, userId: string) =>
       .where(and(eq(notificationStates.projectId, projectId), eq(notificationStates.userId, userId))),
   );
 const set = async (userId: string) => forMyProjects({ user: { id: userId } });
+
+/** Gives a member a floor, a mute, a read-forever mark and a live snooze, all above the floor. */
+async function seedFullState(projectId: string, userId: string) {
+  const floored = await recordEvent(projectId, "target_failed");
+  await createNotificationsRepo(testDb(), projectId, userId).write({ markRead: true });
+  const read = await recordEvent(projectId, "target_failed");
+  const snoozed = await recordEvent(projectId, "target_failed");
+  await markEventFor(projectId, userId, read.id);
+  await markEventFor(projectId, userId, snoozed.id, new Date(Date.now() + 3_600_000));
+  await createNotificationsRepo(testDb(), projectId, userId).write({ markRead: false, muted: true });
+  return { floored, read, snoozed };
+}
 
 /**
  * A project with an owner, 20 earlier problems, and an invitation: "id" for an existing account (in-app),
@@ -96,22 +108,26 @@ describe("leaving and removal", () => {
     return { ...ctx, editor };
   }
 
-  it("remove deletes the row; the project leaves the count and the panel", async () => {
+  it("remove deletes the row and every mark; the project leaves the count and the panel", async () => {
     const ctx = await withEditor();
     await recordEvent(ctx.project.id, "target_failed");
+    await seedFullState(ctx.project.id, ctx.editor.id);
     expect(await stateRows(ctx.project.id, ctx.editor.id)).toHaveLength(1);
-    expect((await unreadSummary(await set(ctx.editor.id))).count).toBe(1);
+    expect(await marksFor(ctx.project.id, ctx.editor.id)).toHaveLength(2);
     await members.remove(await as(ctx, ctx.owner), { userId: ctx.editor.id });
     expect(await stateRows(ctx.project.id, ctx.editor.id)).toHaveLength(0);
+    expect(await marksFor(ctx.project.id, ctx.editor.id)).toHaveLength(0);
     const s = await set(ctx.editor.id);
     expect((await unreadSummary(s)).count).toBe(0);
     expect((await recentPanel(s, new Date())).state).toBe("no_projects");
   });
 
-  it("leave deletes the row, and rejoining starts fresh at the current position", async () => {
+  it("leave deletes the row and every mark, and rejoining starts fresh at the current position", async () => {
     const ctx = await withEditor();
+    await seedFullState(ctx.project.id, ctx.editor.id);
     await members.leave(await as(ctx, ctx.editor));
     expect(await stateRows(ctx.project.id, ctx.editor.id)).toHaveLength(0);
+    expect(await marksFor(ctx.project.id, ctx.editor.id)).toHaveLength(0);
     await recordEvent(ctx.project.id, "target_failed");
     const newest = await newestAttentionSeq(testDb(), ctx.project.id, ctx.owner.id);
     await (await as(ctx, ctx.owner)).transaction((tx) => tx.members.insert(ctx.editor.id, "editor"));
@@ -120,8 +136,9 @@ describe("leaving and removal", () => {
     expect((await unreadSummary(await set(ctx.editor.id))).count).toBe(0);
   });
 
-  it("a forced failure after the delete rolls the row back with it", async () => {
+  it("a forced failure after the delete rolls the row and every mark back with it", async () => {
     const ctx = await withEditor();
+    await seedFullState(ctx.project.id, ctx.editor.id);
     await expect(
       (await as(ctx, ctx.owner)).transaction(async (tx) => {
         await tx.members.delete(ctx.editor.id);
@@ -129,39 +146,50 @@ describe("leaving and removal", () => {
       }),
     ).rejects.toThrow("boom");
     expect(await stateRows(ctx.project.id, ctx.editor.id)).toHaveLength(1);
+    expect(await marksFor(ctx.project.id, ctx.editor.id)).toHaveLength(2);
   });
 
-  it("a last-owner refusal keeps the row", async () => {
+  it("a last-owner refusal keeps the row and its marks", async () => {
     const ctx = await createProjectWithMembers();
     await startReading(ctx.project.id, ctx.owner.id);
+    await seedFullState(ctx.project.id, ctx.owner.id);
     await expect(members.leave(await as(ctx, ctx.owner))).rejects.toBeInstanceOf(LastOwnerError);
     expect(await stateRows(ctx.project.id, ctx.owner.id)).toHaveLength(1);
+    expect(await marksFor(ctx.project.id, ctx.owner.id)).toHaveLength(2);
   });
 
-  it("a role change keeps the row untouched", async () => {
+  it("a role change keeps the row and its marks untouched", async () => {
     const ctx = await withEditor();
+    await seedFullState(ctx.project.id, ctx.editor.id);
     const [before] = await stateRows(ctx.project.id, ctx.editor.id);
+    const marksBefore = await marksFor(ctx.project.id, ctx.editor.id);
     await members.changeRole(await as(ctx, ctx.owner), { userId: ctx.editor.id, role: "admin" });
     const [after] = await stateRows(ctx.project.id, ctx.editor.id);
     expect(after).toEqual(before);
+    expect(await marksFor(ctx.project.id, ctx.editor.id)).toEqual(marksBefore);
   });
 });
 
 describe("cascades", () => {
-  it("deleting the project deletes its rows", async () => {
+  it("deleting the project deletes its rows and marks", async () => {
     const ctx = await createProjectWithMembers();
     const editor = await createUser();
     await (await as(ctx, ctx.owner)).transaction((tx) => tx.members.insert(editor.id, "editor"));
+    await seedFullState(ctx.project.id, editor.id);
     await runCrossProject("test", () => testDb().delete(organization).where(eq(organization.id, ctx.project.id)));
     expect(await stateRows(ctx.project.id, editor.id)).toHaveLength(0);
+    expect(await marksFor(ctx.project.id, editor.id)).toHaveLength(0);
   });
 
-  it("deleting the user deletes their rows", async () => {
+  it("deleting the user deletes their rows and marks", async () => {
     const ctx = await createProjectWithMembers();
     const editor = await createUser();
     await (await as(ctx, ctx.owner)).transaction((tx) => tx.members.insert(editor.id, "editor"));
+    await seedFullState(ctx.project.id, editor.id);
     expect(await stateRows(ctx.project.id, editor.id)).toHaveLength(1);
+    expect(await marksFor(ctx.project.id, editor.id)).toHaveLength(2);
     await runCrossProject("test", () => testDb().delete(userTable).where(eq(userTable.id, editor.id)));
     expect(await stateRows(ctx.project.id, editor.id)).toHaveLength(0);
+    expect(await marksFor(ctx.project.id, editor.id)).toHaveLength(0);
   });
 });

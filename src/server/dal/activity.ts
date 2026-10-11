@@ -143,9 +143,27 @@ function listBranch(
   limit: number,
   memberUserId: string | null,
   extra: BranchExtra | null = null,
+  marks: { userId: string } | null = null,
 ): SQL {
   const order = sql.raw(direction === "older" ? "DESC" : "ASC");
   const pid = window.projectId;
+  // The two anti-joins live inside the inner subquery, before LIMIT, so excluding a live snooze still
+  // leaves `limit` rows after the exclusion (data-model.md §4.5, M16).
+  const marksJoin = marks
+    ? sql`LEFT JOIN notification_event_marks snoozed
+            ON snoozed.project_id = activity_events.project_id
+           AND snoozed.user_id = ${marks.userId}
+           AND snoozed.event_id = activity_events.id
+           AND snoozed.counts_again_at > now() AND snoozed.counts_again_at < 'infinity'::timestamptz
+          LEFT JOIN notification_event_marks hidden
+            ON hidden.project_id = activity_events.project_id
+           AND hidden.user_id = ${marks.userId}
+           AND hidden.event_id = activity_events.id
+           AND hidden.counts_again_at > now()`
+    : sql``;
+  const marksFilter = marks ? sql`AND snoozed.event_id IS NULL` : sql``;
+  const marksSelect = marks ? sql`, (hidden.event_id IS NOT NULL) AS hidden_by_mark` : sql``;
+  const outerMarksSelect = marks ? sql`, ev.hidden_by_mark AS hidden_by_mark` : sql``;
   return sql`(SELECT
       ev.id AS id,
       ev.seq::text AS seq,
@@ -172,10 +190,12 @@ function listBranch(
       ${iso("posts.deleted_at")} AS post_deleted_iso,
       coalesce(post_targets.override_text, posts.base_text) AS post_text,
       post_targets.status::text AS target_status
+      ${outerMarksSelect}
     FROM (
-      SELECT activity_events.* FROM activity_events
+      SELECT activity_events.* ${marksSelect} FROM activity_events
       ${memberJoin(memberUserId)}
-      WHERE ${joinConds(branchConditions(window, q, position, extra))}
+      ${marksJoin}
+      WHERE ${joinConds(branchConditions(window, q, position, extra))} ${marksFilter}
       ORDER BY activity_events.occurred_at ${order}, activity_events.seq ${order}
       LIMIT ${limit + 1}
     ) AS ev
@@ -188,6 +208,10 @@ function listBranch(
 }
 
 type Row = Record<string, unknown>;
+
+function toAttentionRecord(r: Row): AttentionRecord {
+  return { ...toRecord(r), hiddenByMark: r.hidden_by_mark === true };
+}
 
 function toRecord(r: Row): ActivityRecord {
   return {
@@ -222,14 +246,24 @@ function rowsOf(result: unknown): Row[] {
   return (result as { rows: Row[] }).rows;
 }
 
+/** A panel row plus this person's mark state for it (data-model.md §4.5, M16). */
+export type AttentionRecord = ActivityRecord & {
+  /** A mark whose instant is still in the future: having excluded live snoozes, this means "read" (N20). */
+  hiddenByMark: boolean;
+};
+
 /** The read side over a fixed set of projects: every window must name one of them, or the call throws before any SQL runs. */
 export function createActivityReader(
   db: Database,
   allowedProjectIds: readonly string[],
   opts: { memberUserId?: string } = {},
 ): Pick<ActivityRepo, "list" | "summary"> & {
-  /** Attention events for `userId` (022): four equality-outcome branches per project, newest first, up to `limit`. */
-  listAttention(q: { projectIds: readonly string[]; userId: string; limit: number }): Promise<ActivityRecord[]>;
+  /**
+   * Attention events for `userId` (022): four equality-outcome branches per project, newest first, up to
+   * `limit`, with currently-snoozed events excluded and the caller's own read/snooze state on each row
+   * (data-model.md §4.5, M16).
+   */
+  listAttention(q: { projectIds: readonly string[]; userId: string; limit: number }): Promise<AttentionRecord[]>;
 } {
   const memberUserId = opts.memberUserId ?? null;
   const allowed = new Set(allowedProjectIds);
@@ -250,12 +284,14 @@ export function createActivityReader(
         const bq: BranchQuery = { ...base, windows: [{ projectId, from: null, to: null }] };
         const window = bq.windows[0]!;
         for (const outcomeEq of ATTENTION_MEMBER_OUTCOMES) {
-          branches.push(listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq }));
+          branches.push(listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq }, { userId: q.userId }));
         }
-        branches.push(listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq: CONNECT_FAILED, actorEq: q.userId }));
+        branches.push(
+          listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq: CONNECT_FAILED, actorEq: q.userId }, { userId: q.userId }),
+        );
       }
       const query = sql`SELECT * FROM (${sql.join(branches, sql` UNION ALL `)}) AS activity_attention ORDER BY occurred_at DESC, seq::bigint DESC LIMIT ${q.limit}`;
-      return rowsOf(await db.execute(query)).map(toRecord);
+      return rowsOf(await db.execute(query)).map(toAttentionRecord);
     },
     async list(q) {
       check(q);

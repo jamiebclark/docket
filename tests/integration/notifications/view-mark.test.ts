@@ -17,7 +17,7 @@ import { unreadSummary } from "../../../src/server/services/notifications";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
-import { recordEvent, startReading } from "../../helpers/notifications";
+import { markEventFor, marksFor, recordEvent, startReading } from "../../helpers/notifications";
 
 afterAll(async () => {
   actAs(null);
@@ -39,7 +39,7 @@ async function setup() {
   await recordEvent(b.id, "target_failed");
   actAs(u);
   const count = async () => (await unreadSummary(await forMyProjects({ user: { id: u.id } }))).count;
-  return { a, b, count };
+  return { a, b, u, count };
 }
 
 async function visit(path: string, extra: Record<string, string> = {}) {
@@ -101,6 +101,42 @@ function hasLeaf(node: ReactNode): boolean {
   if (node.type === NotificationsChanged) return true;
   return hasLeaf((node.props as { children?: ReactNode }).children);
 }
+
+describe("viewing the problems list prunes that project's marks (US3)", () => {
+  it("the project problems view prunes exactly that project's marks, touching no other project", async () => {
+    const { a, b, u } = await setup();
+    const readEvent = await recordEvent(a.id, "target_failed");
+    const snoozedEvent = await recordEvent(a.id, "target_ambiguous");
+    const otherEvent = await recordEvent(b.id, "target_failed");
+    await markEventFor(a.id, u.id, readEvent.id);
+    await markEventFor(a.id, u.id, snoozedEvent.id, new Date(Date.now() + 60 * 60 * 1000));
+    await markEventFor(b.id, u.id, otherEvent.id);
+    await visit(`/p/${a.slug}/activity?outcome=problems`);
+    expect(await marksFor(a.id, u.id)).toEqual([]);
+    expect((await marksFor(b.id, u.id)).length).toBe(1);
+  });
+
+  it("the all-activity-with-problems-preset first page prunes every shown project's marks", async () => {
+    const { a, b, u } = await setup();
+    const readEvent = await recordEvent(a.id, "target_failed");
+    const otherEvent = await recordEvent(b.id, "target_ambiguous");
+    await markEventFor(a.id, u.id, readEvent.id);
+    await markEventFor(b.id, u.id, otherEvent.id, new Date(Date.now() + 60 * 60 * 1000));
+    await visit("/activity?outcome=problems");
+    expect(await marksFor(a.id, u.id)).toEqual([]);
+    expect(await marksFor(b.id, u.id)).toEqual([]);
+  });
+
+  it("a prefetch, a filtered view and a later page prune nothing", async () => {
+    const { a, u } = await setup();
+    const readEvent = await recordEvent(a.id, "target_failed");
+    await markEventFor(a.id, u.id, readEvent.id);
+    await visit(`/p/${a.slug}/activity?outcome=problems`, { "next-router-prefetch": "1" });
+    await visit(`/p/${a.slug}/activity?outcome=problems&platform=bluesky`);
+    await visit(`/p/${a.slug}/activity?outcome=problems&before=abc`);
+    expect((await marksFor(a.id, u.id)).length).toBe(1);
+  });
+});
 
 describe("telling the bell", () => {
   it("resolves true only when the request marked a problems view", async () => {

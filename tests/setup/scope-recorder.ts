@@ -24,6 +24,11 @@ export function clearRecordedQueries(): void {
   records = [];
 }
 
+/** The SQL recorded so far in the current test, for assertions on shape (e.g. a `LIMIT`, an absent join). */
+export function getRecordedQueries(): readonly QueryRecord[] {
+  return records;
+}
+
 beforeEach(() => {
   records = [];
 });

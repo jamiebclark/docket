@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { createActivityRepo, type NewActivityEvent } from "../../src/server/dal/activity";
 import { createNotificationsRepo } from "../../src/server/dal/notifications";
 import type { ActivityKind } from "../../src/lib/activity/outcomes";
+import { EVENT_MARK_CAP } from "../../src/lib/notifications/attention";
+import { runCrossProject } from "../../src/server/db/cross-project";
 import { testDb } from "./db";
 
 const DETAILS: Record<ActivityKind, NewActivityEvent["details"]> = {
@@ -35,3 +38,55 @@ export function startReading(projectId: string, userId: string) {
 }
 
 export const ALL_KINDS = Object.keys(DETAILS) as ActivityKind[];
+
+/**
+ * Seeds one mark directly, bypassing the row-action transaction (no product path exists yet for an
+ * already-expired instant, since a live write would refuse to resolve a snooze that isn't in the future).
+ * No `until` is "read for ever"; a `Date` is a snooze until that instant, past or future.
+ */
+export async function markEventFor(projectId: string, userId: string, eventId: string, until?: Date): Promise<void> {
+  const db = testDb();
+  await runCrossProject("test: seed a notification mark", async () => {
+    const event = await db.execute(sql`SELECT seq::text AS seq FROM activity_events WHERE project_id = ${projectId} AND id = ${eventId}`);
+    const seq = (event.rows[0] as { seq: string } | undefined)?.seq;
+    if (seq === undefined) throw new Error(`markEventFor: no event ${eventId} in project ${projectId}`);
+    const countsAgainAt = until ? sql`${until.toISOString()}::timestamptz` : sql`'infinity'::timestamptz`;
+    await db.execute(sql`
+      INSERT INTO notification_event_marks (project_id, user_id, event_id, event_seq, counts_again_at)
+      VALUES (${projectId}, ${userId}, ${eventId}, ${seq}::bigint, ${countsAgainAt})
+      ON CONFLICT (project_id, user_id, event_id)
+      DO UPDATE SET counts_again_at = excluded.counts_again_at, updated_at = now()`);
+  });
+}
+
+/** Creates `EVENT_MARK_CAP` fresh attention events and marks every one read, filling the person's cap for this project. */
+export async function fillMarksToCap(projectId: string, userId: string): Promise<string[]> {
+  const eventIds: string[] = [];
+  for (let i = 0; i < EVENT_MARK_CAP; i++) {
+    const event = await recordEvent(projectId, "account_needs_reauth");
+    await markEventFor(projectId, userId, event.id);
+    eventIds.push(event.id);
+  }
+  return eventIds;
+}
+
+/** The person's marks for this project, as seeded or written — for assertions, not for product code. */
+export async function marksFor(
+  projectId: string,
+  userId: string,
+): Promise<{ eventId: string; eventSeq: string; countsAgainAt: "infinity" | string }[]> {
+  const db = testDb();
+  return runCrossProject("test: read notification marks", async () => {
+    const result = await db.execute(sql`
+      SELECT event_id, event_seq::text AS event_seq,
+        CASE WHEN counts_again_at = 'infinity'::timestamptz THEN 'infinity'
+             ELSE to_char(counts_again_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END AS counts_again_at
+      FROM notification_event_marks
+      WHERE project_id = ${projectId} AND user_id = ${userId}
+      ORDER BY event_seq`);
+    return result.rows.map((r) => {
+      const row = r as { event_id: string; event_seq: string; counts_again_at: string };
+      return { eventId: row.event_id, eventSeq: row.event_seq, countsAgainAt: row.counts_again_at };
+    });
+  });
+}

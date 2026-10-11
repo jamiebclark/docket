@@ -1,12 +1,24 @@
 import Link from "next/link";
+import type { RowDone } from "@/app/notifications/actions";
 import { Badge } from "@/components/ui/Badge";
 import { ProviderIcon } from "@/components/ui/Icon";
 import { RelativeTime } from "@/components/ui/RelativeTime";
 import { OUTCOME_TONE } from "@/lib/activity/outcomes";
 import type { NotificationItem } from "@/lib/notifications/types";
+import { NotificationRowActions } from "./NotificationRowActions";
 
 /** The problems, newest first. Shared by the header panel and /notifications; no server-only imports. */
-export function NotificationList({ items, now }: { items: NotificationItem[]; now: Date }) {
+export function NotificationList({
+  items,
+  now,
+  returnTo,
+  onRowDone,
+}: {
+  items: NotificationItem[];
+  now: Date;
+  returnTo?: "/notifications";
+  onRowDone?: (result: RowDone) => void;
+}) {
   if (items.length === 0) return <p className="text-sm text-muted-foreground">No problems in your projects.</p>;
   return (
     <ul className="divide-y divide-border">
@@ -39,6 +51,7 @@ export function NotificationList({ items, now }: { items: NotificationItem[]; no
               item.message
             )}
           </p>
+          <NotificationRowActions item={item} returnTo={returnTo} onDone={onRowDone} />
         </li>
       ))}
     </ul>

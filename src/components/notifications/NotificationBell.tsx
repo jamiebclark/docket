@@ -5,7 +5,7 @@ import { getSession } from "@/server/auth/session";
 import { forMyProjects } from "@/server/dal";
 import { unreadSummary } from "@/server/services/notifications";
 
-const NONE: UnreadSummary = { count: 0, display: "", label: "Notifications" };
+const NONE: UnreadSummary = { count: 0, display: "", label: "Notifications", nextChangeAt: null };
 
 /** The header bell with the person's unread count. A failure here never fails the page: the bell just shows no count. */
 export async function NotificationBell() {

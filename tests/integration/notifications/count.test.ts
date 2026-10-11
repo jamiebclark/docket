@@ -5,7 +5,7 @@ import { unreadSummary } from "../../../src/server/services/notifications";
 import { setNotificationsBySlug } from "../../../src/server/services/notifications";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
-import { ALL_KINDS, recordEvent, startReading } from "../../helpers/notifications";
+import { ALL_KINDS, markEventFor, recordEvent, startReading } from "../../helpers/notifications";
 
 afterAll(async () => {
   await closeDb();
@@ -76,6 +76,26 @@ describe("unread count", () => {
     const { a, u } = await twoProjects();
     await startReading(a.id, u.id);
     for (let i = 0; i < 150; i++) await recordEvent(a.id, "target_failed");
+    const seen: string[] = [];
+    const obs = (q: ObservedQuery) => seen.push(q.sql);
+    queryObservers.add(obs);
+    let result;
+    try {
+      result = await unreadSummary(await forMyProjects({ user: { id: u.id } }));
+    } finally {
+      queryObservers.delete(obs);
+    }
+    expect(result.count).toBe(100);
+    expect(result.display).toBe("99+");
+    expect(seen.some((s) => /limit\s+\$?\d+/i.test(s) && /union all/i.test(s))).toBe(true);
+  });
+
+  it("stops at 100 even with marks in play, still saying so in the SQL", async () => {
+    const { a, u } = await twoProjects();
+    await startReading(a.id, u.id);
+    const events = [];
+    for (let i = 0; i < 150; i++) events.push(await recordEvent(a.id, "target_failed"));
+    for (let i = 0; i < 50; i++) await markEventFor(a.id, u.id, events[i]!.id);
     const seen: string[] = [];
     const obs = (q: ObservedQuery) => seen.push(q.sql);
     queryObservers.add(obs);

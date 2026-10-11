@@ -1,37 +1,130 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { failFromError, ok, type ActionResult } from "@/lib/action-result";
+import { fail, failFromError, ok, type ActionResult } from "@/lib/action-result";
 import { getSession } from "@/server/auth/session";
 import { forMyProjects, NotFoundError, NotificationsBusyError } from "@/server/dal";
-import type { MuteErrorCode } from "@/lib/notifications/text";
+import type { MuteErrorCode, RowErrorCode } from "@/lib/notifications/text";
+import { markedReadConfirmation, rowErrorText, snoozedConfirmation } from "@/lib/notifications/text";
 import { ZodError } from "zod";
-import { markAllRead as markAllReadService, setNotificationsBySlug } from "@/server/services/notifications";
+import {
+  markAllRead as markAllReadService,
+  markEventRead as markEventReadService,
+  snoozeEvent as snoozeEventService,
+  NotificationMarkCapError,
+  setNotificationsBySlug,
+  unreadSummary as unreadSummaryService,
+  type RowActionResult,
+} from "@/server/services/notifications";
+import type { UnreadSummary } from "@/lib/notifications/types";
 
 /** Only the Notifications page itself: an absolute URL, a protocol-relative one or any other path is ignored. */
 function safeReturnTo(value: FormDataEntryValue | null): "/notifications" | null {
   return value === "/notifications" ? "/notifications" : null;
 }
 
+export interface RowDone {
+  eventId: string;
+  outcome: "read" | "snoozed" | "unchanged";
+  /** ISO 8601 UTC, for a snooze. */
+  snoozedUntil: string | null;
+  /** The sentence to announce politely; "" for `unchanged` (N12, FR-017). */
+  announcement: string;
+  unread: UnreadSummary;
+}
+
+function rowErrorCode(error: unknown): RowErrorCode | null {
+  if (error instanceof NotFoundError) return "not_found";
+  if (error instanceof NotificationsBusyError) return "busy";
+  if (error instanceof NotificationMarkCapError) return "at_cap";
+  if (error instanceof ZodError) return "invalid";
+  return null;
+}
+
+/** Maps a row-action failure the same way `setNotifications` already does for its own errors. */
+function failRow(error: unknown, returnTo: "/notifications" | null): ActionResult<RowDone> {
+  const code = rowErrorCode(error);
+  if (!code) return failFromError(error);
+  if (returnTo) redirect(`${returnTo}?rowError=${code}`);
+  return fail(code, rowErrorText(code));
+}
+
+function rowDone(result: RowActionResult): RowDone {
+  const outcome: RowDone["outcome"] = result.noop ? "unchanged" : result.until ? "snoozed" : "read";
+  const announcement = result.noop
+    ? ""
+    : result.until
+      ? snoozedConfirmation(result.until, result.timeZone)
+      : markedReadConfirmation(result.unread.count);
+  return {
+    eventId: result.eventId,
+    outcome,
+    snoozedUntil: result.until ? result.until.toISOString() : null,
+    announcement,
+    unread: result.unread,
+  };
+}
+
+/** "Mark read" on one problem. With `returnTo=/notifications` it redirects back; otherwise it returns in place. */
+export async function markEventRead(_prev: ActionResult<RowDone> | null, formData: FormData): Promise<ActionResult<RowDone>> {
+  const session = await getSession();
+  if (!session) redirect("/login?next=/notifications");
+  const returnTo = safeReturnTo(formData.get("returnTo"));
+  let result: RowActionResult;
+  try {
+    result = await markEventReadService(await forMyProjects(session), { eventId: formData.get("eventId") });
+  } catch (error) {
+    return failRow(error, returnTo);
+  }
+  const done = rowDone(result);
+  if (returnTo) redirect(`${returnTo}?read=1`);
+  return ok(done);
+}
+
+/** "Snooze" on one problem. With `returnTo=/notifications` it redirects back; otherwise it returns in place. */
+export async function snoozeEvent(_prev: ActionResult<RowDone> | null, formData: FormData): Promise<ActionResult<RowDone>> {
+  const session = await getSession();
+  if (!session) redirect("/login?next=/notifications");
+  const returnTo = safeReturnTo(formData.get("returnTo"));
+  let result: RowActionResult;
+  try {
+    result = await snoozeEventService(await forMyProjects(session), {
+      eventId: formData.get("eventId"),
+      choice: formData.get("choice"),
+    });
+  } catch (error) {
+    return failRow(error, returnTo);
+  }
+  const done = rowDone(result);
+  if (returnTo) redirect(`${returnTo}?snoozed=${encodeURIComponent(result.projectSlug)}&until=${encodeURIComponent(result.until!.toISOString())}`);
+  return ok(done);
+}
+
 /** Marks every project's problems read. With `returnTo=/notifications` it redirects back; otherwise it returns the count and any busy projects. */
 export async function markAllRead(
-  _prev: ActionResult<{ count: number; busy: string[] }> | null,
+  _prev: ActionResult<{ unread: UnreadSummary; busy: string[]; snoozesCleared: number }> | null,
   formData: FormData,
-): Promise<ActionResult<{ count: number; busy: string[] }>> {
+): Promise<ActionResult<{ unread: UnreadSummary; busy: string[]; snoozesCleared: number }>> {
   const session = await getSession();
   if (!session) redirect("/login?next=/notifications");
   const returnTo = safeReturnTo(formData.get("returnTo"));
   let busy: string[];
-  let count: number;
+  let snoozesCleared: number;
+  let unread: UnreadSummary;
   try {
     const set = await forMyProjects(session);
-    ({ busy } = await markAllReadService(set));
-    count = await set.notifications.countUnread();
+    ({ busy, snoozesCleared } = await markAllReadService(set));
+    unread = await unreadSummaryService(set);
   } catch (error) {
     return failFromError(error);
   }
-  if (returnTo) redirect(`${returnTo}?marked=1${busy.length > 0 ? `&busy=${encodeURIComponent(busy.join(","))}` : ""}`);
-  return ok({ count, busy });
+  if (returnTo) {
+    const params = new URLSearchParams({ marked: "1" });
+    if (busy.length > 0) params.set("busy", busy.join(","));
+    if (snoozesCleared > 0) params.set("snoozes", String(snoozesCleared));
+    redirect(`${returnTo}?${params.toString()}`);
+  }
+  return ok({ unread, busy, snoozesCleared });
 }
 
 /** Turns one project's notifications on or off, then returns to the page with a confirmation, or with the reason it failed. */

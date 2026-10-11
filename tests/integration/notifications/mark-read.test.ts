@@ -97,7 +97,7 @@ describe("marking read is exact", () => {
     await recordEvent(project.id, "target_failed");
     expect(await count(u.id)).toBe(2);
     const newest = await recordEvent(project.id, "target_failed");
-    expect(await repoOf(project.id, u.id).write({ markRead: true })).toBe("changed");
+    expect(await repoOf(project.id, u.id).write({ markRead: true })).toEqual({ outcome: "changed", snoozesCleared: 0 });
     expect(await count(u.id)).toBe(0);
     expect(await seenSeq(project.id, u.id)).toBe(await seqOf(newest.id));
   });
@@ -116,7 +116,7 @@ describe("marking read is exact", () => {
     const obs = (q: { sql: string }) => seen.push(q.sql);
     queryObservers.add(obs);
     try {
-      expect(await repoOf(project.id, u.id).write({ markRead: true })).toBe("unchanged");
+      expect(await repoOf(project.id, u.id).write({ markRead: true })).toEqual({ outcome: "unchanged", snoozesCleared: 0 });
     } finally {
       queryObservers.delete(obs);
     }
@@ -149,7 +149,7 @@ describe("concurrency (quickstart §2)", () => {
     expect(done).toBe(false);
     release();
     await writer;
-    expect(await mark).toBe("changed");
+    expect(await mark).toEqual({ outcome: "changed", snoozesCleared: 0 });
     expect(await seenSeq(project.id, u.id)).toBeGreaterThanOrEqual(await seqOf(writerId));
     expect(await count(u.id)).toBe(0);
   });
@@ -162,7 +162,7 @@ describe("concurrency (quickstart §2)", () => {
       writer = recordEvent(project.id, "target_failed");
       await waitForLockWait(); // the writer is blocked on FOR KEY SHARE behind the mark
     });
-    expect(await repoOf(project.id, u.id).write({ markRead: true })).toBe("changed");
+    expect(await repoOf(project.id, u.id).write({ markRead: true })).toEqual({ outcome: "changed", snoozesCleared: 0 });
     const late = await writer;
     expect(await seqOf(late.id)).toBeGreaterThan(await seenSeq(project.id, u.id));
     expect(await count(u.id)).toBe(1);
@@ -179,7 +179,7 @@ describe("concurrency (quickstart §2)", () => {
       await expect(markProblemsView(set, { kind: "project", slug: project.slug })).resolves.toBeUndefined();
       expect(await seenSeq(project.id, u.id)).toBe(before);
       await expect(repoOf(project.id, u.id).write({ markRead: true })).rejects.toBeInstanceOf(NotificationsBusyError);
-      expect(await markAllRead(set)).toEqual({ marked: 0, busy: ["Alpha"] });
+      expect(await markAllRead(set)).toEqual({ marked: 0, busy: ["Alpha"], snoozesCleared: 0 });
     } finally {
       await lock.release();
     }
@@ -198,5 +198,60 @@ describe("concurrency (quickstart §2)", () => {
     const marks = Promise.all([repoOf(project.id, u.id).write({ markRead: true }), repoOf(other.id, u.id).write({ markRead: true })]);
     const settled = await Promise.allSettled([writer, marks]);
     expect(settled.map((s) => s.status)).toEqual(["fulfilled", "fulfilled"]);
+  });
+});
+
+describe("markEvent — the row action (quickstart §2, FR-008, US3-AS5 to AS7)", () => {
+  it("two connections marking the same event read collapse to one row with the same count either way", async () => {
+    const { project, u } = await fixture();
+    const a = await recordEvent(project.id, "target_failed");
+    await recordEvent(project.id, "target_failed");
+    const [r1, r2] = await Promise.all([
+      repoOf(project.id, u.id).markEvent({ eventId: a.id, countsAgainAt: "never" }),
+      repoOf(project.id, u.id).markEvent({ eventId: a.id, countsAgainAt: "never" }),
+    ]);
+    expect([r1.kind, r2.kind].every((k) => k === "changed" || k === "unchanged")).toBe(true);
+    // The PK makes a duplicate row impossible; whether the mark itself or the floor it may have moved
+    // past covers `a`, exactly one event (the one never marked) is left unread.
+    expect(await count(u.id)).toBe(1);
+  });
+
+  it("two connections marking different events both survive and the floor never falls", async () => {
+    const { project, u } = await fixture();
+    const a = await recordEvent(project.id, "target_failed");
+    const b = await recordEvent(project.id, "target_failed");
+    const before = await seenSeq(project.id, u.id);
+    const [r1, r2] = await Promise.all([
+      repoOf(project.id, u.id).markEvent({ eventId: a.id, countsAgainAt: "never" }),
+      repoOf(project.id, u.id).markEvent({ eventId: b.id, countsAgainAt: "never" }),
+    ]);
+    expect(r1.kind).toBe("changed");
+    expect(r2.kind).toBe("changed");
+    expect(await seenSeq(project.id, u.id)).toBeGreaterThanOrEqual(before);
+    expect(await count(u.id)).toBe(0);
+  });
+
+  it("a held project lock with a lowered timeout raises NotificationsBusyError, writing nothing", async () => {
+    const { project, u } = await fixture();
+    const e = await recordEvent(project.id, "target_failed");
+    setNotificationsLockTimeoutForTests(150);
+    const before = await count(u.id);
+    const lock = await holdLock(project.id);
+    try {
+      await expect(repoOf(project.id, u.id).markEvent({ eventId: e.id, countsAgainAt: "never" })).rejects.toBeInstanceOf(NotificationsBusyError);
+    } finally {
+      await lock.release();
+    }
+    expect(await count(u.id)).toBe(before);
+  });
+
+  it("a row action on an event the floor has since passed is unchanged, not an error, and does not lower the floor", async () => {
+    const { project, u } = await fixture();
+    const e = await recordEvent(project.id, "target_failed");
+    await repoOf(project.id, u.id).write({ markRead: true });
+    const before = await seenSeq(project.id, u.id);
+    const result = await repoOf(project.id, u.id).markEvent({ eventId: e.id, countsAgainAt: "never" });
+    expect(result).toEqual({ kind: "unchanged" });
+    expect(await seenSeq(project.id, u.id)).toBe(before);
   });
 });
