@@ -76,7 +76,7 @@ describe("API keys page", () => {
     expect(out).toContain("30/min");
     expect(out).toContain("read, write_posts");
     expect(out).toContain("Active");
-    expect(out).toMatch(/Revoked \d{4}-\d{2}-\d{2} by /);
+    expect(out).toMatch(/Revoked \w{3}, \w{3} \d{1,2}, [^<]*by /);
     expect(out).toContain("Revoke the key n8n prod");
     expect(out).not.toContain(secret);
     expect(out).not.toContain(revoked.data.secret);

@@ -1,3 +1,4 @@
+import { formatLocal } from "@/lib/time/format";
 import { z } from "zod";
 import { docsUrl } from "@/lib/docs";
 import { TIKTOK_RECONNECT_NOTE_WINDOW_MS, tiktokAudited } from "./config";
@@ -15,14 +16,14 @@ export function unauditedNote(audited: boolean = tiktokAudited()): string | null
 }
 
 /** Plain text, no secrets (data-model §2). `now` absent: the reconnect note is left out. */
-export function tiktokAccountNotes(input: { settings: TikTokSettings; credentialsExpireAt: Date | null; now?: Date }): string[] {
+export function tiktokAccountNotes(input: { settings: TikTokSettings; credentialsExpireAt: Date | null; now?: Date; timeZone: string }): string[] {
   const notes: string[] = [];
   const unaudited = unauditedNote();
   if (unaudited) notes.push(unaudited);
   notes.push(PHOTO_DOMAIN_NOTE);
-  const { credentialsExpireAt, now } = input;
+  const { credentialsExpireAt, now, timeZone } = input;
   if (credentialsExpireAt && now && credentialsExpireAt.getTime() - now.getTime() <= TIKTOK_RECONNECT_NOTE_WINDOW_MS) {
-    notes.push(`Reconnect TikTok before ${credentialsExpireAt.toISOString().slice(0, 10)}`);
+    notes.push(`Reconnect TikTok before ${formatLocal(credentialsExpireAt, timeZone)}`);
   }
   return notes;
 }

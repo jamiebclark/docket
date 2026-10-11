@@ -1,19 +1,8 @@
+import { formatLocal } from "@/components/ui/LocalTime";
 import type { ActionResult } from "@/lib/action-result";
 import type { PlannedTime } from "@/server/services/queue";
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "2026-10-06T09:00 Europe/London" → "Tue 6 Oct 09:00 Europe/London". Anything else is returned as is. */
-export function formatPlanned(localTime: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::\d{2})?\s+(.+)$/.exec(localTime);
-  if (!m) return localTime;
-  const [, y, mo, d, hm, zone] = m;
-  const weekday = WEEKDAYS[new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d))).getUTCDay()];
-  return `${weekday} ${Number(d)} ${MONTHS[Number(mo) - 1]} ${hm} ${zone}`;
-}
-
-export const announceMoved = (localTime: string): string => `Moved to ${formatPlanned(localTime)}`;
+export const announceMoved = (scheduledAt: string, timeZone: string): string => `Moved to ${formatLocal(scheduledAt, timeZone)}`;
 
 /** A chip may only be dropped on an empty slot of its own account. */
 export function canDrop(chipAccountId: string, slotAccountId: string): boolean {
@@ -29,6 +18,8 @@ export interface EmptySlotRef {
 }
 
 export interface MoveDeps {
+  /** The project's zone, so announced times read like every other time in the app. */
+  timeZone: string;
   moveToOccurrence: (input: { targetId: string; slotId: string; scheduledAt: string }) => Promise<ActionResult<PlannedTime>>;
   announce: (message: string) => void;
   /** Called after a move or a stale refusal, so the page re-reads. */
@@ -55,7 +46,7 @@ export async function moveChipToSlot(
     return { ok: false, message: result.message };
   }
   deps.focusAfterRefresh(chip.targetId);
-  deps.announce(announceMoved(result.data.localTime));
+  deps.announce(announceMoved(result.data.scheduledAt, deps.timeZone));
   deps.refresh();
   return { ok: true };
 }

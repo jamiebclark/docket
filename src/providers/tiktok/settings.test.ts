@@ -3,6 +3,7 @@ import { PHOTO_DOMAIN_NOTE, UNAUDITED_NOTE, tiktokAccountNotes, tiktokSettingsSc
 
 const NOW = new Date("2026-10-01T00:00:00Z");
 const DAY = 86_400_000;
+const TZ = "America/New_York";
 afterEach(() => vi.unstubAllEnvs());
 
 describe("tiktokSettingsSchema", () => {
@@ -15,21 +16,21 @@ describe("tiktokSettingsSchema", () => {
 describe("tiktokAccountNotes", () => {
   it("lists the unaudited and photo-domain notes on an unaudited install", () => {
     vi.stubEnv("TIKTOK_APP_AUDITED", "false");
-    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: null, now: NOW })).toEqual([UNAUDITED_NOTE, PHOTO_DOMAIN_NOTE]);
+    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: null, now: NOW, timeZone: TZ })).toEqual([UNAUDITED_NOTE, PHOTO_DOMAIN_NOTE]);
   });
   it("drops the unaudited note once the app is audited", () => {
     vi.stubEnv("TIKTOK_APP_AUDITED", "true");
-    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: null, now: NOW })).toEqual([PHOTO_DOMAIN_NOTE]);
+    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: null, now: NOW, timeZone: TZ })).toEqual([PHOTO_DOMAIN_NOTE]);
   });
   it("adds the reconnect date within 30 days of expiry, and not beyond", () => {
     vi.stubEnv("TIKTOK_APP_AUDITED", "true");
     const within = new Date(NOW.getTime() + 30 * DAY);
-    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: within, now: NOW })).toContain("Reconnect TikTok before 2026-10-31");
+    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: within, now: NOW, timeZone: TZ })).toContain("Reconnect TikTok before Fri, Oct 30, 8:00 PM EDT");
     const beyond = new Date(NOW.getTime() + 30 * DAY + 1);
-    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: beyond, now: NOW })).toEqual([PHOTO_DOMAIN_NOTE]);
+    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: beyond, now: NOW, timeZone: TZ })).toEqual([PHOTO_DOMAIN_NOTE]);
   });
   it("leaves the reconnect note out without a clock", () => {
     vi.stubEnv("TIKTOK_APP_AUDITED", "true");
-    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: NOW })).toEqual([PHOTO_DOMAIN_NOTE]);
+    expect(tiktokAccountNotes({ settings: {}, credentialsExpireAt: NOW, timeZone: TZ })).toEqual([PHOTO_DOMAIN_NOTE]);
   });
 });

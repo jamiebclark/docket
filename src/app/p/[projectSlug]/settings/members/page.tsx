@@ -53,6 +53,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
       <PageHeader title="Members & invitations" description="Who works in this project, and invitations that haven't been accepted yet." />
       <MembersPanel
         slug={scope.project.slug}
+        timeZone={scope.project.timezone}
         members={memberList.map((m) => ({
           userId: m.userId,
           name: m.name,
@@ -69,6 +70,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
       {canViewInvitations ? (
         <InvitationsPanel
           slug={scope.project.slug}
+          timeZone={scope.project.timezone}
           canInvite={scope.can({ invitation: ["create"] })}
           canInviteOwner={canOwner}
           invitations={list.map((i) => ({
@@ -84,6 +86,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
       ) : null}
       {activity ? (
         <ActivityList
+          timeZone={scope.project.timezone}
           items={activity.map((a) => ({
             id: a.id,
             action: a.action,

@@ -57,7 +57,8 @@ describe("account notes (G13)", () => {
     const env = await connectNoted();
     const [a] = await accounts.listAccounts(env.scope);
     expect(a!.notes).toEqual(["Expiry is estimated.", "<b>plain text</b>"]);
-    expect(Object.keys(seen[0] as object).sort()).toEqual(["credentialsExpireAt", "now", "settings"]);
+    // The hook composes user-facing text, so it also gets the project zone — still never credentials.
+    expect(Object.keys(seen[0] as object).sort()).toEqual(["credentialsExpireAt", "now", "settings", "timeZone"]);
     expect((seen[0] as { credentialsExpireAt: Date }).credentialsExpireAt).toEqual(new Date("2031-01-01T00:00:00Z"));
     expect(JSON.stringify(seen)).not.toContain("SECRET-TOKEN");
   });

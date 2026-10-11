@@ -1,3 +1,4 @@
+import { formatLocal } from "@/components/ui/LocalTime";
 import type { ExplicitTimePreview } from "@/server/services/posts";
 import type { RequeuePreview } from "@/server/services/failures";
 import type { RetryResult } from "@/server/services/posts";
@@ -10,12 +11,14 @@ export function canConfirm(mode: RetryMode, preview: RequeuePreview | "loading" 
   return timePreview !== null && !timePreview.inPast;
 }
 
-export function retryAnnouncement(result: Extract<RetryResult, { status: "scheduled" }>): string {
+/** Times come from `scheduledAt` through `formatLocal`, never from `localTime` (see `PlannedTime`). */
+export function retryAnnouncement(result: Extract<RetryResult, { status: "scheduled" }>, timeZone: string): string {
   if (result.mode === "now") return "Retry queued for the next tick.";
+  const at = formatLocal(result.scheduledAt, timeZone);
   if (result.mode === "requeue") {
-    return `Retry scheduled for ${result.localTime} in the next free slot.${result.changedFromPreview ? " The previewed slot was taken, so the time changed." : ""}`;
+    return `Retry scheduled for ${at} in the next free slot.${result.changedFromPreview ? " The previewed slot was taken, so the time changed." : ""}`;
   }
-  return `Retry scheduled for ${result.localTime}.${result.warnings.map((w) => ` ${w.message}`).join("")}`;
+  return `Retry scheduled for ${at}.${result.warnings.map((w) => ` ${w.message}`).join("")}`;
 }
 
 export function confirmLabel(mode: RetryMode): string {

@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
 import { Cell, Row, Sub, Table } from "@/components/ui/Table";
+import { formatLocal, LocalTime } from "@/components/ui/LocalTime";
 import type { ActionResult } from "@/lib/action-result";
 import { inviteMember, regenerateInvitation, revokeInvitation, type DeliveryDto } from "./actions";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -28,15 +29,16 @@ type Link = { url: string; expiresAt: string; email: string };
 
 const tone = { pending: "neutral", expired: "warning", accepted: "success", declined: "neutral", revoked: "danger" } as const;
 const label = { pending: "Pending", expired: "Expired", accepted: "Accepted", declined: "Declined", revoked: "Revoked" } as const;
-const when = (iso: string) => new Date(iso).toUTCString();
 
 export function InvitationsPanel({
   slug,
+  timeZone,
   invitations,
   canInvite,
   canInviteOwner,
 }: {
   slug: string;
+  timeZone: string;
   invitations: InvitationView[];
   canInvite: boolean;
   canInviteOwner: boolean;
@@ -52,7 +54,7 @@ export function InvitationsPanel({
       {link ? (
         <div role="region" aria-label="Invitation link" className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
           <p className="text-sm">
-            Send this link to {link.email}. It is shown only once and expires on {when(link.expiresAt)}.
+            Send this link to {link.email}. It is shown only once and expires on {formatLocal(link.expiresAt, timeZone)}.
           </p>
           <CopyField id="invitation-link" label="Invitation link" value={link.url} />
           <Button variant="secondary" className="self-start" onClick={() => setLink(null)}>
@@ -65,7 +67,7 @@ export function InvitationsPanel({
       ) : (
         <Table caption="Invitations" columns={["Invitation", "Role", "Status", "Actions"]}>
           {invitations.map((inv) => (
-            <InvitationRow key={inv.id} slug={slug} inv={inv} onLink={setLink} />
+            <InvitationRow key={inv.id} slug={slug} timeZone={timeZone} inv={inv} onLink={setLink} />
           ))}
         </Table>
       )}
@@ -125,7 +127,7 @@ function InviteForm({
   );
 }
 
-function InvitationRow({ slug, inv, onLink }: { slug: string; inv: InvitationView; onLink: (l: Link | null) => void }) {
+function InvitationRow({ slug, timeZone, inv, onLink }: { slug: string; timeZone: string; inv: InvitationView; onLink: (l: Link | null) => void }) {
   const [regen, regenAction, regenerating] = useActionState<ActionResult<DeliveryDto> | null, FormData>(regenerateInvitation, null);
   const [revoked, revokeAction, revoking] = useActionState<ActionResult<DeliveryDto> | null, FormData>(revokeInvitation, null);
   const [confirming, setConfirming] = useState(false);
@@ -147,7 +149,7 @@ function InvitationRow({ slug, inv, onLink }: { slug: string; inv: InvitationVie
       <Cell>
         <Badge tone={tone[inv.status]}>{label[inv.status]}</Badge>
         <Sub>
-          Expires <time dateTime={inv.expiresAt}>{when(inv.expiresAt)}</time>
+          Expires <LocalTime value={inv.expiresAt} timeZone={timeZone} />
         </Sub>
       </Cell>
       <Cell>

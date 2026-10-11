@@ -51,7 +51,7 @@ const invite = (role: string) => ({
 });
 
 const panel = (canInviteOwner: boolean) =>
-  renderToStaticMarkup(<InvitationsPanel slug="acme" invitations={[]} canInvite canInviteOwner={canInviteOwner} />);
+  renderToStaticMarkup(<InvitationsPanel slug="acme" timeZone="America/New_York" invitations={[]} canInvite canInviteOwner={canInviteOwner} />);
 
 describe("invite form", () => {
   it("owner sees three role cards with Editor checked", () => {

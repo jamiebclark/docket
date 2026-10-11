@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
-import { LocalTime } from "@/components/ui/LocalTime";
+import { formatLocal, LocalTime } from "@/components/ui/LocalTime";
 import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import type { ApiKeyDto } from "./dto";
 import { CreateKeyForm } from "./CreateKeyForm";
@@ -55,7 +55,7 @@ export function ApiKeysPanel({ slug, timeZone, keys }: { slug: string; timeZone:
                 {k.status === "expired" ? <Badge>Expired</Badge> : null}
                 {k.status === "revoked" ? (
                   <Badge>
-                    Revoked{k.revokedAt ? ` ${new Date(k.revokedAt).toISOString().slice(0, 10)}` : ""}
+                    Revoked{k.revokedAt ? ` ${formatLocal(k.revokedAt, timeZone)}` : ""}
                     {k.revokedBy ? ` by ${k.revokedBy}` : ""}
                   </Badge>
                 ) : null}

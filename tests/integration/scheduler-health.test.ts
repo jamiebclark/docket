@@ -73,7 +73,7 @@ describe("SchedulerHealth rendering", () => {
     expect(html).toContain("Scheduler ran");
     expect(html).toContain("40 s ago");
     expect(html).toContain('<time dateTime="2026-10-03T14:05:10.000Z"');
-    expect(html).toContain("Sat, 3 Oct 2026");
+    expect(html).toContain("Sat, Oct 3,");
     expect(html).toContain(TZ);
     expect(html).not.toContain("alert");
     expect(render("banner", ok)).toBe("");

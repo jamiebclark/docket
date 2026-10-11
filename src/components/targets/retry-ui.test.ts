@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { canConfirm, confirmLabel, retryAnnouncement } from "./retry-ui";
 
+const TZ = "America/New_York";
 const okPreview = { ok: true as const, scheduledAt: "2026-10-12T09:00:00.000Z", localTime: "Mon 9:00", slotId: "s" };
 const badPreview = { ok: false as const, code: "no_free_occurrence" as const, message: "none" };
 const time = (inPast: boolean) => ({ kind: "exact" as const, instant: "2026-10-12T09:00:00.000Z", resolvedLocal: "2026-10-12T09:00", inPast, warnings: [] });
@@ -35,18 +36,18 @@ describe("canConfirm", () => {
 
 describe("retryAnnouncement", () => {
   it("now", () => {
-    expect(retryAnnouncement(scheduled({}))).toBe("Retry queued for the next tick.");
+    expect(retryAnnouncement(scheduled({}), TZ)).toBe("Retry queued for the next tick.");
   });
   it("requeue, with and without a changed slot", () => {
-    expect(retryAnnouncement(scheduled({ mode: "requeue" }))).toBe("Retry scheduled for Mon 12 Oct, 9:00 in the next free slot.");
-    expect(retryAnnouncement(scheduled({ mode: "requeue", changedFromPreview: true }))).toBe(
-      "Retry scheduled for Mon 12 Oct, 9:00 in the next free slot. The previewed slot was taken, so the time changed.",
+    expect(retryAnnouncement(scheduled({ mode: "requeue" }), TZ)).toBe("Retry scheduled for Mon, Oct 12, 5:00 AM EDT in the next free slot.");
+    expect(retryAnnouncement(scheduled({ mode: "requeue", changedFromPreview: true }), TZ)).toBe(
+      "Retry scheduled for Mon, Oct 12, 5:00 AM EDT in the next free slot. The previewed slot was taken, so the time changed.",
     );
   });
   it("at, with warnings", () => {
-    expect(retryAnnouncement(scheduled({ mode: "at" }))).toBe("Retry scheduled for Mon 12 Oct, 9:00.");
-    expect(retryAnnouncement(scheduled({ mode: "at", warnings: [{ message: "Close to another post." }] }))).toBe(
-      "Retry scheduled for Mon 12 Oct, 9:00. Close to another post.",
+    expect(retryAnnouncement(scheduled({ mode: "at" }), TZ)).toBe("Retry scheduled for Mon, Oct 12, 5:00 AM EDT.");
+    expect(retryAnnouncement(scheduled({ mode: "at", warnings: [{ message: "Close to another post." }] }), TZ)).toBe(
+      "Retry scheduled for Mon, Oct 12, 5:00 AM EDT. Close to another post.",
     );
   });
 });

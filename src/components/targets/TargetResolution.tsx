@@ -6,6 +6,7 @@ import { Button, ButtonGroup } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { controlStyles, hintStyles, labelStyles } from "@/components/ui/controls";
 import { useAnnounce } from "@/components/ui/Announce";
+import { formatLocal } from "@/components/ui/LocalTime";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { ActionResult } from "@/lib/action-result";
 import type { FailureActions, RequeuePreview } from "@/server/services/failures";
@@ -15,12 +16,12 @@ import { cancelTargetAction, previewRequeueAction, resolveTargetAction } from "@
 
 type Kind = "cancel" | "published" | "not-published" | "retry" | null;
 
-function announce(result: ResolveResult): string {
+/** Times come from `scheduledAt` through `formatLocal`, never from `localTime` (see `PlannedTime`). */
+function announce(result: ResolveResult, timeZone: string): string {
   if (result.status === "published") return "Marked published.";
   if (result.status === "scheduled") {
-    return result.changedFromPreview
-      ? `Scheduled for ${result.localTime} (the previewed slot was taken).`
-      : `Scheduled for ${result.localTime}.`;
+    const at = formatLocal(result.scheduledAt, timeZone);
+    return result.changedFromPreview ? `Scheduled for ${at} (the previewed slot was taken).` : `Scheduled for ${at}.`;
   }
   return result.reason === "no_free_slot"
     ? "No free slot was left, so it's marked failed. Retry or schedule it."
@@ -108,7 +109,7 @@ export function TargetResolution({
           requeue,
           ...(requeue && preview && preview !== "loading" && preview.ok ? { expected: preview.scheduledAt } : {}),
         }),
-      (data) => setMessage(announce(data)),
+      (data) => setMessage(announce(data, timeZone)),
     );
 
   return (
@@ -205,7 +206,7 @@ export function TargetResolution({
           <Button
             pending={pending}
             pendingLabel="Saving…"
-            onClick={() => run(() => resolveTargetAction(slug, { targetId, outcome: "published", url }), (d) => setMessage(announce(d)))}
+            onClick={() => run(() => resolveTargetAction(slug, { targetId, outcome: "published", url }), (d) => setMessage(announce(d, timeZone)))}
           >
             Mark as published
           </Button>
@@ -218,7 +219,7 @@ export function TargetResolution({
             <p className="text-sm">Finding the next free slot…</p>
           ) : preview.ok ? (
             <p className="text-sm">
-              It will go out in the next free slot for {accountName}: {preview.localTime}.
+              It will go out in the next free slot for {accountName}: {formatLocal(preview.scheduledAt, timeZone)}.
             </p>
           ) : (
             <p className="text-sm">{preview.message}</p>

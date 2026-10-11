@@ -1,3 +1,5 @@
+import { LocalTime } from "@/components/ui/LocalTime";
+
 const LABEL: Record<string, string> = {
   invite: "invited",
   invite_regenerate: "regenerated an invitation for",
@@ -27,7 +29,7 @@ export interface ActivityItem {
   createdAt: string;
 }
 
-export function ActivityList({ items }: { items: ActivityItem[] }) {
+export function ActivityList({ items, timeZone }: { items: ActivityItem[]; timeZone: string }) {
   return (
     <section aria-labelledby="activity-heading" className="flex flex-col gap-3">
       <h2 id="activity-heading" className="text-lg font-semibold">
@@ -39,9 +41,9 @@ export function ActivityList({ items }: { items: ActivityItem[] }) {
         <ol className="flex flex-col gap-1 text-sm">
           {items.map((i) => (
             <li key={i.id}>
-              <time dateTime={i.createdAt} className="mr-2 text-muted-foreground">
-                {new Date(i.createdAt).toUTCString()}
-              </time>
+              <span className="mr-2 text-muted-foreground">
+                <LocalTime value={i.createdAt} timeZone={timeZone} />
+              </span>
               {i.actor} {LABEL[i.action] ?? i.action} {i.subject}
             </li>
           ))}

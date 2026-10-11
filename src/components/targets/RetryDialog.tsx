@@ -7,6 +7,7 @@ import { Field } from "@/components/ui/Field";
 import { explicitTimeText } from "@/components/schedule/explicit-time-text";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useAnnounce } from "@/components/ui/Announce";
+import { formatLocal } from "@/components/ui/LocalTime";
 import type { RequeuePreview } from "@/server/services/failures";
 import type { ExplicitTimePreview, RetryResult } from "@/server/services/posts";
 import { previewExplicitTimeAction } from "@/app/p/[projectSlug]/compose/actions";
@@ -88,7 +89,7 @@ export function RetryDialog({
   const requeueDescription = loading
     ? "Finding the next free slot…"
     : preview.ok
-      ? `${preview.localTime} — the next free slot for ${accountName}.`
+      ? `${formatLocal(preview.scheduledAt, timeZone)} — the next free slot for ${accountName}.`
       : preview.message;
 
   function confirm() {
@@ -104,7 +105,7 @@ export function RetryDialog({
       if (res.ok && res.data.status === "scheduled") {
         setDone(true);
         onClose();
-        ctx?.announce(retryAnnouncement(res.data));
+        ctx?.announce(retryAnnouncement(res.data, timeZone));
         onDone(res.data);
         return;
       }

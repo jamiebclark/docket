@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { DecisionForm } from "@/components/invitations/DecisionForm";
 import { SignedInHeader } from "@/components/shell/SignedInHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { getSession } from "@/server/auth/session";
 import * as invitations from "@/server/services/invitations";
 import { roleDescription, roleLabel } from "@/lib/roles/roles";
@@ -33,7 +34,7 @@ export default async function InvitationsPage() {
                 <p className="font-medium">{inv.projectName}</p>
                 <p className="text-sm">
                   Join as <strong>{roleLabel(inv.role)}</strong>. Invited by {inv.inviterName}. Expires{" "}
-                  <time dateTime={inv.expiresAt.toISOString()}>{inv.expiresAt.toUTCString()}</time>.
+                  <LocalTime value={inv.expiresAt} timeZone={inv.projectTimeZone} />.
                 </p>
                 <p className="text-sm text-muted-foreground">{roleDescription(inv.role)}</p>
               </div>

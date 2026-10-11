@@ -488,7 +488,7 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   stepFor(state: State | null, settings: Settings, content: StepContent): StepInfo;
   advance(ctx: PublishContext): Promise<StepResult>;
   /** Pure. Non-secret notes shown on the account card. Never receives credentials. A throw or a non-array → []. */
-  accountNotes?(input: { settings: Settings; credentialsExpireAt: Date | null; now?: Date }): string[];
+  accountNotes?(input: { settings: Settings; credentialsExpireAt: Date | null; now?: Date; timeZone: string }): string[];
   posting?: PostingDeclaration;
   accountDetails?: AccountDetailsReader<Settings>;
   consent?: ConsentDeclaration;
