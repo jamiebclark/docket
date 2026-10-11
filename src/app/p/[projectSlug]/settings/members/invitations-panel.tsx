@@ -7,7 +7,7 @@ import { CopyField } from "@/components/ui/CopyField";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
-import { Cell, Row, Table } from "@/components/ui/Table";
+import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import type { ActionResult } from "@/lib/action-result";
 import { inviteMember, regenerateInvitation, revokeInvitation, type DeliveryDto } from "./actions";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -63,7 +63,7 @@ export function InvitationsPanel({
       {invitations.length === 0 ? (
         <EmptyState message="No invitations yet." />
       ) : (
-        <Table caption="Invitations" columns={["Email", "Role", "Status", "Invited by", "Expires", "Actions"]}>
+        <Table caption="Invitations" columns={["Invitation", "Role", "Status", "Actions"]}>
           {invitations.map((inv) => (
             <InvitationRow key={inv.id} slug={slug} inv={inv} onLink={setLink} />
           ))}
@@ -139,14 +139,16 @@ function InvitationRow({ slug, inv, onLink }: { slug: string; inv: InvitationVie
 
   return (
     <Row>
-      <Cell header>{inv.email}</Cell>
+      <Cell header>
+        {inv.email}
+        <Sub>Invited by {inv.inviterName}</Sub>
+      </Cell>
       <Cell>{roleLabel(inv.role)}</Cell>
       <Cell>
         <Badge tone={tone[inv.status]}>{label[inv.status]}</Badge>
-      </Cell>
-      <Cell>{inv.inviterName}</Cell>
-      <Cell>
-        <time dateTime={inv.expiresAt}>{when(inv.expiresAt)}</time>
+        <Sub>
+          Expires <time dateTime={inv.expiresAt}>{when(inv.expiresAt)}</time>
+        </Sub>
       </Cell>
       <Cell>
         {open && inv.canManage ? (

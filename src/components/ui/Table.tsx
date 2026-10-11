@@ -8,14 +8,22 @@ const MAX_LABELLED_COLUMNS = 10;
  * From `sm` up it is a normal table (scrolling sideways if it must); on phones each row stacks
  * into a card, with every cell labelled by its column name. The labels come from CSS variables
  * set here, so rows can be rendered by any component, server or client.
+ *
+ * Keep tables to **five columns or fewer** — facts that answer the same question share a cell
+ * and stack with `Sub`, rather than each claiming a column of its own (design system §7).
+ *
+ * `grouped` leaves the `<tbody>` to the caller, for rows that come in labelled groups or carry
+ * a full-width detail row: supply `RowGroup`s instead of `Row`s.
  */
 export function Table({
   caption,
   columns,
+  grouped = false,
   children,
 }: {
   caption: string;
   columns: string[];
+  grouped?: boolean;
   children: ReactNode;
 }) {
   const labels = Object.fromEntries(
@@ -34,14 +42,18 @@ export function Table({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-border max-sm:block">{children}</tbody>
+        {grouped ? children : <tbody className="divide-y divide-border max-sm:block">{children}</tbody>}
       </table>
     </div>
   );
 }
 
-export function Row({ children }: { children: ReactNode }) {
-  return <tr className="transition-colors hover:bg-muted/40 max-sm:block max-sm:py-2">{children}</tr>;
+export function Row({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <tr id={id} className="scroll-mt-[calc(var(--sticky-top)+1rem)] transition-colors hover:bg-muted/40 max-sm:block max-sm:py-2">
+      {children}
+    </tr>
+  );
 }
 
 export function Cell({ children, header = false }: { children: ReactNode; header?: boolean }) {
@@ -53,5 +65,55 @@ export function Cell({ children, header = false }: { children: ReactNode; header
     <td className="px-4 py-3 align-top max-sm:flex max-sm:items-start max-sm:gap-3 max-sm:px-4 max-sm:py-1.5">
       <div className="min-w-0 max-sm:flex-1">{children}</div>
     </td>
+  );
+}
+
+/**
+ * A secondary line inside a cell — the qualifier that used to be a column of its own ("3 attempts",
+ * the platform under an account name, when a post was meant to go out). Quiet and one step smaller
+ * than the cell's first line, so a cell reads top-down instead of the table growing sideways.
+ */
+export function Sub({ children }: { children: ReactNode }) {
+  return <div className="mt-0.5 text-xs text-muted-foreground">{children}</div>;
+}
+
+/**
+ * A `<tbody>` of rows that belong together: one subject's `Row` plus any `DetailRow`, optionally
+ * under a `heading` naming the group (`<th scope="rowgroup">`). Use inside `<Table grouped>`.
+ */
+export function RowGroup({
+  id,
+  heading,
+  span,
+  children,
+}: {
+  id?: string;
+  heading?: ReactNode;
+  /** Number of columns the heading row spans — pass the table's column count. */
+  span?: number;
+  children: ReactNode;
+}) {
+  return (
+    <tbody id={id} className="border-t border-border first-of-type:border-t-0 max-sm:block">
+      {heading ? (
+        <tr className="bg-muted/60 max-sm:block">
+          <th scope="rowgroup" colSpan={span} className="px-4 py-2 text-left font-medium max-sm:block">
+            {heading}
+          </th>
+        </tr>
+      ) : null}
+      {children}
+    </tbody>
+  );
+}
+
+/** A full-width row under its `Row`, for a detail panel that needs the whole table width. */
+export function DetailRow({ span, children }: { span?: number; children: ReactNode }) {
+  return (
+    <tr className="max-sm:block">
+      <td colSpan={span} className="px-4 pb-3 max-sm:block max-sm:px-4">
+        {children}
+      </td>
+    </tr>
   );
 }

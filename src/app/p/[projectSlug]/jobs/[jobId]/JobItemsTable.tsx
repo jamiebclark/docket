@@ -1,8 +1,28 @@
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Cell, Row, Table } from "@/components/ui/Table";
+import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import type { JobItemView } from "@/server/services/jobs";
 import { RetryButton } from "./RetryButtons";
+
+/** Why an item is not a post yet: the failure message, or the reason it was skipped. */
+function Detail({ slug, item }: { slug: string; item: JobItemView }) {
+  if (item.status === "failed" && item.error) return <Sub>{item.error.message}</Sub>;
+  if (item.status === "skipped" && item.skipped)
+    return (
+      <Sub>
+        {item.skipped.reason}
+        {item.skipped.postId ? (
+          <>
+            {" "}
+            <Link href={`/p/${slug}/posts/${item.skipped.postId}`} className="underline">
+              View post
+            </Link>
+          </>
+        ) : null}
+      </Sub>
+    );
+  return null;
+}
 
 export function JobItemsTable({
   slug,
@@ -16,46 +36,41 @@ export function JobItemsTable({
   canRetry: boolean;
 }) {
   return (
-    <Table caption="Job items" columns={["#", "Item", "Status", "Attempts", "Post", "Detail", "Actions"]}>
+    <Table caption="Job items" columns={["Item", "Status", "Post", "Actions"]}>
       {items.map((item) => (
         <Row key={item.id}>
-          <Cell>{item.position + 1}</Cell>
-          <Cell>
+          <Cell header>
             <span className="flex items-center gap-2">
               {item.media?.thumbnailUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={item.media.thumbnailUrl} alt={item.media.altText} width={40} height={40} className="h-10 w-10 rounded object-cover" />
               ) : null}
-              <span>{item.label}</span>
+              <span className="min-w-0">
+                <span>{item.label}</span>
+                <Sub>#{item.position + 1}</Sub>
+              </span>
             </span>
           </Cell>
           <Cell>
             <StatusBadge status={item.status} />
+            <Sub>
+              {item.attemptCount} {item.attemptCount === 1 ? "attempt" : "attempts"}
+            </Sub>
+            <Detail slug={slug} item={item} />
           </Cell>
-          <Cell>{item.attemptCount}</Cell>
           <Cell>
             {item.post ? (
-              <span className="flex flex-wrap items-center gap-2">
+              <>
                 <Link href={`/p/${slug}/posts/${item.post.id}`} className="underline">
                   View post
                 </Link>
-                <StatusBadge status={item.post.reviewState} />
-                <StatusBadge status={item.post.status} />
-              </span>
-            ) : null}
-          </Cell>
-          <Cell>
-            {item.status === "failed" && item.error ? (
-              item.error.message
-            ) : item.status === "skipped" && item.skipped ? (
-              <span className="flex flex-wrap items-center gap-2">
-                {item.skipped.reason}
-                {item.skipped.postId ? (
-                  <Link href={`/p/${slug}/posts/${item.skipped.postId}`} className="underline">
-                    View post
-                  </Link>
-                ) : null}
-              </span>
+                <Sub>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge status={item.post.reviewState} />
+                    <StatusBadge status={item.post.status} />
+                  </span>
+                </Sub>
+              </>
             ) : null}
           </Cell>
           <Cell>{canRetry && item.status === "failed" ? <RetryButton slug={slug} jobId={jobId} itemId={item.id} /> : null}</Cell>

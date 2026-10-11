@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { Cell, Row, Table } from "@/components/ui/Table";
+import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import { EVENT_LABELS, type EndpointDto } from "./dto";
 import { EndpointForm } from "./EndpointForm";
 import { EndpointRowActions } from "./EndpointRowActions";
@@ -33,29 +33,29 @@ export function WebhooksPanel({ slug, timeZone, endpoints }: { slug: string; tim
       {endpoints.length === 0 ? (
         <EmptyState message="No webhook endpoints yet. Add one to get notified instead of polling." />
       ) : (
-        <Table caption="Webhook endpoints" columns={["Endpoint", "Description", "Events", "Status", "Last delivery", "Actions"]}>
+        <Table caption="Webhook endpoints" columns={["Endpoint", "Events", "Status", "Actions"]}>
           {endpoints.map((e) => (
             <Row key={e.id}>
               <Cell header>
                 <Link href={`/p/${slug}/settings/webhooks/${e.id}`} className="underline">
                   {e.host + new URL(e.url).pathname}
                 </Link>
+                {e.description ? <Sub>{e.description}</Sub> : null}
               </Cell>
-              <Cell>{e.description || "—"}</Cell>
               <Cell>{e.events.map((t) => EVENT_LABELS[t] ?? t).join(", ")}</Cell>
               <Cell>
                 <StatusBadge endpoint={e} />
-              </Cell>
-              <Cell>
-                {e.lastDelivery ? (
-                  <>
-                    {e.lastDelivery.status === "succeeded" ? "Succeeded " : e.lastDelivery.status === "failed" ? "Failed " : "Pending "}
-                    <LocalTime value={e.lastDelivery.at} timeZone={timeZone} />
-                    {e.lastDelivery.status === "failed" && e.lastDelivery.statusCode ? ` (${e.lastDelivery.statusCode})` : ""}
-                  </>
-                ) : (
-                  "None yet"
-                )}
+                <Sub>
+                  {e.lastDelivery ? (
+                    <>
+                      {e.lastDelivery.status === "succeeded" ? "Succeeded " : e.lastDelivery.status === "failed" ? "Failed " : "Pending "}
+                      <LocalTime value={e.lastDelivery.at} timeZone={timeZone} />
+                      {e.lastDelivery.status === "failed" && e.lastDelivery.statusCode ? ` (${e.lastDelivery.statusCode})` : ""}
+                    </>
+                  ) : (
+                    "No deliveries yet"
+                  )}
+                </Sub>
               </Cell>
               <Cell>
                 <EndpointRowActions slug={slug} id={e.id} host={e.host} enabled={e.enabled} onDone={done} />

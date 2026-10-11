@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 /**
  * - `primary`: deep purple, the one main action of a form or page.
@@ -60,5 +60,19 @@ export function Button({
     >
       {pending && pendingLabel ? pendingLabel : children}
     </button>
+  );
+}
+
+/**
+ * Two or three buttons that answer **one** question, drawn as a single joined control on a muted
+ * track — "Published / Not published", never "Mark published" beside "Mark not published…". The
+ * shared verb lives in `label` (the group's accessible name), so each button carries only the word
+ * that sets it apart. Put `ghost` buttons inside; for a value a form submits use `SegmentedControl`.
+ */
+export function ButtonGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex w-fit gap-1 rounded-lg border border-input bg-muted/60 p-1">
+      {children}
+    </div>
   );
 }

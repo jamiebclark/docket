@@ -2,13 +2,14 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { ProviderIcon } from "@/components/ui/Icon";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { Cell, Row, Sub } from "@/components/ui/Table";
 import { OUTCOME_LABEL, OUTCOME_TONE } from "@/lib/activity/outcomes";
-import type { ActivityRow as Row } from "@/server/services/activity";
+import type { ActivityRow as RowData } from "@/server/services/activity";
 
 const isoString = (v: unknown): string | null => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? v : null);
 
 /** The row's details as text, never raw JSON. */
-function Details({ row }: { row: Row }) {
+function Details({ row }: { row: RowData }) {
   const d = row.details;
   const tz = row.project.timeZone;
   const next = isoString(d.nextAttemptAt);
@@ -17,7 +18,7 @@ function Details({ row }: { row: Row }) {
   return (
     <>
       {typeof d.attempt === "number" ? (
-        <div className="text-xs text-muted-foreground">
+        <Sub>
           Attempt {d.attempt}
           {next ? (
             <>
@@ -25,12 +26,12 @@ function Details({ row }: { row: Row }) {
               <LocalTime value={next} timeZone={tz} />
             </>
           ) : null}
-        </div>
+        </Sub>
       ) : null}
       {scheduled ? (
-        <div className="text-xs text-muted-foreground">
+        <Sub>
           Requeued for <LocalTime value={scheduled} timeZone={tz} />
-        </div>
+        </Sub>
       ) : null}
       {url ? (
         <div className="text-xs">
@@ -43,35 +44,34 @@ function Details({ row }: { row: Row }) {
   );
 }
 
-export function ActivityRow({ row, showProject }: { row: Row; showProject: boolean }) {
+export function ActivityRow({ row, showProject }: { row: RowData; showProject: boolean }) {
   const platform = row.platform ?? row.platforms[0] ?? null;
   return (
-    <tr className="border-b border-border align-top">
-      <td className="px-2 py-2 whitespace-nowrap">
-        <LocalTime value={row.occurredAt} timeZone={row.project.timeZone} />
-      </td>
-      <td className="px-2 py-2">
-        <Badge tone={OUTCOME_TONE[row.outcome]}>{OUTCOME_LABEL[row.outcome]}</Badge>
-      </td>
-      <td className="px-2 py-2">
+    <Row>
+      <Cell>
+        <span className="whitespace-nowrap">
+          <LocalTime value={row.occurredAt} timeZone={row.project.timeZone} />
+        </span>
+      </Cell>
+      <Cell>
         {platform ? (
           <div className="flex items-center gap-2">
             <ProviderIcon providerKey={platform.key} size={24} />
-            <div>
-              <div className="font-medium">{platform.name}</div>
-              {row.account ? <div className="text-xs text-muted-foreground">{row.account.name}</div> : null}
+            <div className="min-w-0">
+              <div>{platform.name}</div>
+              {row.account ? <Sub>{row.account.name}</Sub> : null}
             </div>
           </div>
         ) : (
           "—"
         )}
-      </td>
-      <td className="px-2 py-2">
+      </Cell>
+      <Cell>
         {row.post ? (
           row.post.deleted ? (
             <span>
               Post deleted
-              {row.post.excerpt ? <span className="text-muted-foreground"> · {row.post.excerpt}</span> : null}
+              {row.post.excerpt ? <Sub>{row.post.excerpt}</Sub> : null}
             </span>
           ) : (
             <Link href={`/p/${row.project.slug}/posts/${row.post.id}`} className="underline">
@@ -81,26 +81,27 @@ export function ActivityRow({ row, showProject }: { row: Row; showProject: boole
         ) : (
           "—"
         )}
-      </td>
-      <td className="px-2 py-2">
-        <div>{row.message}</div>
+      </Cell>
+      <Cell>
+        <Badge tone={OUTCOME_TONE[row.outcome]}>{OUTCOME_LABEL[row.outcome]}</Badge>
+        <div className="mt-0.5">{row.message}</div>
         <Details row={row} />
-      </td>
-      <td className="px-2 py-2">{row.actorLabel}</td>
+        <Sub>by {row.actorLabel}</Sub>
+      </Cell>
       {showProject ? (
-        <td className="px-2 py-2">
+        <Cell>
           <Link href={`/p/${row.project.slug}/activity`} className="underline">
             {row.project.name}
           </Link>
-        </td>
+        </Cell>
       ) : null}
-      <td className="px-2 py-2 whitespace-nowrap">
+      <Cell>
         {row.link ? (
-          <Link href={row.link.href} className="underline">
+          <Link href={row.link.href} className="whitespace-nowrap underline">
             {row.link.label}
           </Link>
         ) : null}
-      </td>
-    </tr>
+      </Cell>
+    </Row>
   );
 }

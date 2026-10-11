@@ -4,9 +4,26 @@ import type { NextConfig } from "next";
 // plus multipart overhead. Applies to Server Actions and to bodies buffered through the proxy.
 export const UPLOAD_BODY_LIMIT = "26mb";
 
+/**
+ * Hostnames allowed to reach the dev server's own assets, from `DEV_ORIGINS` (comma-separated,
+ * hostnames only — no scheme, no port). Empty by default, so this changes nothing unless set.
+ *
+ * `next dev` already allows localhost and the hostname it started with, and blocks cross-origin
+ * requests to dev-only assets otherwise. The failure is quiet and easy to misread: the page
+ * renders and Next's runtime loads, but React never hydrates, so every form falls back to a
+ * native submit and nothing interactive works. Set this when reaching the dev server by LAN
+ * address or through a tunnel — a phone on the same network, or a browser that cannot use
+ * loopback. Development only; `next build` ignores it.
+ */
+const devOrigins = (process.env.DEV_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const nextConfig: NextConfig = {
   // Self-contained server bundle for the Docker image (see Dockerfile).
   output: "standalone",
+  ...(devOrigins.length > 0 ? { allowedDevOrigins: devOrigins } : {}),
   // Migrations are read from disk at startup; trace them into the standalone output.
   outputFileTracingIncludes: { "/*": ["./drizzle/**/*"] },
   experimental: {

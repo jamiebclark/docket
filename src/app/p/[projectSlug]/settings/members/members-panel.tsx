@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Cell, Row, Table } from "@/components/ui/Table";
+import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import type { ActionResult } from "@/lib/action-result";
 import { changeMemberRole, leaveProject, removeMember, transferOwnership } from "./actions";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -37,7 +37,7 @@ export function MembersPanel({ slug, members }: { slug: string; members: MemberI
       <h2 id="members-heading" className="text-lg font-semibold">
         Members
       </h2>
-      <Table caption="Members" columns={["Name", "Email", "Role", "Joined", "Actions"]}>
+      <Table caption="Members" columns={["Member", "Role", "Actions"]}>
         {members.map((m) => (
           <MemberRow key={m.userId} slug={slug} m={m} />
         ))}
@@ -56,8 +56,11 @@ function MemberRow({ slug, m }: { slug: string; m: MemberItem }) {
       <Cell header>
         {m.name}
         {m.isSelf ? <span className="ml-2"><Badge>You</Badge></span> : null}
+        <Sub>{m.email}</Sub>
+        <Sub>
+          Joined <time dateTime={m.joinedAt}>{joined(m.joinedAt)}</time>
+        </Sub>
       </Cell>
-      <Cell>{m.email}</Cell>
       <Cell>
         {m.canChangeRole ? (
           <form action={roleAction} className="flex flex-wrap items-center gap-2">
@@ -78,9 +81,6 @@ function MemberRow({ slug, m }: { slug: string; m: MemberItem }) {
         ) : (
           <span>{roleLabel(m.role)}</span>
         )}
-      </Cell>
-      <Cell>
-        <time dateTime={m.joinedAt}>{joined(m.joinedAt)}</time>
       </Cell>
       <Cell>
         <div className="flex flex-wrap gap-2">

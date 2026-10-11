@@ -16,10 +16,14 @@
  * (published, failed, ambiguous) that only the scheduler can reach; those are written
  * directly and marked below.
  */
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { getDb } from "../src/server/db/client";
 import { postTargets, posts } from "../src/server/db/schema/posts";
 import { projects } from "../src/server/db/schema/projects";
+import { installState } from "../src/server/db/schema/install";
+import { externalItemClaims } from "../src/server/db/schema/external-claims";
+import { generationJobItems, generationJobs } from "../src/server/db/schema/jobs";
+import { voiceProfileVersions } from "../src/server/db/schema/generation";
 import { organization, user } from "../src/server/db/schema/auth";
 import { forProject } from "../src/server/dal/scope";
 import type { ProjectScope } from "../src/server/dal/scope";
@@ -60,23 +64,42 @@ function assertLocal(url: string): void {
   }
 }
 
-/** The first account if there is none yet, otherwise the existing owner by email. */
+/**
+ * The first account if there is none yet, otherwise the existing owner by email.
+ *
+ * Setup is gated by an `install_state` singleton, not by the user table, so deleting users
+ * alone leaves setup permanently closed and no way back to a first account. On a local
+ * database with no users left, clear it and bootstrap again — otherwise the only recovery is
+ * dropping the whole database.
+ */
 async function ownerUserId(): Promise<string> {
+  const db = getDb();
   if (await isAvailable()) {
     const created = await createFirstUser(OWNER);
     console.log(`  created the first account: ${created.email}`);
     return created.userId;
   }
-  const rows = await getDb().select({ id: user.id }).from(user).where(eq(user.email, OWNER.email)).limit(1);
+
+  const rows = await db.select({ id: user.id }).from(user).where(eq(user.email, OWNER.email)).limit(1);
   const found = rows[0];
-  if (!found) {
+  if (found) {
+    console.log(`  reusing the existing account: ${OWNER.email}`);
+    return found.id;
+  }
+
+  const [remaining] = await db.select({ n: count() }).from(user);
+  if ((remaining?.n ?? 0) > 0) {
     throw new Error(
       `Accounts already exist but none is "${OWNER.email}". Sign in as a user you have and seed ` +
         `from the UI, or point DATABASE_URL at an empty database.`,
     );
   }
-  console.log(`  reusing the existing account: ${OWNER.email}`);
-  return found.id;
+
+  console.log("  no users left but setup was closed; reopening it");
+  await db.delete(installState);
+  const created = await createFirstUser(OWNER);
+  console.log(`  created the first account: ${created.email}`);
+  return created.userId;
 }
 
 /**
@@ -133,6 +156,95 @@ async function forceTargetState(
   await db.update(postTargets).set({ ...common, ...extra }).where(eq(postTargets.postId, postId));
   const postStatus = state === "ambiguous" ? "partially_failed" : state;
   await db.update(posts).set({ status: postStatus }).where(eq(posts.id, postId));
+}
+
+/**
+ * A finished batch job whose items cover done, failed and skipped.
+ *
+ * Skipped is the one state no amount of clicking will produce locally: an item is skipped
+ * when its `externalId` was already claimed by an earlier post, which needs the ledger row
+ * *and* a successful model call to have made that post. Without it the Skipped badge, its
+ * Detail link and the Skipped filter tab cannot be looked at outside production.
+ *
+ * `toItemView` builds the skipped detail by reading `sourceMeta.sourceKey` off the job and
+ * looking up `(sourceKey, externalId)` in the claims ledger, so all three have to agree for
+ * the row to link to the post that covers it.
+ */
+async function seedJobWithSkippedItem(
+  scope: ProjectScope,
+  opts: { projectId: string; accountIds: string[]; voiceProfileId: string; claimedPostId: string; donePostId: string },
+): Promise<void> {
+  const db = getDb();
+  const sourceKey = "demo-source";
+  const externalId = "record-4815";
+
+  const versions = await db
+    .select({ id: voiceProfileVersions.id })
+    .from(voiceProfileVersions)
+    .where(eq(voiceProfileVersions.profileId, opts.voiceProfileId))
+    .limit(1);
+  const versionId = versions[0]?.id;
+  if (!versionId) throw new Error("The voice profile has no version row; cannot seed a job.");
+
+  // The claim that makes the third item skip: this external id already became a post.
+  await db.insert(externalItemClaims).values({
+    projectId: opts.projectId,
+    sourceKey,
+    externalId,
+    postId: opts.claimedPostId,
+  });
+
+  const [job] = await db
+    .insert(generationJobs)
+    .values({
+      projectId: opts.projectId,
+      sourceKind: "api",
+      sourceSummary: "Items sent through the API",
+      sourceMeta: { open: false, sourceKey },
+      voiceProfileId: opts.voiceProfileId,
+      voiceProfileVersionId: versionId,
+      template: "Write a short post about {{title}}.",
+      templateFields: ["title"],
+      targetAccountIds: opts.accountIds,
+      approvalPolicy: "review_required",
+      schedulingPolicy: "leave_as_draft",
+      status: "completed_with_failures",
+      itemCount: 3,
+      // `generation_jobs_finished_pair` requires a finish time once the status is terminal.
+      startedAt: new Date(Date.now() - 10 * 60_000),
+      finishedAt: new Date(Date.now() - 9 * 60_000),
+    })
+    .returning({ id: generationJobs.id });
+  if (!job) throw new Error("Could not create the demo job.");
+
+  const now = new Date();
+  const items = await db
+    .insert(generationJobItems)
+    .values([
+      {
+        projectId: opts.projectId, jobId: job.id, position: 0, label: "A record that worked",
+        payload: { title: "a traffic cone" }, externalId: "record-1123", status: "done", finishedAt: now,
+      },
+      {
+        projectId: opts.projectId, jobId: job.id, position: 1, label: "A record that failed",
+        payload: { title: "a filing cabinet" }, externalId: "record-2242", status: "failed",
+        attemptCount: 3, lastErrorKind: "rate_limited",
+        lastError: "The model provider is rate limiting requests. Try again in a minute.", finishedAt: now,
+      },
+      {
+        projectId: opts.projectId, jobId: job.id, position: 2, label: "A record already posted",
+        payload: { title: "a traffic cone" }, externalId, status: "skipped", finishedAt: now,
+      },
+    ])
+    .returning({ id: generationJobItems.id, position: generationJobItems.position });
+
+  // The done item shows its post through `posts.findByJobItemId`; point one at position 0.
+  const doneItem = items.find((i) => i.position === 0);
+  if (doneItem) {
+    await db.update(posts).set({ generationJobItemId: doneItem.id }).where(eq(posts.id, opts.donePostId));
+  }
+
+  console.log(`  1 job: done, failed and skipped (skipped links to the post claiming "${externalId}")`);
 }
 
 async function main(): Promise<number> {
@@ -225,6 +337,19 @@ async function main(): Promise<number> {
     if (entry) await forceTargetState(entry.id, label, now);
   }
   console.log(`  ${made.length} posts: ${made.map((m) => m.label).join(", ")}`);
+
+  const claimed = made.find((m) => m.label === "published");
+  const doneFor = made.find((m) => m.label === "approved");
+  if (claimed && doneFor) {
+    console.log("Batch job");
+    await seedJobWithSkippedItem(scope, {
+      projectId: scope.project.id,
+      accountIds: accounts.map((a) => a.id),
+      voiceProfileId: voice.profileId,
+      claimedPostId: claimed.id,
+      donePostId: doneFor.id,
+    });
+  }
 
   console.log(`\nDone. Sign in at /login as ${OWNER.email} with the password ${OWNER.password}`);
   console.log(`Then open /p/${slug}/calendar`);

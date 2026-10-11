@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { attemptActorLabel } from "@/lib/failures/attempt-actor";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
@@ -9,8 +8,10 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as posts from "@/server/services/posts";
+import { groupAttemptRuns } from "@/server/services/failures";
 import { preparingVideoLabel } from "@/server/services/posts/view";
 import { AnnounceProvider } from "@/components/ui/Announce";
+import { AttemptLog } from "@/components/targets/AttemptLog";
 import { TargetResolution } from "@/components/targets/TargetResolution";
 import { safeExternalHref } from "@/lib/safe-redirect";
 import { DeletePostButton } from "./DeletePostButton";
@@ -18,22 +19,6 @@ import { buttonStyles } from "@/components/ui/Button";
 
 export const metadata: Metadata = { title: "Post" };
 export const dynamic = "force-dynamic";
-
-function Pairs({ value }: { value: Record<string, unknown> }) {
-  const entries = Object.entries(value);
-  if (entries.length === 0) return <span aria-label="empty">—</span>;
-  return (
-    <ul className="space-y-0.5">
-      {entries.map(([k, v]) => (
-        <li key={k}>
-          <code>
-            {k}: {typeof v === "string" ? v : JSON.stringify(v)}
-          </code>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export default async function PostPage({ params }: { params: Promise<{ projectSlug: string; postId: string }> }) {
   const { projectSlug, postId } = await params;
@@ -183,39 +168,9 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
           {t.attempts.length === 0 ? (
             <p className="mt-1 text-sm">No attempts yet.</p>
           ) : (
-            <table className="mt-1 w-full border-collapse text-left text-xs">
-              <caption className="sr-only">Attempts for {t.accountName}</caption>
-              <thead>
-                <tr className="border-b border-border">
-                  {["Time", "Step", "Outcome", "Who", "Request", "Response"].map((c) => (
-                    <th key={c} scope="col" className="px-2 py-1 font-medium">
-                      {c}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {t.attempts.map((a) => (
-                  <tr key={a.id} className="border-b border-border align-top">
-                    <td className="px-2 py-1">
-                      <LocalTime value={a.at} timeZone={tz} />
-                    </td>
-                    <td className="px-2 py-1">{a.step}</td>
-                    <td className="px-2 py-1">
-                      {a.outcome.replaceAll("_", " ")}
-                      {a.error ? <div className="text-danger">{a.error}</div> : null}
-                    </td>
-                    <td className="px-2 py-1">{attemptActorLabel(a.actor)}</td>
-                    <td className="px-2 py-1">
-                      <Pairs value={a.request} />
-                    </td>
-                    <td className="px-2 py-1">
-                      <Pairs value={a.response} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="mt-1">
+              <AttemptLog runs={groupAttemptRuns(t.attempts)} timeZone={tz} caption={`Attempts for ${t.accountName}`} />
+            </div>
           )}
         </section>
       ))}

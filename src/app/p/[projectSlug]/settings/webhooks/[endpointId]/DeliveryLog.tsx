@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { Cell, Row, Table } from "@/components/ui/Table";
+import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import { resendDeliveryAction } from "../actions";
 import { EVENT_LABELS } from "../dto";
 
@@ -56,17 +56,32 @@ export function DeliveryLog({
   return (
     <div className="flex flex-col gap-2">
       <LiveRegion message={message} />
-      <Table
-        caption="Deliveries, newest first"
-        columns={["Event", "Created", "Status", "Attempts", "Next attempt", "Last result", "Resend"]}
-      >
+      <Table caption="Deliveries, newest first" columns={["Event", "Status", "Last result", "Resend"]}>
         {deliveries.map((d) => (
           <Row key={d.id}>
             <Cell header>
               {EVENT_LABELS[d.eventType] ?? d.eventType} <code className="font-mono text-xs">{d.eventId.slice(0, 8)}</code>
+              <Sub>
+                <LocalTime value={d.createdAt} timeZone={timeZone} />
+              </Sub>
+            </Cell>
+            <Cell>
+              <Badge tone={STATUS_TONE[d.status]}>{STATUS_LABEL[d.status]}</Badge>
+              <Sub>
+                {d.attemptCount} of {d.maxAttempts} attempts
+                {d.nextAttemptAt ? (
+                  <>
+                    {" · next "}
+                    <LocalTime value={d.nextAttemptAt} timeZone={timeZone} />
+                  </>
+                ) : null}
+              </Sub>
+            </Cell>
+            <Cell>
+              {d.result}
               {d.attempts.length > 0 ? (
                 <details className="mt-1 text-xs font-normal">
-                  <summary>Attempts</summary>
+                  <summary className="text-muted-foreground">Each attempt</summary>
                   <ol className="mt-1 flex flex-col gap-1">
                     {d.attempts.map((a) => (
                       <li key={a.attempt}>
@@ -79,19 +94,8 @@ export function DeliveryLog({
               ) : null}
             </Cell>
             <Cell>
-              <LocalTime value={d.createdAt} timeZone={timeZone} />
-            </Cell>
-            <Cell>
-              <Badge tone={STATUS_TONE[d.status]}>{STATUS_LABEL[d.status]}</Badge>
-            </Cell>
-            <Cell>
-              {d.attemptCount} of {d.maxAttempts}
-            </Cell>
-            <Cell>{d.nextAttemptAt ? <LocalTime value={d.nextAttemptAt} timeZone={timeZone} /> : "—"}</Cell>
-            <Cell>{d.result}</Cell>
-            <Cell>
               {enabled && d.status !== "pending" && d.status !== "delivering" ? (
-                <Button variant="secondary" pending={pending} onClick={() => resend(d.id)} aria-label={`Resend delivery ${d.eventId.slice(0, 8)}`}>
+                <Button variant="secondary" size="sm" pending={pending} onClick={() => resend(d.id)} aria-label={`Resend delivery ${d.eventId.slice(0, 8)}`}>
                   Resend
                 </Button>
               ) : null}

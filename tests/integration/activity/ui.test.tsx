@@ -57,7 +57,7 @@ describe("activity list markup", () => {
   it("renders an accessible table with the outcome as text", () => {
     const html = list([row(), row({ outcome: "published", kind: "target_published", message: "Published." })]);
     expect(html).toContain('<caption class="sr-only">');
-    expect((html.match(/<th scope="col"/g) ?? []).length).toBe(7);
+    expect((html.match(/<th scope="col"/g) ?? []).length).toBe(5);
     expect(html).toContain("Failed");
     expect(html).toContain("Published");
     expect(html).toContain("Open in Failures");

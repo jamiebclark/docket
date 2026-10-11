@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { COMPOSE_ONLY_VARIABLES, INTERNAL_VARIABLES } from "../../src/server/config-registry";
+import { COMPOSE_ONLY_VARIABLES, DEV_ONLY_VARIABLES, INTERNAL_VARIABLES } from "../../src/server/config-registry";
 import { ENV_VARIABLES } from "../../src/server/env";
 import { LLM_VARIABLES } from "../../src/server/llm/config";
 import { listConnectGroups } from "../../src/providers/registry";
@@ -48,6 +48,7 @@ const KNOWN = new Set([
   ...CONFIGURABLE,
   ...Object.keys(INTERNAL_VARIABLES),
   ...Object.keys(COMPOSE_ONLY_VARIABLES),
+  ...Object.keys(DEV_ONLY_VARIABLES),
 ]);
 const EXAMPLE = readFileSync(join(ROOT, ".env.example"), "utf8");
 const LINES = EXAMPLE.split("\n");
@@ -67,9 +68,9 @@ describe("environment variable coverage", () => {
     expect(unknown).toEqual([]);
   });
 
-  it("every configurable and compose-only variable is in .env.example with description, marker and default", () => {
+  it("every configurable, compose-only and dev-only variable is in .env.example with description, marker and default", () => {
     const problems: string[] = [];
-    for (const name of [...CONFIGURABLE, ...Object.keys(COMPOSE_ONLY_VARIABLES)]) {
+    for (const name of [...CONFIGURABLE, ...Object.keys(COMPOSE_ONLY_VARIABLES), ...Object.keys(DEV_ONLY_VARIABLES)]) {
       const at = LINES.findIndex((l) => ASSIGN(name).test(l));
       if (at < 0) {
         problems.push(`${name}: missing`);
@@ -97,6 +98,7 @@ describe("environment variable coverage", () => {
       "Public API and webhooks",
       "Compose-only",
       "Smoke script",
+      "Development only",
     ];
     const at = order.map((g) => LINES.findIndex((l) => l.startsWith(`# --- ${g}`)));
     expect(at.every((i) => i >= 0), JSON.stringify(at)).toBe(true);

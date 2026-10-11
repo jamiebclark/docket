@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { Cell, Row, Table } from "@/components/ui/Table";
+import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import type { ApiKeyDto } from "./dto";
 import { CreateKeyForm } from "./CreateKeyForm";
 import { RevokeKeyDialog } from "./RevokeKeyDialog";
@@ -21,27 +21,35 @@ export function ApiKeysPanel({ slug, timeZone, keys }: { slug: string; timeZone:
       {keys.length === 0 ? (
         <EmptyState message="No API keys yet. Create one to connect n8n or another tool." />
       ) : (
-        <Table
-          caption="API keys"
-          columns={["Name", "Key", "Permissions", "Rate limit", "Created by", "Created", "Last used", "Expires", "Status", "Actions"]}
-        >
+        <Table caption="API keys" columns={["Key", "Permissions", "Created", "Status", "Actions"]}>
           {keys.map((k) => (
             <Row key={k.id}>
-              <Cell header>{k.name}</Cell>
-              <Cell>
-                <code className="font-mono text-xs">{k.display}</code>
+              <Cell header>
+                {k.name}
+                <Sub>
+                  <code className="font-mono">{k.display}</code>
+                </Sub>
               </Cell>
-              <Cell>{k.permissions.join(", ")}</Cell>
-              <Cell>{k.rateLimitPerMinute}/min</Cell>
               <Cell>
-                {k.createdBy.name}
-                {k.createdBy.isMember ? "" : " (no longer a member)"}
+                {k.permissions.join(", ")}
+                <Sub>{k.rateLimitPerMinute}/min</Sub>
               </Cell>
               <Cell>
                 <LocalTime value={k.createdAt} timeZone={timeZone} />
+                <Sub>
+                  by {k.createdBy.name}
+                  {k.createdBy.isMember ? "" : " (no longer a member)"}
+                </Sub>
+                <Sub>
+                  {k.lastUsedAt ? (
+                    <>
+                      Last used <LocalTime value={k.lastUsedAt} timeZone={timeZone} />
+                    </>
+                  ) : (
+                    "Never used"
+                  )}
+                </Sub>
               </Cell>
-              <Cell>{k.lastUsedAt ? <LocalTime value={k.lastUsedAt} timeZone={timeZone} /> : "Never"}</Cell>
-              <Cell>{k.expiresAt ? <LocalTime value={k.expiresAt} timeZone={timeZone} /> : "Never"}</Cell>
               <Cell>
                 {k.status === "active" ? <Badge tone="success">Active</Badge> : null}
                 {k.status === "expired" ? <Badge>Expired</Badge> : null}
@@ -51,6 +59,15 @@ export function ApiKeysPanel({ slug, timeZone, keys }: { slug: string; timeZone:
                     {k.revokedBy ? ` by ${k.revokedBy}` : ""}
                   </Badge>
                 ) : null}
+                <Sub>
+                  {k.expiresAt ? (
+                    <>
+                      Expires <LocalTime value={k.expiresAt} timeZone={timeZone} />
+                    </>
+                  ) : (
+                    "No expiry"
+                  )}
+                </Sub>
               </Cell>
               <Cell>
                 {k.status === "revoked" ? null : (

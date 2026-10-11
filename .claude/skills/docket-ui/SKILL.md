@@ -15,7 +15,7 @@ over fancy.** Every screen must be fully usable from the keyboard.
   about to use (Next 16 differs from older versions — see `AGENTS.md`).
 - Reuse components in `src/components/ui/` before adding new ones (`Button` /
   `buttonStyles()`, `Field`, `Select`, `controlStyles`, `Card`, `PageHeader`,
-  `Table`, `Badge`/`StatusBadge`, `Alert`, `EmptyState`, `FilterTabs`,
+  `Table`/`Row`/`Cell`/`Sub`, `Badge`/`StatusBadge`, `Alert`, `EmptyState`, `FilterTabs`,
   `Dialog`, `Menu`, `Pagination`, `Skeleton`, `Icon`). Multi-line text uses
   `TextareaField`, never a raw `<textarea>`. If you add one, put it there with
   a short JSDoc comment on its props and list it in the design doc.
@@ -65,8 +65,18 @@ over fancy.** Every screen must be fully usable from the keyboard.
   the shell offsets from `var(--sticky-top)`, never `top-0`.
 
 ## Lists, tables, calendar
-- Tables use real `<table>` markup with `<th scope>`. Filters are links/
-  search params (shareable URLs), not hidden client state.
+- Tables use the shared `Table` / `Row` / `Cell` primitives (real `<table>`
+  markup with `<th scope>`). Filters are links/search params (shareable URLs),
+  not hidden client state.
+- **Five columns or fewer.** A row answers who / what / why / what now — one
+  column each, with the facts that qualify an answer stacked inside the cell as
+  `Sub` lines ("3 attempts" under the error, the platform under the account
+  name). Never a column of counts, and never a column that is "—" on most rows.
+  Log and detail tables are `text-xs` and four columns at most. See
+  `docs/design-system.md` §7 "Column grouping".
+- Mutually exclusive answers to one question are one `ButtonGroup`, not a
+  button each — the shared verb goes in the group label and the dialog, not in
+  both button labels.
 - Status badges use text + colour (never colour alone). Post statuses:
   draft, needs_review, approved, scheduled, publishing, published,
   partially_failed, failed; target `ambiguous` is shown in amber with

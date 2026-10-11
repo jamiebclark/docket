@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonGroup } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { controlStyles, hintStyles, labelStyles } from "@/components/ui/controls";
 import { useAnnounce } from "@/components/ui/Announce";
@@ -133,11 +133,19 @@ export function TargetResolution({
           Cancel
         </Button>
       ) : null}
-      {actions.canMarkPublished ? <Button onClick={() => setOpen("published")}>Mark published</Button> : null}
-      {actions.canMarkNotPublished ? (
-        <Button variant="secondary" onClick={openNotPublished}>
-          Mark not published…
-        </Button>
+      {actions.canMarkPublished || actions.canMarkNotPublished ? (
+        <ButtonGroup label={`Did this post go out to ${accountName}?`}>
+          {actions.canMarkPublished ? (
+            <Button variant="ghost" size="sm" onClick={() => setOpen("published")}>
+              Published
+            </Button>
+          ) : null}
+          {actions.canMarkNotPublished ? (
+            <Button variant="ghost" size="sm" onClick={openNotPublished}>
+              Not published
+            </Button>
+          ) : null}
+        </ButtonGroup>
       ) : null}
       {error && !open ? errorLine : null}
 
