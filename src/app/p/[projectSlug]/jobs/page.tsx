@@ -80,7 +80,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
     <section className="flex flex-col gap-4">
       <PageHeader title="Batch jobs" description="Generate many posts at once from images or a CSV file." actions={actions} />
       {prerequisites ? <SetupNotice title={PREREQUISITES_TITLE} items={prerequisites} icon="jobs" /> : null}
-      {hold ? <CreditHoldNotice since={hold.since} timeZone={scope.project.timezone} /> : null}
+      {hold ? <CreditHoldNotice since={hold.since} timeZone={scope.project.timezone} scope={hold.scope} /> : null}
       {items.length === 0 ? (
         prerequisites ? null : (
           <EmptyState

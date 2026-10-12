@@ -61,7 +61,13 @@ beforeAll(async () => {
   const journal = JSON.parse(await (await import("node:fs/promises")).readFile(join(folder, "meta/_journal.json"), "utf8")) as {
     entries: { idx: number; tag: string }[];
   };
-  const before0024 = journal.entries.filter((e) => e.tag !== "0024_luxuriant_bill_hollister");
+  // Everything *before* 0024, not merely "everything except 0024": drizzle applies migrations in order and
+  // remembers how far it got, so leaving a later migration in this list would apply it, after which 0024 is
+  // treated as already behind the mark and silently skipped. Pinning to the index keeps this test working
+  // whatever later migrations exist.
+  const idx0024 = journal.entries.find((e) => e.tag === "0024_luxuriant_bill_hollister")?.idx;
+  if (idx0024 === undefined) throw new Error("0024_luxuriant_bill_hollister is missing from the journal");
+  const before0024 = journal.entries.filter((e) => e.idx < idx0024);
   const partialJournal = { ...journal, entries: before0024 };
   await (await import("node:fs/promises")).writeFile(join(folder, "meta/_journal.json"), JSON.stringify(partialJournal));
   await runMigrations(urlFor(DB), folder);

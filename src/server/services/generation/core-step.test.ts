@@ -7,6 +7,7 @@ import { runGenerationStep, type CoreRequest } from "./core";
 
 const prepare = vi.hoisted(() => vi.fn());
 vi.mock("../../llm/images", () => ({ imagesForModel: prepare }));
+vi.mock("../../dal/credential-owners", () => ({ credentialOwnerFor: vi.fn().mockResolvedValue("install") }));
 
 const scope = { media: {}, project: { id: "project-1" } } as unknown as ProjectScope;
 const req: CoreRequest = {

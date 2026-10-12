@@ -52,6 +52,40 @@ export const llmCreditHolds = pgTable(
   (t) => [check("llm_credit_holds_owner_nonempty", sql`length(${t.owner}) > 0`)],
 );
 
+/**
+ * Project-owned, at most one row per project: an optional per-project LLM credential plus the check's
+ * lease and cooldown bookkeeping. A row may exist with all three credential columns null (FR-021).
+ * The only module that selects api_key_encrypted is src/server/dal/project-llm.ts (FR-009, FR-010).
+ */
+export const projectLlmSettings = pgTable(
+  "project_llm_settings",
+  {
+    projectId: uuid("project_id")
+      .primaryKey()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    provider: text("provider"),
+    model: text("model"),
+    apiKeyEncrypted: text("api_key_encrypted"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedByUserId: uuid("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    lastCheckAt: timestamp("last_check_at", { withTimezone: true }),
+    checkLeaseUntil: timestamp("check_lease_until", { withTimezone: true }),
+  },
+  (t) => [
+    check("project_llm_settings_provider", sql`${t.provider} IS NULL OR ${t.provider} IN ('openai','anthropic')`),
+    check(
+      "project_llm_settings_credential",
+      sql`(${t.provider} IS NULL AND ${t.model} IS NULL AND ${t.apiKeyEncrypted} IS NULL)
+        OR (${t.provider} IS NOT NULL AND ${t.model} IS NOT NULL AND ${t.apiKeyEncrypted} IS NOT NULL)`,
+    ),
+    check(
+      "project_llm_settings_model_shape",
+      sql`${t.model} IS NULL OR (length(${t.model}) BETWEEN 1 AND 200 AND ${t.model} !~ '\\s')`,
+    ),
+    check("project_llm_settings_key_nonempty", sql`${t.apiKeyEncrypted} IS NULL OR length(${t.apiKeyEncrypted}) > 0`),
+  ],
+);
+
 export const voiceProfiles = pgTable(
   "voice_profiles",
   {
@@ -159,3 +193,4 @@ export type VoiceProfileRow = typeof voiceProfiles.$inferSelect;
 export type VoiceProfileVersionRow = typeof voiceProfileVersions.$inferSelect;
 export type GenerationSeriesRow = typeof generationSeries.$inferSelect;
 export type GenerationFailureRow = typeof generationFailures.$inferSelect;
+export type ProjectLlmSettingsRow = typeof projectLlmSettings.$inferSelect;

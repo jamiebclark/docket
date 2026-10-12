@@ -1,5 +1,6 @@
 import type { ChecklistItem } from "@/components/ui/Checklist";
 import { docsUrl } from "@/lib/docs";
+import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
 import type { GenerationReadiness } from "@/server/services/generation/readiness";
 import { askManagers, askOwners, type Manager } from "./names";
 
@@ -9,7 +10,7 @@ export const PREREQUISITES_TITLE = "Before you can generate";
 export function generationPrerequisites(input: {
   slug: string;
   readiness: GenerationReadiness;
-  viewer: { isOwner: boolean; canManageAccounts: boolean; canManageVoice: boolean };
+  viewer: { isOwner: boolean; canManageAccounts: boolean; canManageVoice: boolean; canManageModel: boolean };
   managers: readonly Manager[];
   /** New job from media only: present when the selection has no usable images. */
   images?: { message: string } | null;
@@ -20,23 +21,35 @@ export function generationPrerequisites(input: {
   const items: ChecklistItem[] = [];
 
   const aiDone = readiness.ai.configured;
+  const keyUnreadable = readiness.ai.keyUnreadable;
   items.push({
     key: "ai",
     title: "Set up AI generation",
-    description: aiDone
-      ? "The server has an AI provider."
-      : readiness.ai.missingSettings
-        ? `Set ${readiness.ai.missingSettings.join(", ")} on the server, then reload this page.`
-        : "The server needs an AI provider before posts can be generated.",
+    description: keyUnreadable
+      ? LLM_KEY_UNREADABLE
+      : aiDone
+        ? "The server has an AI provider."
+        : readiness.ai.missingSettings
+          ? `Set ${readiness.ai.missingSettings.join(", ")} on the server, then reload this page.`
+          : "The server needs an AI provider before posts can be generated.",
     status: aiDone
       ? { kind: "done" }
-      : viewer.isOwner
-        ? { kind: "todo" }
-        : { kind: "waiting", on: askOwners(managers, "and") },
-    action:
-      !aiDone && viewer.isOwner
-        ? { label: "Open the setup guide", href: docsUrl("generator", "configuring-a-provider") }
-        : null,
+      : keyUnreadable
+        ? viewer.canManageModel
+          ? { kind: "todo" }
+          : { kind: "waiting", on: askOwners(managers, "and") }
+        : viewer.isOwner
+          ? { kind: "todo" }
+          : { kind: "waiting", on: askOwners(managers, "and") },
+    action: aiDone
+      ? null
+      : keyUnreadable
+        ? viewer.canManageModel
+          ? { label: "Go to Settings → Model", href: `${base}/settings/model` }
+          : null
+        : viewer.isOwner
+          ? { label: "Open the setup guide", href: docsUrl("generator", "configuring-a-provider") }
+          : null,
   });
 
   const accountDone = readiness.accounts >= 1;

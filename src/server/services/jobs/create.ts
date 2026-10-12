@@ -7,8 +7,10 @@ import { createJobSchema, jobSourceSchema, type JobInstructionsSnapshot } from "
 import * as clock from "../../dal/clock";
 import { ConflictError, ValidationIssuesError } from "../../dal/errors";
 import type { JobRecord } from "../../dal/jobs";
+import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
 import { actorColumns, type ProjectScope } from "../../dal/scope";
-import { getLlmStatus, LlmNotConfiguredError } from "../../llm";
+import { LlmNotConfiguredError, missingLlmSettings } from "../../llm";
+import { resolveLlmForProject } from "../../llm/resolve";
 import { resolvePolicies } from "../generation/policy";
 import { assertGroupLimit, groupsForAccounts } from "../generation/groups";
 import { assertMediaFits, distinctProviderKeys, isUniqueViolation, loadAccounts, need, takeVoice } from "../generation/single";
@@ -102,8 +104,12 @@ export async function insertItems(tx: ProjectScope, job: JobRecord, items: reado
 export async function createJob(scope: ProjectScope, input: unknown, ctx: FileCtx = {}): Promise<CreateJobResult> {
   const parsed = createJobSchema.parse(input);
   need(scope, { generation: ["run"], post: ["edit"] });
-  const llm = getLlmStatus();
-  if (!llm.configured) throw new LlmNotConfiguredError(llm.problems.map((p) => p.name));
+  const resolved = await resolveLlmForProject(scope.project.id);
+  if (!resolved.ok) {
+    throw new LlmNotConfiguredError(
+      resolved.reason === "key_unreadable" ? LLM_KEY_UNREADABLE : missingLlmSettings(resolved.problems),
+    );
+  }
 
   const policies = resolvePolicies(scope, {
     approval: parsed.approval,

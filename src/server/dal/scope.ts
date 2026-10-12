@@ -26,6 +26,7 @@ import { createMediaRepo, type MediaRepo } from "./media";
 import { createVideoVersionsRepo, type VideoVersionsRepo } from "./video-versions";
 import { createUploadsRepo, type UploadsRepo } from "./uploads";
 import { createPostsRepo, type PostsRepo } from "./posts";
+import { createProjectLlmRepo, type ProjectLlmRepo } from "./project-llm";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
 import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
@@ -94,6 +95,9 @@ function keyCan(permissions: readonly ApiKeyPermission[], request: PermissionReq
 
 export interface ProjectScope {
   readonly actor: ScopeActor;
+  /** The database or transaction this scope is pinned to. For a write that spans a DAL this scope has no repo for
+   * (e.g. clearing a credit hold inside the same transaction as a credential save). */
+  readonly exec: Database;
   readonly project: {
     id: string;
     slug: string;
@@ -130,6 +134,7 @@ export interface ProjectScope {
   readonly idempotency: IdempotencyRepo;
   readonly webhooks: WebhooksRepo;
   readonly externalClaims: ExternalClaimsRepo;
+  readonly projectLlm: ProjectLlmRepo;
   /** The caller's own reading position and mute setting; job-runner and API-key scopes throw `ForbiddenError`. */
   readonly notifications: NotificationsRepo;
   readonly projects: {
@@ -214,6 +219,7 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
   const scope: ProjectScope = {
     ...data,
     actor,
+    exec,
     can:
       actor.kind === "api_key"
         ? (request) => keyCan(actor.permissions, request)
@@ -232,6 +238,7 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     jobItems: createJobItemsRepo(exec, data.project.id),
     apiKeys: createApiKeysRepo(exec, data.project.id),
     idempotency: createIdempotencyRepo(exec, data.project.id),
+    projectLlm: createProjectLlmRepo(exec, data.project.id),
     notifications:
       actor.kind === "member"
         ? createNotificationsRepo(exec, data.project.id, data.membership.userId)

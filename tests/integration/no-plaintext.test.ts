@@ -9,6 +9,7 @@ import { createAnthropicProvider } from "../../src/server/llm/anthropic";
 import { createOpenAiProvider } from "../../src/server/llm/openai";
 import type { LlmConfig } from "../../src/server/llm/config";
 import { generateSingle } from "../../src/server/services/generation/single";
+import { saveProjectLlm } from "../../src/server/services/generation/credential";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import * as invitations from "../../src/server/services/invitations";
 import * as members from "../../src/server/services/members";
@@ -19,13 +20,15 @@ import { mockProvider } from "../../src/providers/mock";
 import { runTick } from "../../src/server/scheduler";
 import { atTime } from "../helpers/clock";
 import { createFakeLlmFetch } from "../helpers/fake-llm-http";
-import { jobsEnv } from "../helpers/jobs-env";
+import { clearProjectCredentials, jobsEnv } from "../helpers/jobs-env";
 import { parkAllDueTargets } from "../helpers/scheduling";
 import { fakeSession } from "../helpers/auth";
 import { closeDb, createThrowawayDb, testDb } from "../helpers/db";
 import { createProjectWithMembers } from "../helpers/factories";
 
 afterAll(async () => {
+  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
+  await clearProjectCredentials();
   await closeDb();
 });
 
@@ -35,6 +38,7 @@ const PASSWORD = "plaintext-canary-password-1";
 const SETUP_PASSWORD = "setup-canary-password-2";
 const OPENAI_API_KEY_CANARY = "sk-plaintext-canary-openai-0123456789abcdef";
 const ANTHROPIC_API_KEY_CANARY = "sk-ant-plaintext-canary-0123456789abcdef";
+const PROJECT_LLM_API_KEY_CANARY = "sk-plaintext-canary-project-llm-0123456789abcdef";
 const sha256Hex = (s: string) => createHash("sha256").update(s).digest("hex");
 
 describe("SC-009: no plaintext secrets at rest or in logs", () => {
@@ -60,12 +64,16 @@ describe("SC-009: no plaintext secrets at rest or in logs", () => {
       ANTHROPIC_API_KEY_CANARY,
       sha256Hex(OPENAI_API_KEY_CANARY),
       sha256Hex(ANTHROPIC_API_KEY_CANARY),
+      PROJECT_LLM_API_KEY_CANARY,
+      sha256Hex(PROJECT_LLM_API_KEY_CANARY),
     ];
     // Drive one real billing refusal through withCreditHold (via generateSingle's own wrapping), with the
     // configured key embedded in the provider's error body, so llm_credit_holds and the service result are
     // exercised by a path that could actually produce a hit (FR-033): the hold row must record only the
     // owner and timestamps, never a credential value or a hash of one.
     const genEnv = await jobsEnv();
+    await saveProjectLlm(genEnv.scope, { provider: "openai", model: "test-model", apiKey: PROJECT_LLM_API_KEY_CANARY });
+
     const anthropicConfig: LlmConfig = { provider: "anthropic", model: "test-model", apiKey: process.env.ANTHROPIC_API_KEY!, timeoutMs: 10_000, maxOutputTokens: 1000 };
     const anthropicFetch = createFakeLlmFetch([
       {
@@ -118,6 +126,11 @@ describe("SC-009: no plaintext secrets at rest or in logs", () => {
       const owner = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
       await members.changeRole(owner, { userId, role: "admin" });
       await members.remove(owner, { userId });
+
+      // The stored project credential, named explicitly before the all-tables scan below also covers it.
+      const llmSettingsRow = await testDb().execute<{ r: string }>(sql`select t::text as r from project_llm_settings t where project_id = ${genEnv.project.id}`);
+      expect(llmSettingsRow.rows.length).toBe(1);
+      expect(llmSettingsRow.rows[0]!.r.includes(PROJECT_LLM_API_KEY_CANARY)).toBe(false);
 
       // Scan every table (both databases) as text.
       const scan = async (db: ReturnType<typeof testDb>) => {

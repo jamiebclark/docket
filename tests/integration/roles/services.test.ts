@@ -55,11 +55,32 @@ describe("role-awareness services", () => {
     const editor = await getGenerationReadiness(await env.as(env.editor));
     expect(owner).toMatchObject({ accounts: 0, voiceProfiles: 0 });
     if (status.configured) {
-      expect(owner.ai).toEqual({ configured: true, missingSettings: null });
+      expect(owner.ai).toEqual({
+        configured: true,
+        source: "install",
+        provider: status.provider,
+        model: status.model,
+        missingSettings: null,
+        keyUnreadable: false,
+      });
     } else {
       expect(owner.ai.missingSettings).toEqual(missingLlmSettings(status.problems));
-      expect(admin.ai).toEqual({ configured: false, missingSettings: null });
-      expect(editor.ai).toEqual({ configured: false, missingSettings: null });
+      expect(admin.ai).toEqual({
+        configured: false,
+        source: null,
+        provider: null,
+        model: null,
+        missingSettings: null,
+        keyUnreadable: false,
+      });
+      expect(editor.ai).toEqual({
+        configured: false,
+        source: null,
+        provider: null,
+        model: null,
+        missingSettings: null,
+        keyUnreadable: false,
+      });
     }
   });
 });

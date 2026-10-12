@@ -7,5 +7,6 @@ export const CREDIT_HOLD_WAITING =
 export const CREDIT_HOLD_RESUME =
   "They resume by themselves within a few minutes of credit being restored.";
 export const CREDIT_HOLD_ACTION = "Add credit to the provider account.";
+export const CREDIT_HOLD_ACCOUNT_PROJECT = "Add credit to this project's own provider account.";
 /** The label before the instant; the instant itself goes through LocalTime (one date format). */
 export const CREDIT_HOLD_SINCE_LABEL = "Paused since";

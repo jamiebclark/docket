@@ -1,6 +1,7 @@
 // scheduler/generation: the generation-jobs section of a tick (contracts/runner.md).
 import * as clock from "../dal/clock";
 import { writeHeartbeat } from "../dal/heartbeats";
+import { anyProjectHasCredential } from "../dal/project-llm";
 import { claimDueJobItems } from "../dal/job-claims";
 import { getLlmStatus } from "../llm";
 import { processClaimedItem } from "../services/jobs/runner";
@@ -27,7 +28,9 @@ export interface GenerationCounts {
   cancelled: number;
   /** Lease lost before persisting. */
   staleResults: number;
-  notConfigured: 0 | 1;
+  /** `1` when the whole tick had no credential anywhere; also incremented per item whose own
+   * project-and-install resolution came back unconfigured after the claim (L27). */
+  notConfigured: number;
   /** The tick budget is too short for any item. */
   notRunnable: 0 | 1;
   /** Items a billing refusal sent back to the queue with no attempt counted (FR-009). */
@@ -68,7 +71,7 @@ export async function runGenerationJobs(opts: {
   const deadline = opts.startedAt.getTime() + cfg.timeBudgetMs;
   const beat = async () => writeHeartbeat("generation", await clock.now(), { ...counts });
 
-  if (!getLlmStatus().configured) {
+  if (!getLlmStatus().configured && !(await anyProjectHasCredential())) {
     counts.notConfigured = 1;
     await beat();
     return counts;

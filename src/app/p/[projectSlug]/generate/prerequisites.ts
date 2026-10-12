@@ -20,6 +20,7 @@ export async function loadPrerequisites(
       isOwner: scope.membership.role === "owner",
       canManageAccounts: scope.can({ account: ["manage"] }),
       canManageVoice: scope.can({ voice: ["manage"] }),
+      canManageModel: scope.can({ llm_credential: ["manage"] }),
     },
     managers: await listManagers(scope),
     images,

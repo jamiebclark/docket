@@ -13,6 +13,7 @@ export const statements = {
   generation: ["run", "auto_approve"],
   api_key: ["manage"],
   webhook: ["manage"],
+  llm_credential: ["manage"],
 } as const;
 
 export const ac = createAccessControl(statements);
@@ -30,6 +31,7 @@ export const owner = ac.newRole({
   generation: ["run", "auto_approve"],
   api_key: ["manage"],
   webhook: ["manage"],
+  llm_credential: ["manage"],
 });
 
 export const admin = ac.newRole({
@@ -45,6 +47,7 @@ export const admin = ac.newRole({
   generation: ["run", "auto_approve"],
   api_key: ["manage"],
   webhook: ["manage"],
+  llm_credential: ["manage"],
 });
 
 export const editor = ac.newRole({

@@ -3,13 +3,15 @@
 import { z } from "zod";
 import { approvalPolicySchema, schedulingPolicySchema, type GenerationRecord } from "@/lib/validation/generation";
 import * as clock from "../../dal/clock";
+import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
 import { credentialOwnerFor } from "../../dal/credential-owners";
 import { NotFoundError } from "../../dal/errors";
 import type { GenerationFailureRecord } from "../../dal/generation-failures";
 import type { PostRecord } from "../../dal/posts";
 import { actorColumns, type ProjectScope } from "../../dal/scope";
 import type { SeriesRecord } from "../../dal/series";
-import { getLlm } from "../../llm";
+import { LlmNotConfiguredError, missingLlmSettings } from "../../llm";
+import { resolveLlmForProject } from "../../llm/resolve";
 import type { LlmFailureKind, LlmProvider, LlmResult } from "../../llm/types";
 import { withCreditHold } from "./credit";
 import { recordFailure } from "./failures";
@@ -82,8 +84,19 @@ type Attempts = GenerationRecord["attempts"];
 
 const RETRYABLE = new Set<LlmFailureKind>(["invalid_output", "refused", "incomplete", "timeout"]);
 
-export async function planSeries(scope: ProjectScope, input: unknown, llm: LlmProvider = getLlm()): Promise<PlanSeriesResult> {
-  llm = withCreditHold(llm, await credentialOwnerFor(scope.project.id));
+export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmProvider): Promise<PlanSeriesResult> {
+  let owner: string | undefined;
+  if (!llm) {
+    const resolved = await resolveLlmForProject(scope.project.id);
+    if (!resolved.ok) {
+      throw new LlmNotConfiguredError(
+        resolved.reason === "key_unreadable" ? LLM_KEY_UNREADABLE : missingLlmSettings(resolved.problems),
+      );
+    }
+    llm = resolved.llm;
+    owner = resolved.owner;
+  }
+  llm = withCreditHold(llm, owner ?? (await credentialOwnerFor(scope.project.id)));
   const parsed = planSeriesSchema.parse(input);
   need(scope, { generation: ["run"], post: ["edit"] });
   const voice = await takeVoice(scope, parsed.voiceProfileId);

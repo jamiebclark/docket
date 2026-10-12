@@ -12,10 +12,10 @@ export default async function SettingsLayout({
 }) {
   const { projectSlug } = await params;
   const base = `/p/${projectSlug}/settings`;
-  // Keys are owner/admin only; the sub-nav link follows the same permission as the page.
-  const canManageApi = await forProject(await getSession(), projectSlug)
-    .then((scope) => scope.can({ api_key: ["manage"] }))
-    .catch(() => false);
+  const scope = await forProject(await getSession(), projectSlug).catch(() => null);
+  // Keys and the model credential are owner/admin only; each sub-nav link follows its own permission.
+  const canManageApi = scope?.can({ api_key: ["manage"] }) ?? false;
+  const canManageLlm = scope?.can({ llm_credential: ["manage"] }) ?? false;
   const items = [
     { label: "Project settings", href: base },
     { label: "Members & invitations", href: `${base}/members` },
@@ -25,6 +25,7 @@ export default async function SettingsLayout({
           { label: "Webhooks", href: `${base}/webhooks` },
         ]
       : []),
+    ...(canManageLlm ? [{ label: "Model & API key", href: `${base}/model` }] : []),
   ];
   return (
     <div className="flex flex-col gap-6">

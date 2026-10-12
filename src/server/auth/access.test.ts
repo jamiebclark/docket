@@ -18,6 +18,7 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     generation: ["run", "auto_approve"],
     api_key: ["manage"],
     webhook: ["manage"],
+    llm_credential: ["manage"],
   },
   admin: {
     project: ["view", "update"],
@@ -32,6 +33,7 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     generation: ["run", "auto_approve"],
     api_key: ["manage"],
     webhook: ["manage"],
+    llm_credential: ["manage"],
   },
   editor: {
     project: ["view"],

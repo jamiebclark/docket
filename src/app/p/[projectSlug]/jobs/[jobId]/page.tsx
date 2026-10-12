@@ -9,7 +9,9 @@ import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { getSession } from "@/server/auth/session";
 import { forProject, NotFoundError } from "@/server/dal";
-import { getLlmStatus } from "@/server/llm";
+import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
+import { missingLlmSettings } from "@/server/llm";
+import { resolveLlmForProject } from "@/server/llm/resolve";
 import { getJob, JOB_ITEMS_PAGE_SIZE, listJobItems } from "@/server/services/jobs";
 import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { UNREVIEWED_QUEUE_LABEL } from "../../generate/PolicyPicker";
@@ -59,7 +61,7 @@ export default async function JobPage({ params, searchParams }: Props) {
   const canRun = scope.can({ generation: ["run"] });
   const c = job.counts;
   const announce = `${c.done} done, ${c.failed} failed, ${c.queued} queued`;
-  const llm = getLlmStatus();
+  const llm = await resolveLlmForProject(scope.project.id);
 
   return (
     <section className="flex flex-col gap-4">
@@ -93,11 +95,14 @@ export default async function JobPage({ params, searchParams }: Props) {
         ) : null}
       </div>
 
-      {active && !llm.configured ? (
-        <JobNotice>Generation is not configured, so these items are waiting. Set: {llm.problems.map((p) => p.name).join(", ")}.</JobNotice>
+      {active && !llm.ok && llm.reason === "key_unreadable" ? <JobNotice>{LLM_KEY_UNREADABLE}</JobNotice> : null}
+      {active && !llm.ok && llm.reason === "not_configured" ? (
+        <JobNotice>Generation is not configured, so these items are waiting. Set: {missingLlmSettings(llm.problems).join(", ")}.</JobNotice>
       ) : null}
       {active && !job.jobsRunnable.ok ? <JobNotice>Jobs cannot run: {job.jobsRunnable.message}</JobNotice> : null}
-      {active && job.creditHold ? <CreditHoldNotice since={job.creditHold.since} timeZone={tz} /> : null}
+      {active && job.creditHold ? (
+        <CreditHoldNotice since={job.creditHold.since} timeZone={tz} scope={job.creditHold.scope} />
+      ) : null}
 
       <dl className="grid max-w-2xl grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
         <dt className="font-medium">Voice</dt>

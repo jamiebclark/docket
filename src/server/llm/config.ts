@@ -11,6 +11,11 @@ export interface LlmConfig {
 
 type Source = Record<string, string | undefined>;
 
+export interface LlmLimits {
+  timeoutMs: number;
+  maxOutputTokens: number;
+}
+
 const KEY_NAME: Record<LlmProviderName, string> = { openai: "OPENAI_API_KEY", anthropic: "ANTHROPIC_API_KEY" };
 
 function intIn(
@@ -29,6 +34,17 @@ function intIn(
     return fallback;
   }
   return n;
+}
+
+function limitsFrom(source: Source, problems: EnvIssue[]): LlmLimits {
+  const timeoutSeconds = intIn(source, "LLM_TIMEOUT_SECONDS", 10, 600, 90, problems);
+  const maxOutputTokens = intIn(source, "LLM_MAX_OUTPUT_TOKENS", 256, 32_000, 4000, problems);
+  return { timeoutMs: timeoutSeconds * 1000, maxOutputTokens };
+}
+
+/** The install-wide call limits, independent of whether a provider is configured (L8, FR-004). */
+export function parseLlmLimits(source: Source): LlmLimits {
+  return limitsFrom(source, []);
 }
 
 /** Problems carry variable names and reasons only, never values. */
@@ -55,11 +71,10 @@ export function parseLlmConfig(
   const apiKey = source[keyName]?.trim() ?? "";
   if (!apiKey) problems.push({ name: keyName, reason: `required when LLM_PROVIDER=${provider}` });
 
-  const timeoutSeconds = intIn(source, "LLM_TIMEOUT_SECONDS", 10, 600, 90, problems);
-  const maxOutputTokens = intIn(source, "LLM_MAX_OUTPUT_TOKENS", 256, 32_000, 4000, problems);
+  const limits = limitsFrom(source, problems);
 
   if (problems.length > 0) return { ok: false, problems };
-  return { ok: true, config: { provider, model, apiKey, timeoutMs: timeoutSeconds * 1000, maxOutputTokens } };
+  return { ok: true, config: { provider, model, apiKey, ...limits } };
 }
 
 export const LLM_VARIABLES: readonly string[] = [
