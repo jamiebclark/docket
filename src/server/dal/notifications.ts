@@ -389,10 +389,10 @@ export function createNotificationsRepo(db: Database, projectId: string, userId:
           );
           if (rowsOf(stillMember).length === 0) return { outcome: "not_member", snoozesCleared: 0 } as const;
           const newest = await newestAttentionSeq(tx, projectId, userId);
-          const set: Record<string, unknown> = { updatedAt: new Date() };
+          const set: Record<string, unknown> = { updatedAt: sql`now()` };
           if (change.markRead) {
             set.seenSeq = sql`GREATEST(${notificationStates.seenSeq}, excluded.seen_seq)`;
-            set.seenAt = new Date();
+            set.seenAt = sql`now()`;
           }
           await tx
             .insert(notificationStates)
