@@ -61,7 +61,7 @@ beforeAll(async () => {
   const journal = JSON.parse(await (await import("node:fs/promises")).readFile(join(folder, "meta/_journal.json"), "utf8")) as {
     entries: { idx: number; tag: string }[];
   };
-  const before0024 = journal.entries.filter((e) => e.tag !== "0024_graceful_pepper_potts");
+  const before0024 = journal.entries.filter((e) => e.tag !== "0024_luxuriant_bill_hollister");
   const partialJournal = { ...journal, entries: before0024 };
   await (await import("node:fs/promises")).writeFile(join(folder, "meta/_journal.json"), JSON.stringify(partialJournal));
   await runMigrations(urlFor(DB), folder);
@@ -95,14 +95,27 @@ afterAll(async () => {
   await rm(folder, { recursive: true, force: true });
 });
 
-describe("0024 activity_events_attention_global_seq_idx migration", () => {
-  it("creates the partial index", async () => {
-    const row = await one<{ indexdef: string } | undefined>(
-      `select indexdef from pg_indexes where indexname = 'activity_events_attention_global_seq_idx'`,
-    );
-    expect(row).toBeDefined();
-    expect(row!.indexdef).toContain("activity_events_attention_global_seq_idx");
-    expect(row!.indexdef).toContain("outcome");
+describe("0024 notification_change_marker migration", () => {
+  it("creates the marker with its single seeded row", async () => {
+    const rows = (await pool.query(`select id, attention_writes from notification_change_marker`)).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(true);
+    expect(rows[0].attention_writes).toBe("0");
+  });
+
+  it("holds only that one row", async () => {
+    // The CHECK pins `id` to true and it is the primary key, so a second row cannot exist.
+    await expect(pool.query(`insert into notification_change_marker (id) values (false)`)).rejects.toThrow();
+    const rows = (await pool.query(`select count(*)::int as n from notification_change_marker`)).rows;
+    expect(rows[0].n).toBe(1);
+  });
+
+  it("adds no index to activity_events", async () => {
+    // The first revision of 045 probed `max(seq)` behind a partial index here; the planner then
+    // preferred it for the recent-problems panel and broke the panel's budget. The marker exists so
+    // that no read plan on this table changes.
+    const rows = (await pool.query(`select indexname from pg_indexes where tablename = 'activity_events'`)).rows;
+    expect(rows.map((r: { indexname: string }) => r.indexname)).not.toContain("activity_events_attention_global_seq_idx");
   });
 
   it("leaves the existing floor (notification_states) row unchanged", async () => {

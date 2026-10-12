@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, foreignKey, index, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, foreignKey, index, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { activityEvents } from "./activity";
 import { member } from "./auth";
 
@@ -111,3 +111,29 @@ export const notificationEventMarks = pgTable(
 );
 
 export type NotificationEventMarkRecord = typeof notificationEventMarks.$inferSelect;
+
+/**
+ * One row for the whole install: the stream watcher's change marker (045, revised).
+ *
+ * The watcher needs to know *that* an attention event was written, not which one. An earlier revision
+ * asked `max(seq)` over `activity_events` behind a partial index covering every attention outcome, and
+ * the planner then preferred that index for the recent-problems panel too, pushing the panel past its
+ * 100 ms budget at twenty projects. A counter the writer bumps costs the probe one primary-key read and
+ * leaves every read plan on `activity_events` exactly as it was.
+ *
+ * Only an *attention* write bumps it, so the hot path — a post publishing successfully — never touches
+ * this row. Writers already hold a KEY SHARE lock on their project row before drawing `seq`, and take
+ * this row after it, so the order is always project then marker.
+ */
+export const notificationChangeMarker = pgTable(
+  "notification_change_marker",
+  {
+    /** Exactly one row, enforced by the CHECK below rather than by convention. */
+    id: boolean("id").primaryKey().default(true),
+    attentionWrites: bigint("attention_writes", { mode: "bigint" }).notNull().default(sql`0`),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [check("notification_change_marker_single_row", sql`${t.id}`)],
+);
+
+export type NotificationChangeMarkerRecord = typeof notificationChangeMarker.$inferSelect;

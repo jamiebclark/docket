@@ -2236,3 +2236,32 @@ the N12 reversal recorded in place above, and the extensions recorded next to N3
 - **S32 — Every interval and cap is a shared constant, not a setting.** `stream-protocol.ts` holds the
   path, the event names, the codec and every number; server and client import the same module, so the
   client's deadlines and the server's heartbeat cannot drift apart.
+
+### Revision, same day — the probe reads a marker row, not an index on `activity_events`
+
+N71 and N72 were written against an install-wide probe that asked `max(seq)` over `activity_events`
+behind a partial index covering the four attention outcomes. CI rejected it: the planner then preferred
+that index for the recent-problems panel too, and the panel's SC-003 budget went from passing to
+**155.7 ms against 100 ms** at twenty projects, while `count` and `refresh` stayed comfortable. The probe
+index and the panel's per-project index filter on the same outcomes, so no predicate separates them — the
+index that makes the probe O(1) is also attractive to the panel, and worse for it.
+
+- **N71 stands as written** — no process notifies another; every process still discovers change in the
+  database they already share, with one watcher per web process probing every 2 seconds.
+- **N71.1 — what it probes changed.** The first of the nine scalars now reads
+  `notification_change_marker`: one row for the whole install, holding a counter the activity writer
+  bumps in the same transaction when, and only when, the outcome is an attention outcome. The probe is a
+  primary-key read, and **no read plan on `activity_events` changes at all**.
+- **N71.2 — the hot path is untouched.** A post publishing successfully writes no attention outcome, so
+  it never touches the marker. Only failures, ambiguities, reauth and connect attempts do, and those are
+  rare by comparison. Writers already take KEY SHARE on their project row before drawing `seq` and take
+  the marker after it, so the order is always project then marker.
+- **N71.3 — the writer upserts rather than updates.** A plain `UPDATE` against a missing row would touch
+  nothing and change detection would stop silently, which is a worse failure than any cost of the
+  `ON CONFLICT` path. The migration seeds the row as well.
+- **N72 stands, with a cheaper probe than it claimed.** Per-person count queries still fall to zero in
+  exchange for one fixed probe per web process every 2 seconds; that probe is now a single-row read
+  rather than an index scan, so SC-004's "same work with 1 connection and with 50" holds more easily.
+
+Measured on the same machine, same seeded test: the 20-project panel went from 125–168 ms with the index
+to **79.5 ms** with the marker, with `count` and `refresh` unchanged at about 72 ms.

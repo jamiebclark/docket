@@ -1,1 +1,0 @@
-CREATE INDEX "activity_events_attention_global_seq_idx" ON "activity_events" USING btree ("seq") WHERE "activity_events"."outcome" IN ('failed', 'ambiguous', 'needs_reauth', 'connect_failed');

@@ -1,5 +1,5 @@
 {
-  "id": "b6df545f-9cf7-4acf-b707-c10dbb4f30b2",
+  "id": "71440b8b-4f17-40a5-993d-7809d78d4754",
   "prevId": "c4fbf623-7ebd-459c-a464-bb770a123ddf",
   "version": "7",
   "dialect": "postgresql",
@@ -667,22 +667,6 @@
           ],
           "isUnique": false,
           "where": "\"activity_events\".\"outcome\" = 'connect_failed'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "activity_events_attention_global_seq_idx": {
-          "name": "activity_events_attention_global_seq_idx",
-          "columns": [
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"activity_events\".\"outcome\" IN ('failed', 'ambiguous', 'needs_reauth', 'connect_failed')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -7585,6 +7569,45 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.notification_change_marker": {
+      "name": "notification_change_marker",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "attention_writes": {
+          "name": "attention_writes",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "notification_change_marker_single_row": {
+          "name": "notification_change_marker_single_row",
+          "value": "\"notification_change_marker\".\"id\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.notification_event_marks": {

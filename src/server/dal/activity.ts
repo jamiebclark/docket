@@ -1,11 +1,11 @@
 import { sql, type SQL } from "drizzle-orm";
 import { PROBLEM_OUTCOMES, SUCCESS_OUTCOMES, KIND_OUTCOME, type ActivityKind, type ActivityOutcome } from "../../lib/activity/outcomes";
 import { activityDetailsSchema, type ActivityDetails } from "../../lib/activity/details";
-import { CONNECT_FAILED } from "../../lib/notifications/attention";
+import { CONNECT_FAILED, isAttentionOutcome } from "../../lib/notifications/attention";
 import type { EligibilityPlan } from "../../lib/notifications/eligibility";
 import { clipMessage } from "../../lib/activity/text";
 import type { Database } from "../db/client";
-import { activityEvents } from "../db/schema";
+import { activityEvents, notificationChangeMarker } from "../db/schema";
 import { platformClauseSql } from "./notifications";
 
 export interface NewActivityEvent {
@@ -461,6 +461,19 @@ export function createActivityRepo(db: Database, projectId: string): ActivityRep
           details,
         })
         .returning({ id: activityEvents.id });
+      // The stream watcher's change marker (045): bumped in this same transaction, and only for an
+      // attention outcome, so a post publishing successfully never touches the install-wide row.
+      if (isAttentionOutcome(KIND_OUTCOME[event.kind])) {
+        // An upsert, not an update: if the row were ever missing, a plain UPDATE would touch nothing and
+        // change detection would stop silently, which is worse than any cost of the ON CONFLICT path.
+        await db
+          .insert(notificationChangeMarker)
+          .values({ attentionWrites: 1n })
+          .onConflictDoUpdate({
+            target: notificationChangeMarker.id,
+            set: { attentionWrites: sql`${notificationChangeMarker.attentionWrites} + 1`, updatedAt: new Date() },
+          });
+      }
       return { id: row!.id };
     },
   };

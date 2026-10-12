@@ -54,4 +54,7 @@ export const notProjectOwned = [
   "email_settings",
   "email_delivery_attempts",
   "llm_credit_holds",
+  // One row for the whole install: the stream watcher's change marker. It names no project on purpose —
+  // the watcher asks only whether anything changed anywhere, then recomputes per person inside scope.
+  "notification_change_marker",
 ] as const;

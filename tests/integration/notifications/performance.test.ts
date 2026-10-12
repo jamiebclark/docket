@@ -167,12 +167,7 @@ async function measure(label: string, userId: string, projectIds: string[], opts
   // With one project and a mid-way position the planner may read the whole-table seq index instead; that is
   // still bounded by the LIMIT, so the index names are only asserted where the plan is stable (many projects).
   if (opts.partialIndexes) {
-    // Either attention index is a pass. 045 added `…_attention_global_seq_idx` for the stream's
-    // install-wide probe, and with many projects the planner prefers it over the per-project
-    // `…_attention_seq_idx`: it is partial (attention outcomes only, ~15% of rows) and the scan is
-    // bounded by the LIMIT, which is the same reasoning the single-project case above relies on.
-    // The guarantees that matter are still asserted — the budgets above, and no Seq Scan below.
-    expect(plan).toMatch(/activity_events_attention_(global_)?seq_idx/);
+    expect(plan).toContain("activity_events_attention_seq_idx");
     expect(plan).toContain("activity_events_connect_failed_actor_idx");
   }
   expect(plan).not.toMatch(/Seq Scan on activity_events/);

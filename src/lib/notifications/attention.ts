@@ -16,3 +16,14 @@ export function isAttentionFor(event: { outcome: string; actorUserId: string | n
   if (event.outcome === CONNECT_FAILED) return event.actorUserId !== null && event.actorUserId === userId;
   return (ATTENTION_MEMBER_OUTCOMES as readonly string[]).includes(event.outcome);
 }
+
+/** Every outcome that can put something in front of somebody: the member set plus a connect attempt. */
+export const ATTENTION_OUTCOMES = [...ATTENTION_MEMBER_OUTCOMES, CONNECT_FAILED] as const;
+
+/**
+ * Whether an outcome is one anybody could need to see. Unlike `isAttentionFor`, this asks nothing about
+ * who: it is the writer-side test for whether a write can change *someone's* count (045).
+ */
+export function isAttentionOutcome(outcome: string): boolean {
+  return (ATTENTION_OUTCOMES as readonly string[]).includes(outcome);
+}

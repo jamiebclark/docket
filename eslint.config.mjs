@@ -30,6 +30,9 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // A git worktree checked out inside the repo is a second copy of every source file: linting
+    // it doubles every finding and buries real errors in the duplicates.
+    ".claude/worktrees/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
