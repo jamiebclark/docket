@@ -213,7 +213,7 @@ exists.
   stored, logged or rendered" is replaced **in place**, under the same headings other documents link to,
   by what is now true, plus a "Per-project provider, model and key" subsection covering resolution, who
   may set one, the check and the undecryptable case; "Jobs" gains the per-project hold scope.
-  `docs/decisions.md` gains **046 — Per-project LLM** with K1–K16 and L1–L33 next to the generator
+  `docs/decisions.md` gains **047 — Per-project LLM** with K1–K16 and L1–L33 next to the generator
   decisions, including a line of its own stating that an install that only ever used environment
   variables needs to do nothing and behaves exactly as before. `docs/security.md`'s four secret rows are
   updated to name the stored project key and the new places, and gain a row for the credential at rest

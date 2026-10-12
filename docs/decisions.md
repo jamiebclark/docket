@@ -1036,7 +1036,7 @@ These are fixes to existing helpers, inert for every provider before this entry.
 - **N9 — The bell is always shown; the count hides at zero.** The display is capped at "99+", and counting stops at 100.
 - **N10 — Muting is edited on a personal Notifications page** (linked from the user menu and the panel) and on each project's settings page, for every role. **Extended by 044's N46**: email cadence, hour, zone and quiet hours join that same personal page as one more card; which problems may be mailed is still the per-project rule above, not a second one.
 - **N11 — The callout appears on the project home and on Posts.**
-- **N12 — The refresh is quiet.** It runs every 60 s while the tab is visible and once on becoming visible. It is announced politely only when the count rises.
+- **N12 — The refresh is quiet.** It runs every 60 s while the tab is visible and once on becoming visible. It is announced politely only when the count rises. **Reversed in its first half, kept in its second, by 045's N79/N80/N70**: the poll is replaced by a server push as the primary path, with the poll kept as its fallback; the announce-on-rise-only rule stands unchanged, because it was never about the transport. Nothing migrates — N12 stored no data.
 
 ### Plan decisions
 
@@ -1070,16 +1070,16 @@ These are fixes to existing helpers, inert for every provider before this entry.
 - **R7 — "The *Problems* preset" is the existing URL `?outcome=problems`.** The spec's `preset=problems` refers to it, and no parameter is added. The view qualifies only with no platform, account, range or dates, and with no `before` or `after`.
 - **R8 — The view mark runs once per request.** A React-cached `ensureProblemsViewMarked()` reads the URL that the proxy forwards in `x-docket-path`. The bell calls it before counting, and both activity pages call it before listing, so the header count is right even without JavaScript.
 - **R9 — Prefetches never mark.** Requests with `next-router-prefetch`, `next-router-segment-prefetch`, or a `Sec-Purpose` / `Purpose` header containing `prefetch` are ignored. This matters because a prefetch of a route with `loading.tsx` renders the layout and so the header. Links to problems views also set `prefetch={false}`.
-- **R10 — The bell is a link to `/notifications` without JavaScript, and a disclosure button with it.** Its non-modal panel loads `GET /api/me/notifications/recent` when opened. `router.refresh()` is never used, because it would re-mark a problems view.
+- **R10 — The bell is a link to `/notifications` without JavaScript, and a disclosure button with it.** Its non-modal panel loads `GET /api/me/notifications/recent` when opened. `router.refresh()` is never used, because it would re-mark a problems view. **Kept deliberately by 045's N82/S31**: a stream push also never marks a problems view and never calls `router.refresh()`.
 - **R11 — Two session-only GET routes under `/api/me/`.**
   - API keys get 401.
   - No input is read.
   - Responses carry `Cache-Control: private, no-store` and `Vary: Cookie`.
-  - `/api/me/` is a public prefix in the auth gate, so a cookie-less request gets 401 instead of a login redirect.
-- **R12 — The poller is pure, injectable logic**, tested without a DOM. It also refreshes at once on a `docket:notifications-changed` event.
+  - `/api/me/` is a public prefix in the auth gate, so a cookie-less request gets 401 instead of a login redirect. **Extended by 045's N68/S10**: the new stream route under the same prefix answers the identical 401, byte for byte, and reads no input either.
+- **R12 — The poller is pure, injectable logic**, tested without a DOM. It also refreshes at once on a `docket:notifications-changed` event. **Left untouched by 045's S25/S26**: `poll.ts` is not edited; it becomes the fallback leg of a new supervisor that reuses its own refresh-on-entry hook.
 - **R13 — Mutations are server actions over the caller's own resolved projects.** An unknown project and someone else's give the same "not found". The proxy's same-origin check refuses forged POSTs. The only allowed `returnTo` is `/notifications`.
 - **R14 — Muting UI.** Each project has one form with a single "Turn off" / "Turn on" button, named with the project, and its state shown as text. A redirect confirms the change, so it works without JavaScript. **Extended by 044's E18/E29**: the email settings card is one form with one Save button on the same no-JavaScript, redirect-confirms shape; its pause/resume control is its own one-button form, the same pattern as this toggle.
-- **R15 — The callout is a warning `Alert` with `role="status"`**, so it is polite. Screen readers rarely announce a status region that is present at load, so its place first in `main` is what makes it found.
+- **R15 — The callout is a warning `Alert` with `role="status"`**, so it is polite. Screen readers rarely announce a status region that is present at load, so its place first in `main` is what makes it found. **Reused by 045's N70/S27**: the stream and the poll share one announce-on-rise-only baseline, so switching between them neither re-announces nor misses a rise.
 - **R16 — A `RelativeTime` atom.** `SchedulerHealth`'s `ago()` wording moves to `lib/time/relative.ts`, with unchanged output. The absolute time and zone are the tooltip and screen-reader text.
 - **R17 — No change** to dependencies, environment variables, the public API, webhooks, event kinds, filters or `docker-compose.yml`. **Owed to the operator:** `.claude/skills/docket-ui/SKILL.md` should list `/notifications` and the bell. The pipeline cannot write it.
 
@@ -1665,7 +1665,8 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
   every member role. Both work with no client JavaScript.
 - **N39 — One rule gates everything a person is told** — the bell, the panel, the callout and the
   project's unread number all ask `eligibility.ts`'s one question. Activity, the public API and webhooks
-  are untouched: preferences gate notifications, never the record.
+  are untouched: preferences gate notifications, never the record. **Reused unchanged by 045's N68**: the
+  stream's message body is produced by the same service call, so a push can never disagree with the bell.
 - **N40 — That rule is the shape `email-delivery` (entry 3) will consume unchanged.** Quiet hours are a
   delivery-timing rule with no meaning for an in-app badge, and are therefore not in this entry.
 - **N41 — A preference is only ever the caller's own.** Mutations resolve through the caller's own
@@ -2087,7 +2088,185 @@ call on billing used to permanently fail every item it touched. Full text in
 - **Detecting any other provider condition** (expired cards, suspended accounts, spend limits, regional
   restrictions) beyond the two verified shapes, and **any provider beyond `openai` and `anthropic`**.
 
-## 046 — Per-project LLM (2026-10-12)
+## 046 — Real-time updates (2026-10-12)
+
+The bell's count moves from a 60-second poll to a server push, with the poll kept as its fallback. See
+the N12 reversal recorded in place above, and the extensions recorded next to N39, R10, R11, R12 and R15.
+
+### Spec decisions (N68–N84)
+
+- **N68 — One authenticated stream endpoint per person, under `/api/me/`, carrying count snapshots and
+  nothing else.** Session cookie only; an API key gets the same 401 as no session; no query parameter,
+  header or body is ever read. The body is exactly `GET /api/me/notifications`'s shape, from the same
+  service call (N39). Never on the wire: problem rows, event text, project names, account names, platform
+  keys.
+- **N69 — Snapshots, not increments, which is what makes reconnection safe.** Every message is the whole
+  current count; a missed message cannot be missed and a duplicate cannot double-count. No replay buffer,
+  no server-side event log, no cursor, no message ids, and therefore no `Last-Event-ID`.
+- **N70 — The announcement rule survives, measured against what the page last showed.** A snapshot higher
+  than the last count the page displayed is announced; an equal or lower one, including a reconnect's
+  repeated snapshot, is silent (N12, R15).
+- **N71 — No process ever notifies another; every process discovers change in the database they already
+  share.** One watcher per web process, not per connection, probing a fixed set of install-wide scalars
+  every 2 seconds. Several web processes need no coordination, no shared memory and no Postgres `LISTEN`.
+- **N72 — The cost stops growing with tabs; the promise is "seconds", not "instant".** The per-person
+  count query moves from once per open tab per minute to once per connected person per actual change, in
+  exchange for one small fixed probe per web process every 2 seconds whether anyone is connected or not.
+- **N73 — The stream follows the visible tab**, exactly where N12's timer stopped and started, so a
+  backgrounded tab still costs the server nothing, and a person with many tabs does not exhaust HTTP/1.1's
+  roughly six connections per origin.
+- **N74 — The caps are constants, not settings: 50 streams per web process, 5 at once per person.** An
+  install's ceiling is 50 × the number of web processes, stated in `docs/deployment.md`. No environment
+  variable; more capacity means another web process.
+- **N75 — At the person's cap their oldest stream is closed; at the process cap the newcomer is told to
+  poll.** A sixth tab displaces the first, which falls back with nothing lost (N69). A full process refuses
+  the newcomer, never queues, never closes someone else's stream.
+- **N76 — A connection is deliberately short-lived: the server closes it after 4.5 minutes and the client
+  reconnects.** A proxy timeout, a container restart, a deploy and a rolling restart all then look like
+  ordinary operation; the reconnect's opening snapshot arrives in well under a second.
+- **N77 — A heartbeat every 20 seconds, and the client insists on the opening snapshot within 5 seconds.**
+  The heartbeat keeps a proxy's idle timer off and is how the client detects a buffering proxy, which
+  otherwise looks open while delivering nothing. An install behind one degrades to the poll by itself.
+- **N78 — The proxy configuration is a documented requirement, not left to hope.** `docs/deployment.md` §7
+  states what must be true — buffering off, a timeout above the heartbeat, HTTP/1.1-or-better with no
+  response transformation — in that section's existing voice, plus the ceiling (N74) and that a proxy that
+  cannot be changed still works on the fallback.
+- **N79 — The poll is not deleted; it becomes the fallback, and the server-rendered count stays the
+  floor.** Three complete layers: the no-JavaScript server-rendered count (022's FR-014), the unchanged
+  60-second poll, and the stream when it works. `poll.ts` keeps its shape and its tests; only who starts it
+  changes.
+- **N80 — What counts as "unavailable", and what does not.** Unavailable: no `EventSource`, a cap refusal,
+  a connection or server failure, no opening snapshot within 5 seconds, or more than 3 backed-off failed
+  attempts — remembered per tab. Not unavailable: a 401 (N81) or an ordinary scheduled close (N76). A
+  failure is silent; the last known count stays on screen.
+- **N81 — Sign-out, session expiry and membership removal all end the right thing, and none leaves a stale
+  count on screen.** The stream re-resolves the session and memberships on every recompute and at least
+  once a minute, bounded at 4.5 minutes regardless (N76). A gone session ends the stream with a terminal
+  message and the client stops reconnecting. Losing a membership is not an ending — the next snapshot just
+  reflects it (022's FR-019).
+- **N82 — A push never marks anything read and never refreshes the page.** The stream is read-only: it
+  never runs the problems-view mark and the client never calls `router.refresh()` on a push (R10).
+- **N83 — An open panel is refreshed by a push**, because a panel that disagrees with the bell is worse
+  than one a second late. The bell bumps a `refreshKey` the panel's existing fetch effect depends on;
+  nothing else on the page reacts to a push.
+- **N84 — A snapshot yields to the person's own action for one probe interval.** A mark, snooze or
+  preference change shows its own authoritative count at once; stream snapshots are ignored for 2 seconds
+  afterward, so the badge never flickers back to a number the person just acted on.
+
+### Plan decisions (S1–S32)
+
+- **S1 — One Route Handler returning a `ReadableStream`**, under the existing personal prefix
+  (`GET /api/me/notifications/stream`), `force-dynamic` like its two siblings. *Rejected:* long-polling the
+  count route; WebSockets; a hand-rolled `fetch` reader instead of `EventSource`.
+- **S2 — `Content-Encoding: identity` is how the stream escapes Next's own gzip.** Verified against the
+  installed package: `compressible` has no `text/event-stream` entry, so the stream is gzip-compressible by
+  default unless the response declares `identity`, which the bundled listener passes straight through.
+- **S3 — `X-Accel-Buffering: no` as well**, for nginx-family proxies; every other proxy is covered by the
+  documented requirement (N78) and the client's own buffering detection (N77).
+- **S4 — The response headers, and the ones deliberately absent.** `Content-Type`, `Cache-Control`,
+  `Vary`, `Content-Encoding`, `X-Accel-Buffering`. No `Connection` header (meaningless on HTTP/1.1, illegal
+  on HTTP/2); no `Content-Length` (there is none, which is what signals chunked transfer).
+- **S5 — Five named events, no event ids, no `retry:` field.** `snapshot`, `ping`, `reconnect`,
+  `unavailable`, `ended`. No `id:` is ever sent, so the browser never sends `Last-Event-ID` (N69).
+- **S6 — The heartbeat is a named `ping` event, not an SSE comment**, so the client's silence watchdog
+  (S17) can actually observe it, as well as keeping a proxy's idle timer off.
+- **S7 — The refusal at the process cap is a 200 stream carrying one `unavailable` event**, not a 503,
+  because `EventSource` cannot read a failed connect's status or body.
+- **S8 — A displaced stream gets the same `unavailable`, and the displaced tab remembers it**, so six tabs
+  of one person do not round-robin displace each other forever.
+- **S9 — Admission order: session, then the person's own displacement, then the process cap, then the
+  count.** Displacing before the process check means a person at their own cap is never refused for a slot
+  they were about to free; computing the summary last means a refused request costs no query.
+- **S10 — 401 is the count route's own refusal, byte for byte**, including for an API key, which is simply
+  not a session.
+- **S11 — `EventSource`'s own reconnection is overridden entirely.** `onerror` closes the source and the
+  client's own state machine decides what happens next, because the browser's built-in retry cannot
+  distinguish a 401 from a refusal from an ordinary close.
+- **S12 — A 401 is learned from the existing count route, not from the stream.** One probe to
+  `GET /api/me/notifications` on a failed connect: 401 ends things for good (N81); 200 means back off and
+  retry, and refreshes the count for free.
+- **S13 — One watcher per web process, discovering change in the database they already share** (N71): a
+  sequential loop — probe, round if due, sleep — so a problem from any writer is seen within one interval
+  with nothing added to the stack.
+- **S14 — The fingerprint: nine scalars, one statement**, each sparse table contributing a `count(*)` and
+  a `max(updated_at)` so additions, changes and deletions are all visible; `member` likewise, with no
+  `updated_at` needed because all three roles already count.
+- **S15 — One new partial index, migration `0023`, and why the probe needs it.** `max(seq)` restricted to
+  attention outcomes needs a dedicated partial index to be both O(1) and independent of install size; pure
+  additive DDL, no operator action.
+- **S16 — `updated_at` is stamped by the database, not by the web process.** One pre-existing path in
+  `src/server/dal/notifications.ts` built it in JavaScript; fixed in passing so the fingerprint's instant
+  comparisons are sound against a web process whose clock lags.
+- **S17 — A 45-second silence watchdog on the client**, just over two heartbeats, for a socket that dies
+  without a FIN — a sleeping laptop, a network change, a proxy that starts buffering mid-stream. Counts as a
+  drop, never a terminal end.
+- **S18 — The connection lifetime is 4.5 minutes, not 5**, so Docket is always the party that closes first
+  under the common 300-second proxy/Node read-timeout default, and a scheduled close never races a timeout.
+- **S19 — Teardown does not depend on `request.signal` or `cancel()`**, neither being documented for this
+  installed framework. Every write is guarded; a throw deregisters and clears timers; the 20-second
+  heartbeat is therefore also the liveness check.
+- **S20 — The session re-check is a read-only `SELECT`, never `auth.api.getSession`**, because the latter
+  can refresh and write a cookie a response whose headers are already sent cannot deliver (N81).
+- **S21 — Two tabs of one person share one recompute.** A round groups connections by user id and computes
+  each person's summary once, comparing it against each connection's own last-sent value.
+- **S22 — At most three recomputes at once, and a sequential loop**, against a default pool of 10, leaving
+  7 for ordinary page requests; a worst-case round at the cap is well inside the 2-second interval.
+- **S23 — The watcher starts with the first connection and stops with the last**, guarded by the same
+  `Symbol.for` singleton pattern `src/server/scheduler/in-process.ts` uses, so a quiet process probes
+  nothing and a hot reload cannot start two.
+- **S24 — A failed probe changes nothing; a failed recompute keeps its connection.** The baseline advances
+  only on a successful probe; a failed recompute retries next round rather than sending a wrong count or
+  closing anyone.
+- **S25 — One pure state machine, and `poll.ts` untouched.** `refresh.ts`'s five states — `hidden`,
+  `connecting`, `streaming`, `polling`, `ended` — hold the stream in exactly the two states where the poll
+  must not run, and vice versa (022's FR-019).
+- **S26 — The fallback leg refreshes at once on entry, through `poll.ts`'s own hook**, by pulling its
+  existing `onChanged` trigger the moment the supervisor enters `polling`, with no edit to `poll.ts` itself.
+- **S27 — One announcement baseline across both legs**, so switching between stream and poll can neither
+  re-announce a count already shown nor miss a rise across the switch (N70, R15).
+- **S28 — The 2-second yield is driven by the bell's own local changes** — a row action, "mark all", the
+  in-page changed event — never by the poll leg, whose own fetch always runs after the write that triggered
+  it (N84).
+- **S29 — The panel refetches on a push through one new prop**, `refreshKey` added to the dependency array
+  of the fetch effect `NotificationPanel` already has. `router.refresh()` is still never called (N83, R10).
+- **S30 — Nothing else moves.** No table, environment variable, runtime dependency, infrastructure,
+  `docker-compose.yml` or `next.config.ts` change, security header, UI atom or visible control.
+- **S31 — A stream request cannot be mistaken for a problems view.** The route never calls
+  `ensureProblemsViewMarked()`, and the client never calls `router.refresh()` on a push (N82, R10).
+- **S32 — Every interval and cap is a shared constant, not a setting.** `stream-protocol.ts` holds the
+  path, the event names, the codec and every number; server and client import the same module, so the
+  client's deadlines and the server's heartbeat cannot drift apart.
+
+### Revision, same day — the probe reads a marker row, not an index on `activity_events`
+
+N71 and N72 were written against an install-wide probe that asked `max(seq)` over `activity_events`
+behind a partial index covering the four attention outcomes. CI rejected it: the planner then preferred
+that index for the recent-problems panel too, and the panel's SC-003 budget went from passing to
+**155.7 ms against 100 ms** at twenty projects, while `count` and `refresh` stayed comfortable. The probe
+index and the panel's per-project index filter on the same outcomes, so no predicate separates them — the
+index that makes the probe O(1) is also attractive to the panel, and worse for it.
+
+- **N71 stands as written** — no process notifies another; every process still discovers change in the
+  database they already share, with one watcher per web process probing every 2 seconds.
+- **N71.1 — what it probes changed.** The first of the nine scalars now reads
+  `notification_change_marker`: one row for the whole install, holding a counter the activity writer
+  bumps in the same transaction when, and only when, the outcome is an attention outcome. The probe is a
+  primary-key read, and **no read plan on `activity_events` changes at all**.
+- **N71.2 — the hot path is untouched.** A post publishing successfully writes no attention outcome, so
+  it never touches the marker. Only failures, ambiguities, reauth and connect attempts do, and those are
+  rare by comparison. Writers already take KEY SHARE on their project row before drawing `seq` and take
+  the marker after it, so the order is always project then marker.
+- **N71.3 — the writer upserts rather than updates.** A plain `UPDATE` against a missing row would touch
+  nothing and change detection would stop silently, which is a worse failure than any cost of the
+  `ON CONFLICT` path. The migration seeds the row as well.
+- **N72 stands, with a cheaper probe than it claimed.** Per-person count queries still fall to zero in
+  exchange for one fixed probe per web process every 2 seconds; that probe is now a single-row read
+  rather than an index scan, so SC-004's "same work with 1 connection and with 50" holds more easily.
+
+Measured on the same machine, same seeded test: the 20-project panel went from 125–168 ms with the index
+to **79.5 ms** with the marker, with `count` and `refresh` unchanged at about 72 ms.
+
+## 047 — Per-project LLM (2026-10-12)
 
 Spec: `specs/065-per-project-llm`. Roadmap entry 2 of 3 (`.specify/roadmaps/llm-credentials.md`, slug
 `per-project-llm`): a project may store its own LLM provider, model and API key, so its generation spends

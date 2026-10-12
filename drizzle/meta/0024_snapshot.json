@@ -1,5 +1,5 @@
 {
-  "id": "ae2bcd7a-0ed3-42f3-9092-ff013e4f0a61",
+  "id": "71440b8b-4f17-40a5-993d-7809d78d4754",
   "prevId": "c4fbf623-7ebd-459c-a464-bb770a123ddf",
   "version": "7",
   "dialect": "postgresql",
@@ -3207,112 +3207,6 @@
         "llm_credit_holds_owner_nonempty": {
           "name": "llm_credit_holds_owner_nonempty",
           "value": "length(\"llm_credit_holds\".\"owner\") > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.project_llm_settings": {
-      "name": "project_llm_settings",
-      "schema": "",
-      "columns": {
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "api_key_encrypted": {
-          "name": "api_key_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_by_user_id": {
-          "name": "updated_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_check_at": {
-          "name": "last_check_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "check_lease_until": {
-          "name": "check_lease_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "project_llm_settings_project_id_projects_id_fk": {
-          "name": "project_llm_settings_project_id_projects_id_fk",
-          "tableFrom": "project_llm_settings",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "project_llm_settings_updated_by_user_id_user_id_fk": {
-          "name": "project_llm_settings_updated_by_user_id_user_id_fk",
-          "tableFrom": "project_llm_settings",
-          "tableTo": "user",
-          "columnsFrom": [
-            "updated_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "project_llm_settings_provider": {
-          "name": "project_llm_settings_provider",
-          "value": "\"project_llm_settings\".\"provider\" IS NULL OR \"project_llm_settings\".\"provider\" IN ('openai','anthropic')"
-        },
-        "project_llm_settings_credential": {
-          "name": "project_llm_settings_credential",
-          "value": "(\"project_llm_settings\".\"provider\" IS NULL AND \"project_llm_settings\".\"model\" IS NULL AND \"project_llm_settings\".\"api_key_encrypted\" IS NULL)\n        OR (\"project_llm_settings\".\"provider\" IS NOT NULL AND \"project_llm_settings\".\"model\" IS NOT NULL AND \"project_llm_settings\".\"api_key_encrypted\" IS NOT NULL)"
-        },
-        "project_llm_settings_model_shape": {
-          "name": "project_llm_settings_model_shape",
-          "value": "\"project_llm_settings\".\"model\" IS NULL OR (length(\"project_llm_settings\".\"model\") BETWEEN 1 AND 200 AND \"project_llm_settings\".\"model\" !~ '\\s')"
-        },
-        "project_llm_settings_key_nonempty": {
-          "name": "project_llm_settings_key_nonempty",
-          "value": "\"project_llm_settings\".\"api_key_encrypted\" IS NULL OR length(\"project_llm_settings\".\"api_key_encrypted\") > 0"
         }
       },
       "isRLSEnabled": false
@@ -7677,6 +7571,45 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.notification_change_marker": {
+      "name": "notification_change_marker",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "attention_writes": {
+          "name": "attention_writes",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "notification_change_marker_single_row": {
+          "name": "notification_change_marker_single_row",
+          "value": "\"notification_change_marker\".\"id\""
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.notification_event_marks": {
       "name": "notification_event_marks",
       "schema": "",
@@ -8090,8 +8023,7 @@
         "webhook_rotate_secret",
         "webhook_enable",
         "webhook_disable",
-        "account_posting_instructions_update",
-        "llm_credential_update"
+        "account_posting_instructions_update"
       ]
     },
     "public.generation_mode": {

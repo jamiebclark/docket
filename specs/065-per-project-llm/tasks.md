@@ -301,7 +301,7 @@ proof that the repository is left working.
   stored, logged or rendered" in place, under its existing headings, with what is now true; add the
   "Per-project provider, model and key" subsection (resolution, who may set one, the check, the
   undecryptable case); widen the "Jobs" hold paragraph for per-owner scope (FR-031)
-- [X] T049 [P] Add `docs/decisions.md` § 046 — Per-project LLM, carrying K1–K16 and L1–L33 next to the
+- [X] T049 [P] Add `docs/decisions.md` § 047 — Per-project LLM, carrying K1–K16 and L1–L33 next to the
   generator decisions and entry 1's C/H sets, with its own line stating that an install that only ever used
   environment variables needs to do nothing and behaves exactly as before (FR-031)
 - [X] T050 [P] Update `docs/security.md`: update the four existing secret rows to name the stored project
