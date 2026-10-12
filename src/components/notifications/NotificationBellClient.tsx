@@ -26,6 +26,9 @@ export function NotificationBellClient({ initial }: { initial: UnreadSummary }) 
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const [panelKey, setPanelKey] = useState(0);
+  // Declared before `onSummary`, which reads it: a ref captured by a hook before its own `useRef` is
+  // seen reads as an opaque value, and assigning to it later then trips react-hooks' mutation rule.
+  const refreshHandle = useRef<RefreshHandle | null>(null);
   const onSummary = useCallback(
     (value: UnreadSummary) => {
       setOverride({ base: initial, value });
@@ -35,7 +38,6 @@ export function NotificationBellClient({ initial }: { initial: UnreadSummary }) 
   );
   const [announcement, setAnnouncement] = useState("");
   const initialSummary = useRef(summary);
-  const refreshHandle = useRef<RefreshHandle | null>(null);
   useEffect(() => {
     initialSummary.current = summary;
   }, [summary]);
