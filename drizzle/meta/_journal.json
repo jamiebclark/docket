@@ -169,6 +169,13 @@
       "when": 1791784943195,
       "tag": "0023_chemical_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791810163023,
+      "tag": "0024_groovy_manta",
+      "breakpoints": true
     }
   ]
 }

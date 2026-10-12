@@ -28,6 +28,7 @@ export const projectOwnedTables = [
   { table: "voice_profile_versions", scopeColumn: "project_id" },
   { table: "generation_series", scopeColumn: "project_id" },
   { table: "generation_failures", scopeColumn: "project_id" },
+  { table: "project_llm_settings", scopeColumn: "project_id" },
   { table: "generation_jobs", scopeColumn: "project_id" },
   { table: "generation_job_items", scopeColumn: "project_id" },
   { table: "external_item_claims", scopeColumn: "project_id" },
