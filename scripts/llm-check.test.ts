@@ -120,7 +120,7 @@ describe("mainForProject()", () => {
     await createProjectLlmRepo(getDb(), project.id).save({
       provider: "openai",
       model: "fake-model",
-      apiKeyEncrypted: encryptSecret("sk-good", { aad: aadFor(project.id) }),
+      keyCiphertext: encryptSecret("sk-good", { aad: aadFor(project.id) }),
       updatedByUserId: null,
     });
     setLlmFactoryForTests((config: LlmConfig): LlmProvider =>

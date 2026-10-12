@@ -36,7 +36,7 @@ async function saveCredential(projectId: string, apiKey: string) {
   await createProjectLlmRepo(getDb(), projectId).save({
     provider: "openai",
     model: "fake-model",
-    apiKeyEncrypted: encryptSecret(apiKey, { aad: aadFor(projectId) }),
+    keyCiphertext: encryptSecret(apiKey, { aad: aadFor(projectId) }),
     updatedByUserId: null,
   });
 }

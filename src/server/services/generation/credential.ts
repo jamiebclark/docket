@@ -74,12 +74,12 @@ export async function saveProjectLlm(scope: ProjectScope, input: unknown): Promi
   need(scope);
 
   const current = await scope.projectLlm.status();
-  let apiKeyEncrypted: string | null;
+  let keyCiphertext: string | null;
   if (parsed.apiKey !== "") {
-    apiKeyEncrypted = encryptSecret(parsed.apiKey, { aad: `project_llm_credential:${scope.project.id}` });
+    keyCiphertext = encryptSecret(parsed.apiKey, { aad: `project_llm_credential:${scope.project.id}` });
   } else if (current?.hasKey && current.provider === parsed.provider) {
     // Blank means "keep the stored key" — only valid for the provider that key belongs to (K8).
-    apiKeyEncrypted = null;
+    keyCiphertext = null;
   } else if (current?.hasKey) {
     throw new ValidationIssuesError({
       apiKey: [{ code: "required", message: "Enter an API key for the new provider" }],
@@ -93,7 +93,7 @@ export async function saveProjectLlm(scope: ProjectScope, input: unknown): Promi
     await tx.projectLlm.save({
       provider: parsed.provider,
       model: parsed.model,
-      apiKeyEncrypted,
+      keyCiphertext,
       updatedByUserId: tx.membership.userId || null,
     });
     await tx.audit.insert({

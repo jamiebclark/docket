@@ -2086,3 +2086,154 @@ call on billing used to permanently fail every item it touched. Full text in
   owned by any roadmap entry (C12, C14).
 - **Detecting any other provider condition** (expired cards, suspended accounts, spend limits, regional
   restrictions) beyond the two verified shapes, and **any provider beyond `openai` and `anthropic`**.
+
+## 046 — Per-project LLM (2026-10-12)
+
+Spec: `specs/065-per-project-llm`. Roadmap entry 2 of 3 (`.specify/roadmaps/llm-credentials.md`, slug
+`per-project-llm`): a project may store its own LLM provider, model and API key, so its generation spends
+its own credential instead of the install's, widening the credential-owner seam (H2) entry 1 left for
+exactly this. Full text in `specs/065-per-project-llm/spec.md` (K1–K16) and
+`specs/065-per-project-llm/research.md` (L1–L33).
+
+**An install that only ever used environment variables needs to do nothing.** With no project credential
+stored, every project keeps using the install default exactly as before — same prompts, calls, logging,
+timings and existing test expectations; the only visible addition is a settings section telling an owner or
+admin that the project uses the install default (K4).
+
+### Spec decisions (K1–K16)
+
+- **K1 — The override is one atomic credential: provider, model and key together, or nothing.** No
+  field-by-field fallback; resolution is a choice between two complete configurations.
+- **K2 — Timeout and output-token limits stay install-wide.** They are operational safety limits tied to
+  the tick budget, not spend choices; both apply unchanged to a project credential.
+- **K3 — A project credential makes generation available for that project even when the install has
+  none.** `LLM_PROVIDER` unset now means "off for projects without their own credential", not "off
+  everywhere".
+- **K4 — Nothing changes for an env-only install**, beyond one settings sentence saying the project uses
+  the install default.
+- **K5 — One project-owned row per project, with the key in a single encrypted column**, through the
+  scoped DAL like every other project-owned table, keyed as associated data to the project.
+- **K6 — Nothing but the ciphertext is kept.** No plaintext, hash, prefix, last-four, length or
+  fingerprint — nothing here ever needs to recognise the key, only use it.
+- **K7 — The key is write-only in every direction.** Read only to make a provider call; never in an
+  action result, page, log line, error message, audit row, API payload or test snapshot.
+- **K8 — Leaving the key field blank keeps the stored key**; switching provider requires a key, because a
+  key belongs to one provider.
+- **K9 — A key that cannot be decrypted makes generation unavailable for that project; it never falls
+  back to the install default.** The project is told, in a fixed sentence, that an owner or admin must
+  re-enter the key; the stored row is left alone.
+- **K10 — Provider error text is still never surfaced.** The fixed per-kind sentences remain the only
+  user-facing failure text, for the check too; no new failure kind and no new API error code.
+- **K11 — A new permission statement for the credential, granted to owner and admin only.** Editors do
+  not see the section at all (absent, not disabled), and the server refuses their actions whatever the UI
+  shows.
+- **K12 — Every set, change and removal is audited** — actor, provider and model before and after, and
+  whether the key changed; never the key.
+- **K13 — Removing the override is one explicit, confirmed action**, because it silently moves spend back
+  onto the install's account.
+- **K14 — One check service, two callers.** A single function performs the per-project check; both the
+  settings surface and the command line call it, reporting source, provider, model, outcome and latency,
+  and never a key.
+- **K15 — The check is serialised per project with a short cooldown**, and runs through
+  `withCreditHold`, so a billing refusal during a check sets that project's hold and any other outcome
+  clears it (C11).
+- **K16 — The credential owner becomes the credential, and a credential change clears that owner's hold
+  at once.** A project with its own credential is its own owner; everything else about the hold — the
+  5-minute probe, single-flight probing, nothing failed or unreserved while held, no give-up timeout, no
+  operator control to lift it — is unchanged, simply now per owner.
+
+### Plan decisions (L1–L33)
+
+- **L1 — One new project-owned table, `project_llm_settings`**, primary key `project_id`, carrying the
+  optional credential, who last changed it and when, and the check lease bookkeeping.
+- **L2 — The row may exist with no credential; the credential is `provider IS NOT NULL`.** A CHECK makes
+  K1's atomicity a database fact; removal nulls all three credential columns and keeps the row.
+- **L3 — `provider` is `text` with a CHECK naming the two providers**, not a new pgEnum, matching the
+  email tables' shape.
+- **L4 — The associated data is `project_llm_credential:<projectId>`**, the shape
+  `webhook_endpoint:<id>` already uses.
+- **L5 — Nothing but the ciphertext.** No hash, prefix, last-four, length or fingerprint column exists to
+  populate; status is computed from `api_key_encrypted IS NOT NULL`.
+- **L6 — The one named place is `src/server/llm/resolve.ts`, `resolveLlmForProject(projectId)`**, the
+  only code that reads the credential table or calls `getLlm()` on a project's behalf.
+- **L7 — No provider-instance cache for a project credential.** The install branch keeps its existing
+  memoisation; a project credential constructs its SDK client per resolution.
+- **L8 — Install-wide limits are parsed on their own** via a new `parseLlmLimits(source)`, fixing in
+  passing a hard-coded 90 000 ms fallback that was wrong the moment a project could generate on an
+  install with no `LLM_PROVIDER`.
+- **L9 — `credentialOwnerFor` becomes a read of the table**; owner values are `"install"` and
+  `project:<uuid>`, so every existing hold row keeps its meaning.
+- **L10 — A batch sibling, `credentialOwnersFor(projectIds)`**, one statement for many projects, used by
+  `resolveBlockedProjectIds` inside the claim transaction.
+- **L11 — The resolved credential carries its owner**, so `runGenerationStep` and `planSeries` stop
+  asking twice.
+- **L12 — Readiness, overview, job creation, the Batch jobs screens and the job page take their answer
+  from `resolveLlmForProject`.** `getLlmStatus()` survives for startup-adjacent code and as resolution's
+  install branch.
+- **L13 — Test seams: `setLlmForTests` is untouched and still wins everywhere.** A new
+  `setLlmFactoryForTests((config) => provider)` is consulted only when that override is unset.
+- **L14 — A new permission statement, `llm_credential: ["manage"]`**, granted to `owner` and `admin`,
+  absent from `editor`.
+- **L15 — A settings sub-page, `/p/[projectSlug]/settings/model`**, beside API keys and Webhooks. An
+  editor reaching the URL directly gets `notFound()`.
+- **L16 — The key input is a `type="password"` field with `autoComplete="off"` and no value, ever.**
+- **L17 — One shared Zod schema for provider and model**, `projectLlmCredentialSchema`, bounding the key
+  at 500 characters after trimming.
+- **L18 — One audit action, `llm_credential_update`**, covering set, change and removal, with details
+  `{ fromProvider, fromModel, toProvider, toModel, keyChanged }` — never the key.
+- **L19 — Removal is a confirmed `Dialog` submit** naming the project and saying plainly that generation
+  moves back onto the install's account.
+- **L20 — The surface reports, and never renders a fragment of the key**: provider and model in force,
+  whether that is this project or the install default, whether a key is stored, and who last changed it.
+- **L21 — One check implementation, two callers**, in `src/server/services/generation/check.ts`:
+  `runLlmCheck(projectId, repo)` is resolve, gate, one call through `withCreditHold`, release, map; and
+  `checkProjectLlm(scope)` is `need(scope)` plus that call.
+- **L22 — The gate is a lease plus a cooldown on the settings row**, claimed and released in two short
+  transactions with the live call in between, the shape webhook delivery and email already use.
+- **L23 — Documented constants, not environment variables**: `LLM_CHECK_COOLDOWN_MS = 30_000`,
+  `LLM_CHECK_LEASE_MS = 60_000`, call timeout `min(installTimeoutMs, 30_000)`.
+- **L24 — The CLI grows one optional argument.** `pnpm llm:check` with no argument is byte-identical to
+  today; `pnpm llm:check --project <slug>` resolves and checks that project with no session.
+- **L25 — Saving, changing and removing clear the project's hold inside the same transaction as the
+  write**, so "its items resume on the next tick" is a committed fact.
+- **L26 — The notice gains one sentence naming whose account needs credit.** `CreditHoldNotice` takes a
+  `scope: "project" | "install"` prop.
+- **L27 — The runner's global gate becomes "the install is configured, or some project has a
+  credential".** Per item, `not_configured` or `key_unreadable` releases the item — no attempt counted,
+  no failure.
+- **L28 — Orphan hold rows are swept by housekeeping**: `pruneOrphanCreditHolds()` deletes
+  `project:<uuid>` rows with no matching project.
+- **L29 — The undecryptable-key sentence is a resolution state, not a failure kind.** No `LlmFailureKind`
+  is added; the public API maps it onto the existing `generation_not_configured`.
+- **L30 — The runner's `logLine` redacts the *resolved* key, not just the environment's.**
+- **L31 — A new guard test extends the existing one.** `key-reads.test.ts` gains a sibling asserting
+  `api_key_encrypted` / `apiKeyEncrypted` is read and decrypted only in `project-llm.ts` and `resolve.ts`,
+  and that `runLlmCheck` is imported only by its siblings and the CLI script.
+- **L32 — The secret-scan extension is one more section of the existing scanned run**: a project key
+  saved, changed and removed through the real server actions; the settings page rendered for owner, admin
+  and editor; a check; a tick that generates on that credential; and a billing refusal whose provider
+  error body embeds that key. `no-plaintext.test.ts` gains the stored key and its SHA-256 hex and dumps
+  the new table before its all-tables scan.
+- **L33 — Docs.** `docs/generator.md`'s env-only sentence is replaced in place, with a new "Per-project
+  provider, model and key" subsection and a widened "Jobs" hold paragraph; `docs/decisions.md` gains this
+  entry; `docs/security.md`'s four secret rows are updated and one row added, each naming tests that
+  exist; `.env.example`'s generator block notes a project may store its own, adding no variable.
+
+### What this entry does not do
+
+- **Reporting spend, cost or token usage, per project or at all** — roadmap entry 3,
+  `llm-cost-visibility`. This entry stores a key and resolves it; it persists nothing about what a call
+  consumed.
+- **Any provider beyond `openai` and `anthropic`** — closed by the roadmap; nothing here opens it.
+- **Letting a non-admin see, change or check a key** — editors see no credential section at all.
+- **Budgets, caps or throttling on spend** — outside the roadmap entirely.
+- **Per-project timeouts or output-token limits** (K2), and **per-user credentials** — no roadmap entry
+  owns either.
+- **Changing entry 1's hold mechanics** — the probe interval, single-flight probing, "nothing failed
+  while held", the absence of a give-up timeout and the absence of an operator control to lift a hold all
+  stay exactly as entry 1 specified them; only the owner's identity widens.
+- **Notifying anyone that a project's credential failed** — the notifications roadmap owns attention
+  events.
+- **Image generation credentials** — image generation is an extension point only on `main`.
+- **Validating model ids against a provider catalogue**, and **retro-fitting anything onto generations
+  already made** — neither is owned by any roadmap entry.

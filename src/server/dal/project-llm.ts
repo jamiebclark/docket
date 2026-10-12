@@ -31,11 +31,11 @@ export interface ProjectLlmRepo {
   read(): Promise<ProjectLlmRow | null>;
   /** The surface's read. Cannot return a ciphertext. */
   status(): Promise<ProjectLlmStatusRow | null>;
-  /** Set or replace. `apiKeyEncrypted: null` keeps the stored ciphertext (FR-015, K8). */
+  /** Set or replace. `keyCiphertext: null` keeps the stored ciphertext (FR-015, K8). */
   save(patch: {
     provider: LlmProviderName;
     model: string;
-    apiKeyEncrypted: string | null;
+    keyCiphertext: string | null;
     updatedByUserId: string | null;
   }): Promise<ProjectLlmStatusRow>;
   /** Nulls provider, model and the ciphertext; keeps the row (FR-017, L2). */
@@ -96,7 +96,7 @@ export function createProjectLlmRepo(exec: Database, projectId: string): Project
           projectId,
           provider: patch.provider,
           model: patch.model,
-          apiKeyEncrypted: patch.apiKeyEncrypted,
+          apiKeyEncrypted: patch.keyCiphertext,
           updatedAt: at,
           updatedByUserId: patch.updatedByUserId,
         })
@@ -105,7 +105,7 @@ export function createProjectLlmRepo(exec: Database, projectId: string): Project
           set: {
             provider: patch.provider,
             model: patch.model,
-            apiKeyEncrypted: patch.apiKeyEncrypted ?? sql`${projectLlmSettings.apiKeyEncrypted}`,
+            apiKeyEncrypted: patch.keyCiphertext ?? sql`${projectLlmSettings.apiKeyEncrypted}`,
             updatedAt: at,
             updatedByUserId: patch.updatedByUserId,
           },

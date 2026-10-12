@@ -20,7 +20,7 @@ async function saveCredential(
   await repo.save({
     provider: patch.provider,
     model: patch.model,
-    apiKeyEncrypted: encryptSecret(patch.apiKey, { aad: aadFor(projectId) }),
+    keyCiphertext: encryptSecret(patch.apiKey, { aad: aadFor(projectId) }),
     updatedByUserId: null,
   });
 }
@@ -108,7 +108,7 @@ describe("resolveLlmForProject", () => {
     vi.stubEnv("OPENAI_API_KEY", "install-key");
     const project = await createProject();
     const repo = projectLlmRepoFor(project.id);
-    await repo.save({ provider: "openai", model: "m", apiKeyEncrypted: "not-really-ciphertext", updatedByUserId: null });
+    await repo.save({ provider: "openai", model: "m", keyCiphertext: "not-really-ciphertext", updatedByUserId: null });
 
     const resolved = await resolveLlmForProject(project.id);
     expect(resolved).toEqual({ ok: false, reason: "key_unreadable" });

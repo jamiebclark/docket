@@ -297,19 +297,19 @@ well as in the UI, and the extended secret scan proves no leak in any of the for
 **Purpose**: The documentation obligations the roadmap attaches to this entry by name, and the full-suite
 proof that the repository is left working.
 
-- [ ] T048 [P] Update `docs/generator.md`: replace "Keys are read from the environment only and never
+- [X] T048 [P] Update `docs/generator.md`: replace "Keys are read from the environment only and never
   stored, logged or rendered" in place, under its existing headings, with what is now true; add the
   "Per-project provider, model and key" subsection (resolution, who may set one, the check, the
   undecryptable case); widen the "Jobs" hold paragraph for per-owner scope (FR-031)
-- [ ] T049 [P] Add `docs/decisions.md` § 046 — Per-project LLM, carrying K1–K16 and L1–L33 next to the
+- [X] T049 [P] Add `docs/decisions.md` § 046 — Per-project LLM, carrying K1–K16 and L1–L33 next to the
   generator decisions and entry 1's C/H sets, with its own line stating that an install that only ever used
   environment variables needs to do nothing and behaves exactly as before (FR-031)
-- [ ] T050 [P] Update `docs/security.md`: update the four existing secret rows to name the stored project
+- [X] T050 [P] Update `docs/security.md`: update the four existing secret rows to name the stored project
   key and its new places, and add one row for the credential at rest naming the tests that prove it
   (FR-031, checked by `tests/integration/docs/security-findings.test.ts`)
-- [ ] T051 [P] Update `.env.example`'s generator block to note that a project may also store its own
+- [X] T051 [P] Update `.env.example`'s generator block to note that a project may also store its own
   credential, adding no new variable (FR-031, checked by `tests/lint/env-coverage.test.ts`)
-- [ ] T052 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`; the whole existing
+- [X] T052 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`; the whole existing
   suite — `src/server/llm/*.test.ts`, `scripts/llm-check.test.ts`, every `tests/integration/jobs/*.test.ts`,
   every generation golden/snapshot file — must pass **unchanged**, not re-snapshotted (SC-001, FR-032);
   fix any regression found rather than adjusting its expectation
@@ -320,6 +320,9 @@ proof that the repository is left working.
   work with client JavaScript disabled; confirm no screen, toast or page source contains any part of the
   key. If this window has closed before the task is picked up, mark it so and state why rather than leaving
   it open.
+  NOT DONE: left unchecked by the automated implement pass (2026-10-12) — this is a headless agent with no
+  signed-in browser session to drive `pnpm dev` through. Needs a human (or a browser-capable agent) to run
+  the quickstart.md §4 walk-through before this task can be ticked.
 
 ---
 
