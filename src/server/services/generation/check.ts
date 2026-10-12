@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LLM_CHECK_BUSY, LLM_KEY_UNREADABLE } from "../../../lib/generation/llm-source";
 import type { ProjectLlmRepo } from "../../dal/project-llm";
 import { requirePermission, type ProjectScope } from "../../dal/scope";
 import { missingLlmSettings } from "../../llm";
@@ -10,9 +11,6 @@ import { withCreditHold } from "./credit";
 export const LLM_CHECK_COOLDOWN_MS = 30_000;
 export const LLM_CHECK_LEASE_MS = 60_000;
 export const LLM_CHECK_TIMEOUT_MS = 30_000;
-
-const BUSY_MESSAGE = "A check is already running for this project. Wait a moment and try again.";
-const KEY_UNREADABLE_MESSAGE = "The stored key could not be read. Re-enter it.";
 
 export type LlmCheckResult =
   | { ok: true; source: "project" | "install"; provider: LlmProviderName; model: string; latencyMs: number }
@@ -37,11 +35,11 @@ export async function runLlmCheck(projectId: string, repo: ProjectLlmRepo): Prom
     if (resolved.reason === "not_configured") {
       return { ok: false, reason: "not_configured", missingSettings: missingLlmSettings(resolved.problems) };
     }
-    return { ok: false, reason: "key_unreadable", message: KEY_UNREADABLE_MESSAGE };
+    return { ok: false, reason: "key_unreadable", message: LLM_KEY_UNREADABLE };
   }
 
   const claimed = await repo.claimCheck(new Date(), LLM_CHECK_LEASE_MS, LLM_CHECK_COOLDOWN_MS);
-  if (!claimed) return { ok: false, reason: "busy", message: BUSY_MESSAGE };
+  if (!claimed) return { ok: false, reason: "busy", message: LLM_CHECK_BUSY };
 
   try {
     const llm = withCreditHold(resolved.llm, resolved.owner);

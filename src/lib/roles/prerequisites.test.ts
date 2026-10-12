@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
 import type { GenerationReadiness } from "@/server/services/generation/readiness";
 import type { Manager } from "./names";
 import { generationPrerequisites, PREREQUISITES_TITLE } from "./prerequisites";
@@ -13,9 +14,9 @@ const ownerReadiness: GenerationReadiness = {
   ...none,
   ai: { ...aiBase, configured: false, missingSettings: ["LLM_PROVIDER", "LLM_MODEL"] },
 };
-const owner = { isOwner: true, canManageAccounts: true, canManageVoice: true };
-const admin = { isOwner: false, canManageAccounts: true, canManageVoice: true };
-const editor = { isOwner: false, canManageAccounts: false, canManageVoice: false };
+const owner = { isOwner: true, canManageAccounts: true, canManageVoice: true, canManageModel: true };
+const admin = { isOwner: false, canManageAccounts: true, canManageVoice: true, canManageModel: true };
+const editor = { isOwner: false, canManageAccounts: false, canManageVoice: false, canManageModel: false };
 const run = (viewer: typeof owner, readiness = none, images?: { message: string } | null) =>
   generationPrerequisites({ slug: "p", readiness, viewer, managers, images }) ?? [];
 const status = (items: ReturnType<typeof run>, key: string) => items.find((i) => i.key === key)?.status;
@@ -67,6 +68,26 @@ describe("generationPrerequisites", () => {
         managers,
       }),
     ).toBeNull();
+  });
+
+  it("keyUnreadable: points an owner or admin at Settings → Model, never the env-variable guide", () => {
+    const readiness: GenerationReadiness = { ...none, ai: { ...aiBase, configured: false, keyUnreadable: true, missingSettings: null } };
+    const ownerItems = run(owner, readiness);
+    expect(status(ownerItems, "ai")).toEqual({ kind: "todo" });
+    expect(ownerItems[0]).toMatchObject({
+      description: LLM_KEY_UNREADABLE,
+      action: { label: "Go to Settings → Model", href: "/p/p/settings/model" },
+    });
+
+    const adminItems = run(admin, readiness);
+    expect(adminItems[0]).toMatchObject({
+      description: LLM_KEY_UNREADABLE,
+      action: { label: "Go to Settings → Model", href: "/p/p/settings/model" },
+    });
+
+    const editorItems = run(editor, readiness);
+    expect(status(editorItems, "ai")).toEqual({ kind: "waiting", on: "Robin" });
+    expect(editorItems[0]).toMatchObject({ description: LLM_KEY_UNREADABLE, action: null });
   });
 
   it("adds the images item, which keeps the list even when all else is done", () => {

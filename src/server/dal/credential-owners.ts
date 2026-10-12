@@ -5,6 +5,15 @@ import { generationJobs, projectLlmSettings } from "../db/schema";
 /** The install's env-configured credential: the only credential owner that exists today (C7). */
 export const INSTALL_CREDENTIAL_OWNER = "install";
 
+/** Prefix of every project's own credential owner string. Shared so a `LIKE`/`substring` elsewhere (see
+ * `pruneOrphanCreditHolds`) stays in lockstep with `projectCredentialOwner`. */
+export const PROJECT_CREDENTIAL_OWNER_PREFIX = "project:";
+
+/** The owner string for a project's own stored credential (FR-012, FR-027). The one place that formats it. */
+export function projectCredentialOwner(projectId: string): string {
+  return `${PROJECT_CREDENTIAL_OWNER_PREFIX}${projectId}`;
+}
+
 /**
  * Who owns the credential a call for this project would spend (FR-012, FR-024).
  * The install's one credential, unless the project has set its own.
@@ -16,7 +25,7 @@ export async function credentialOwnerFor(projectId: string, exec: Database = get
     .from(projectLlmSettings)
     .where(and(eq(projectLlmSettings.projectId, projectId), isNotNull(projectLlmSettings.provider)))
     .limit(1);
-  return rows.length > 0 ? `project:${projectId}` : INSTALL_CREDENTIAL_OWNER;
+  return rows.length > 0 ? projectCredentialOwner(projectId) : INSTALL_CREDENTIAL_OWNER;
 }
 
 /** The same question for many projects, in one statement (L10). */
@@ -30,7 +39,7 @@ export async function credentialOwnersFor(
     .select({ projectId: projectLlmSettings.projectId })
     .from(projectLlmSettings)
     .where(and(inArray(projectLlmSettings.projectId, [...projectIds]), isNotNull(projectLlmSettings.provider)));
-  for (const row of rows) owners.set(row.projectId, `project:${row.projectId}`);
+  for (const row of rows) owners.set(row.projectId, projectCredentialOwner(row.projectId));
   return owners;
 }
 

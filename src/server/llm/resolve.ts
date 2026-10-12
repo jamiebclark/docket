@@ -1,5 +1,5 @@
 import { decryptSecret, SecretDecryptionError } from "../crypto/secrets";
-import { INSTALL_CREDENTIAL_OWNER } from "../dal/credential-owners";
+import { INSTALL_CREDENTIAL_OWNER, projectCredentialOwner } from "../dal/credential-owners";
 import { projectLlmRepoFor } from "../dal/project-llm";
 import type { EnvIssue } from "../env";
 import { parseLlmConfig, parseLlmLimits, type LlmConfig } from "./config";
@@ -56,7 +56,7 @@ export async function resolveLlmForProject(projectId: string): Promise<ResolvedL
         source: "project",
         provider: row.provider,
         model: row.model!,
-        owner: `project:${projectId}`,
+        owner: projectCredentialOwner(projectId),
         limits,
         llm: createLlmProviderForConfig(config),
         apiKey,

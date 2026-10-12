@@ -45,4 +45,56 @@ describe("project LLM credential authorization", () => {
     const removed = await removeProjectLlm(adminScope);
     expect(removed.hasKey).toBe(false);
   });
+
+  it("audits the before/after provider, model and whether the key changed, never the key itself", async () => {
+    const { scope } = await postsEnv();
+
+    await saveProjectLlm(scope, { provider: "openai", model: "m1", apiKey: KEY });
+    let entries = await scope.audit.list();
+    expect(entries[0]).toMatchObject({
+      action: "llm_credential_update",
+      details: { fromProvider: null, fromModel: null, toProvider: "openai", toModel: "m1", keyChanged: true },
+    });
+    expect(JSON.stringify(entries[0]?.details)).not.toContain(KEY);
+
+    await saveProjectLlm(scope, { provider: "openai", model: "m2", apiKey: "" });
+    entries = await scope.audit.list();
+    expect(entries[0]).toMatchObject({
+      details: { fromProvider: "openai", fromModel: "m1", toProvider: "openai", toModel: "m2", keyChanged: false },
+    });
+
+    await removeProjectLlm(scope);
+    entries = await scope.audit.list();
+    expect(entries[0]).toMatchObject({
+      details: { fromProvider: "openai", fromModel: "m2", toProvider: null, toModel: null, keyChanged: true },
+    });
+  });
+
+  it("refuses a blank key with a field-level message, both with a key stored for a different provider and with none stored", async () => {
+    const { scope } = await postsEnv();
+
+    await expect(saveProjectLlm(scope, { provider: "openai", model: "m1", apiKey: "" })).rejects.toMatchObject({
+      name: "ValidationIssuesError",
+      issues: [{ code: "required", field: "apiKey", message: "Enter an API key" }],
+    });
+
+    await saveProjectLlm(scope, { provider: "openai", model: "m1", apiKey: KEY });
+    await expect(saveProjectLlm(scope, { provider: "anthropic", model: "m2", apiKey: "" })).rejects.toMatchObject({
+      name: "ValidationIssuesError",
+      issues: [{ code: "required", field: "apiKey", message: "Enter an API key for the new provider" }],
+    });
+  });
+
+  it("does not report a credential change from a check alone (F4): lastChange stays null until a real save", async () => {
+    const { scope } = await postsEnv();
+    setLlmForTests(createFakeLlm([{ ok: { text: "hi" } }], { provider: "openai", model: "install-model" }));
+
+    await checkProjectLlm(scope);
+    const afterCheck = await getProjectLlm(scope);
+    expect(afterCheck.lastChange).toBeNull();
+
+    await saveProjectLlm(scope, { provider: "openai", model: "m1", apiKey: KEY });
+    const afterSave = await getProjectLlm(scope);
+    expect(afterSave.lastChange).not.toBeNull();
+  });
 });

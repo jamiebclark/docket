@@ -5,7 +5,7 @@ import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
 import { projects } from "../../../src/server/db/schema";
 import { clearCreditHold } from "../../../src/server/dal/credit-holds";
-import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
+import { INSTALL_CREDENTIAL_OWNER, projectCredentialOwner } from "../../../src/server/dal/credential-owners";
 import { createProjectLlmRepo } from "../../../src/server/dal/project-llm";
 import { setLlmFactoryForTests, setLlmForTests } from "../../../src/server/llm";
 import type { LlmConfig } from "../../../src/server/llm/config";
@@ -14,6 +14,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { pruneOrphanHolds } from "../../../src/server/scheduler/housekeeping";
 import { generationCreditHold } from "../../../src/server/services/jobs/read";
 import { createJob } from "../../../src/server/services/jobs";
+import { removeProjectLlm, saveProjectLlm } from "../../../src/server/services/generation/credential";
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
@@ -30,7 +31,7 @@ afterAll(async () => {
 });
 
 const aadFor = (projectId: string) => `project_llm_credential:${projectId}`;
-const PROJECT_OWNER = (projectId: string) => `project:${projectId}`;
+const PROJECT_OWNER = projectCredentialOwner;
 
 async function saveCredential(projectId: string, apiKey: string) {
   await createProjectLlmRepo(getDb(), projectId).save({
@@ -187,6 +188,40 @@ describe("hold scope (US3)", () => {
     expect(tick.generation.counts).toMatchObject({ claimed: 1, held: 0, probed: 0, done: 1 });
     const [item] = await e.scope.jobItems.listForJob(jobId);
     expect(item!.status).toBe("done");
+  }, 60_000);
+
+  it("FR-027: saveProjectLlm clears a held project's hold through the real action, not a stand-in", async () => {
+    const e = await jobsEnv();
+    const KEY = "sk-held-then-saved";
+    await saveCredential(e.project.id, KEY);
+    const { queue } = keyedFactory();
+    await e.asset();
+    await createJob(e.scope, e.input());
+
+    queue(KEY, { fail: "credit_exhausted" });
+    await tickAt(new Date(), { jobMaxItems: 1 });
+    const owner = PROJECT_OWNER(e.project.id);
+    expect(await readHold(owner)).not.toBeNull();
+
+    await saveProjectLlm(e.scope, { provider: "openai", model: "fake-model", apiKey: "sk-fresh-key-0123456789" });
+    expect(await readHold(owner)).toBeNull();
+  }, 60_000);
+
+  it("FR-027: removeProjectLlm clears a held project's hold through the real action", async () => {
+    const e = await jobsEnv();
+    const KEY = "sk-held-then-removed";
+    await saveCredential(e.project.id, KEY);
+    const { queue } = keyedFactory();
+    await e.asset();
+    await createJob(e.scope, e.input());
+
+    queue(KEY, { fail: "credit_exhausted" });
+    await tickAt(new Date(), { jobMaxItems: 1 });
+    const owner = PROJECT_OWNER(e.project.id);
+    expect(await readHold(owner)).not.toBeNull();
+
+    await removeProjectLlm(e.scope);
+    expect(await readHold(owner)).toBeNull();
   }, 60_000);
 
   it("AS5/AS6: the notice names whose account, and names the install elsewhere, with none in a different funded project", async () => {

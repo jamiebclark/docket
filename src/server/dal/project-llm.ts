@@ -90,6 +90,34 @@ export function createProjectLlmRepo(exec: Database, projectId: string): Project
     },
     async save(patch) {
       const at = await now(exec);
+      if (patch.keyCiphertext === null) {
+        // Keep the already-stored ciphertext (caller only passes null when a row with one exists):
+        // a plain UPDATE that never mentions the column, not an upsert whose SET self-references it.
+        // Postgres's ON CONFLICT DO UPDATE validates this table's multi-column CHECK constraint
+        // against the proposed (excluded) row even when SET resolves the column to the old value, so
+        // an insert with a null key and a self-referencing SET fails the constraint it would not
+        // actually violate.
+        const rows = await exec
+          .update(projectLlmSettings)
+          .set({
+            provider: patch.provider,
+            model: patch.model,
+            updatedAt: at,
+            updatedByUserId: patch.updatedByUserId,
+          })
+          .where(mine)
+          .returning(statusColumns);
+        const row = rows[0];
+        if (row) {
+          return {
+            provider: row.provider as LlmProviderName | null,
+            model: row.model,
+            hasKey: row.hasKey,
+            updatedAt: row.updatedAt,
+            updatedByUserId: row.updatedByUserId,
+          };
+        }
+      }
       const rows = await exec
         .insert(projectLlmSettings)
         .values({
@@ -105,7 +133,7 @@ export function createProjectLlmRepo(exec: Database, projectId: string): Project
           set: {
             provider: patch.provider,
             model: patch.model,
-            apiKeyEncrypted: patch.keyCiphertext ?? sql`${projectLlmSettings.apiKeyEncrypted}`,
+            apiKeyEncrypted: patch.keyCiphertext,
             updatedAt: at,
             updatedByUserId: patch.updatedByUserId,
           },

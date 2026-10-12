@@ -9,7 +9,7 @@ import { Field } from "@/components/ui/Field";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type { ActionResult } from "@/lib/action-result";
-import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
+import { LLM_KEY_UNREADABLE, LLM_SOURCE_INSTALL, LLM_SOURCE_PROJECT } from "@/lib/generation/llm-source";
 import type { LlmCheckResult } from "@/server/services/generation/check";
 import { checkProjectModel, removeProjectModel, saveProjectModel } from "./actions";
 import type { ProjectLlmDto } from "./dto";
@@ -31,10 +31,14 @@ function InUseLine({ inUse }: { inUse: ModelView["inUse"] }) {
     );
   }
   return (
-    <p className="text-sm">
-      {inUse.provider === "openai" ? "OpenAI" : "Anthropic"} · {inUse.model} ·{" "}
-      {inUse.source === "project" ? "this project's own key" : "this Docket's key"}
-    </p>
+    <>
+      <p className="text-sm">
+        {inUse.provider === "openai" ? "OpenAI" : "Anthropic"} · {inUse.model}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {inUse.source === "project" ? LLM_SOURCE_PROJECT : LLM_SOURCE_INSTALL}
+      </p>
+    </>
   );
 }
 

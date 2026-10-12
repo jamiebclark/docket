@@ -1,4 +1,5 @@
 import { encryptSecret } from "../../crypto/secrets";
+import { projectCredentialOwner } from "../../dal/credential-owners";
 import { clearCreditHold } from "../../dal/credit-holds";
 import { ForbiddenError, ValidationIssuesError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
@@ -43,14 +44,14 @@ async function buildView(scope: ProjectScope): Promise<ProjectLlmView> {
       : { source: "install", configured: false, missingSettings: missingLlmSettings(status.problems) };
   }
 
+  // `updatedByUserId` is only ever set by `save`/`clear`; `claimCheck` can create this row without it,
+  // so gating on the row's existence (or `updatedAt`, which a fresh row always has) would report a
+  // credential change that never happened.
   let lastChange: ProjectLlmView["lastChange"] = null;
-  if (row?.updatedByUserId || row?.updatedAt) {
-    let by: { id: string; name: string } | null = null;
-    if (row.updatedByUserId) {
-      const members = await scope.members.list();
-      const member = members.find((m) => m.userId === row.updatedByUserId);
-      by = member ? { id: member.userId, name: member.name } : null;
-    }
+  if (row?.updatedByUserId) {
+    const members = await scope.members.list();
+    const member = members.find((m) => m.userId === row.updatedByUserId);
+    const by = member ? { id: member.userId, name: member.name } : null;
     lastChange = { by, at: row.updatedAt };
   }
 
@@ -73,36 +74,46 @@ export async function saveProjectLlm(scope: ProjectScope, input: unknown): Promi
   const parsed = projectLlmCredentialSchema.parse(input);
   need(scope);
 
-  const current = await scope.projectLlm.status();
-  let keyCiphertext: string | null;
-  if (parsed.apiKey !== "") {
-    keyCiphertext = encryptSecret(parsed.apiKey, { aad: `project_llm_credential:${scope.project.id}` });
-  } else if (current?.hasKey && current.provider === parsed.provider) {
-    // Blank means "keep the stored key" — only valid for the provider that key belongs to (K8).
-    keyCiphertext = null;
-  } else if (current?.hasKey) {
-    throw new ValidationIssuesError({
-      apiKey: [{ code: "required", message: "Enter an API key for the new provider" }],
-    });
-  } else {
-    throw new ValidationIssuesError({ apiKey: [{ code: "required", message: "Enter an API key" }] });
-  }
+  await scope.transaction(
+    async (tx) => {
+      need(tx);
+      // Read under the project lock, so the "blank keeps the stored key" decision cannot race a concurrent save.
+      const current = await tx.projectLlm.status();
+      let keyCiphertext: string | null;
+      if (parsed.apiKey !== "") {
+        keyCiphertext = encryptSecret(parsed.apiKey, { aad: `project_llm_credential:${scope.project.id}` });
+      } else if (current?.hasKey && current.provider === parsed.provider) {
+        // Blank means "keep the stored key" — only valid for the provider that key belongs to (K8).
+        keyCiphertext = null;
+      } else if (current?.hasKey) {
+        const message = "Enter an API key for the new provider";
+        throw new ValidationIssuesError([{ code: "required", field: "apiKey", message }], message);
+      } else {
+        const message = "Enter an API key";
+        throw new ValidationIssuesError([{ code: "required", field: "apiKey", message }], message);
+      }
 
-  await scope.transaction(async (tx) => {
-    need(tx);
-    await tx.projectLlm.save({
-      provider: parsed.provider,
-      model: parsed.model,
-      keyCiphertext,
-      updatedByUserId: tx.membership.userId || null,
-    });
-    await tx.audit.insert({
-      action: "llm_credential_update",
-      actorUserId: tx.membership.userId || null,
-      details: { toProvider: parsed.provider, toModel: parsed.model },
-    });
-    await clearCreditHold(`project:${scope.project.id}`, tx.exec);
-  });
+      await tx.projectLlm.save({
+        provider: parsed.provider,
+        model: parsed.model,
+        keyCiphertext,
+        updatedByUserId: tx.membership.userId || null,
+      });
+      await tx.audit.insert({
+        action: "llm_credential_update",
+        actorUserId: tx.membership.userId || null,
+        details: {
+          fromProvider: current?.provider ?? null,
+          fromModel: current?.model ?? null,
+          toProvider: parsed.provider,
+          toModel: parsed.model,
+          keyChanged: keyCiphertext !== null,
+        },
+      });
+      await clearCreditHold(projectCredentialOwner(scope.project.id), tx.exec);
+    },
+    { lockProject: true },
+  );
 
   return buildView(scope);
 }
@@ -111,16 +122,26 @@ export async function saveProjectLlm(scope: ProjectScope, input: unknown): Promi
 export async function removeProjectLlm(scope: ProjectScope): Promise<ProjectLlmView> {
   need(scope);
 
-  await scope.transaction(async (tx) => {
-    need(tx);
-    await tx.projectLlm.clear(tx.membership.userId || null);
-    await tx.audit.insert({
-      action: "llm_credential_update",
-      actorUserId: tx.membership.userId || null,
-      details: { toProvider: null, toModel: null },
-    });
-    await clearCreditHold(`project:${scope.project.id}`, tx.exec);
-  });
+  await scope.transaction(
+    async (tx) => {
+      need(tx);
+      const current = await tx.projectLlm.status();
+      await tx.projectLlm.clear(tx.membership.userId || null);
+      await tx.audit.insert({
+        action: "llm_credential_update",
+        actorUserId: tx.membership.userId || null,
+        details: {
+          fromProvider: current?.provider ?? null,
+          fromModel: current?.model ?? null,
+          toProvider: null,
+          toModel: null,
+          keyChanged: Boolean(current?.hasKey),
+        },
+      });
+      await clearCreditHold(projectCredentialOwner(scope.project.id), tx.exec);
+    },
+    { lockProject: true },
+  );
 
   return buildView(scope);
 }
