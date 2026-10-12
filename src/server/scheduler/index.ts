@@ -7,6 +7,7 @@ import { emptyGenerationCounts, runGenerationJobs, type GenerationCounts } from 
 import { emptyHousekeepingCounts, runHousekeeping, type HousekeepingCounts } from "./housekeeping";
 import { emptyWebhookCounts, runWebhookDeliveries, type WebhookCounts } from "./webhooks";
 import { emptyPublishingCounts, runPublishing, type PublishingCounts } from "./publishing";
+import { emptyEmailCounts, runEmailDeliveries, type EmailCounts } from "./email";
 
 export type { SchedulerConfig } from "./config";
 
@@ -21,6 +22,7 @@ export interface TickSummary {
   generation: SectionResult<GenerationCounts>;
   housekeeping: SectionResult<HousekeepingCounts>;
   webhooks: SectionResult<WebhookCounts>;
+  email: SectionResult<EmailCounts>;
 }
 
 /**
@@ -42,13 +44,14 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     }
   };
   // The sections run concurrently under the same deadline (D7); each handles its own failure.
-  const [publishing, tokenRefresh, generation, housekeeping, webhooks] = await Promise.all([
+  const [publishing, tokenRefresh, generation, housekeeping, webhooks, email] = await Promise.all([
     section("publishing", () => runPublishing({ config, tickId, startedAt }), emptyPublishingCounts()),
     section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0 }),
     section("generation jobs", () => runGenerationJobs({ config, tickId, startedAt }), emptyGenerationCounts()),
     section("housekeeping", () => runHousekeeping(), emptyHousekeepingCounts()),
     section("webhooks", () => runWebhookDeliveries({ config, tickId, startedAt }), emptyWebhookCounts()),
+    section("email", () => runEmailDeliveries({ config, tickId, startedAt }), emptyEmailCounts()),
   ]);
 
-  return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh, generation, housekeeping, webhooks };
+  return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh, generation, housekeeping, webhooks, email };
 }

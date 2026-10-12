@@ -25,10 +25,22 @@ export interface InvitationView {
   canManage: boolean;
 }
 
-type Link = { url: string; expiresAt: string; email: string };
+type Link = { url: string; expiresAt: string; email: string; deliveryEmail: DeliveryDto["email"] };
 
 const tone = { pending: "neutral", expired: "warning", accepted: "success", declined: "neutral", revoked: "danger" } as const;
 const label = { pending: "Pending", expired: "Expired", accepted: "Accepted", declined: "Declined", revoked: "Revoked" } as const;
+
+function manualLinkMessage(link: Link, timeZone: string): string {
+  if (link.deliveryEmail === "sent") return "Invitation emailed.";
+  if (link.deliveryEmail === "failed") return "The invitation was created, but the email did not go out.";
+  return `Send this link to ${link.email}. It is shown only once and expires on ${formatLocal(link.expiresAt, timeZone)}.`;
+}
+
+function inAppMessage(email: string, deliveryEmail: DeliveryDto["email"]): string {
+  if (deliveryEmail === "sent") return `Invitation sent. ${email} will see it in Docket and has been emailed.`;
+  if (deliveryEmail === "failed") return "The invitation was created, but the email did not go out.";
+  return "Invitation sent. They will see it under Invitations when they sign in.";
+}
 
 export function InvitationsPanel({
   slug,
@@ -53,9 +65,7 @@ export function InvitationsPanel({
       {canInvite ? <InviteForm slug={slug} canInviteOwner={canInviteOwner} onLink={setLink} /> : null}
       {link ? (
         <div role="region" aria-label="Invitation link" className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
-          <p className="text-sm">
-            Send this link to {link.email}. It is shown only once and expires on {formatLocal(link.expiresAt, timeZone)}.
-          </p>
+          <p className="text-sm">{manualLinkMessage(link, timeZone)}</p>
           <CopyField id="invitation-link" label="Invitation link" value={link.url} />
           <Button variant="secondary" className="self-start" onClick={() => setLink(null)}>
             Done, hide link
@@ -90,7 +100,7 @@ function InviteForm({
   const formError = state && !state.ok && Object.keys(errors).length === 0 ? state.message : null;
 
   useEffect(() => {
-    if (state?.ok && state.data.link) onLink({ ...state.data.link, email });
+    if (state?.ok && state.data.link) onLink({ ...state.data.link, email, deliveryEmail: state.data.email });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- react to each new result only
   }, [state]);
 
@@ -120,7 +130,7 @@ function InviteForm({
       ) : null}
       {state?.ok && !state.data.link ? (
         <p role="status" className="text-sm">
-          Invitation sent. They will see it under Invitations when they sign in.
+          {inAppMessage(email, state.data.email)}
         </p>
       ) : null}
     </form>
@@ -135,7 +145,7 @@ function InvitationRow({ slug, timeZone, inv, onLink }: { slug: string; timeZone
   const error = [regen, revoked].find((s) => s && !s.ok);
 
   useEffect(() => {
-    if (regen?.ok && regen.data.link) onLink({ ...regen.data.link, email: inv.email });
+    if (regen?.ok && regen.data.link) onLink({ ...regen.data.link, email: inv.email, deliveryEmail: regen.data.email });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- react to each new result only
   }, [regen]);
 

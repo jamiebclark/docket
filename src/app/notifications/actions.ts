@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fail, failFromError, ok, type ActionResult } from "@/lib/action-result";
 import { getSession } from "@/server/auth/session";
@@ -16,6 +17,12 @@ import {
   unreadSummary as unreadSummaryService,
   type RowActionResult,
 } from "@/server/services/notifications";
+import {
+  EmailUnavailableError,
+  includeMyProject as includeMyProjectService,
+  resumeMyEmail as resumeMyEmailService,
+  saveMyEmailSettings as saveMyEmailSettingsService,
+} from "@/server/services/email";
 import type { UnreadSummary } from "@/lib/notifications/types";
 
 /** Only the Notifications page itself: an absolute URL, a protocol-relative one or any other path is ignored. */
@@ -152,4 +159,51 @@ export async function setNotifications(_prev: ActionResult<never> | null, formDa
   }
   if (failed) redirect(`/notifications?notifications=${failed}`);
   redirect(`/notifications?${qs}`);
+}
+
+/** Saves the Email card's form, then redirects with a confirmation the page parses (contracts/http.md §3). */
+export async function saveEmailSettings(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) redirect("/login?next=/notifications");
+  const cadence = formData.get("cadence");
+  let code: string;
+  try {
+    const raw = formData.get("quietStartHour");
+    const rawEnd = formData.get("quietEndHour");
+    const settings = await saveMyEmailSettingsService(session, {
+      cadence,
+      digestHour: formData.get("digestHour"),
+      timeZone: formData.get("timeZone"),
+      quietStartHour: raw === null || raw === "" ? null : raw,
+      quietEndHour: rawEnd === null || rawEnd === "" ? null : rawEnd,
+    });
+    code = settings.cadence;
+  } catch (error) {
+    if (error instanceof EmailUnavailableError) redirect("/notifications?email=unavailable");
+    if (error instanceof ZodError) redirect("/notifications?email=invalid");
+    throw error;
+  }
+  revalidatePath("/notifications");
+  redirect(`/notifications?email=${code}`);
+}
+
+/** Clears a pause on the Email card (contracts/http.md §3). */
+export async function resumeEmail(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) redirect("/login?next=/notifications");
+  void formData;
+  await resumeMyEmailService(session);
+  revalidatePath("/notifications");
+  redirect("/notifications?email=resumed");
+}
+
+/** Reverses a per-project unsubscribe from the Email card's own list (contracts/ui.md §1). */
+export async function includeEmailProject(formData: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) redirect("/login?next=/notifications");
+  const projectSlug = formData.get("projectSlug");
+  if (typeof projectSlug !== "string" || !projectSlug) redirect("/notifications?email=invalid");
+  await includeMyProjectService(session, projectSlug);
+  revalidatePath("/notifications");
+  redirect("/notifications?email=saved");
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { emailSchema, PASSWORD_MAX, PASSWORD_MIN, passwordSchema } from "@/lib/validation";
+import type { SmtpConfig, SmtpSecurity } from "./mail/types";
 
 const PG_URL = /^postgres(ql)?:\/\//;
 
@@ -66,11 +67,15 @@ function crossFieldIssues(source: Record<string, string | undefined>): EnvIssue[
     });
   }
   out.push(...storageIssues(source));
+  out.push(...smtpIssues(source));
   return out;
 }
 
 const STORAGE_GROUP = ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_PUBLIC_BASE_URL"] as const;
 const STORAGE_OPTIONAL = ["S3_ENDPOINT", "S3_REGION", "S3_FORCE_PATH_STYLE", "S3_CHECKSUMS", "S3_PREVIEW_URLS", "S3_BROWSER_ENDPOINT"] as const;
+const SMTP_GROUP = ["SMTP_HOST", "SMTP_FROM"] as const;
+const SMTP_SATELLITES = ["SMTP_USER", "SMTP_PASSWORD", "SMTP_PORT", "SMTP_SECURITY", "SMTP_FROM_NAME"] as const;
+const SMTP_SECURITY_VALUES = ["none", "starttls", "tls"] as const;
 const HTTP_URL = /^https?:\/\/[^/\s?#][^\s?#]*$/;
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
@@ -130,6 +135,67 @@ function storageIssues(source: Record<string, string | undefined>): EnvIssue[] {
     }
   }
   return out;
+}
+
+/** All-or-none SMTP group plus the credential-pair and satellite checks. Messages never carry values. */
+function smtpIssues(source: Record<string, string | undefined>): EnvIssue[] {
+  const out: EnvIssue[] = [];
+  const set = (n: string) => Boolean(source[n]);
+  const anyGroup = SMTP_GROUP.some(set);
+  if (!anyGroup) {
+    for (const n of SMTP_SATELLITES) {
+      if (set(n)) out.push({ name: n, reason: "set SMTP_HOST and SMTP_FROM to enable email" });
+    }
+    return out;
+  }
+  for (const n of SMTP_GROUP) {
+    if (!set(n)) out.push({ name: n, reason: "required when email is configured" });
+  }
+  const host = source.SMTP_HOST;
+  if (host && /\s/.test(host)) {
+    out.push({ name: "SMTP_HOST", reason: "must not contain whitespace" });
+  }
+  const user = source.SMTP_USER;
+  const password = source.SMTP_PASSWORD;
+  if (user && !password) out.push({ name: "SMTP_PASSWORD", reason: "required when SMTP_USER is set" });
+  if (password && !user) out.push({ name: "SMTP_USER", reason: "required when SMTP_PASSWORD is set" });
+  const from = source.SMTP_FROM;
+  if (from && !emailSchema.safeParse(from).success) {
+    out.push({ name: "SMTP_FROM", reason: "must be an email address" });
+  }
+  const port = source.SMTP_PORT;
+  if (port) {
+    const n = Number(port);
+    if (!Number.isInteger(n) || n < 1 || n > 65535) {
+      out.push({ name: "SMTP_PORT", reason: "must be an integer from 1 to 65535" });
+    }
+  }
+  const security = source.SMTP_SECURITY;
+  if (security && !(SMTP_SECURITY_VALUES as readonly string[]).includes(security)) {
+    out.push({ name: "SMTP_SECURITY", reason: "must be one of: none, starttls, tls" });
+  }
+  return out;
+}
+
+function toSmtp(e: {
+  SMTP_HOST?: string;
+  SMTP_FROM?: string;
+  SMTP_USER?: string;
+  SMTP_PASSWORD?: string;
+  SMTP_PORT?: string;
+  SMTP_SECURITY?: string;
+  SMTP_FROM_NAME?: string;
+}): SmtpConfig | null {
+  if (!e.SMTP_HOST || !e.SMTP_FROM) return null;
+  return {
+    host: e.SMTP_HOST,
+    from: e.SMTP_FROM,
+    fromName: e.SMTP_FROM_NAME || "Docket",
+    user: e.SMTP_USER || undefined,
+    password: e.SMTP_PASSWORD || undefined,
+    port: e.SMTP_PORT ? Number(e.SMTP_PORT) : undefined,
+    security: (e.SMTP_SECURITY as SmtpSecurity | undefined) || undefined,
+  };
 }
 
 export type EnvIssue = { name: string; reason: string };
@@ -283,6 +349,13 @@ const base = z.object({
     S3_FORCE_PATH_STYLE: bool(false),
     S3_CHECKSUMS: oneOf(["when_required", "when_supported"], "when_required"),
     S3_PREVIEW_URLS: oneOf(["public", "signed"], "public"),
+    SMTP_HOST: z.string().optional(),
+    SMTP_FROM: z.string().optional(),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
+    SMTP_PORT: z.string().optional(),
+    SMTP_SECURITY: z.string().optional(),
+    SMTP_FROM_NAME: z.string().max(100, { error: "must be 1–100 characters" }).optional(),
     MEDIA_MAX_UPLOAD_MB: int(1, 25, 20),
     MEDIA_MAX_MEGAPIXELS: int(1, 100, 50),
     MEDIA_MAX_VIDEO_MB: int(1, 4096, 1024),
@@ -331,6 +404,7 @@ export function directUrlOf(source: Record<string, string | undefined>): string 
 const schema = base.transform((e) => ({
     ...e,
     storage: toStorage(e),
+    smtp: toSmtp(e),
     media: {
       maxUploadBytes: e.MEDIA_MAX_UPLOAD_MB * 1024 * 1024,
       maxPixels: e.MEDIA_MAX_MEGAPIXELS * 1_000_000,

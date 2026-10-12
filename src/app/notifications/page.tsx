@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { EmailSettingsCard } from "@/components/email/EmailSettingsCard";
 import { NotificationPreferenceGrid } from "@/components/notifications/NotificationPreferenceGrid";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import { SignedInHeader } from "@/components/shell/SignedInHeader";
@@ -12,6 +13,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { getSession } from "@/server/auth/session";
 import { forMyProjects } from "@/server/dal";
 import { myNotificationPreferences, recentPanel } from "@/server/services/notifications";
+import { myEmailSettings } from "@/server/services/email";
 import {
   markAllConfirmation,
   muteErrorText,
@@ -24,7 +26,8 @@ import {
   snoozedConfirmation,
   switchConfirmation,
 } from "@/lib/notifications/text";
-import { markAllRead, setNotifications } from "./actions";
+import { emailConfirmationText, formatHourLabel, parseEmailConfirmation } from "@/lib/email/text";
+import { includeEmailProject, markAllRead, resumeEmail, saveEmailSettings, setNotifications } from "./actions";
 
 export const metadata: Metadata = { title: "Notifications" };
 export const dynamic = "force-dynamic";
@@ -38,7 +41,17 @@ export default async function NotificationsPage({ searchParams }: Props) {
   const now = new Date();
   const panel = await recentPanel(set, now);
   const rows = await myNotificationPreferences(set);
+  const emailSettings = await myEmailSettings(session);
   const raw = await searchParams;
+  const emailCode = parseEmailConfirmation(raw.email);
+  const emailConfirmation =
+    raw.email === "unavailable"
+      ? "Email is unavailable on this install."
+      : raw.email === "invalid"
+        ? "Could not save those email settings."
+        : emailCode
+          ? emailConfirmationText(emailCode, { hour: formatHourLabel(emailSettings.digestHour), zone: emailSettings.timeZone })
+          : null;
   const muteError = parseMuteError(raw.notifications);
   const marked = raw.marked === "1";
   const busy = typeof raw.busy === "string" ? raw.busy.split(",").filter(Boolean) : [];
@@ -78,17 +91,27 @@ export default async function NotificationsPage({ searchParams }: Props) {
           description="Problems from your projects, and which projects can notify you. Problems always stay in Activity."
         />
         {panel.state === "no_projects" ? (
-          <EmptyState
-            message="You are not a member of any project yet."
-            action={
-              <Link href="/" className={buttonStyles({ variant: "secondary" })}>
-                Back to Docket
-              </Link>
-            }
-          />
+          <div className="flex flex-col gap-6">
+            {emailConfirmation ? <Alert tone={emailCode ? "success" : "danger"}>{emailConfirmation}</Alert> : null}
+            <EmailSettingsCard
+              settings={emailSettings}
+              saveAction={saveEmailSettings}
+              resumeAction={resumeEmail}
+              includeProjectAction={includeEmailProject}
+            />
+            <EmptyState
+              message="You are not a member of any project yet."
+              action={
+                <Link href="/" className={buttonStyles({ variant: "secondary" })}>
+                  Back to Docket
+                </Link>
+              }
+            />
+          </div>
         ) : (
           <div className="flex flex-col gap-6">
             {muteError ? <Alert tone="danger">{muteErrorText(muteError)}</Alert> : null}
+            {emailConfirmation ? <Alert tone={emailCode ? "success" : "danger"}>{emailConfirmation}</Alert> : null}
             {change ? (
               <Alert tone="success">
                 {change.axis === "project"
@@ -137,6 +160,12 @@ export default async function NotificationsPage({ searchParams }: Props) {
                 <NotificationList items={panel.items} now={now} returnTo="/notifications" />
               )}
             </Card>
+            <EmailSettingsCard
+              settings={emailSettings}
+              saveAction={saveEmailSettings}
+              resumeAction={resumeEmail}
+              includeProjectAction={includeEmailProject}
+            />
             <Card title="Projects" padded={false}>
               <NotificationPreferenceGrid rows={rows} action={switchAction} />
             </Card>

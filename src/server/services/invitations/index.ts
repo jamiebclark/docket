@@ -11,6 +11,7 @@ import {
   NotFoundError,
 } from "@/server/dal/errors";
 import {
+  findUserIdByEmail,
   insertInvitedUser,
   listPendingForEmail,
   lookupInvitation,
@@ -25,7 +26,7 @@ import { getEnv } from "@/server/env";
 import { defaultInvitationDelivery, type InvitationDelivery, type InvitationDeliveryResult } from "./delivery";
 
 export { defaultInvitationDelivery } from "./delivery";
-export type { InvitationDelivery, InvitationDeliveryInput, InvitationDeliveryResult } from "./delivery";
+export type { InvitationDelivery, InvitationDeliveryInput, InvitationDeliveryResult, InvitationEmail } from "./delivery";
 
 /** What the invitee-side services need from a session. */
 export interface InviteeSession {
@@ -71,16 +72,19 @@ async function deliverAfterCommit(
   inviterEmail: string,
   inviterName: string,
 ): Promise<InvitationDeliveryResult> {
-  const inviteeHasAccount = await userExistsByEmail(inv.email);
+  const inviteeUserId = await findUserIdByEmail(inv.email);
   try {
     return await delivery.deliver({
       invitation: { id: inv.id, email: inv.email, role: asRole(inv.role), expiresAt: inv.expiresAt },
-      project: { name: scope.project.name, slug: scope.project.slug },
+      project: { name: scope.project.name, slug: scope.project.slug, timeZone: scope.project.timezone },
       inviter: { name: inviterName, email: inviterEmail },
       acceptUrl: invitationUrl(token),
-      inviteeHasAccount,
+      inviteeHasAccount: inviteeUserId !== null,
+      inviteeUserId,
     });
   } catch {
+    // The mailer never throws (E4); a thrown error here is a programmer error, not a delivery
+    // problem (E26) — a failed send is a value, so this no longer covers the mailer's own failures.
     throw new ConflictError("The invitation was created but could not be delivered. Regenerate it to try again.");
   }
 }

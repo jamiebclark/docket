@@ -1,5 +1,6 @@
 import { formatEnvIssues, parseEnv, type Env, type EnvIssue } from "../env";
 import { llmEnvIssues } from "../llm/config";
+import { createSmtpMailer } from "../mail/smtp";
 import { providerEnvIssues } from "../provider-env";
 import { listConnectGroups } from "../../providers/registry";
 
@@ -18,6 +19,10 @@ export function validateConfiguration(source: Record<string, string | undefined>
 
   const disabled: string[] = [];
   if (parsed.ok && !parsed.env.storage) disabled.push("media storage is off (S3_* not set)");
+  if (parsed.ok && !parsed.env.smtp) disabled.push("email is off (SMTP_HOST and SMTP_FROM not set)");
+  else if (parsed.ok && parsed.env.smtp && !createSmtpMailer(parsed.env.smtp)) {
+    disabled.push("email is configured but unavailable (no SMTP client installed); nothing will be sent");
+  }
   if (!source.LLM_PROVIDER?.trim() && llmEnvIssues(source).length === 0) {
     disabled.push("generation is off (LLM_PROVIDER not set)");
   }

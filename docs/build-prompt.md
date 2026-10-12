@@ -82,7 +82,7 @@ Membership is per project. Someone can belong to one project without seeing the 
 - **Kick**: an owner or admin removes a member. Removal takes effect immediately, including for sessions already open. A project must always keep at least one owner.
 - Members can leave a project themselves. Owners can change roles and transfer ownership.
 - Bootstrap: the first user is created from env vars or a one-time setup screen, and can create projects.
-- Invitation delivery, for now, uses no email at all. If the invited email belongs to an existing user, they get an in-app notification with accept and decline actions. If it does not, the app generates a single-use invitation URL that the inviter copies and sends themselves, and the new user signs up through it. Keep delivery behind a small interface so email can be added later.
+- Invitation delivery is behind a small interface, exactly as promised above, and email has since been added behind it: if a mail server is configured, the invitation is also emailed, naming the project, the role, who invited them and the deadline. If the invited email belongs to an existing user, they get an in-app notification with accept and decline actions either way. If it does not, the app generates a single-use invitation URL that the inviter copies and sends themselves, and the new user signs up through it — that link stays available even when the email also went out, and the inviter is always told which happened. With no mail server configured, or when a send fails, delivery is exactly this link-only flow.
 - Invitation URLs carry an unguessable token, stored hashed, and stop working once used, revoked, or expired.
 - Keep an audit log of membership changes (who invited, removed, or changed whom, and when).
 
