@@ -1,386 +1,343 @@
 # Review: Per-project LLM — a project can bring its own model and API key
 
-Reviewed 72 file(s) changed across 6 commit(s), against `54b3d8a...HEAD` (`git merge-base HEAD origin/main`).
+**Round 2 — a re-review after the Phase 8 remediation.** Reviewed 75 file(s) changed across 8 commit(s),
+against `54b3d8a...HEAD` (`git merge-base HEAD origin/main`). Round 1 of this file reviewed `0cc9951` and
+found one BLOCKER and six MAJORs; `cef096a` ("fix(llm): review remediation (Phase 8)") answers them. Per
+the constitution's "review is exhaustive once, then scoped", this pass checks **only** (a) that each
+round-1 blocking finding is actually fixed and (b) that the files `cef096a` touched introduced no
+regression. Anything else newly noticed is recorded as MINOR, not as a blocker. Round 1's still-open MINOR
+and NOTE findings are carried forward below with their locations refreshed, because `tasks.md` Phase 8
+points at this file as their record.
 
-Read in full: `src/server/llm/resolve.ts`, `src/server/llm/config.ts`, `src/server/llm/index.ts`,
-`src/server/dal/project-llm.ts`, `src/server/dal/credential-owners.ts`, `src/server/dal/credit-holds.ts`,
-`src/server/dal/job-claims.ts`, `src/server/dal/scope.ts`, `src/server/db/schema/generation.ts`,
-`drizzle/0024_groovy_manta.sql`, `src/server/services/generation/{credential,check,core,series,readiness}.ts`,
+Read in full (this round): the whole of `cef096a` (`git show cef096a`), plus the current state of
+`src/server/services/generation/{credential,check}.ts`,
+`src/server/dal/{project-llm,credential-owners,credit-holds,job-claims,scope}.ts`,
+`src/server/llm/{resolve,config,index}.ts`, `src/server/services/generation/{core,series,readiness,credit}.ts`,
 `src/server/services/jobs/{runner,create,read}.ts`, `src/server/services/overview.ts`,
-`src/server/scheduler/{generation,housekeeping}.ts`, `src/server/auth/access.ts`,
-`src/lib/validation/generation.ts`, `src/lib/generation/llm-source.ts`, `src/lib/jobs/credit-hold.ts`,
-`src/lib/roles/prerequisites.ts`, `src/lib/action-result.ts`,
-`src/app/p/[projectSlug]/settings/model/*` (page, dto, actions, ModelPanel), `settings/layout.tsx`,
-`jobs/CreditHoldNotice.tsx`, `jobs/[jobId]/page.tsx`, `scripts/llm-check.ts`,
-`src/server/llm/{resolve,key-reads}.test.ts`, `tests/integration/llm/*.test.ts`,
-the `secret-scan.test.ts` / `no-plaintext.test.ts` additions, and the `docs/` + `.env.example` diff.
-Also read `spec.md`, `plan.md`, `tasks.md`, `research.md` (L1–L33), all four `contracts/*.md`, and
-`.specify/memory/constitution.md`.
+`src/server/scheduler/{generation,housekeeping}.ts`, `src/lib/roles/prerequisites.ts`,
+`src/lib/generation/llm-source.ts`, `src/lib/validation/generation.ts`, `src/lib/jobs/credit-hold.ts`,
+`src/app/p/[projectSlug]/settings/model/*` (page, dto, actions, ModelPanel),
+`src/app/p/[projectSlug]/{settings/layout.tsx,generate/prerequisites.ts,jobs/CreditHoldNotice.tsx,jobs/[jobId]/page.tsx}`,
+`src/server/db/schema/{generation,audit}.ts`, `drizzle/0024_groovy_manta.sql`, `scripts/llm-check.ts`,
+`src/server/llm/{resolve,key-reads}.test.ts`, all four `tests/integration/llm/*.test.ts`,
+`scripts/llm-check.test.ts`, the `secret-scan.test.ts` / `no-plaintext.test.ts` additions, the `docs/` and
+`.env.example` diff, and `spec.md`, `tasks.md`, `.specify/memory/constitution.md`.
 
-Sampled: `tests/integration/llm/per-project-resolution.test.ts` and
-`tests/integration/jobs/credit-hold.test.ts` (test names in full, bodies of the sections that bear on a
-finding), `tests/integration/llm/hold-scope.test.ts` (AS3–AS7 in full, AS1/AS2 by name),
-`scripts/llm-check.test.ts` (names only), `src/components/ui/Dialog.tsx`,
-`src/app/p/[projectSlug]/settings/api-keys/*` (for the house convention).
+Sampled: `tests/integration/jobs/credit-hold.test.ts` and `tests/integration/roles/services.test.ts`
+(names in full, bodies only where they bear on a finding), `src/server/llm/{openai,anthropic}.ts` (provider
+constructors only), `tests/helpers/{jobs-env,posts-env,factories}.ts`.
 
-Not reviewed: `drizzle/meta/0024_snapshot.json` (8,284 lines of generated snapshot; `pnpm db:check` is the
-check that matters and `tasks.md` records it green), the unchanged bodies of the generation and publish
-paths this entry does not touch, and the 11 `specs/065-per-project-llm/` artifacts as *deliverables* (they
-are this review's yardstick, not its subject).
+Not reviewed: `drizzle/meta/0024_snapshot.json` (8,284 generated lines; `pnpm db:check` is the check that
+matters, and it was run — green), the unchanged bodies of the publish paths this entry does not touch, and
+the 12 `specs/065-per-project-llm/` artifacts as *deliverables* (they are this review's yardstick).
 
-Per the constitution's "run checks in proportion to the change", the full suite, lint, typecheck and build
-were **not** re-run: commit 718cd3e records T052's gate. No targeted test was run either — every finding
-below is established by reading the code paths end to end, and each names the mechanism precisely enough
-to re-check in one command.
+**Checks run.** The constitution tells review not to re-run the gate, on the grounds that implement's final
+pass already did. That did not hold here: T052's gate ran on `718cd3e`, and `cef096a` changed six
+production files afterwards, so no recorded gate covered HEAD and FR-032 was unverified for the code a
+human would merge. I therefore ran the full set once, at HEAD, and it is green:
+
+- `pnpm typecheck` — clean.
+- `pnpm lint` — 0 errors, 22 pre-existing warnings (all `no-unused-vars` in unrelated test files; none in
+  this feature's files).
+- `pnpm vitest run` (full suite, `DATABASE_URL` on the local test Postgres) — **584 files passed, 8
+  skipped; 5,572 tests passed, 55 skipped**, 489 s. No failures, no re-snapshotting.
+- `pnpm db:check` — "Migrations are current."
+- `pnpm build` — succeeded, including the five esbuild bundles.
+- `pnpm vitest run src/server/llm tests/integration/llm scripts/llm-check.test.ts src/lib/roles/prerequisites.test.ts`
+  — 17 files, 147 tests, all passing; this is the set that proves the remediation.
+
+`git status` is clean after the build, so nothing in the working tree was disturbed.
 
 ## Verdict
 
-**The core of this entry is right, and most of it is unusually well built.** Resolution really is one named
-place; the install branch is byte-for-byte `getLlm()`; an undecryptable key never falls back; the hold
-genuinely follows the credential, and `tests/integration/llm/{per-project-resolution,hold-scope}.test.ts`
-prove isolation and per-owner probes against two live stubs keyed by API key. The secret-scan extension
-(`secret-scan.test.ts:440-520`) is the real thing — save, change, check, three-role render, a tick that
-generates, a billing refusal whose error body embeds the key, five encodings, nothing exempted, deliberate
-leak still proven to fail. FR-030, the obligation the author attached to this entry by name, is met.
+**The blocking set from round 1 is closed, and closed properly — not papered over. Nothing blocks the
+merge.** All seven fixes are real code changes in the right place, and six of the seven are now pinned by
+an assertion that would fail if the fix were reverted: the audit row carries
+`{fromProvider, fromModel, toProvider, toModel, keyChanged}` and three assertions check its contents across
+a set, a model-only change and a removal (`credential-authz.test.ts:49-71`); both "key required" refusals
+are thrown in the array form and tested for their field-level shape (`:73-86`); both writes now run in
+`scope.transaction(…, { lockProject: true })` with the `status()` read moved **inside** the lock, so the
+"blank keeps the stored key" decision is made under it (`credential.ts:77-116`, `:125-144`); `lastChange`
+is gated on `updatedByUserId`, which only `save`/`clear` ever set, and a test proves a check alone no
+longer invents a change (`:88-99`); `check.ts` imports the two shared sentences and its local copies are
+gone; the generate page's `ai` prerequisite renders `LLM_KEY_UNREADABLE` and points an owner-or-admin at
+`/p/<slug>/settings/model` (`prerequisites.ts:28-52`); and FR-027 is now proven through the real services
+rather than a stand-in — `saveProjectLlm` and `removeProjectLlm` each clear a genuinely held project's hold
+in their own test (`hold-scope.test.ts:193-225`), with every `project:<id>` string in production now
+flowing through `projectCredentialOwner`, including `pruneOrphanCreditHolds`' `LIKE` predicate and its
+`substring(… from 9)` offset.
 
-**What does not hold up is the settings surface and its audit trail** — the part no automated test touches.
-Every defect below lives in the seam between the pass that built the service (`credential.ts`) and the
-passes that built the text constants, the action-result mapping and the tests. The audit row that FR-018
-requires to carry before-and-after values carries only the new ones, and `docs/generator.md` documents the
-behaviour that was not built. Two of FR-016's five refusals reach the user as "Some posts have validation
-problems." The save transaction drops the `lockProject: true` that `tasks.md` T042 specified, which is
-exactly what keeps two admins from combining one's provider with the other's key. A check on a project that
-has no credential creates its settings row, after which the page reports "Last changed by a former member"
-about a change nobody made. `src/lib/generation/llm-source.ts` was created to be the single home of four
-fixed sentences; three of the four are dead and `check.ts` re-declares two of them with different words.
+**No regression from the remediation.** The one change with real risk was the DAL's `save`: the old
+self-referencing upsert became a plain `UPDATE` that never mentions the ciphertext column, because Postgres
+validates the multi-column CHECK against the proposed row even when `SET` resolves to the old value. That
+path is exercised by `credential-authz.test.ts:60` (save with a blank key, audit `keyChanged: false`) and
+passes, and the `RETURNING` of the computed `hasKey` reads the retained value correctly. The hold clear now
+runs inside the credential transaction on `tx.exec` while that transaction holds the project row lock; the
+claim transaction locks hold rows and job rows but never the project row, so there is no lock cycle — a
+save waits briefly on a tick at worst.
 
-Fix the seven blocking findings — they are all small and local, and five of them are "wire up what the
-foundational pass already built" — and this is ready. The remediation tasks are appended to `tasks.md` as
-Phase 8.
+What remains is what round 1 already recorded: **nine MINOR findings and three NOTEs, all non-blocking**,
+plus four new MINORs this pass noticed (N1–N4), one of which is a small latent trap the remediation itself
+introduced. Round 1's F14 is now substantially closed by T060; F15 has shrunk from four gaps to two. These
+are hardening work, not merge blockers. With T053's manual walk-through still owed by a human, this feature
+is ready for a human to review and merge.
 
 ## Findings
 
-- [ ] 🛑 BLOCKER F1 — the credential audit row records no before-values and no `keyChanged`, and the docs
-      describe the behaviour that was not built
-      where:  src/server/services/generation/credential.ts:99, src/server/services/generation/credential.ts:117, docs/generator.md:23
-      why:    FR-018 is unconditional: "the actor, the provider and model **before and after**, and whether
-              the key changed". L18 fixes the shape as
-              `{ fromProvider, fromModel, toProvider, toModel, keyChanged }`. Both `audit.insert` calls
-              write only `{ toProvider, toModel }` (and `{ toProvider: null, toModel: null }` on removal),
-              so an audit reader cannot tell a model change from a provider switch, cannot tell either from
-              a key rotation, and cannot see what the credential was before. `saveProjectLlm` already holds
-              everything needed: `current` (read at :76) has the old provider and model, and
-              `keyCiphertext !== null` is exactly `keyChanged`. Meanwhile docs/generator.md:23 tells the
-              reader the audit carries "actor, provider and model before and after", which is false — so
-              SC-009's "a reader of the updated documentation can answer … who may set one" is answered
-              wrongly. No test asserts the row's contents, which is why this survived.
-      owed:   write `{ fromProvider, fromModel, toProvider, toModel, keyChanged }` from both call sites
-              (reading `current` inside the transaction — see F3), and add one assertion on the row.
-      traces: FR-018, K12, L18, FR-031 (docs), SC-009
+**No blocking findings.** The round-1 blocking set is verified closed:
 
-- [ ] MAJOR F2 — a missing API key is refused with "Some posts have validation problems." and no
-      field-level message
-      where:  src/server/services/generation/credential.ts:84, src/server/services/generation/credential.ts:88, src/lib/action-result.ts:89, src/lib/action-result.ts:99
-      why:    FR-016 requires field-level messages for all five refusals. Three (unknown provider, bad
-              model, over-long key) come from Zod and are mapped correctly by the action's `ZodError`
-              branch. The other two are thrown as `ValidationIssuesError({ apiKey: [...] })` — the
-              **grouped-record** form. `failFromError` only keeps an error's own message when
-              `Array.isArray(flatIssues)` (action-result.ts:89), and only builds `fieldErrors` when
-              `Array.isArray(issues)` (action-result.ts:99). A record is neither, so the action returns
-              `message: GENERIC_MESSAGE.validation` = "Some posts have validation problems." with no
-              `fieldErrors`. `ModelPanel.tsx:68-69` then renders that sentence in a page-level danger alert
-              and no error on the key field. Failure scenario: an owner on a project with no stored key
-              types a model, leaves the key blank and presses Save → a danger alert about *posts*, nothing
-              highlighted, and no hint that the key is what is missing. Every other single-field refusal in
-              the repo uses the array form (e.g. `src/server/services/jobs/create.ts:41`).
-      owed:   throw `new ValidationIssuesError([{ code: "required", field: "apiKey", message }], message)`
-              from both branches (or flatten `issues` in the panel, the `jobs/new/JobForm.tsx:102`
-              pattern), and test both refusals.
-      traces: FR-016, K8, L16
+| Round-1 finding | Status | Evidence at HEAD |
+|---|---|---|
+| F1 (blocker) audit row carried no before-values or `keyChanged`; docs described the unbuilt behaviour | fixed | `src/server/services/generation/credential.ts:105`, `:133`; asserted at `tests/integration/llm/credential-authz.test.ts:56`, `:63`, `:69`; `docs/generator.md:23` now matches |
+| F2 missing key refused as "Some posts have validation problems." | fixed | `credential.ts:90`, `:93` throw the array form; asserted at `credential-authz.test.ts:76`, `:82` |
+| F3 read-then-write with no project lock | fixed | `credential.ts:77-81` + `:115`, `:128` + `:143` — `{ lockProject: true }`, `status()` read inside |
+| F4 a check alone made the page report a credential change | fixed | `credential.ts:51` gates on `updatedByUserId`; asserted at `credential-authz.test.ts:92-94` |
+| F5 `check.ts` re-declared two fixed sentences; `LLM_SOURCE_*` dead | fixed | `check.ts:2`, `:38`, `:42`; `ModelPanel.tsx:12`, `:39` |
+| F6 unreadable-key state computed and thrown away | fixed | `src/lib/roles/prerequisites.ts:28`, `:48`; `src/app/p/[projectSlug]/generate/prerequisites.ts:23`; `src/lib/roles/prerequisites.test.ts:17-19` |
+| F7 FR-027 asserted only through a stand-in; owner string hand-built | fixed | `tests/integration/llm/hold-scope.test.ts:193`, `:210`; `src/server/dal/credential-owners.ts:13`; `credit-holds.ts:98`, `:106` |
 
-- [ ] MAJOR F3 — the credential save is a read-then-write with no project lock, so two admins can leave one
-      admin's provider stored with the other's key
-      where:  src/server/services/generation/credential.ts:76, src/server/services/generation/credential.ts:91, src/server/services/generation/credential.ts:114
-      why:    `tasks.md` T042 specifies "one `scope.transaction({ lockProject: true })`"; the call passes no
-              options, and `current` is read at :76 **outside** the transaction. `lockProject` is opt-in
-              (`src/server/dal/scope.ts:256`). Failure scenario: admin A saves `{anthropic, mA, keyA}` while
-              admin B saves `{openai, mB, blank}`; B reads `current` (provider `openai`, `hasKey: true`)
-              before A commits, so B takes the "blank keeps the stored key" branch
-              (`keyCiphertext = null`); A commits; B's `ON CONFLICT … SET api_key_encrypted =
-              project_llm_settings.api_key_encrypted` (`dal/project-llm.ts:109`) then preserves **A's
-              Anthropic key** under B's `provider = openai`. The row ends as one admin's provider with the
-              other admin's key — the state the spec's own edge case forbids ("never one admin's provider
-              with another's key") — and every call in that project fails `auth` until someone re-saves.
-      owed:   `scope.transaction(async (tx) => …, { lockProject: true })` for both save and remove, and move
-              the `status()` read inside the transaction so the keep-the-key decision is made under the lock.
-      traces: FR-001, FR-015, spec edge case "Two admins save at once", T042
+New this pass, all non-blocking:
 
-- [ ] MAJOR F4 — running the check on a project that uses the install default makes the page report a
-      credential change that never happened
-      where:  src/server/dal/project-llm.ts:138, src/server/services/generation/credential.ts:54, src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:78
-      why:    `claimCheck` upserts the settings row to take its lease, inserting `{ projectId,
-              checkLeaseUntil }` for a project that has no credential; `updated_at` then takes its
-              `defaultNow()` and `updated_by_user_id` stays null. `buildView` derives `lastChange` from
-              `row?.updatedByUserId || row?.updatedAt` — and `updatedAt` is `notNull`, so that condition is
-              just "a row exists". Failure scenario: an owner of a project on the install default presses
-              "Check this credential", then reloads Settings → Model and reads **"Last changed by a former
-              member on 12 October 2026 at 14:03"** — about a credential that has never existed and a
-              person who never touched it. FR-013 asks the surface to report "who last changed it and when";
-              it reports a fiction, and the same row makes `hasKey: false` coexist with a change record.
-      owed:   gate `lastChange` on an actual credential write (e.g. `updatedByUserId !== null`, or a
-              dedicated `credential_updated_at` written only by `save`/`clear`), and assert it after a check
-              on a credential-less project.
-      traces: FR-013, FR-021, L2, L20
+- [ ] MINOR N1 — `ProjectLlmRepo.save({ keyCiphertext: null })` falls through to an `INSERT` that violates
+      the table's own CHECK when no row exists
+      where:  src/server/dal/project-llm.ts:93, src/server/dal/project-llm.ts:121, drizzle/0024_groovy_manta.sql:12
+      why:    the remediation replaced the self-referencing upsert with a two-step: `UPDATE … RETURNING`,
+              then `if (row)` return. When the `UPDATE` matches nothing, control falls through to the
+              `INSERT`/`onConflictDoUpdate` below with `apiKeyEncrypted: patch.keyCiphertext`, i.e. `null`,
+              while `provider` and `model` are non-null — exactly what `project_llm_settings_credential`
+              forbids, so Postgres raises a raw constraint violation instead of anything a caller can map.
+              It is unreachable today: the only caller passes `null` only when `current?.hasKey` is true,
+              read inside the same transaction under the project lock (`credential.ts:81-87`), so the row
+              provably exists. The comment at `:94` states that precondition but nothing enforces it, and
+              the fall-through reads like a deliberate fallback rather than dead code.
+      owed:   throw (or assert) on the no-row case instead of falling through, so the precondition is
+              checked where it is relied on.
+      traces: FR-015, K8, L2
 
-- [ ] MAJOR F5 — the check re-declares two of the feature's fixed sentences with different wording, leaving
-      three of the four shared constants dead
-      where:  src/server/services/generation/check.ts:14, src/server/services/generation/check.ts:15, src/lib/generation/llm-source.ts:3
-      why:    T014 created `src/lib/generation/llm-source.ts` to be the single home of four fixed sentences,
-              and contracts/services.md §8 / contracts/ui.md:88-89 name those constants as what the check
-              returns. `check.ts` instead declares its own `BUSY_MESSAGE` ("Wait a **moment**…" vs
-              `LLM_CHECK_BUSY`'s "Wait a **few seconds**…") and its own `KEY_UNREADABLE_MESSAGE` ("The
-              stored key could not be read. Re-enter it.") — which, unlike `LLM_KEY_UNREADABLE`, does not
-              say that an **owner or admin** must re-enter it, nor where. Failure scenario: after
-              `CREDENTIALS_ENCRYPTION_KEY` is rotated, an admin presses "Check this credential" and is told
-              "The stored key could not be read. Re-enter it.", while the same condition on the job page
-              and in the "In use now" alert reads the fuller FR-012 sentence — one condition, two
-              sentences, and the shorter one omits both the actor and the place. `LLM_CHECK_BUSY`,
-              `LLM_SOURCE_INSTALL` and `LLM_SOURCE_PROJECT` have no importer anywhere in `src/`.
-      owed:   import `LLM_CHECK_BUSY` and `LLM_KEY_UNREADABLE` in `check.ts` and delete the local copies;
-              either use `LLM_SOURCE_*` in `ModelPanel`'s "in use now" line or delete them.
-      traces: FR-011, FR-012, constitution IV, contracts/services.md §8, contracts/ui.md §2
+- [ ] MINOR N2 — gating `lastChange` on `updatedByUserId` loses the "when" as well as the "who" once the
+      actor's user row is deleted
+      where:  src/server/services/generation/credential.ts:51, src/server/db/schema/generation.ts:70, src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:84
+      why:    F4's fix narrowed the condition from `row?.updatedByUserId || row?.updatedAt` to
+              `row?.updatedByUserId`. `updated_by_user_id` is `ON DELETE set null`, so when the admin who
+              set the credential is deleted, the column goes null and the whole `lastChange` block
+              disappears — the page stops showing the date too, where before it showed "Last changed by a
+              former member on …". FR-013 asks for "who last changed it **and when**". The panel's
+              `by?.name ?? "a former member"` fallback is now reachable only while the user row survives
+              and the membership does not. Related: invoking `removeProjectLlm` on a project that never had
+              a credential (possible directly, since the button only renders when `hasKey`) writes an
+              all-null audit row and starts reporting a `lastChange` — F4's complaint by another route.
+      owed:   keep `at` from `updatedAt` whenever a credential write has happened, and distinguish "never
+              written" from "writer deleted" with a column or a null-actor convention rather than by
+              dropping the row.
+      traces: FR-013, AS 4.1
 
-- [ ] MAJOR F6 — the unreadable-key state is computed for the generate surface and thrown away, so the
-      reader is told to set server environment variables
-      where:  src/server/services/generation/readiness.ts:45, src/lib/roles/prerequisites.ts:28, src/lib/roles/prerequisites.ts:30
-      why:    T024 added `ai.keyUnreadable` to `GenerationReadiness`, and `getGenerationReadiness` sets it
-              correctly — but `generationPrerequisites`, its only consumer
-              (`src/app/p/[projectSlug]/generate/prerequisites.ts:13`), never reads it. With a stored key
-              that cannot be decrypted, `ai.configured` is false and `ai.missingSettings` is null, so the
-              generate page replaces the form with "The server needs an AI provider before posts can be
-              generated." and offers the owner "Open the setup guide" → the *environment variable* docs.
-              Failure scenario: `CREDENTIALS_ENCRYPTION_KEY` is rotated; the owner opens Generate, is sent
-              to configure `LLM_PROVIDER` on the server, and is never told that re-entering the project's
-              key in Settings → Model is the fix. FR-012 requires that state to be reported "with a fixed
-              sentence telling the reader that an owner or admin must re-enter the key"; the job page got
-              that branch (`jobs/[jobId]/page.tsx:98`) and the generate page did not.
-      owed:   render `LLM_KEY_UNREADABLE` from the `ai` checklist item when `keyUnreadable` is true (and
-              point the owner's action at `/p/<slug>/settings/model`), or delete the field.
-      traces: FR-012, AS 4.7, L12, L29
+- [ ] MINOR N3 — the CLI prints `source=project` for a busy check even when the project uses the install
+      default
+      where:  scripts/llm-check.ts:156, src/server/services/generation/check.ts:29
+      why:    `LlmCheckResult`'s `busy` variant carries no `source`, but the CLI's `else` branch hard-codes
+              `source=project` for both `busy` and `key_unreadable`. For `key_unreadable` that is true by
+              construction; for `busy` on a project with no credential it is simply wrong, and FR-022 asks
+              the CLI to print "the same fields … including which source it used". Failure scenario: an
+              operator runs `pnpm llm:check --project acme` twice inside the 30 s cooldown on a project
+              that has no credential, and is told the project's own credential was involved.
+      owed:   carry `source` on the `busy` result (resolution has already run by then), or print no
+              `source=` field for it.
+      traces: FR-020, FR-022
 
-- [ ] MAJOR F7 — FR-027 ("a save clears that project's hold immediately") is asserted only through a
-      stand-in, and the owner key it depends on is hand-built
-      where:  tests/integration/llm/hold-scope.test.ts:180, src/server/services/generation/credential.ts:104, src/server/dal/credential-owners.ts:19
-      why:    AS 3.4's test calls `clearCreditHold(owner)` directly, with the comment "Stands in for an
-              owner saving a new key (US4's `saveProjectLlm` clears the hold the same way)". It therefore
-              proves entry 1's `clearCreditHold`, not that the save path calls it. Nothing in the suite
-              calls `saveProjectLlm`/`removeProjectLlm` against a held project
-              (`grep -rn "saveProjectLlm" tests/` → only the authz and no-plaintext files, neither with a
-              hold). The link is a string built by hand in two independent places —
-              `credential.ts:104`/`:122` writes `` `project:${scope.project.id}` `` and
-              `credential-owners.ts:19` builds the same literal separately — so a change to either leaves
-              the clear silently targeting an owner nobody holds, with no test and no type to catch it.
-              Failure scenario: the owner-string format is ever touched (e.g. to carry a credential
-              version); saves stop clearing holds; a project whose key has just been fixed waits out a
-              5-minute probe and SC-007's "resumes on the next tick when the fix was a save" quietly fails.
-      owed:   assert the hold is gone after `saveProjectLlm` and after `removeProjectLlm` on a held project,
-              and route all four sites through one exported helper (see F14).
-      traces: FR-027, AS 3.4, SC-007, K16, L25
+- [ ] MINOR N4 — one more test title claims an assertion the body does not make
+      where:  tests/integration/llm/hold-scope.test.ts:227
+      why:    the title is "AS5/AS6: the notice names whose account, **and names the install elsewhere**,
+              with none in a different funded project"; the body asserts `scope: "project"` for the held
+              project and `null` for the funded one, and never exercises a project on the install default
+              taking an install-wide hold. So the `scope: "install"` branch of `generationCreditHold`
+              (`src/server/services/jobs/read.ts:64`) and `CREDIT_HOLD_ACTION`'s half of
+              `CreditHoldNotice` are reached by no test. Same shape as round 1's F15 note about
+              `check.test.ts:72`.
+      owed:   either assert the install case in that test, or trim the title to what it proves.
+      traces: FR-028, AS 3.5, constitution II
 
-- [ ] MINOR F8 — `getJobView`'s `generationConfigured` is still the install-wide answer, and is read by
-      nobody
+Carried forward from round 1, still open and still non-blocking (locations refreshed to HEAD):
+
+- [ ] MINOR F8 — `getJobView`'s `generationConfigured` is still the install-wide answer, and is now read by
+      nobody at all
       where:  src/server/services/jobs/read.ts:172, src/server/services/jobs/read.ts:12
-      why:    contracts/services.md §5 says it "keeps its name and becomes per project", and FR-006 says no
-              caller may read the environment directly. It still calls `getLlmStatus().configured`, so on an
-              install with `LLM_PROVIDER` unset it reports `false` for a project that has its own working
-              credential. Nothing reads the field today (`grep -rn generationConfigured src tests` → the
-              assignment only; the job page resolves for itself at `jobs/[jobId]/page.tsx:64`), so there is
-              no user-visible failure — it is a trap for the next reader and the last environment read left
-              inside a per-project view.
+      why:    unchanged from round 1, and confirmed dead: `grep -rn generationConfigured src tests scripts`
+              returns only the assignment. The job page resolves for itself (`jobs/[jobId]/page.tsx:64`).
+              It is the last `getLlmStatus()` read left inside a per-project view, and a trap for the next
+              reader.
       owed:   derive it from the resolution the page already performs, or drop the field.
       traces: FR-006, contracts/services.md §5
 
-- [ ] MINOR F9 — the claim transaction still asks `credentialOwnerFor` once per job, which is now a database
-      read each
-      where:  src/server/dal/job-claims.ts:100, src/server/dal/credential-owners.ts:14
-      why:    L10's own argument ("it runs inside the claim transaction, and one round trip per candidate
-              project would put an unbounded number of statements inside a held transaction") applies to
-              this loop too, and T034 only converted `resolveBlockedProjectIds`. `credentialOwnerFor` was a
-              constant before this entry and is now a `select` on `project_llm_settings`, so the claim's
-              `FOR UPDATE SKIP LOCKED` transaction gains one round trip per claimed job (bounded by
-              `GENERATION_TICK_MAX_ITEMS`, 1–10) and the plan's "the claim transaction gains **no**
-              statements per project" is no longer true.
-      owed:   replace the loop with the `credentialOwnersFor(projectIds, exec)` batch already written for
-              the sibling call.
+- [ ] MINOR F9 — the claim transaction still asks `credentialOwnerFor` once per job, which is now a
+      database read each
+      where:  src/server/dal/job-claims.ts:100, src/server/dal/credential-owners.ts:22
+      why:    unchanged. T034 converted `resolveBlockedProjectIds` to the batch form but not this loop, so
+              the claim's `FOR UPDATE SKIP LOCKED` transaction gains one round trip per claimed job
+              (bounded by `GENERATION_TICK_MAX_ITEMS`, 1–10). `credentialOwnersFor(projectIds, exec)` is
+              already written and imported in the same file.
+      owed:   replace the loop with the batch call.
       traces: L10, plan.md "Performance Goals"
 
 - [ ] MINOR F10 — the surface never states whether a key is stored, and the key hint claims a stored key
       that may not exist
-      where:  src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:132, src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:142
-      why:    FR-013 lists "whether a key is stored" as one of four things the surface must show, and
-              contracts/ui.md §2 is explicit: "'A key is stored' / 'No key is stored' is the whole status."
-              `hasKey` only decides whether the Remove button renders. For a project on the install default
-              the page says nothing about a stored key, while the key field's hint always reads "Leave blank
-              to keep the key already stored" — advice that, followed on a project with no stored key,
-              produces F2's refusal.
+      where:  src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:136, src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:146
+      why:    unchanged. `hasKey` still only decides whether the Remove button renders; FR-013 and
+              contracts/ui.md §2 ask for an explicit "A key is stored" / "No key is stored" line. The hint
+              still reads "Leave blank to keep the key already stored" unconditionally — advice that, on a
+              project with no stored key, produces the (now field-level) "Enter an API key" refusal.
       owed:   render the one-line status from `hasKey`, and make the hint conditional on it.
       traces: FR-013, AS 4.1, contracts/ui.md §2
 
 - [ ] MINOR F11 — a failed check reports only the sentence, not the source, provider or model it tested
-      where:  src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:47, specs/065-per-project-llm/contracts/ui.md:88
-      why:    FR-020 is unconditional ("The check MUST state which source it tested"), and the ui.md outcome
-              table says a failure renders the fixed sentence "with the same source/provider/model line".
-              `checkOutcomeText` returns bare `result.message` for `reason: "failed"`, discarding the
-              `source`, `provider` and `model` the result already carries. Failure scenario: an admin checks
-              a project with no credential, gets `auth`, and cannot tell from the screen whether the
-              install's key or their own was tested — the one thing AS 2.3 exists to make clear. The CLI
-              prints all three on the same path (`scripts/llm-check.ts:147`).
+      where:  src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:52, specs/065-per-project-llm/contracts/ui.md:88
+      why:    unchanged. `checkOutcomeText` returns bare `result.message` for `reason: "failed"`,
+              discarding the `source`, `provider` and `model` the result carries, so an admin who checks a
+              project with no credential and gets `auth` cannot tell from the screen which key was tested —
+              the one thing AS 2.3 exists to make clear. The CLI prints all three on the same path
+              (`scripts/llm-check.ts:151`).
       owed:   prefix the failure line with the same source/provider/model text the success line uses.
       traces: FR-020, AS 2.3, contracts/ui.md §2
 
 - [ ] MINOR F12 — resolution has no status-only variant, so read-only callers decrypt the key and build an
       SDK client, and one of them is a page component
-      where:  src/server/llm/resolve.ts:52, src/app/p/[projectSlug]/jobs/[jobId]/page.tsx:64, src/server/services/generation/readiness.ts:19
-      why:    `resolveLlmForProject` always decrypts and calls `createLlmProviderForConfig`, and carries the
-              plaintext in `ResolvedLlm.apiKey`. Four callers only want "is it configured, and from where":
-              `readiness`, `overview` (both run on a project page, so two decryptions and two SDK clients
-              per render), `createJob`, and the job page — a React server component that now holds the
-              plaintext key and a live provider in its render scope. Nothing leaks today (the secret scan
-              renders that page and finds nothing, and only `runner.ts:300` reads `.apiKey`), but the plan's
-              own constraint was "the key exists in exactly three places and nowhere else", and one careless
-              client-component prop would put `apiKey` into the RSC flight payload. The same function also
-              makes `buildView` inconsistent with itself: `getLlmStatus()` for the install branch
-              (`credential.ts:40`) and full resolution for the project branch.
-      owed:   add a `resolveLlmStatusForProject` (or an `{ includeProvider: false }` mode) that answers
-              source/provider/model without decrypting, and use it in the four read-only callers.
+      where:  src/server/llm/resolve.ts:52, src/server/services/generation/readiness.ts:24, src/server/services/overview.ts:39, src/app/p/[projectSlug]/jobs/[jobId]/page.tsx:64
+      why:    unchanged, and L7 records "no provider-instance cache for a project credential … constructs
+              its SDK client per resolution" as a deliberate decision, so that cost is accepted; what is
+              not recorded is that four callers who only want "configured, and from where" get a decrypted
+              plaintext key and a live provider as well — `readiness` and `overview` both run on a project
+              page, so two of each per render, and the job page is a server component that holds them in
+              its render scope. Nothing leaks today (the secret scan renders that page and finds nothing;
+              only `runner.ts:300` reads `.apiKey`), but one careless client-component prop would put
+              `apiKey` into the RSC flight payload.
+      owed:   add a `resolveLlmStatusForProject` (or an `{ includeProvider: false }` mode) and use it in
+              the four read-only callers.
       traces: FR-010, plan.md "Constraints", constitution VII
 
 - [ ] MINOR F13 — the runner's log redaction narrowed instead of widening
-      where:  src/server/services/jobs/runner.ts:69, src/server/services/jobs/runner.ts:300
-      why:    L30 and contracts/services.md §6 say `logLine` redacts "the **resolved** key **as well as**
-              the environment's". It now redacts only `resolvedKey`, which is null whenever `ctx.llm` is
-              supplied, whenever resolution fails, and on every early return before line 300 — so those
-              lines are emitted with no redaction list at all, where they previously always carried the
-              environment key. The line itself is `job=… item=… outcome=… latency_ms=…`, so there is no
-              realistic leak; what is lost is the belt-and-braces guard the plan said it was strengthening.
+      where:  src/server/services/jobs/runner.ts:72, src/server/services/jobs/runner.ts:300
+      why:    unchanged. `logLine` redacts only `resolvedKey`, which is null whenever `ctx.llm` is
+              supplied, whenever resolution fails, and on every early return before `:300` — so those
+              lines carry no redaction list at all, where they previously always carried the environment
+              key. L30 and contracts/services.md §6 say it redacts the resolved key "**as well as**" the
+              environment's. The line is `job=… item=… outcome=… latency_ms=…`, so there is no realistic
+              leak; what is lost is the belt-and-braces guard the plan said it was strengthening.
       owed:   pass both keys, or move redaction into a wrapper that always has the environment key.
       traces: FR-010, L30
 
-- [ ] MINOR F14 — the `project:<id>` owner string is constructed by hand in four production places,
-      including a SQL `substring(… from 9)`
-      where:  src/server/dal/credential-owners.ts:19, src/server/dal/credential-owners.ts:34, src/server/llm/resolve.ts:57, src/server/dal/credit-holds.ts:98
-      why:    Five independent encodings of one format: two in `credential-owners.ts`, one in `resolve.ts`,
-              two in `credential.ts` (:104, :122), plus `pruneOrphanCreditHolds`, which hard-codes both the
-              `"project:%"` prefix and the offset `from 9` that depends on `"project:"` being eight
-              characters. A change to the format breaks the prune silently (it would match nothing, or cast
-              a non-UUID and abort the housekeeping statement) and breaks F7's hold clear silently.
-      owed:   one exported `projectCredentialOwner(projectId)` / `projectIdFromOwner(owner)` pair in
-              `credential-owners.ts`, used everywhere including the prune's predicate.
+- [ ] MINOR F14 (reduced) — two tests still hand-build the `project:<id>` owner string
+      where:  tests/integration/llm/check.test.ts:91, tests/integration/llm/check.test.ts:98
+      why:    T060 closed this in production — `projectCredentialOwner` is the one formatter, and
+              `pruneOrphanCreditHolds` derives both its `LIKE` prefix and its `substring` offset from
+              `PROJECT_CREDENTIAL_OWNER_PREFIX` (`credit-holds.ts:98`, `:106`). The residue is in tests:
+              `check.test.ts` still writes the literal twice, so a format change would leave two silently
+              wrong assertions while `hold-scope.test.ts` (which uses the helper) stayed correct.
+      owed:   use `projectCredentialOwner` in `check.test.ts` too.
       traces: constitution IV, L9, L28
 
-- [ ] MINOR F15 — three named obligations have no test at all, and one test's title claims an assertion it
-      does not make
-      where:  src/server/services/generation/credential.ts:78, tests/integration/llm/credential-authz.test.ts:36, tests/integration/llm/check.test.ts:72
-      why:    Nothing anywhere saves with a blank key, so FR-015/K8's "submitting it blank MUST leave the
-              stored key unchanged" — the reason `keyCiphertext: null` exists in the DAL — is unproven
-              (`grep -rn 'apiKey: ""' tests/` → nothing; the secret-scan run always passes a key).
-              `projectLlmCredentialSchema` has no test, so none of FR-016's five refusals is covered — which
-              is how F2 survived. AS 4.6 ("a ciphertext copied into another project's row … fails to
-              decrypt") has no test; only a corrupt-ciphertext case is covered
-              (`src/server/llm/resolve.test.ts:106`), so the AAD binding itself — FR-008's second half — is
-              asserted nowhere. And check.test.ts:72's title says "with no second live call" while the body
-              asserts only one `ok` and one `busy`, never that the second stub step went unconsumed.
-      owed:   one test per gap; the AAD test is three lines (encrypt under project A's AAD, store in project
-              B's row, expect `key_unreadable`).
-      traces: FR-008, FR-015, FR-016, AS 4.6, AS 2.4, constitution II
+- [ ] MINOR F15 (reduced) — two named obligations still have no test
+      where:  src/lib/validation/generation.ts:21, src/server/llm/resolve.ts:52
+      why:    two of round 1's four gaps are closed: the blank-key save is now exercised
+              (`credential-authz.test.ts:60`) and two of FR-016's five refusals are asserted (`:73-86`).
+              Still untested: (a) `projectLlmCredentialSchema` has no test of its own, so FR-016's three
+              Zod refusals — unknown provider, malformed or over-long model, key beyond `LLM_API_KEY_MAX` —
+              are covered nowhere (`grep -rn projectLlmCredentialSchema src tests scripts` finds the
+              definition and one caller); (b) AS 4.6, "a ciphertext copied into another project's row …
+              fails to decrypt", has no test — every `aadFor` in the suite encrypts under the row's own
+              project, so the AAD **binding** (FR-008's second half) is asserted nowhere; only a corrupt
+              ciphertext is covered (`resolve.test.ts:105`). Also still true: `check.test.ts:72`'s title
+              promises "no second live call" while the body asserts only one `ok` and one `busy`.
+      owed:   one schema test for the three refusals; a three-line AAD test (encrypt under project A's AAD,
+              store in project B's row, expect `key_unreadable`).
+      traces: FR-008, FR-016, AS 4.6, AS 2.4, constitution II
 
 - [ ] MINOR F16 — the credential-seeding test helper is copy-pasted into six files
-      where:  tests/integration/llm/hold-scope.test.ts:32, tests/integration/llm/check.test.ts:24, tests/integration/llm/per-project-resolution.test.ts:35, tests/integration/jobs/credit-hold.test.ts:116, src/server/llm/resolve.test.ts:13, scripts/llm-check.test.ts:104
-      why:    Six independent copies of `aadFor` plus a `saveCredential` wrapper, one per pass that needed
-              one, where `tests/helpers/` is the house location the plan itself names for shared seams. Each
-              copy re-encodes the production AAD format, so the next change to it is a six-file edit.
+      where:  tests/integration/llm/hold-scope.test.ts:33, tests/integration/llm/check.test.ts:24, tests/integration/llm/per-project-resolution.test.ts:35, tests/integration/jobs/credit-hold.test.ts:122, src/server/llm/resolve.test.ts:13, scripts/llm-check.test.ts:123
+      why:    unchanged. Six independent copies of `aadFor` plus a `saveCredential` wrapper, each
+              re-encoding the production AAD format, where `tests/helpers/` is the house location the plan
+              names for shared seams.
       owed:   one `tests/helpers/project-llm.ts` exporting `saveProjectCredential(projectId, {…})`.
       traces: constitution IV, plan.md "Testing"
 
-- NOTE F17 — "Remove this project's credential" needs client JavaScript: the trigger is
+- NOTE F17 — "Remove this project's credential" still needs client JavaScript: the trigger is
   `onClick={() => setRemoveOpen(true)}` and the form lives inside the dialog
-  (`src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:143`), so with JS unavailable the form is never
-  rendered. Save and check are real form actions and do work without it. This matches the house pattern
-  (`settings/api-keys/RevokeKeyDialog.tsx:37`), so it is consistency with the codebase rather than a
-  regression — but plan.md's accessibility row and contracts/ui.md's "the submit works with client
-  JavaScript unavailable" are inaccurate as written, and T053 is the task that would have caught it.
+  (`src/app/p/[projectSlug]/settings/model/ModelPanel.tsx:148`, `:166`), so with JS unavailable the form is
+  never rendered. Save and check are real form actions and work without it. This matches the house pattern
+  (`settings/api-keys/RevokeKeyDialog.tsx`), so it is consistency rather than a regression — but plan.md's
+  accessibility row and contracts/ui.md's "the submit works with client JavaScript unavailable" are
+  inaccurate as written, and T053 part 4 is the task that would observe it.
 
-- NOTE F18 — the four implementation commits end `Co-Authored-By: Claude Sonnet 5`, where the constitution's
-  workflow section asks for `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-  `commitlint.config.mjs` does not enforce the trailer's content, so CI will not fail; the trailer is also
-  the honest attribution. Flagged only because it is a literal MUST in the constitution.
+- NOTE F18 (widened) — commit trailers do not match the constitution. Round 1 noted the four
+  implementation commits ending `Co-Authored-By: Claude Sonnet 5` where the workflow section asks for
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The remediation commit `cef096a` carries **no
+  `Co-Authored-By` trailer at all** (`git log --format='%(trailers:key=Co-Authored-By)'`).
+  `commitlint.config.mjs` does not enforce the trailer's content, so CI will not fail, and fixing it now
+  would mean rewriting history on a branch that is about to be reviewed — recorded, not owed.
 
-- NOTE F19 — `getGenerationReadiness` now returns `source`, `provider` and `model` to every role
-  (`src/server/services/generation/readiness.ts:31-33`), and `tests/integration/roles/services.test.ts:58`
-  pins that for an editor. Nothing renders them (`generationPrerequisites` reads only `configured` and
-  `missingSettings`), so no editor learns anything today — but K11's "a non-admin may not even *see* that a
-  key exists" becomes false the moment anyone renders `ai.source`, and there is no guard saying so.
+- NOTE F19 — `getGenerationReadiness` still returns `source`, `provider` and `model` to every role
+  (`src/server/services/generation/readiness.ts:30-32`), and `tests/integration/roles/services.test.ts`
+  pins that for an editor. Nothing renders them — `generationPrerequisites` reads only `configured`,
+  `missingSettings` and now `keyUnreadable` — so no editor learns anything today; but K11's "a non-admin
+  may not even *see* that a key exists" becomes false the moment anyone renders `ai.source`, and no guard
+  says so.
 
 ## Coverage
 
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements (FR-001…FR-032) | 32 | 25 | 6 | 0 | 1 |
-| Success criteria (SC-001…SC-009) | 9 | 8 | 1 | 0 | 0 |
-| Constitution principles (I–VII) | 7 | 6 | 1 | 0 | 0 |
-| User-story acceptance scenarios (US1–US4) | 22 | 19 | 3 | 0 | 0 |
-| Judgement calls (K1–K16) | 16 | 14 | 2 | 0 | 0 |
-| Plan decisions (L1–L33) | 33 | 29 | 4 | 0 | 0 |
+| Functional requirements (FR-001…FR-032) | 32 | 28 | 4 | 0 | 0 |
+| Success criteria (SC-001…SC-009) | 9 | 9 | 0 | 0 | 0 |
+| Constitution principles (I–VII) | 7 | 7 | 0 | 0 | 0 |
+| User-story acceptance scenarios (US1–US4) | 22 | 21 | 1 | 0 | 0 |
+| Judgement calls (K1–K16) | 16 | 16 | 0 | 0 | 0 |
+| Plan decisions (L1–L33) | 33 | 30 | 3 | 0 | 0 |
 
-Partial: **FR-006** (F8, and `credential.ts:40`), **FR-012** (F5, F6), **FR-013** (F4, F10),
-**FR-016** (F2), **FR-020** (F11), **FR-027** (F7 — unproven rather than wrong).
-Contradicted: **FR-018** (F1). Partial SC: **SC-009** (the docs state an audit behaviour that does not
-exist). Partial principle: **IV** (two implementations of two fixed sentences, F5; `getLlmStatus` left in
-two service modules, F8/F12). Partial K: **K7/K12** via F1 and F4. Partial L: **L10** (F9), **L18** (F1),
-**L20** (F10), **L30** (F13).
+Closed since round 1: **FR-018** (was contradicted — F1), **FR-016** (was partial — F2), **FR-012** (was
+partial — F5, F6), **FR-027** (was unproven — F7), **SC-001/SC-009** (the docs now describe the audit that
+exists, and the whole gate is green at HEAD rather than at the previous commit), **principle IV** (the two
+duplicated sentences are gone; the one remaining `getLlmStatus()` in a per-project view is dead code, F8),
+**K7/K12**, **L18**, **L28**, and most of **L9/L20**.
 
-Verified as genuinely satisfied, with the evidence: FR-002/FR-007 and AS 1.1–1.6
-(`src/server/llm/resolve.test.ts`; all six paths in
-`tests/integration/llm/per-project-resolution.test.ts` with two live stubs keyed by API key, asserting no
-call ever carried the other project's or the install's key); FR-005/K3 (`resolve.test.ts:62`,
-`scheduler/generation.ts:74`); FR-008's cipher and AAD (`resolve.ts:52`, `credential.ts:79`); FR-009 (no
-fingerprint column exists in `drizzle/0024_groovy_manta.sql`); FR-010/FR-030/SC-004
-(`secret-scan.test.ts:440-520` and `no-plaintext.test.ts:73,128` — save, change, check, three-role render,
-generating tick, billing refusal embedding the key, five encodings, every table, deliberate leak still
-proven to fail); FR-012's no-fallback rule (`resolve.ts:64`, `resolve.test.ts:106`); FR-014/SC-005
-(`access.ts`, `access.test.ts`, `settings/layout.tsx:19`, `settings/model/page.tsx:23`,
-`credential-authz.test.ts`); FR-019/FR-021/FR-023 and AS 2.1–2.5 (`check.test.ts`, the conditional-upsert
-lease at `project-llm.ts:133`); FR-022 (`scripts/llm-check.test.ts`, the no-argument path untouched);
-FR-024–FR-026/FR-028/FR-029 and AS 3.1–3.3, 3.5–3.7, SC-006 (`hold-scope.test.ts`;
-`credit-hold.test.ts:139-250` re-running entry 1's suite against a project owner); FR-031
-(`docs/generator.md`, `docs/security.md`, `docs/decisions.md` § 046 including the "needs to do nothing"
-line, `.env.example`); and the migration's shape (additive DDL, the `ALTER TYPE … ADD VALUE` precedent
-`0023` already set, the new label unused in its own transaction).
+Still partial, all MINOR: **FR-006** (F8 — the dead install-wide field), **FR-013** (F10, N2 — the
+"a key is stored" line and the lost date), **FR-020** (F11, N3 — a failed check and a busy CLI check omit
+the source), **FR-022** (N3). Partial AS: **4.1** (F10/N2). Partial L: **L10** (F9), **L30** (F13),
+**L20** (F10).
+
+Verified satisfied this round by execution rather than by reading: **FR-032/SC-001** (the full gate at
+HEAD, above), **FR-018/K12** and **FR-016**'s two non-Zod refusals and **FR-015**'s blank-key rule
+(`credential-authz.test.ts`, run green), **FR-027/AS 3.4/SC-007** (`hold-scope.test.ts:193`, `:210`, run
+green), **FR-012**'s unreadable-key surface (`prerequisites.test.ts`, run green), and the whole of round
+1's "verified as genuinely satisfied" list, which the same suite re-ran unchanged — including
+**FR-010/FR-030/SC-004**, the secret scan's save/change/check/three-role-render/generating-tick/
+billing-refusal corpus with the key embedded in the provider's error body, five encodings, every table, and
+the deliberate-leak canary still proving the scan can fail.
 
 ## What I could not check
 
-- **T053, the manual walk-through** — still unchecked in `tasks.md`, with the implement pass's reason
-  recorded. Everything it owns is unverified here: keyboard operation of the `SegmentedControl` and the
-  remove `Dialog`, focus return, the no-JS behaviour of all three controls (F17 is a code reading, not an
-  observation), and that no screen or page source shows the key to a signed-in human. The secret scan
-  covers the last of those for server-rendered markup, which is the strongest substitute available
-  headlessly.
-- **CI** — the branch is not pushed and there is no PR, so there are no CI results to read. I took
-  `pnpm lint && typecheck && test && db:check && build` as green on the authority of T052 and commit
-  718cd3e, and did not re-run them (the constitution forbids it at this phase). Every finding above comes
-  from reading, so none depends on a test run; equally, **none has been reproduced by executing
-  anything**, and F2, F3 and F4 are the three worth reproducing first because each is one assertion away
-  from being proven.
+- **T053, the manual walk-through** — still unchecked in `tasks.md` Phase 9, with the implement pass's
+  reason recorded. Everything it owns remains unobserved: keyboard operation of the `SegmentedControl` and
+  the remove `Dialog`, focus return, the no-JS behaviour of all three controls (F17 is a code reading, not
+  an observation), and that no screen, toast or page source shows a human any part of the key. The secret
+  scan covers the last of those for server-rendered markup, which is the strongest substitute available
+  headlessly. This is the one piece of the feature a human must still do before merging.
+- **CI** — `git branch -r --list '*065*'` is empty: the branch is not pushed and there is no PR, so there
+  are no CI results to read. The gate I ran locally is the substitute, and it is weaker than CI in at least
+  one known way: 55 tests skipped locally (the ffmpeg-dependent video suite among them), which CI runs.
 - **Live provider behaviour** — verified with mocks only, as the constitution requires. No test in this
-  entry opens a socket to a provider, so "the key works" and the real latency of a check are unproven by
-  construction.
+  entry opens a socket to a provider, so "the key works" and a check's real latency are unproven by
+  construction. `pnpm llm:check --project <slug>` against a real account is the only thing that proves it,
+  and needs credentials this phase does not have.
+- **Behaviour under real concurrency** — F3's race is now closed by construction (`lockProject: true` plus
+  the read moved inside), and I read the lock ordering against the claim transaction and found no cycle,
+  but I did not demonstrate either with two interleaved transactions. The check's lease *is* demonstrated
+  concurrently (`check.test.ts:77`, two checks under `Promise.all`).
+- **Clock skew between the app and Postgres** — unchanged from round 1: `claimCheck`/`releaseCheck` stamp
+  `last_check_at` from `new Date()` (`check.ts:41`, `:75`) while `save`/`clear` use the DAL's database
+  clock (`project-llm.ts:92`, `:152`), so one row mixes two clocks. The cooldown compares app time with
+  app time, so it is self-consistent; I could not rule out a long-tail effect on an install whose web and
+  database clocks differ by more than 30 s.
 - **`drizzle/meta/0024_snapshot.json`** — 8,284 generated lines, not read. `pnpm db:check` is the only
-  meaningful check on it, and T052 records it green.
-- **Behaviour under real concurrency** — F3's race is argued from the code and Postgres' `ON CONFLICT DO
-  UPDATE` semantics, not demonstrated with two interleaved transactions. The check's lease *is*
-  demonstrated concurrently (`check.test.ts:72`, two checks under `Promise.all`).
-- **Clock skew between the app and Postgres** — `claimCheck`/`releaseCheck` stamp `last_check_at` from
-  `new Date()` (`check.ts:43,70`) while `save`/`clear` use the DAL's database clock
-  (`project-llm.ts:96,124`), so one row mixes two clocks. The cooldown compares app time with app time, so
-  it is self-consistent and I found no failure from it; I could not rule out a long-tail effect on an
-  install whose web and database clocks differ by more than 30 seconds.
+  meaningful check on it, and it is green at HEAD.
+- **The round-1 categories I did not re-sweep** — per the constitution's re-review rule, this pass did not
+  re-open idempotency and retries, time zones and DST, or the publish paths; round 1 swept them and nothing
+  in `cef096a` touches them. If a human wants a second exhaustive sweep rather than a scoped one, that is a
+  different, ~40-minute pass.
