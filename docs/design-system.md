@@ -383,7 +383,22 @@ a new pattern.
 | Many-of-many | Checkboxes with `checkStyles` |
 
 Native `<select>` is no longer used in the app; `Select` stays only for
-callers outside the design system.
+callers outside the design system — **except** for a long list that a
+requirement demands stay changeable with client JavaScript unavailable (below).
+
+- **Exception: a long list that must work with no JavaScript uses `Select`,
+  not `Combobox`.** `Combobox` is a client component that submits through a
+  hidden input carrying the server-rendered default; with JavaScript
+  unavailable the visible text box never updates that hidden input, so the
+  control *looks* changeable while silently failing to take effect. The email
+  settings card's digest-hour and time-zone pickers (24 and ~400 options) use
+  `Select` for exactly this reason — the email entry needs every control on
+  that page to work with no client JavaScript at all. Cadence, with only three
+  options, stays a `SegmentedControl`, which is already built on native radios
+  and needs no exception. Reach for this only when the no-JavaScript
+  requirement is real; `Combobox`/`TimeZoneField` stay the default for every
+  other long list, where the richer typeahead is worth the JavaScript
+  dependency.
 
 ## 8. States
 

@@ -392,7 +392,7 @@ Interim limits (each one constant; *Reverse:* change the constant):
 - JSON body limit 8 MB: `JSON_BODY_LIMIT` in `src/server/api/handle.ts` (multipart gets the upload limit plus `MULTIPART_EXTRA`, 1 MB).
 - 100 items per add call: `API_ITEMS_PER_CALL_MAX` in `src/lib/validation/api.ts`; 500 items per job: `JOB_ITEMS_MAX` in `src/lib/validation/jobs.ts`.
 - Page size 50 by default, at most 100: `PAGE_LIMIT_DEFAULT`, `PAGE_LIMIT_MAX` in `src/lib/validation/api.ts`.
-- Webhook delivery: 8 attempts, backoff 1 min doubling to 6 h, 10 s timeout, disabled after 20 failed deliveries, 30-day log, 10 deliveries per tick at concurrency 4: `WEBHOOK_DEFAULTS` in `src/server/scheduler/config.ts`. Secret rotation overlap 24 h: `ROTATION_OVERLAP_MS` in `src/server/services/webhooks/endpoints.ts`. Signature tolerance 300 s: `SIGNATURE_TOLERANCE_SECONDS` in `src/server/services/webhooks/sign.ts`.
+- Webhook delivery: 8 attempts, backoff 1 min doubling to 6 h, 10 s timeout, disabled after 20 failed deliveries, 30-day log, 10 deliveries per tick at concurrency 4: `WEBHOOK_DEFAULTS` in `src/server/scheduler/config.ts`. Secret rotation overlap 24 h: `ROTATION_OVERLAP_MS` in `src/server/services/webhooks/endpoints.ts`. Signature tolerance 300 s: `SIGNATURE_TOLERANCE_SECONDS` in `src/server/services/webhooks/sign.ts`. **Extended by 044's N60/N61/E17/E24**: email's delivery log and self-disabling pause reuse this shape (claim, backoff, a consecutive-failure threshold, a 30-day-style retention pruned by the section itself) with one departure — the log excerpts no reply text at all, because a mail server's refusal routinely quotes the recipient address (N60).
 - URL fetches: 3 redirects, 30 s: `FETCH_MAX_REDIRECTS`, `FETCH_TIMEOUT_MS` in `src/server/net/safe-fetch.ts`.
 - Housekeeping deletes in batches of 500: `HOUSEKEEPING_BATCH` in `src/server/scheduler/housekeeping.ts`.
 
@@ -1026,21 +1026,21 @@ These are fixes to existing helpers, inert for every provider before this entry.
   3. All activity with the *Problems* preset and no other filter, first page (the projects it covers).
 
   Opening the panel, other Activity views, paging and prefetching mark nothing.
-- **N5 — Muting is personal and hides; it does not delete.** Events stay in Activity. Notifications are on by default.
-- **N6 — Unmuting starts fresh**: turning notifications back on marks the project read at that moment.
+- **N5 — Muting is personal and hides; it does not delete.** Events stay in Activity. Notifications are on by default. **Extended by 044's N45** for the email channel specifically: email defaults *off* even where in-app notifications are on, because an inbox is not a badge a person only sees when they come looking.
+- **N6 — Unmuting starts fresh**: turning notifications back on marks the project read at that moment. **Unaffected by 044**: email has its own forward-only mailed-through position (N55) and does not move the read floor, or move with it.
 - **N7 — Starting points.**
   - A new member starts at the moment they joined.
   - A rejoin starts again.
   - The first deploy marks everything up to then as read.
 - **N8 — Leaving deletes the state**, in the same transaction as the membership; it also goes with the project or the user.
 - **N9 — The bell is always shown; the count hides at zero.** The display is capped at "99+", and counting stops at 100.
-- **N10 — Muting is edited on a personal Notifications page** (linked from the user menu and the panel) and on each project's settings page, for every role.
+- **N10 — Muting is edited on a personal Notifications page** (linked from the user menu and the panel) and on each project's settings page, for every role. **Extended by 044's N46**: email cadence, hour, zone and quiet hours join that same personal page as one more card; which problems may be mailed is still the per-project rule above, not a second one.
 - **N11 — The callout appears on the project home and on Posts.**
 - **N12 — The refresh is quiet.** It runs every 60 s while the tab is visible and once on becoming visible. It is announced politely only when the count rises.
 
 ### Plan decisions
 
-- **R1 — A `notification_states` table**, one row per membership: `seen_seq`, `seen_at` and `muted`.
+- **R1 — A `notification_states` table**, one row per membership: `seen_seq`, `seen_at` and `muted`. **Extended by 044's E6–E8**: email adds its own per-person settings row and a per-person-per-project position row, on the same cascade-with-the-membership rule, rather than growing this table with a second channel's bookkeeping.
   - The primary key is `(project_id, user_id)`.
   - A composite FK to `member (organization_id, user_id) ON DELETE CASCADE` deletes the row with the membership, project or user, in the same statement.
   - It is not columns on Better Auth's `member`, where marking would contend with `lockSelf`.
@@ -1078,7 +1078,7 @@ These are fixes to existing helpers, inert for every provider before this entry.
   - `/api/me/` is a public prefix in the auth gate, so a cookie-less request gets 401 instead of a login redirect.
 - **R12 — The poller is pure, injectable logic**, tested without a DOM. It also refreshes at once on a `docket:notifications-changed` event.
 - **R13 — Mutations are server actions over the caller's own resolved projects.** An unknown project and someone else's give the same "not found". The proxy's same-origin check refuses forged POSTs. The only allowed `returnTo` is `/notifications`.
-- **R14 — Muting UI.** Each project has one form with a single "Turn off" / "Turn on" button, named with the project, and its state shown as text. A redirect confirms the change, so it works without JavaScript.
+- **R14 — Muting UI.** Each project has one form with a single "Turn off" / "Turn on" button, named with the project, and its state shown as text. A redirect confirms the change, so it works without JavaScript. **Extended by 044's E18/E29**: the email settings card is one form with one Save button on the same no-JavaScript, redirect-confirms shape; its pause/resume control is its own one-button form, the same pattern as this toggle.
 - **R15 — The callout is a warning `Alert` with `role="status"`**, so it is polite. Screen readers rarely announce a status region that is present at load, so its place first in `main` is what makes it found.
 - **R16 — A `RelativeTime` atom.** `SchedulerHealth`'s `ago()` wording moves to `lib/time/relative.ts`, with unchanged output. The absolute time and zone are the tooltip and screen-reader text.
 - **R17 — No change** to dependencies, environment variables, the public API, webhooks, event kinds, filters or `docker-compose.yml`. **Owed to the operator:** `.claude/skills/docket-ui/SKILL.md` should list `/notifications` and the bell. The pipeline cannot write it.
@@ -1629,7 +1629,9 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
   (N27). No row's `seen_seq`, `seen_at` or sparse mark is touched.
 - **N27 — Default on, stored as exceptions.** A new member, a new project, a platform a later release
   adds, and a project nobody has touched a switch for are all on with nothing written — the fact that
-  makes the N26 migration a no-op for every unmuted row.
+  makes the N26 migration a no-op for every unmuted row. **Not reversed by 044's N45**: N45 governs a
+  different axis (which *channel* carries an already-eligible event), and deliberately inverts the
+  default for email alone; this rule, for the bell, is unchanged.
 - **N28 — Two independent axes, combined with AND.** An event may notify when its kind is on *and*
   either it records no platform or at least one platform it records is on.
 - **N29 — A multi-platform event counts once if any of its platforms is on.** A connect failure spanning
@@ -1743,10 +1745,227 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
   `muted` before it is dropped. `pnpm db:check` stays green because it only compares the snapshot with
   the journal.
 
-## 043 — Credit hold (2026-10-11)
+## 044 — Email delivery (2026-10-12)
 
-Spec: `specs/043-llm-credit-hold`. Shares the number 043 with the notification-preferences entry above:
-both branches were cut from a `main` whose highest spec was 042, so the speckit numbering assigned 043 twice.
+### Spec decisions (N42–N67)
+
+- **N42 — One mailer capability, shaped like invitation delivery, injected and never imported by a
+  screen.** A single `Mailer` with one send operation and a classified outcome — sent, permanently
+  rejected, temporarily failed, or unavailable. Every caller asks one question: "is there a mailer?"
+- **N43 — The SMTP group is the two variables that are meaningless alone; credentials are an all-or-none
+  pair that requires the group.** `SMTP_HOST`/`SMTP_FROM` are the group; `SMTP_USER`/`SMTP_PASSWORD` are
+  a pair, both or neither, and either without the group is an error, because an unauthenticated relay on
+  a private network is a real deployment. Satellites have defaults; setting one without the group is an
+  error. With the group unset, email is off and no validation message ever carries a value.
+- **N44 — The wire transport is the one piece this entry cannot finish, and it is marked rather than
+  faked.** `NEEDS DEPENDENCY: nodemailer`, `NEEDS RESEARCH: SMTP`. Configured-but-unavailable reports
+  *unavailable*: one startup line, each would-be send recorded without a retry storm, no bookkeeping
+  advance, nobody told they were emailed.
+- **N45 — Email is opt-in per person, deliberately the opposite of N27's default-on.** Configuring a mail
+  server must never, by itself, start mailing anyone who never asked. Default cadence is **off** for
+  everybody, including people who already have notifications fully on; nothing in the migration opts
+  anybody in. **Not a reversal of N27**: N27 governs which events may notify; N45 governs which channel
+  carries them.
+- **N46 — Email settings are per person and account-wide; what may be mailed is still the per-project
+  rule.** Cadence, hour, zone and quiet hours are one set per person. Which problems may be mailed is
+  N39's rule, imported unchanged via N40: no second notion of what someone cares about.
+- **N47 — Three cadences: off, immediate, or a daily digest at a chosen hour.** Immediate and digest are
+  the same assembly at a different due instant — one query at send time, never a per-event queue.
+- **N48 — The person's time zone is stored with their email settings, shown in words beside every hour.**
+  Until chosen, Docket uses the zone their projects agree on, UTC when they disagree or there are none —
+  never guessed from a request. Pre-filled from the browser when JavaScript is available; still usable
+  without it.
+- **N49 — Quiet hours govern immediate mail only; a chosen digest hour is exempt.** A digest hour is an
+  explicit instruction. Inside quiet hours, immediate mail is deferred, never dropped: everything still
+  eligible when the window ends arrives as one message, not a burst.
+- **N50 — Wall-clock rules are resolved per local day with explicit DST disambiguation.** A non-existent
+  hour resolves to the next instant that exists; an hour occurring twice sends once, at the first
+  occurrence. Quiet windows may wrap midnight. Resolved instants are stored absolute, never recomputed —
+  entry 1's snooze rule (**M8**) applied to a second wall-clock promise.
+- **N51 — The filter runs at send time, never at queue time.** A problem read, dismissed or snoozed, or
+  excluded by a preference switch, is not mailed — including when it became so in the minutes between
+  appearing and the mail going out.
+- **N52 — An empty message is never sent.** No mail, no "all clear", no bookkeeping change; the next due
+  instant simply rolls forward.
+- **N53 — A missed digest is sent late only while it is still the same local day.** A worker down two
+  hours sends late, same day; down two days skips the stale digest, its problems rolling into the next
+  one, because the mailed-through position only advances on an actual send.
+- **N54 — Never twice, even at the cost of never.** A crash between handing a message to the mail server
+  and recording that it was handed over is recorded as sent and never retried — constitution V's
+  publishing choice, for the same reason: a duplicate problem email teaches people to filter Docket into
+  the bin.
+- **N55 — What has been mailed is a forward-only position per person and project**, mirroring the read
+  floor. A person's bookkeeping also carries their next due instant and a claim, so two processes ticking
+  at once, and a tick killed mid-run, cannot both send.
+- **N56 — The unsubscribe link carries a signed, scoped, expiring token and names nobody.** No user id,
+  address, project slug or event id in the URL. Outlives the mail by a wide margin (60 days) and is not
+  single-use. **Strengthened by E19**: implemented as AES-256-GCM ciphertext rather than a merely signed,
+  readable payload, because FR-026 forbids a user identifier appearing in the URL at all.
+- **N57 — The link lands on a page with one pre-filled submit; it does not act on the GET.** A mail
+  client's own one-click unsubscribe button does act immediately, because that one is unambiguously the
+  person pressing it. Either way the page afterwards says, in plain words, exactly what changed.
+- **N58 — One click turns off every problem email for that person.** The same page offers stopping just
+  one project's problems, switching to one digest a day, and a way back — all within the token's scope,
+  without signing in. Turning email off never changes in-app notifications (**N5**'s "hides, does not
+  delete", applied to channels).
+- **N59 — Being unsubscribed is a fact about the person's settings, not a separate flag.** One-click sets
+  cadence to off; the per-project variant excludes that project from email only. No second "suppressed"
+  state that can disagree with the settings screen (**N26**'s lesson).
+- **N60 — The delivery log stores no body, no subject, no recipient address and no free text from the
+  SMTP conversation.** One row per attempt: person, cadence, problem count, outcome class, numeric SMTP
+  code, duration, instant. A server's refusal routinely quotes the address, so it is classified and
+  discarded — the one place this entry departs from the webhook log's shape, for the roadmap's secrets
+  rule.
+- **N61 — Repeated failure or a permanent rejection pauses that person's email with a reason they can
+  see.** Permanent rejection pauses immediately; temporary failures retry with backoff and pause after
+  enough consecutive ones — the webhook endpoint's self-disabling rule, with the person able to resume
+  it. A pause never touches in-app notifications.
+- **N62 — Only a rejection during the conversation is a bounce.** Docket receives no mail, so a delivery
+  report arriving later is invisible to it — stated plainly in the docs rather than implied by silence;
+  inbound mail is out of scope.
+- **N63 — A person sees their own delivery outcome and nobody else's.** No administrative view, no
+  public-API operation, no cross-person page.
+- **N64 — Invitations are transactional and are emailed whenever email exists, in addition to today's
+  in-app notification.** A 7-day deadline, so not governed by cadence, quiet hours, preferences or
+  digest; carries no unsubscribe — nothing recurring to unsubscribe from.
+- **N65 — The fallback is today's behaviour, unchanged, and the inviter is always told which happened.**
+  No email configured, unavailable, or a failed send: the inviter gets the copyable single-use link
+  exactly as now, and is told whether mail also went out. The link, its token, hashing, single use and
+  expiry do not change.
+- **N66 — Docket mails the address on the account and does not require it to be verified.** A permanently
+  rejected address pauses that person's email (**N61**), the honest version of the same protection.
+- **N67 — An email reveals nothing the person could not already see.** Each problem names its project and
+  links into Activity, which still requires signing in; no credential, no token beyond the unsubscribe
+  scope, no other person's data. A digest spans only the person's own projects.
+
+### Plan decisions (E1–E34)
+
+- **E1 — The group is `SMTP_HOST` and `SMTP_FROM`; the credentials are an all-or-none pair that requires
+  it.** `smtpIssues(source)` is `storageIssues()`'s shape verbatim. *Rejected:* credentials in the group
+  (breaks the private-relay case N43 names); one `SMTP_URL` string (one variable every log-scrubber has to
+  know, and no per-variable message); a `MAIL_ENABLED` boolean (N26's lesson — a second switch that can
+  disagree).
+- **E2 — The satellites have no default in the env layer; the default is the transport's and is
+  `NEEDS RESEARCH`.** `SMTP_PORT`/`SMTP_SECURITY` validate range/membership only and stay `undefined`
+  when unset; `createSmtpMailer()` and `.env.example` get the real default from the one task that can
+  know it. *Rejected:* writing `587`/`starttls` in now and fixing later — the guess constitution I
+  forbids.
+- **E3 — `src/server/mail/` is `src/server/storage/` with a different verb.** `getMailer(): Mailer | null`
+  memoised from `getEnv().smtp`, `setMailerForTests()` the only seam; the unavailable transport collapses
+  into a `Mailer` that always answers `unavailable`, so callers branch two ways, not three. *Rejected:*
+  `requireMailer()` throwing — FR-005 wants a recorded outcome, not an exception.
+- **E4 — The `Mailer` interface and its four outcomes.** One `send()` that never throws; `MailOutcome` is
+  `sent | rejected | failed | unavailable`, each with `durationMs` and an optional numeric `code`.
+  *Rejected:* throwing typed errors; a boolean plus out-parameter; one `failed` covering both permanent
+  and temporary (FR-023 treats them completely differently).
+- **E5 — The wire transport is one file whose body is the only thing the deferred task rewrites.**
+  `src/server/mail/smtp.ts` ships today as `return null` with both marks named verbatim. *Rejected:*
+  hand-rolled SMTP (constitution VI); shelling to `sendmail` (FR-005 forbids by name); a hosted HTTP
+  provider (out of scope).
+- **E6 — One sparse settings row per person; absence is "off".** `email_settings` is created only by the
+  first save; no migration inserts a row — N45/FR-007's "nothing opts anybody in" as a fact about the
+  database, Q2's move repeated.
+- **E7 — The claim lives on the settings row, not in a second table.** `next_due_at`, `lease_owner`,
+  `lease_until`, failure count, pause state and last outcome live on `email_settings`, because there is
+  one claim per person and a second table could only ever disagree.
+- **E8 — One per-project row carries the position, the exclusion and the in-flight high-water.**
+  `email_project_state(project_id, user_id, mailed_seq, excluded, sending_seq)`, absence meaning neutral
+  for both; the composite FK to `member` makes FR-025's cascade the database's job, R1/M1/Q1's shape.
+- **E9 — Three transactions and a `sending_seq` column.** Claim → assemble (read-only) → write
+  `sending_seq` under the lease → `mailer.send()` outside any transaction → record. Advancing the position
+  before sending loses a message on the first temporary failure; advancing only after sending risks a
+  duplicate on a crash between send and record. `sending_seq` is the smallest thing that tells recovery
+  "may have finished" from "never started".
+- **E10 — Recovery of an expired lease is "sent".** `recoverEmailClaims()` treats any row with
+  `sending_seq` set and an expired lease as sent, logs the attempt as `internal`, and rolls `next_due_at`
+  forward — N54's duplicate-avoidance made concrete.
+- **E11 — One `next_due_at` drives both cadences, and ordering by it is the fairness rule.** The claim
+  query is `ORDER BY next_due_at ASC LIMIT maxPerTick FOR UPDATE SKIP LOCKED`, serving the
+  longest-overdue first (FR-024) off one indexed column.
+- **E12 — `nextDue()` takes `lastSentAt`, because otherwise FR-020 cannot hold.** Comparing the local date
+  of `lastSentAt` against `now` is what lets a digest-hour change mid-day send exactly once instead of
+  twice or skipping a day.
+- **E13 — "Same local day", and why a missed digest is skipped rather than sent stale.** Compares
+  `Instant.toZonedDateTimeISO(zone).toPlainDate()`; a digest due on an earlier local day than now is
+  skipped with no attempt row and no position movement.
+- **E14 — Quiet hours are two nullable hour columns; equal ends normalise to none.** `CHECK` both-or-
+  neither; the Zod boundary folds `start === end` into `(null, null)` so the clock module has no
+  equal-ends special case.
+- **E15 — Assembly reuses the existing attention branch builder, with one new marks mode and one
+  `minSeq`.** `listBranch()` gains `exclude: "snoozed" | "hidden"`; `minSeq` becomes
+  `max(groupThreshold, floor, mailed_seq)` — three reasons an event is not mailed, one comparison, no
+  second attention query to drift from the first.
+- **E16 — The bounds: 20 listed, 1000 scanned, the overflow counted exactly within that.**
+  `EMAIL_LIST_LIMIT = 20`, `EMAIL_SCAN_LIMIT = 1000`; `sending_seq` is the scanned set's `max(seq)`, so the
+  position advances over the counted overflow too — one bad day produces one message, not a run of them.
+- **E17 — A sixth section, with constants beside `WEBHOOK_DEFAULTS` and no new environment variable.**
+  `EMAIL_DEFAULTS`: `maxPerTick` 50 (SC-009's 500-in-10-ticks), `concurrency` 8, `minWindowMs` 11000,
+  `backoffBaseMs`/`backoffMaxMs` the webhook section's values, `pauseAfterFailures` 5 (tighter than the
+  webhook endpoint's 20 — five failed attempts to one inbox already span most of a day), `unavailableRetryMs`
+  3600000, `retentionDays` 30.
+- **E18 — The section's first line is the capability check.** `if (!getMailer()) return
+  emptyEmailCounts();` before any query, clock read or heartbeat — SC-006's zero-behaviour-change install
+  made structural.
+- **E19 — The unsubscribe token is AES-256-GCM ciphertext, not a signed payload.**
+  `encryptSecret(JSON.stringify(payload), { aad: "docket-unsubscribe-v1" })`; nothing stored. A
+  signed-but-readable payload would carry the user id in the clear, failing FR-026, so AEAD is a
+  strengthening of N56's literal "signed", not a substitution — recorded there.
+- **E20 — The token's plaintext, and its 60 days.** `{ v, u, p: projectId | null, x: expiry }`; `p: null`
+  for a digest spanning several projects. Expiry `now + 60 days` (N56).
+- **E21 — A page for the human, a POST route for the mail client.** `GET /email/unsubscribe` renders and
+  writes nothing; `POST /api/email/unsubscribe` is a session-less Route Handler, the one-click path, which
+  does act immediately. The header names a mail client needs to find that route are `NEEDS RESEARCH`; the
+  route already handles whatever body that research says the client sends.
+- **E22 — One click is `cadence = 'off'`, and nothing else.** Every submit maps to exactly one settings
+  write; no `notification_preferences`, `notification_states` or `notification_event_marks` row is ever
+  touched by an unsubscribe action.
+- **E23 — One neutral page, one status code, for every refusal.** A bad, expired, re-signed or
+  scope-mismatched token all render the same sentence with HTTP 200 and write nothing — a different
+  status or render time would be a probe.
+- **E24 — The log is person-scoped, has no excerpt column, and allows a null person.**
+  `email_delivery_attempts(id, user_id NULL, at, purpose, cadence, problem_count, outcome, smtp_code,
+  duration_ms)`; an invitation to an address with no account logs with `user_id = NULL` rather than the
+  address. Pruned at 30 days by the section itself.
+- **E25 — The invitation result gains one field, and `manual_link` is returned whenever there is no
+  account.** `InvitationEmail = "sent" | "failed" | "unavailable"` joins both `InvitationDeliveryResult`
+  variants, so the inviter is always told which happened and the copyable link never disappears because
+  mail also went out.
+- **E26 — Invitation mail is a value, not a throw, and never rolls back the invitation.**
+  `deliverAfterCommit()`'s `catch` no longer turns a delivery problem into `ConflictError`; the mailer
+  never throws, so the normal path cannot reach it.
+- **E27 — The person's zone default is derived, and the browser only pre-fills.** `derivedZone()` returns
+  the single zone every project agrees on, else UTC; `BrowserTimeZone` sets the select only when no zone
+  is stored, so opening the page on holiday never silently changes a chosen zone.
+- **E28 — One extension to `docs/design-system.md` §7: a no-JavaScript exception for long lists.** Where a
+  control must be changeable with client JavaScript unavailable, a long list (digest hour, time zone) uses
+  `Select`, not `Combobox` — `Combobox` submits a hidden input carrying the server-rendered default when
+  JavaScript is unavailable, so the visible control would silently fail to take effect. Cadence stays a
+  `SegmentedControl` (native radios already work with no JavaScript).
+- **E29 — The email settings are one form with one Save; pause/resume is its own one-button form.**
+  Cadence, hour, zone and quiet hours are one coherent schedule saved together; resume-after-pause is a
+  different question, answered by a separate Q18-shaped switch.
+- **E30 — One pure renderer: text first, HTML derived, no remote anything.**
+  `renderProblemEmail(model): { subject, text, html }` is pure; every instant goes through
+  `formatLocal(instant, zone)` in the **person's** zone, not a project's. No images, remote stylesheet,
+  tracking pixel or click wrapping.
+- **E31 — No public API, no webhook event, no new settings route.** Settings live on the existing
+  `/notifications` page and its existing actions; there is no handler to protect because none is added.
+- **E32 — Nothing else is added to the stack.** No queue, no Redis, no second process, no infrastructure,
+  no new UI primitive, no new index on `activity_events`; one runtime dependency, `nodemailer`, marked and
+  recorded.
+- **E33 — Retention is pruned by the email section itself.** `purgeEmailHistory(30)` runs at the end of
+  `runEmailDeliveries()`, the shape `runWebhookDeliveries()` already uses — a purge inside the section, not
+  inside `runHousekeeping()`.
+- **E34 — The address has exactly one shape and one home.** A recipient address exists only as
+  `MailMessage.to`, constructed inside `send.ts`/`invitations/delivery.ts` and passed straight to
+  `mailer.send()` — never a DAL parameter, never in an outcome, heartbeat, thrown error or `console` call,
+  so the secrets assertion is checkable by reading the call sites.
+
+## 045 — Credit hold (2026-10-11)
+
+Spec: `specs/043-llm-credit-hold`. The section number follows this file's own sequence (044 is Email
+delivery, whose spec directory is 060), not the spec directory: parallel branches were each assigned spec
+number 043 by speckit, because each was cut from a `main` whose highest spec was 042.
 
 latency: unmeasured; live path verified with mocks only.
 

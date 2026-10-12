@@ -174,6 +174,13 @@ fi
 
 _opts_lines=()
 while IFS= read -r _line || [[ -n "$_line" ]]; do
+  # Strip a trailing carriage return. On Windows the parser above prints through a
+  # text-mode stdout, so every line but the last arrives with one appended. A marker
+  # carrying a stray CR never matches the context file, and a start marker that does
+  # not match truncates that file to the managed section (losing everything above it).
+  # Strip into the variable first: inside an array append, bash does not apply the
+  # ANSI-C quote, so `_opts_lines+=("${_line%$'\r'}")` would keep the CR.
+  _line="${_line%$'\r'}"
   _opts_lines+=("$_line")
 done < <(printf '%s\n' "$_raw_opts")
 if (( ${#_opts_lines[@]} < 1 )); then
@@ -209,6 +216,7 @@ fi
 
 CONTEXT_FILES=()
 while IFS= read -r _line || [[ -n "$_line" ]]; do
+  _line="${_line%$'\r'}"
   [[ -n "$_line" ]] && CONTEXT_FILES+=("$_line")
 done < <(printf '%s\n' "$_context_files_raw")
 

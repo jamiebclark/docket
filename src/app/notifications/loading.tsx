@@ -6,6 +6,7 @@ export default function NotificationsLoading() {
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-5 w-96 max-w-full" />
       <Skeleton className="h-64 w-full" />
+      <Skeleton className="h-[34rem] w-full" />
       <Skeleton className="h-40 w-full" />
     </main>
   );

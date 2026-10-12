@@ -1,5 +1,5 @@
 {
-  "id": "753548c4-82c4-407d-88ed-5e0d84b48a71",
+  "id": "a37343cf-e947-4ccd-b27d-6e441b0ae926",
   "prevId": "a4654f7b-d4a8-4804-9919-5ffc3de6c775",
   "version": "7",
   "dialect": "postgresql",
@@ -2331,6 +2331,440 @@
       },
       "isRLSEnabled": false
     },
+    "public.email_delivery_attempts": {
+      "name": "email_delivery_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "at": {
+          "name": "at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cadence": {
+          "name": "cadence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "problem_count": {
+          "name": "problem_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "smtp_code": {
+          "name": "smtp_code",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "email_delivery_attempts_user_idx": {
+          "name": "email_delivery_attempts_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "email_delivery_attempts_purge_idx": {
+          "name": "email_delivery_attempts_purge_idx",
+          "columns": [
+            {
+              "expression": "at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "email_delivery_attempts_user_id_user_id_fk": {
+          "name": "email_delivery_attempts_user_id_user_id_fk",
+          "tableFrom": "email_delivery_attempts",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "email_delivery_attempts_purpose": {
+          "name": "email_delivery_attempts_purpose",
+          "value": "\"email_delivery_attempts\".\"purpose\" IN ('problems','invitation')"
+        },
+        "email_delivery_attempts_cadence": {
+          "name": "email_delivery_attempts_cadence",
+          "value": "\"email_delivery_attempts\".\"cadence\" IS NULL OR \"email_delivery_attempts\".\"cadence\" IN ('immediate','digest')"
+        },
+        "email_delivery_attempts_outcome": {
+          "name": "email_delivery_attempts_outcome",
+          "value": "\"email_delivery_attempts\".\"outcome\" IN ('sent','unavailable','refused','rejected','timed_out','connect_failed','tls_failed','internal')"
+        },
+        "email_delivery_attempts_cadence_purpose": {
+          "name": "email_delivery_attempts_cadence_purpose",
+          "value": "(\"email_delivery_attempts\".\"purpose\" = 'problems') = (\"email_delivery_attempts\".\"cadence\" IS NOT NULL)"
+        },
+        "email_delivery_attempts_count_nonneg": {
+          "name": "email_delivery_attempts_count_nonneg",
+          "value": "\"email_delivery_attempts\".\"problem_count\" >= 0"
+        },
+        "email_delivery_attempts_duration_nonneg": {
+          "name": "email_delivery_attempts_duration_nonneg",
+          "value": "\"email_delivery_attempts\".\"duration_ms\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.email_project_state": {
+      "name": "email_project_state",
+      "schema": "",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mailed_seq": {
+          "name": "mailed_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "excluded": {
+          "name": "excluded",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "sending_seq": {
+          "name": "sending_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "email_project_state_member_fk": {
+          "name": "email_project_state_member_fk",
+          "tableFrom": "email_project_state",
+          "tableTo": "member",
+          "columnsFrom": [
+            "project_id",
+            "user_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "email_project_state_project_id_user_id_pk": {
+          "name": "email_project_state_project_id_user_id_pk",
+          "columns": [
+            "project_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "email_project_state_mailed_nonneg": {
+          "name": "email_project_state_mailed_nonneg",
+          "value": "\"email_project_state\".\"mailed_seq\" >= 0"
+        },
+        "email_project_state_sending_fwd": {
+          "name": "email_project_state_sending_fwd",
+          "value": "\"email_project_state\".\"sending_seq\" IS NULL OR \"email_project_state\".\"sending_seq\" >= \"email_project_state\".\"mailed_seq\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.email_settings": {
+      "name": "email_settings",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "cadence": {
+          "name": "cadence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'off'"
+        },
+        "digest_hour": {
+          "name": "digest_hour",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 7
+        },
+        "time_zone": {
+          "name": "time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quiet_start_hour": {
+          "name": "quiet_start_hour",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quiet_end_hour": {
+          "name": "quiet_end_hour",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_due_at": {
+          "name": "next_due_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consecutive_failures": {
+          "name": "consecutive_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "paused_at": {
+          "name": "paused_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paused_reason": {
+          "name": "paused_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_attempt_at": {
+          "name": "last_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_outcome": {
+          "name": "last_outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_sent_at": {
+          "name": "last_sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "email_settings_due_idx": {
+          "name": "email_settings_due_idx",
+          "columns": [
+            {
+              "expression": "next_due_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"email_settings\".\"cadence\" <> 'off' AND \"email_settings\".\"paused_at\" IS NULL AND \"email_settings\".\"lease_owner\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "email_settings_user_id_user_id_fk": {
+          "name": "email_settings_user_id_user_id_fk",
+          "tableFrom": "email_settings",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "email_settings_cadence": {
+          "name": "email_settings_cadence",
+          "value": "\"email_settings\".\"cadence\" IN ('off','immediate','digest')"
+        },
+        "email_settings_digest_hour": {
+          "name": "email_settings_digest_hour",
+          "value": "\"email_settings\".\"digest_hour\" BETWEEN 0 AND 23"
+        },
+        "email_settings_quiet_pair": {
+          "name": "email_settings_quiet_pair",
+          "value": "(\"email_settings\".\"quiet_start_hour\" IS NULL) = (\"email_settings\".\"quiet_end_hour\" IS NULL)"
+        },
+        "email_settings_quiet_start": {
+          "name": "email_settings_quiet_start",
+          "value": "\"email_settings\".\"quiet_start_hour\" IS NULL OR \"email_settings\".\"quiet_start_hour\" BETWEEN 0 AND 23"
+        },
+        "email_settings_quiet_end": {
+          "name": "email_settings_quiet_end",
+          "value": "\"email_settings\".\"quiet_end_hour\" IS NULL OR \"email_settings\".\"quiet_end_hour\" BETWEEN 0 AND 23"
+        },
+        "email_settings_lease_pair": {
+          "name": "email_settings_lease_pair",
+          "value": "(\"email_settings\".\"lease_owner\" IS NULL) = (\"email_settings\".\"lease_until\" IS NULL)"
+        },
+        "email_settings_pause_pair": {
+          "name": "email_settings_pause_pair",
+          "value": "(\"email_settings\".\"paused_at\" IS NULL) = (\"email_settings\".\"paused_reason\" IS NULL)"
+        },
+        "email_settings_pause_reason": {
+          "name": "email_settings_pause_reason",
+          "value": "\"email_settings\".\"paused_reason\" IS NULL OR \"email_settings\".\"paused_reason\" IN ('rejected','failing')"
+        },
+        "email_settings_due_when_on": {
+          "name": "email_settings_due_when_on",
+          "value": "(\"email_settings\".\"cadence\" = 'off') = (\"email_settings\".\"next_due_at\" IS NULL)"
+        },
+        "email_settings_failures_nonneg": {
+          "name": "email_settings_failures_nonneg",
+          "value": "\"email_settings\".\"consecutive_failures\" >= 0"
+        },
+        "email_settings_outcome": {
+          "name": "email_settings_outcome",
+          "value": "\"email_settings\".\"last_outcome\" IS NULL OR \"email_settings\".\"last_outcome\" IN\n        ('sent','unavailable','refused','rejected','timed_out','connect_failed','tls_failed','internal')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.external_item_claims": {
       "name": "external_item_claims",
       "schema": "",
@@ -2731,48 +3165,6 @@
         "generation_series_planned_count_range": {
           "name": "generation_series_planned_count_range",
           "value": "\"generation_series\".\"planned_count\" BETWEEN 2 AND 10"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.llm_credit_holds": {
-      "name": "llm_credit_holds",
-      "schema": "",
-      "columns": {
-        "owner": {
-          "name": "owner",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "held_since": {
-          "name": "held_since",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_refusal_at": {
-          "name": "last_refusal_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "next_probe_at": {
-          "name": "next_probe_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "llm_credit_holds_owner_nonempty": {
-          "name": "llm_credit_holds_owner_nonempty",
-          "value": "length(\"llm_credit_holds\".\"owner\") > 0"
         }
       },
       "isRLSEnabled": false
@@ -7574,8 +7966,7 @@
         "rate_limited",
         "unavailable",
         "auth",
-        "bad_request",
-        "credit_exhausted"
+        "bad_request"
       ]
     },
     "public.approval_policy": {
@@ -7666,8 +8057,7 @@
         "bad_request",
         "image_deleted",
         "image_unavailable",
-        "no_targets",
-        "credit_exhausted"
+        "no_targets"
       ]
     },
     "public.generation_job_item_status": {

@@ -21,6 +21,10 @@ const ENV = vi.hoisted(() => {
     THREADS_GRAPH_BASE: "https://graph.threads.test",
     // Meta and Threads refuse a callback address that is not public HTTPS, so the scanned run uses one.
     BETTER_AUTH_URL: "https://docket.scan.test",
+    SMTP_HOST: "smtp.scan.test",
+    SMTP_FROM: "scan-from@example.test",
+    SMTP_USER: "scan-smtp-user-4a1e7c902b",
+    SMTP_PASSWORD: "scan-smtp-password-f3a8c9d1e6b50473",
   };
   Object.assign(process.env, values);
   return values;
@@ -86,6 +90,10 @@ import { postsEnv } from "../../helpers/posts-env";
 import type { PublishContext, SocialProvider, StepResult } from "../../../src/providers/types";
 import { createMemoryStorage } from "../../helpers/storage";
 import { deliverAt, webhookEnv } from "../../helpers/webhooks";
+import { renderProblemEmail } from "../../../src/lib/email/render";
+import { mintUnsubscribeToken, unsubscribeUrl } from "../../../src/lib/email/unsubscribe";
+import { getMailer, setMailerForTests } from "../../../src/server/mail";
+import { recordingMailer } from "../../helpers/mailer";
 
 afterAll(async () => {
   setStorageForTests(undefined);
@@ -316,7 +324,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     await invitations.create(scope, { email: "scan-invitee@example.com", role: "editor" }, {
       async deliver(input) {
         inviteToken = new URL(input.acceptUrl).searchParams.get("token") ?? input.acceptUrl;
-        return { kind: "manual_link", url: input.acceptUrl, expiresAt: input.invitation.expiresAt };
+        return { kind: "manual_link", url: input.acceptUrl, expiresAt: input.invitation.expiresAt, email: "unavailable" };
       },
     });
     expect(inviteToken.length).toBeGreaterThan(20);
@@ -521,5 +529,58 @@ describe("secret scan (FR-020, SC-005)", () => {
       { name: "app password", value: PASSWORD_ECHO },
     ];
     expect(scan(pieces, [...ENV_SECRETS, ...echoed])).toEqual([]);
+  });
+
+  it("a rendered problem email and a failing send never echo an SMTP credential (FR-001, FR-002)", async () => {
+    const pieces: Piece[] = [];
+    captureOutput(pieces);
+
+    const token = mintUnsubscribeToken({ userId: "scan-user-id", projectId: "scan-project-id" }, new Date());
+    const rendered = renderProblemEmail({
+      cadence: "immediate",
+      timeZone: "UTC",
+      groups: [
+        {
+          name: "Scan Project",
+          problems: [
+            {
+              outcomeLabel: "Failed",
+              occurredAt: new Date(),
+              platforms: [{ key: "bluesky", name: "Bluesky" }],
+              accountName: "scan.bsky.social",
+              message: "Could not reach the server.",
+              href: "https://docket.scan.test/p/scan-project/activity",
+            },
+          ],
+          overflow: 0,
+          overflowHref: "https://docket.scan.test/p/scan-project/activity",
+        },
+      ],
+      unsubscribeUrl: unsubscribeUrl(token),
+    });
+    pieces.push({ place: "rendered problem email", text: `${rendered.subject}\n${rendered.text}\n${rendered.html}` });
+
+    const mailer = recordingMailer();
+    mailer.queue({ kind: "rejected", code: 550, durationMs: 4 });
+    setMailerForTests(mailer);
+    try {
+      const outcome = await getMailer()!.send({
+        to: "scan-recipient@example.test",
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html,
+      });
+      pieces.push({ place: "mailer send outcome", text: JSON.stringify(outcome) });
+    } finally {
+      setMailerForTests(undefined);
+    }
+
+    const smtpSecrets: Secret[] = [
+      { name: "SMTP_HOST", value: ENV.SMTP_HOST },
+      { name: "SMTP_USER", value: ENV.SMTP_USER },
+      { name: "SMTP_PASSWORD", value: ENV.SMTP_PASSWORD },
+      { name: "SMTP_FROM", value: ENV.SMTP_FROM },
+    ];
+    expect(scan(pieces, smtpSecrets)).toEqual([]);
   });
 });

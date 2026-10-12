@@ -157,7 +157,7 @@ export function serverSetupItems(facts: OverviewFacts): ServerSetupItem[] {
   if (facts.viewer.role !== "owner") return [];
   const items: ServerSetupItem[] = [];
   if (facts.scheduler !== "ok")
-    items.push({ key: "scheduler", label: "The scheduler isn't running", href: docsUrl("deployment", "9-is-the-scheduler-running") });
+    items.push({ key: "scheduler", label: "The scheduler isn't running", href: docsUrl("deployment", "10-is-the-scheduler-running") });
   if (!facts.ai.configured)
     items.push({ key: "ai", label: "AI generation isn't set up", href: docsUrl("generator", "configuring-a-provider") });
   if (!facts.storage.configured) items.push({ key: "storage", label: "Media storage isn't set up", href: docsUrl("storage") });

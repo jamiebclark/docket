@@ -91,7 +91,7 @@ describe("acceptById / declineById", () => {
     // Existing accounts get in-app delivery, so regenerate with a recording delivery to see the URL.
     const { invitationId } = await invitations.create(scope, { email: invitee.email, role: "editor" });
     let url = "";
-    await invitations.regenerate(scope, { invitationId }, { deliver: async (d) => { url = d.acceptUrl; return { kind: "in_app" }; } });
+    await invitations.regenerate(scope, { invitationId }, { deliver: async (d) => { url = d.acceptUrl; return { kind: "in_app", email: "unavailable" }; } });
     const token = new URL(url).searchParams.get("token")!;
     expect((await invitations.resolveToken(token, sessionOf(invitee))).state).toBe("accept");
     const other = await createUser();
@@ -199,7 +199,7 @@ describe("resolveToken, listMine and countMine", () => {
     const invitee = await createUser();
     const { invitationId } = await invitations.create(scope, { email: invitee.email, role: "editor" });
     let url = "";
-    await invitations.regenerate(scope, { invitationId }, { deliver: async (d) => { url = d.acceptUrl; return { kind: "in_app" }; } });
+    await invitations.regenerate(scope, { invitationId }, { deliver: async (d) => { url = d.acceptUrl; return { kind: "in_app", email: "unavailable" }; } });
     const res = await invitations.resolveToken(new URL(url).searchParams.get("token"));
     expect(res.state).toBe("login_required");
   });

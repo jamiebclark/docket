@@ -155,12 +155,13 @@ function listBranch(
   limit: number,
   memberUserId: string | null,
   extra: BranchExtra | null = null,
-  marks: { userId: string } | null = null,
+  marks: { userId: string; exclude: "snoozed" | "hidden" } | null = null,
 ): SQL {
   const order = sql.raw(direction === "older" ? "DESC" : "ASC");
   const pid = window.projectId;
-  // The two anti-joins live inside the inner subquery, before LIMIT, so excluding a live snooze still
-  // leaves `limit` rows after the exclusion (data-model.md §4.5, M16).
+  // The two anti-joins live inside the inner subquery, before LIMIT, so excluding a live snooze (or,
+  // for email, anything hidden now) still leaves `limit` rows after the exclusion (data-model.md §4.5,
+  // M16; data-model.md §6.1, E15).
   const marksJoin = marks
     ? sql`LEFT JOIN notification_event_marks snoozed
             ON snoozed.project_id = activity_events.project_id
@@ -173,9 +174,14 @@ function listBranch(
            AND hidden.event_id = activity_events.id
            AND hidden.counts_again_at > now()`
     : sql``;
-  const marksFilter = marks ? sql`AND snoozed.event_id IS NULL` : sql``;
-  const marksSelect = marks ? sql`, (hidden.event_id IS NOT NULL) AS hidden_by_mark` : sql``;
-  const outerMarksSelect = marks ? sql`, ev.hidden_by_mark AS hidden_by_mark` : sql``;
+  const marksFilter = marks
+    ? marks.exclude === "hidden"
+      ? sql`AND hidden.event_id IS NULL`
+      : sql`AND snoozed.event_id IS NULL`
+    : sql``;
+  // "hidden" excludes outright, so hidden_by_mark is always false there and is not selected.
+  const marksSelect = marks && marks.exclude === "snoozed" ? sql`, (hidden.event_id IS NOT NULL) AS hidden_by_mark` : sql``;
+  const outerMarksSelect = marks && marks.exclude === "snoozed" ? sql`, ev.hidden_by_mark AS hidden_by_mark` : sql``;
   return sql`(SELECT
       ev.id AS id,
       ev.seq::text AS seq,
@@ -308,6 +314,7 @@ export function createActivityReader(
           branches.push(
             listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomesIn: group.outcomes, minSeq: group.minSeq, platformClause }, {
               userId: q.userId,
+              exclude: "snoozed",
             }),
           );
         }
@@ -321,7 +328,7 @@ export function createActivityReader(
               q.limit,
               memberUserId,
               { outcomeEq: CONNECT_FAILED, actorEq: q.userId, minSeq: plan.connectFailed.minSeq, platformClause },
-              { userId: q.userId },
+              { userId: q.userId, exclude: "snoozed" },
             ),
           );
         }
@@ -364,6 +371,63 @@ export function createActivityReader(
       return { successes, problems };
     },
   };
+}
+
+function maxBigint(a: bigint, b: bigint): bigint {
+  return a > b ? a : b;
+}
+
+/**
+ * One branch per `plan.memberGroups` entry plus one for `connect_failed`, built on `listBranch` with
+ * `marks: { userId, exclude: "hidden" }` — nothing hidden now is listed or counted (data-model.md §6.2,
+ * E15). `minSeq` is the caller's own floor (the reading floor and the mailed-through position, already
+ * maxed together); each branch raises it further by its own group threshold.
+ */
+function attentionForEmailBranches(
+  q: { projectId: string; userId: string; plan: EligibilityPlan; minSeq: bigint },
+  limit: number,
+): SQL[] {
+  const window: BranchQuery["windows"][number] = { projectId: q.projectId, from: null, to: null };
+  const bq: BranchQuery = { windows: [window], outcomes: null, platform: null, accountId: null };
+  const platformClause = platformClauseSql(q.plan.platforms, "activity_events.provider_keys", "activity_events.seq");
+  const marks = { userId: q.userId, exclude: "hidden" as const };
+  const branches: SQL[] = [];
+  for (const group of q.plan.memberGroups) {
+    const minSeq = maxBigint(group.minSeq, q.minSeq);
+    branches.push(listBranch(window, bq, null, "older", limit, q.userId, { outcomesIn: group.outcomes, minSeq, platformClause }, marks));
+  }
+  if (q.plan.connectFailed) {
+    const minSeq = maxBigint(q.plan.connectFailed.minSeq, q.minSeq);
+    branches.push(
+      listBranch(window, bq, null, "older", limit, q.userId, { outcomeEq: CONNECT_FAILED, actorEq: q.userId, minSeq, platformClause }, marks),
+    );
+  }
+  return branches;
+}
+
+/** One project, one person: the newest `q.limit` eligible attention events above `q.minSeq`, nothing hidden now (data-model.md §6.2). */
+export async function listAttentionForEmail(
+  db: Database,
+  q: { projectId: string; userId: string; limit: number; plan: EligibilityPlan; minSeq: bigint },
+): Promise<AttentionRecord[]> {
+  const branches = attentionForEmailBranches(q, q.limit);
+  if (branches.length === 0) return [];
+  const query = sql`SELECT * FROM (${sql.join(branches, sql` UNION ALL `)}) AS activity_email ORDER BY occurred_at DESC, seq::bigint DESC LIMIT ${q.limit}`;
+  return rowsOf(await db.execute(query)).map(toAttentionRecord);
+}
+
+/** The same predicate, bounded: how many there are and the highest seq among them (data-model.md §6.2, E16). */
+export async function countAttentionForEmail(
+  db: Database,
+  q: { projectId: string; userId: string; scanLimit: number; plan: EligibilityPlan; minSeq: bigint },
+): Promise<{ total: number; maxSeq: bigint | null }> {
+  const branches = attentionForEmailBranches(q, q.scanLimit);
+  if (branches.length === 0) return { total: 0, maxSeq: null };
+  const query = sql`SELECT count(*)::int AS total, max(seq::bigint) AS max_seq
+    FROM (SELECT seq FROM (${sql.join(branches, sql` UNION ALL `)}) AS u LIMIT ${q.scanLimit}) AS bounded`;
+  const row = rowsOf(await db.execute(query))[0];
+  const maxSeq = row?.max_seq;
+  return { total: Number(row?.total ?? 0), maxSeq: maxSeq === null || maxSeq === undefined ? null : BigInt(maxSeq as string) };
 }
 
 export function createActivityRepo(db: Database, projectId: string): ActivityRepo {
