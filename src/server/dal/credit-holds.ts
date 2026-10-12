@@ -35,8 +35,8 @@ export async function holdCredit(owner: string, now: Date): Promise<void> {
 }
 
 /** Any other call outcome: the owner is spending again (FR-017). No-op when there is no hold. */
-export async function clearCreditHold(owner: string): Promise<void> {
-  await getDb().delete(llmCreditHolds).where(eq(llmCreditHolds.owner, owner));
+export async function clearCreditHold(owner: string, exec: Database = getDb()): Promise<void> {
+  await exec.delete(llmCreditHolds).where(eq(llmCreditHolds.owner, owner));
 }
 
 /**

@@ -61,39 +61,39 @@ building blocks every user story's work calls. No user story can start until thi
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 [P] Add `parseLlmLimits(source)` to `src/server/llm/config.ts` and make `parseLlmConfig`
+- [X] T005 [P] Add `parseLlmLimits(source)` to `src/server/llm/config.ts` and make `parseLlmConfig`
   delegate to it, fixing in passing the hard-coded 90000 `llmTimeoutMs()` falls back to whenever the
   provider group is incomplete (L8)
-- [ ] T006 [P] Add `setLlmFactoryForTests(fn)` to `src/server/llm/index.ts`, consulted only when
+- [X] T006 [P] Add `setLlmFactoryForTests(fn)` to `src/server/llm/index.ts`, consulted only when
   `setLlmForTests`'s override is unset; `getLlm()`/`getLlmStatus()`/`missingLlmSettings()` keep their exact
   signatures and behaviour (L13)
-- [ ] T007 Create `src/server/dal/project-llm.ts`: `ProjectLlmRow`, `ProjectLlmStatusRow`,
+- [X] T007 Create `src/server/dal/project-llm.ts`: `ProjectLlmRow`, `ProjectLlmStatusRow`,
   `ProjectLlmRepo` (`read`, `status`, `save`, `clear`, `claimCheck`, `releaseCheck`),
   `createProjectLlmRepo(exec, projectId)`, and `anyProjectHasCredential(exec?)` per
   contracts/resolution.md §4 and the claim/release statements in data-model.md §5
-- [ ] T008 Wire `scope.projectLlm = createProjectLlmRepo(...)` into `ProjectScope` in
+- [X] T008 Wire `scope.projectLlm = createProjectLlmRepo(...)` into `ProjectScope` in
   `src/server/dal/scope.ts` (depends on T007)
-- [ ] T009 Create `src/server/llm/resolve.ts`: the `ResolvedLlm` discriminated union and
+- [X] T009 Create `src/server/llm/resolve.ts`: the `ResolvedLlm` discriminated union and
   `resolveLlmForProject(projectId)` implementing the algorithm in contracts/resolution.md §1 — test
   override first, then the project's decrypted credential (never falling back to the install credential on
   `SecretDecryptionError`), then the install via `parseLlmConfig`/`getLlm()`, with `limits` always from
   `parseLlmLimits` (depends on T005, T006, T007)
-- [ ] T010 [P] Widen `credentialOwnerFor` to read `project_llm_settings` (owner becomes `project:<id>` when
+- [X] T010 [P] Widen `credentialOwnerFor` to read `project_llm_settings` (owner becomes `project:<id>` when
   a credential is set) and add the batch sibling `credentialOwnersFor(projectIds, exec?)` in
   `src/server/dal/credential-owners.ts`, keeping `INSTALL_CREDENTIAL_OWNER` and `jobsExcludingProjects`
   unchanged
-- [ ] T011 [P] Add an optional `exec` parameter to `clearCreditHold(owner, exec?)` in
+- [X] T011 [P] Add an optional `exec` parameter to `clearCreditHold(owner, exec?)` in
   `src/server/dal/credit-holds.ts`, the way `rewindCreditProbe` already has one
-- [ ] T012 [P] Add the `llm_credential: ["manage"]` permission statement to
+- [X] T012 [P] Add the `llm_credential: ["manage"]` permission statement to
   `src/server/auth/access.ts`, granted to `owner` and `admin` only, absent from `editor`
-- [ ] T013 [P] Add `LLM_API_KEY_MAX`, `llmModelIdSchema` and `projectLlmCredentialSchema` to
+- [X] T013 [P] Add `LLM_API_KEY_MAX`, `llmModelIdSchema` and `projectLlmCredentialSchema` to
   `src/lib/validation/generation.ts` per contracts/services.md §4 (model rule matches
   `parseLlmConfig`'s own; no message quotes a submitted value)
-- [ ] T014 [P] Create `src/lib/generation/llm-source.ts` with `LLM_KEY_UNREADABLE`, `LLM_CHECK_BUSY`,
+- [X] T014 [P] Create `src/lib/generation/llm-source.ts` with `LLM_KEY_UNREADABLE`, `LLM_CHECK_BUSY`,
   `LLM_SOURCE_INSTALL` and `LLM_SOURCE_PROJECT`
-- [ ] T015 [P] Add `CREDIT_HOLD_ACCOUNT_PROJECT` to `src/lib/jobs/credit-hold.ts`, keeping its five
+- [X] T015 [P] Add `CREDIT_HOLD_ACCOUNT_PROJECT` to `src/lib/jobs/credit-hold.ts`, keeping its five
   existing constants unchanged
-- [ ] T016 Extend `src/server/llm/key-reads.test.ts` (or a named sibling) asserting `apiKeyEncrypted` /
+- [X] T016 Extend `src/server/llm/key-reads.test.ts` (or a named sibling) asserting `apiKeyEncrypted` /
   `api_key_encrypted` appears only in the schema, `src/server/dal/project-llm.ts` and
   `src/server/llm/resolve.ts`, and that `decryptSecret` is applied to it only in `resolve.ts` (depends on
   T007, T009)

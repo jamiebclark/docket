@@ -8,6 +8,27 @@ export const INSTRUCTIONS_MAX = 2000;
 /** Rendered job instructions (a 2,000-character template plus values) can be longer than a form field allows. */
 export const JOB_INSTRUCTIONS_MAX = 10_000;
 export const TARGET_ACCOUNTS_MAX = 50;
+export const LLM_API_KEY_MAX = 500;
+
+/** The model rule is `parseLlmConfig`'s own, so the install and a project are checked identically (L17). */
+export const llmModelIdSchema = z
+  .string()
+  .trim()
+  .min(1, { error: "Enter a model id" })
+  .max(200, { error: "A model id can be at most 200 characters" })
+  .refine((v) => !/\s/.test(v), { error: "A model id cannot contain spaces" });
+
+export const projectLlmCredentialSchema = z.object({
+  provider: z.enum(["openai", "anthropic"], { error: "Choose a provider" }),
+  model: llmModelIdSchema,
+  /** Write-only. Blank means "leave the stored key alone" (FR-015). */
+  apiKey: z
+    .string()
+    .trim()
+    .max(LLM_API_KEY_MAX, { error: `An API key can be at most ${LLM_API_KEY_MAX} characters` })
+    .default(""),
+});
+export type ProjectLlmCredentialInput = z.infer<typeof projectLlmCredentialSchema>;
 
 const angleSchema = z.object({ title: z.string().min(1).max(120), description: z.string().min(1).max(300) });
 
