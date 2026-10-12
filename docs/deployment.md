@@ -235,7 +235,18 @@ Unverified, so check against your Unraid version: how Unraid exposes Compose, wh
 - Keep port 3000 bound to `127.0.0.1` or a private network, as `docker-compose.yml` does by default. Never publish it directly to the internet.
 - The security headers, including HSTS, appear once `BETTER_AUTH_URL` is `https`.
 
-Proxy-product configuration is not given here: it is specific to each product and has not been researched.
+### The notifications stream (045)
+
+The bell pushes updates over a long-lived `GET /api/me/notifications/stream` connection, falling back to a 60-second poll when it cannot. What must be true of the proxy, not a per-product recipe, because no proxy product has been researched:
+
+- **Response buffering must be off for this one path.** A buffering proxy holds the stream's bytes instead of forwarding them as they are written, so the connection looks open while delivering nothing. Docket already sends `X-Accel-Buffering: no` (nginx-family) and `Content-Encoding: identity`; some proxies need an explicit directive of their own for streamed/chunked responses.
+- **The read/idle timeout must exceed 20 seconds**, the stream's heartbeat interval. A shorter timeout closes an otherwise healthy connection between heartbeats.
+- **HTTP/1.1 or better, with no response transformation** (no re-encoding, re-chunking or caching) on this path.
+- **An install's connection ceiling is 50 × the number of web processes** — 50 streams per process is a fixed constant, never a setting. An install that needs more capacity runs another web process.
+- Over plain HTTP/1.1 a browser allows about **six connections per origin**; a held stream occupies one of them for as long as its tab stays visible.
+- **A proxy that cannot be changed still works**: an install behind a buffering proxy, or one that cannot meet the above, falls back to the existing 60-second refresh with nothing broken and nothing shown on screen about it.
+
+Proxy-product configuration is otherwise not given here: it is specific to each product and has not been researched.
 
 ## 8. Container host + Neon
 
