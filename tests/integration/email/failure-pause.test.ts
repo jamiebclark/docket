@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
 import { notificationEventMarks, notificationPreferences, notificationStates } from "../../../src/server/db/schema";
@@ -8,10 +8,11 @@ import { runEmailDeliveries } from "../../../src/server/scheduler/email";
 import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
+import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
 import { recordEvent } from "../../helpers/notifications";
 
+beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 const SCHED_CONFIG: SchedulerConfig = {

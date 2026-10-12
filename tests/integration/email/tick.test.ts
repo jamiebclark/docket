@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
 import { emailProjectState, emailSettings, member, user } from "../../../src/server/db/schema";
@@ -13,9 +13,10 @@ import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { webhookEnv } from "../../helpers/webhooks";
-import { seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
+import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
 
+beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 const SCHED_CONFIG: SchedulerConfig = {
@@ -115,12 +116,8 @@ describe("tick", () => {
 
   it("serves 500 due people within 10 ticks at 50 per tick (SC-009)", { timeout: 120_000 }, async () => {
     setMailerForTests(mailer);
-    // Immediate cadence is due again the instant it's checked (it is event-driven, not interval-driven);
-    // other tests in this file leave their person perpetually "due" with nothing left to say. Clearing
-    // them here keeps this tick-count bound about these 500 people only, regardless of run order.
-    await runCrossProject("test: clear other due people before the SC-009 run", async () => {
-      await getDb().update(emailSettings).set({ cadence: "off", nextDueAt: null });
-    });
+    // `beforeEach(parkAllEmail)` has already parked everyone, so this tick-count bound is about these
+    // 500 people only, regardless of run order.
 
     const now = new Date(Date.now() + 5000);
     const people = await Promise.all(
