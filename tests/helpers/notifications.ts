@@ -4,6 +4,7 @@ import { createActivityRepo, type NewActivityEvent } from "../../src/server/dal/
 import { createNotificationsRepo } from "../../src/server/dal/notifications";
 import type { ActivityKind } from "../../src/lib/activity/outcomes";
 import { EVENT_MARK_CAP } from "../../src/lib/notifications/attention";
+import { ATTENTION_KINDS, type SwitchAxis } from "../../src/lib/notifications/eligibility";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import { testDb } from "./db";
 
@@ -32,9 +33,27 @@ export function recordEvent(projectId: string, kind: ActivityKind, extra: Partia
   } as NewActivityEvent);
 }
 
+/** `recordEvent`, but tagged with the given provider keys — a single platform, or several for a shared failure. */
+export function recordEventOnPlatforms(projectId: string, kind: ActivityKind, platforms: readonly string[], extra: Partial<NewActivityEvent> = {}) {
+  return recordEvent(projectId, kind, { providerKey: platforms.length === 1 ? platforms[0]! : null, providerKeys: platforms, ...extra });
+}
+
 /** Starts a person's reading position at the project's newest event (what joining does). */
 export function startReading(projectId: string, userId: string) {
   return createNotificationsRepo(testDb(), projectId, userId).createAtCurrentPosition();
+}
+
+/** Turns one of a person's switches on or off for a project — the write path tests exercise directly. */
+export function setSwitch(projectId: string, userId: string, axis: SwitchAxis, key: string, on: boolean) {
+  return createNotificationsRepo(testDb(), projectId, userId).setSwitches({ switches: [{ axis, key }], on });
+}
+
+/** The old mute's equivalent under the new model: all four kind switches off for this project. */
+export function muteProject(projectId: string, userId: string) {
+  return createNotificationsRepo(testDb(), projectId, userId).setSwitches({
+    switches: ATTENTION_KINDS.map((key) => ({ axis: "kind" as const, key })),
+    on: false,
+  });
 }
 
 export const ALL_KINDS = Object.keys(DETAILS) as ActivityKind[];
@@ -68,6 +87,25 @@ export async function fillMarksToCap(projectId: string, userId: string): Promise
     eventIds.push(event.id);
   }
   return eventIds;
+}
+
+/** The person's stored switches for this project, as written — for assertions, not for product code. */
+export async function preferenceRows(
+  projectId: string,
+  userId: string,
+): Promise<{ axis: string; switchKey: string; onFromSeq: string | null }[]> {
+  const db = testDb();
+  return runCrossProject("test: read notification preferences", async () => {
+    const result = await db.execute(sql`
+      SELECT axis, switch_key, on_from_seq::text AS on_from_seq
+      FROM notification_preferences
+      WHERE project_id = ${projectId} AND user_id = ${userId}
+      ORDER BY axis, switch_key`);
+    return result.rows.map((r) => {
+      const row = r as { axis: string; switch_key: string; on_from_seq: string | null };
+      return { axis: row.axis, switchKey: row.switch_key, onFromSeq: row.on_from_seq };
+    });
+  });
 }
 
 /** The person's marks for this project, as seeded or written — for assertions, not for product code. */

@@ -1,5 +1,5 @@
 {
-  "id": "229f587f-03a4-4e48-8672-9bdefbdf6301",
+  "id": "a4654f7b-d4a8-4804-9919-5ffc3de6c775",
   "prevId": "22619bd7-0727-456c-aa28-357218b9a486",
   "version": "7",
   "dialect": "postgresql",
@@ -2731,48 +2731,6 @@
         "generation_series_planned_count_range": {
           "name": "generation_series_planned_count_range",
           "value": "\"generation_series\".\"planned_count\" BETWEEN 2 AND 10"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.llm_credit_holds": {
-      "name": "llm_credit_holds",
-      "schema": "",
-      "columns": {
-        "owner": {
-          "name": "owner",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "held_since": {
-          "name": "held_since",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_refusal_at": {
-          "name": "last_refusal_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "next_probe_at": {
-          "name": "next_probe_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "llm_credit_holds_owner_nonempty": {
-          "name": "llm_credit_holds_owner_nonempty",
-          "value": "length(\"llm_credit_holds\".\"owner\") > 0"
         }
       },
       "isRLSEnabled": false
@@ -7269,6 +7227,106 @@
       },
       "isRLSEnabled": false
     },
+    "public.notification_preferences": {
+      "name": "notification_preferences",
+      "schema": "",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "axis": {
+          "name": "axis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "switch_key": {
+          "name": "switch_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "on_from_seq": {
+          "name": "on_from_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_preferences_member_fk": {
+          "name": "notification_preferences_member_fk",
+          "tableFrom": "notification_preferences",
+          "tableTo": "member",
+          "columnsFrom": [
+            "project_id",
+            "user_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "notification_preferences_pkey": {
+          "name": "notification_preferences_pkey",
+          "columns": [
+            "project_id",
+            "user_id",
+            "axis",
+            "switch_key"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "notification_preferences_axis": {
+          "name": "notification_preferences_axis",
+          "value": "\"notification_preferences\".\"axis\" IN ('kind', 'platform')"
+        },
+        "notification_preferences_seq_nonneg": {
+          "name": "notification_preferences_seq_nonneg",
+          "value": "\"notification_preferences\".\"on_from_seq\" IS NULL OR \"notification_preferences\".\"on_from_seq\" >= 0"
+        },
+        "notification_preferences_kind_key": {
+          "name": "notification_preferences_kind_key",
+          "value": "\"notification_preferences\".\"axis\" <> 'kind' OR \"notification_preferences\".\"switch_key\" IN ('failed', 'ambiguous', 'needs_reauth', 'connect_failed')"
+        },
+        "notification_preferences_key_format": {
+          "name": "notification_preferences_key_format",
+          "value": "\"notification_preferences\".\"switch_key\" ~ '^[a-z0-9_-]{1,40}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.notification_states": {
       "name": "notification_states",
       "schema": "",
@@ -7298,13 +7356,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "muted": {
-          "name": "muted",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -7481,8 +7532,7 @@
         "rate_limited",
         "unavailable",
         "auth",
-        "bad_request",
-        "credit_exhausted"
+        "bad_request"
       ]
     },
     "public.approval_policy": {
@@ -7573,8 +7623,7 @@
         "bad_request",
         "image_deleted",
         "image_unavailable",
-        "no_targets",
-        "credit_exhausted"
+        "no_targets"
       ]
     },
     "public.generation_job_item_status": {

@@ -1,10 +1,12 @@
 import { sql, type SQL } from "drizzle-orm";
 import { PROBLEM_OUTCOMES, SUCCESS_OUTCOMES, KIND_OUTCOME, type ActivityKind, type ActivityOutcome } from "../../lib/activity/outcomes";
 import { activityDetailsSchema, type ActivityDetails } from "../../lib/activity/details";
-import { ATTENTION_MEMBER_OUTCOMES, CONNECT_FAILED } from "../../lib/notifications/attention";
+import { CONNECT_FAILED } from "../../lib/notifications/attention";
+import type { EligibilityPlan } from "../../lib/notifications/eligibility";
 import { clipMessage } from "../../lib/activity/text";
 import type { Database } from "../db/client";
 import { activityEvents } from "../db/schema";
+import { platformClauseSql } from "./notifications";
 
 export interface NewActivityEvent {
   /** The outcome is derived from `KIND_OUTCOME`, never passed. */
@@ -76,10 +78,18 @@ export interface ActivityRepo {
   summary(q: BranchQuery): Promise<{ successes: number; problems: number }>;
 }
 
-/** An equality outcome (and optionally the actor) for one branch; the literals come from the attention constants, never from input. */
+/**
+ * An equality outcome or an outcome group (and optionally the actor and the eligibility floor) for one
+ * branch; the literals come from the attention constants, never from input.
+ */
 interface BranchExtra {
-  outcomeEq: ActivityOutcome;
+  outcomeEq?: ActivityOutcome;
+  outcomesIn?: readonly string[];
   actorEq?: string;
+  /** Omitted when 0 (data-model.md §4.4). */
+  minSeq?: bigint;
+  /** The platform clause of data-model.md §4.3, applied to this branch's own alias. */
+  platformClause?: SQL;
 }
 
 const ISO = `'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'`;
@@ -105,8 +115,10 @@ function branchConditions(
   if (window.to) conds.push(sql`${e}.occurred_at < ${window.to.toISOString()}::timestamptz`);
   if (q.outcomes) conds.push(sql`${e}.outcome = ANY(${sql.param([...q.outcomes])}::activity_outcome[])`);
   if (extra) {
-    conds.push(sql`${e}.outcome = ${sql.raw(`'${extra.outcomeEq}'`)}`);
+    if (extra.outcomeEq) conds.push(sql`${e}.outcome = ${sql.raw(`'${extra.outcomeEq}'`)}`);
+    if (extra.outcomesIn) conds.push(sql`${e}.outcome IN (${sql.raw(extra.outcomesIn.map((o) => `'${o}'`).join(", "))})`);
     if (extra.actorEq) conds.push(sql`${e}.actor_user_id = ${extra.actorEq}`);
+    if (extra.minSeq && extra.minSeq > 0n) conds.push(sql`${e}.seq > ${extra.minSeq.toString()}::bigint`);
   }
   if (q.platform) conds.push(sql`${e}.provider_keys @> ARRAY[${q.platform}]::text[]`);
   if (q.accountId) conds.push(sql`${e}.social_account_id = ${q.accountId}`);
@@ -195,7 +207,7 @@ function listBranch(
       SELECT activity_events.* ${marksSelect} FROM activity_events
       ${memberJoin(memberUserId)}
       ${marksJoin}
-      WHERE ${joinConds(branchConditions(window, q, position, extra))} ${marksFilter}
+      WHERE ${joinConds(branchConditions(window, q, position, extra))} ${extra?.platformClause ?? sql``} ${marksFilter}
       ORDER BY activity_events.occurred_at ${order}, activity_events.seq ${order}
       LIMIT ${limit + 1}
     ) AS ev
@@ -259,11 +271,17 @@ export function createActivityReader(
   opts: { memberUserId?: string } = {},
 ): Pick<ActivityRepo, "list" | "summary"> & {
   /**
-   * Attention events for `userId` (022): four equality-outcome branches per project, newest first, up to
-   * `limit`, with currently-snoozed events excluded and the caller's own read/snooze state on each row
-   * (data-model.md §4.5, M16).
+   * Attention events for `userId` (022): one branch per on member-outcome group plus one for
+   * `connect_failed`, per project, newest first, up to `limit`, with currently-snoozed events excluded
+   * and the caller's own read/snooze state on each row. Applies each project's compiled plan's minSeq
+   * and platform clause, but not the floor — the panel lists read rows too (data-model.md §4.4, §4.5, M16).
    */
-  listAttention(q: { projectIds: readonly string[]; userId: string; limit: number }): Promise<AttentionRecord[]>;
+  listAttention(q: {
+    projectIds: readonly string[];
+    userId: string;
+    limit: number;
+    plans: ReadonlyMap<string, EligibilityPlan>;
+  }): Promise<AttentionRecord[]>;
 } {
   const memberUserId = opts.memberUserId ?? null;
   const allowed = new Set(allowedProjectIds);
@@ -281,15 +299,34 @@ export function createActivityReader(
       const base = { outcomes: null, platform: null, accountId: null };
       const branches: SQL[] = [];
       for (const projectId of q.projectIds) {
+        const plan = q.plans.get(projectId);
+        if (!plan) continue;
         const bq: BranchQuery = { ...base, windows: [{ projectId, from: null, to: null }] };
         const window = bq.windows[0]!;
-        for (const outcomeEq of ATTENTION_MEMBER_OUTCOMES) {
-          branches.push(listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq }, { userId: q.userId }));
+        const platformClause = platformClauseSql(plan.platforms, "activity_events.provider_keys", "activity_events.seq");
+        for (const group of plan.memberGroups) {
+          branches.push(
+            listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomesIn: group.outcomes, minSeq: group.minSeq, platformClause }, {
+              userId: q.userId,
+            }),
+          );
         }
-        branches.push(
-          listBranch(window, bq, null, "older", q.limit, memberUserId, { outcomeEq: CONNECT_FAILED, actorEq: q.userId }, { userId: q.userId }),
-        );
+        if (plan.connectFailed) {
+          branches.push(
+            listBranch(
+              window,
+              bq,
+              null,
+              "older",
+              q.limit,
+              memberUserId,
+              { outcomeEq: CONNECT_FAILED, actorEq: q.userId, minSeq: plan.connectFailed.minSeq, platformClause },
+              { userId: q.userId },
+            ),
+          );
+        }
       }
+      if (branches.length === 0) return [];
       const query = sql`SELECT * FROM (${sql.join(branches, sql` UNION ALL `)}) AS activity_attention ORDER BY occurred_at DESC, seq::bigint DESC LIMIT ${q.limit}`;
       return rowsOf(await db.execute(query)).map(toAttentionRecord);
     },

@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { listProviders } from "../../providers/registry";
 import type { Database } from "../db/client";
 import { postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
 
@@ -71,6 +72,8 @@ export interface AccountsRepo {
   markCredentialsInvalid(id: string, opts: { expectedCiphertext: string | null; reason: string }): Promise<StatusChange>;
   /** Internal: used only by the scheduler and token refresh. */
   getCredentialsCiphertext(id: string): Promise<string | null>;
+  /** Distinct `provider_key` for live accounts in this project, registry order (data-model.md §4.9). */
+  platformKeys(): Promise<string[]>;
 }
 
 /** `changed` = a row was updated; `previousStatus` = the status it had before (read under a row lock, so call inside a transaction). */
@@ -296,6 +299,16 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .where(mine(id))
         .limit(1);
       return row?.c ?? null;
+    },
+    async platformKeys() {
+      const rows = await db
+        .selectDistinct({ providerKey: socialAccounts.providerKey })
+        .from(socialAccounts)
+        .where(and(eq(socialAccounts.projectId, projectId), isNull(socialAccounts.removedAt)));
+      const live = new Set(rows.map((r) => r.providerKey));
+      return listProviders()
+        .map((p) => p.key)
+        .filter((key) => live.has(key));
     },
   };
 }

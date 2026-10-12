@@ -1,6 +1,8 @@
 // Wording for the bell, the callout and the notification settings. Pure.
 import { UNREAD_CAP } from "./attention";
 import { formatLocal } from "../time/format";
+import { OUTCOME_LABEL, type ActivityOutcome } from "../activity/outcomes";
+import type { SwitchAxis } from "./eligibility";
 
 const MAX_SHOWN = UNREAD_CAP - 1;
 
@@ -23,10 +25,56 @@ export function calloutCountText(n: number): string {
   return `${n} ${n === 1 ? "problem" : "problems"}`;
 }
 
-export function mutedConfirmation(name: string, on: boolean): string {
+/** One switch, by name, for one project (FR-017). */
+export function switchConfirmation(projectName: string, label: string, on: boolean): string {
   return on
-    ? `Notifications for ${name} are on. Earlier problems are marked as read.`
-    : `Notifications for ${name} are off. Its problems still appear in Activity.`;
+    ? `${label} notifications for ${projectName} are on. Problems from now on will reach you.`
+    : `${label} notifications for ${projectName} are off. Its problems still appear in Activity.`;
+}
+
+/** The project-level "This project" control (FR-017); the off sentence is the old `mutedConfirmation` wording, kept word-for-word. */
+export function projectSwitchConfirmation(projectName: string, on: boolean): string {
+  return on
+    ? `Notifications for ${projectName} are on. Problems from now on will reach you.`
+    : `Notifications for ${projectName} are off. Its problems still appear in Activity.`;
+}
+
+export interface SwitchChangeQuery {
+  axis: SwitchAxis | "project";
+  key?: string;
+  on: boolean;
+}
+
+/** From the redirect's query string; unknown axis or malformed key -> null, and the page renders "Notifications updated." */
+export function parseSwitchChange(raw: { axis?: unknown; key?: unknown; on?: unknown }): SwitchChangeQuery | null {
+  const axis = raw.axis;
+  if (axis !== "kind" && axis !== "platform" && axis !== "project") return null;
+  const key = typeof raw.key === "string" && raw.key.length > 0 ? raw.key : undefined;
+  if (axis === "project" ? key !== undefined : key === undefined) return null;
+  const on = raw.on === "1" ? true : raw.on === "0" ? false : null;
+  if (on === null) return null;
+  return key === undefined ? { axis, on } : { axis, key, on };
+}
+
+/** Below the preference grid (FR-018). */
+export function preferenceHelpText(): string {
+  return "Turning a switch off only hides its notifications — the problems stay in Activity for everyone. Turning one back on starts from that moment: anything from while it was off is never delivered later.";
+}
+
+/** The roll-up, said the same way everywhere (FR-005). */
+export function projectOffText(): string {
+  return "Notifications for this project are off.";
+}
+
+/** What the spec's edge case asks for when every kind is on but platforms are off. */
+export function platformsOffNote(labels: readonly string[]): string {
+  return `Switched off: ${labels.join(", ")}.`;
+}
+
+/** `OUTCOME_LABEL[key]` for a kind; the platform's display name otherwise. Takes the resolved name so this module stays pure and registry-free. */
+export function switchLabel(axis: SwitchAxis, key: string, platformName?: string): string {
+  if (axis === "kind") return OUTCOME_LABEL[key as ActivityOutcome] ?? key;
+  return platformName ?? key;
 }
 
 export type MuteErrorCode = "busy" | "not_found" | "invalid";

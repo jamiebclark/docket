@@ -13,7 +13,7 @@ import { recentPanel, unreadSummary } from "../../../src/server/services/notific
 import { fakeSession } from "../../helpers/auth";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers, createUser } from "../../helpers/factories";
-import { markEventFor, marksFor, recordEvent, startReading } from "../../helpers/notifications";
+import { markEventFor, marksFor, muteProject, recordEvent, startReading } from "../../helpers/notifications";
 
 afterAll(async () => {
   await closeDb();
@@ -40,7 +40,7 @@ async function seedFullState(projectId: string, userId: string) {
   const snoozed = await recordEvent(projectId, "target_failed");
   await markEventFor(projectId, userId, read.id);
   await markEventFor(projectId, userId, snoozed.id, new Date(Date.now() + 3_600_000));
-  await createNotificationsRepo(testDb(), projectId, userId).write({ markRead: false, muted: true });
+  await muteProject(projectId, userId);
   return { floored, read, snoozed };
 }
 

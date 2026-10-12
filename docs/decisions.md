@@ -1613,7 +1613,140 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
   disclosure of three submits, hiding `returnTo` only until hydration (the same trick
   `NotificationBellClient` already uses) so the no-JavaScript path still redirects with a confirmation.
 
+## 043 — Per-kind and per-platform notification preferences (2026-10-11)
+
+### Spec decisions (N25–N41)
+
+- **N25 — Reverses half of N5.** The three halves of N5 that stand: muting is personal, it hides and
+  never deletes (every event stays in Activity for everyone, including the person who muted), and
+  notifications are on by default. The half reversed: the unit of choice is no longer the project. A
+  person now chooses, per project, which of the four N1 attention kinds and which platforms may notify
+  them; the project level becomes a roll-up of those switches (N33) rather than a stored flag.
+- **N26 — `muted` is dropped, not kept as a derived column.** One source of truth; no boolean that can
+  drift from the switches it would have to mirror. **Fate of the data**: every `notification_states`
+  row with `muted = true` becomes all four kind switches off for that person and project, in the
+  migration that drops the column; `muted = false` rows get nothing written, because absent means on
+  (N27). No row's `seen_seq`, `seen_at` or sparse mark is touched.
+- **N27 — Default on, stored as exceptions.** A new member, a new project, a platform a later release
+  adds, and a project nobody has touched a switch for are all on with nothing written — the fact that
+  makes the N26 migration a no-op for every unmuted row.
+- **N28 — Two independent axes, combined with AND.** An event may notify when its kind is on *and*
+  either it records no platform or at least one platform it records is on.
+- **N29 — A multi-platform event counts once if any of its platforms is on.** A connect failure spanning
+  Facebook and Instagram is heard about exactly once, not per platform.
+- **N30 — An event with no platform is governed by its kind alone** — the platform axis only excludes,
+  never silently swallows an event with nothing to exclude it by. Unreachable under the log's own CHECK
+  today (Q22); implemented and tested anyway.
+- **N31 — The platform axis is keyed by platform, never by account.** Removing or renaming an account
+  changes no preference and no past event's recorded platforms; there is deliberately no per-account
+  preference.
+- **N32 — Offered platforms**: the platforms a project has accounts for, plus any platform the person
+  has already switched off for it, in registry order. A platform with neither is simply absent and, by
+  N27, on.
+- **N33 — "Off for this project" means no kind is on.** Derived, never stored — the same fact N26
+  removed as a column is recomputed from the switches wherever it is described.
+- **N34 — One click still turns a whole project off, and one click turns it back on** — the old mute's
+  "Turn all off", plus a "Turn all on" beside it, each a single confirmed submit. "Turn all on" is
+  subject to the fresh-start rule (N35) and so cannot deliver a backlog.
+- **N35 — Extends N6: the fresh-start rule applies to every switch, not just the project.** Turning any
+  switch on — a kind, a platform, or the project-level "Turn all on" — records with that switch the
+  newest attention position at that moment; only events after it may notify through that switch. Events
+  from while it was off never become eligible later, and remain in Activity for everyone.
+- **N36 — Turning a switch on prunes the marks it makes redundant**, in the same transaction that
+  records its new position, so N16's bound on sparse rows survives repeated switching.
+- **N37 — The N4 floor paths (unchanged) still cover everything**, including events of switched-off
+  kinds and platforms — exactly as N4.1 already covered muted projects — so a switch turned on later can
+  never surface anything at or below the floor.
+- **N38 — Extends N10: the personal Notifications page becomes a per-project grid.** One row per
+  project, the four kinds as columns, that project's platform switches in a per-project disclosure, and
+  the one-click all-off/all-on beside them. Each project's settings page carries the same control, for
+  every member role. Both work with no client JavaScript.
+- **N39 — One rule gates everything a person is told** — the bell, the panel, the callout and the
+  project's unread number all ask `eligibility.ts`'s one question. Activity, the public API and webhooks
+  are untouched: preferences gate notifications, never the record.
+- **N40 — That rule is the shape `email-delivery` (entry 3) will consume unchanged.** Quiet hours are a
+  delivery-timing rule with no meaning for an in-app badge, and are therefore not in this entry.
+- **N41 — A preference is only ever the caller's own.** Mutations resolve through the caller's own
+  project set; a foreign or unknown project and another person's preferences give the same "not found"
+  (022's R13 shape), unchanged.
+
+### Plan decisions (Q1–Q24)
+
+- **Q1 — One table, `notification_preferences`**, one row per switch: `project_id`, `user_id`, `axis`
+  (`kind`/`platform`), `switch_key`, `on_from_seq`, `created_at`, `updated_at`. PK `(project_id,
+  user_id, axis, switch_key)`; the same composite FK to `member ON DELETE CASCADE` as R1 and M1, so
+  FR-022's "deleted with the membership" is the database's job.
+- **Q2 — `on_from_seq bigint NULL` carries all three states**: no row = on with no position (N27); row
+  with `NULL` = off (N26); row with a value = on from that position (N35). A switch-on rewrites the row
+  rather than deleting it — deleting would mean "on with no position" and reopen the backlog N35
+  forbids.
+- **Q3 — `OFF_SEQ` (`bigint` max) is the one named sentinel**, in TypeScript and interpolated as a SQL
+  literal: `seq > coalesce(on_from_seq, OFF_SEQ)` is one comparison with no branching, the same shape as
+  056's `'infinity'::timestamptz`.
+- **Q4 — `src/lib/notifications/eligibility.ts` is the rule's one statement (extends R1-era design,
+  next to N1/022's rule)**; `email-delivery` imports it unchanged. The SQL and the pure rule are two
+  expressions of one thing, kept from drifting by a test that asserts they agree over the same seeded
+  events, not by review habit.
+- **Q5 — Extends R4/R5: the kind axis compiles into the branch list.** An off kind emits no branch; on
+  kinds are grouped by position with outcomes as literals. With no preferences stored the SQL is
+  exactly what R5 shipped — the partial indexes (R4) keep driving every statement.
+- **Q6 — The platform axis is one correlated comparison over `unnest(provider_keys)` against a literal
+  `VALUES` map** — no `OR`, no `NOT`, honouring 022's SQL rules (R4's note) in the one new expression
+  this entry adds.
+- **Q7 — Two costs, both only for a person with a stored platform switch**: a heap fetch per candidate
+  row (no more index-only scan), and an unbounded-by-`LIMIT` scan for a person with every platform off.
+  SC-007 is extended with that case rather than assumed; the named fallback (not taken speculatively) is
+  a GIN index on `provider_keys` plus an `&&` pre-filter.
+- **Q8 — Switch writes reuse R3's transaction verbatim.** Same lock order, same `NotificationsBusyError`
+  failure mode. "Turn all off"/"Turn all on" write several rows in that one transaction (N34).
+- **Q9 — An on-write only touches switches currently off**, so "Turn all on" never moves an
+  already-on switch's position backward into a backlog, and a double submit is idempotent.
+- **Q10 — `GREATEST` on conflict**, exactly as R3/M-series upserts use it: NULLs are ignored, so an
+  off→on cycle can never record a position below an earlier one.
+- **Q11 — Pruning happens only on an on-write, in the same transaction as the position** (extends M7's
+  prune-on-rise to every switch, not just the floor); an off-write touches no position and prunes
+  nothing, so the 200-mark cap (N16) is unaffected by switching off.
+- **Q12 — "Turn all off" touches only the four kinds; "Turn all on" also turns on any off platform.**
+  Keeping a platform choice through an all-off/all-on cycle is the kinder behaviour; one click on the
+  way back still restores everything (SC-002).
+- **Q13 — `nextChangeAt` (M17) now joins each live snooze back to its event** and applies the compiled
+  plan, so a snooze whose kind or platform has since gone off never arms the poller.
+- **Q14 — The floor paths (R5/N4, M-series) stay preference-blind** — unchanged, and still cover
+  switched-off kinds and platforms, exactly as N4.1 covered muted projects.
+- **Q15 — The panel keeps its wire state name `all_muted`.** FR-011 forbids a payload change; the
+  sentence stays "Notifications are off for all of your projects," its meaning now N33's roll-up.
+- **Q16 — `MyProject` drops `muted`, gains `preferences`; `unmutedIds` becomes `notifyingIds`.** One
+  extra statement per caller loads every preference row inside the existing project-set section.
+- **Q17 — `offeredPlatforms` (N32) needs two new reads**: `AccountsRepo.platformKeys()` (one project)
+  and a `platformsByProject()` set reader (the grid), both in registry order; `platformOptions()`'s
+  existing `mock`-unless-enabled rule needs no new code.
+- **Q18 — Extends design-system §7: the switch control is a state-showing submit button, not a
+  checkbox** — generalises `NotificationToggle`'s R14 shape from one button per project to one per
+  switch, because FR-017 needs every change saved with no client JavaScript, which a checkbox cannot do
+  alone. `aria-pressed` deliberately omitted — the visible label already says the state.
+- **Q19 — Extends design-system §7's "five columns" ceiling with a control-matrix exception.** A row of
+  fixed-width control columns does not wrap the way fact columns do, so `Table grouped` with a per-kind
+  column plus a platform `DetailRow` is the shape, not a violation.
+- **Q20 — Extends R14's confirmation shape**: a redirect carries `?changed=<slug>&axis=…&key=…&on=…`,
+  resolved by pure, tested functions in `text.ts`; an unparseable code renders a generic confirmation
+  rather than erroring.
+- **Q21 — Extends R13: "not found" is decided before "invalid."** The caller's own project set is
+  resolved first (foreign and unknown project give the same sentence); only then is the switch key
+  checked, so an invalid key never reveals whether a project exists.
+- **Q22 — N30's case is unreachable under the log's `cardinality(provider_keys) >= 1` CHECK today**,
+  and is implemented and tested anyway (the pure rule, and the Q6 expression against an empty array)
+  rather than leaving a trap for the day it stops being unreachable. The CHECK itself is not relaxed.
+- **Q23 — Nothing is added to the stack**: no dependency, environment variable, infrastructure change,
+  recurring work, public-API operation, webhook change, UI primitive or new index on `activity_events`.
+- **Q24 — Migration 0021 is generated, then hand-ordered**: `CREATE TABLE` → FK → the `muted = true` →
+  all-kinds-off insert (`ON CONFLICT DO NOTHING`) → `DROP COLUMN "muted"`, because the insert must read
+  `muted` before it is dropped. `pnpm db:check` stays green because it only compares the snapshot with
+  the journal.
+
 ## 043 — Credit hold (2026-10-11)
+
+Spec: `specs/043-llm-credit-hold`. Shares the number 043 with the notification-preferences entry above:
+both branches were cut from a `main` whose highest spec was 042, so the speckit numbering assigned 043 twice.
 
 latency: unmeasured; live path verified with mocks only.
 
