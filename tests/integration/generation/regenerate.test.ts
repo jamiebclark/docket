@@ -107,4 +107,13 @@ describe("regeneratePost", () => {
     expect((await t.env.scope.posts.get(t.postId))!.baseText).toBe("First draft");
     expect(await t.records()).toHaveLength(1);
   });
+
+  it("returns credit_exhausted after one call, leaving the post unchanged", async () => {
+    const t = await setup();
+    const llm = createFakeLlm([{ fail: "credit_exhausted" }]);
+    const res = await regeneratePost(t.env.scope, t.postId, {}, llm);
+    expect(res).toMatchObject({ ok: false, kind: "credit_exhausted" });
+    expect(llm.requests).toHaveLength(1);
+    expect((await t.env.scope.posts.get(t.postId))!.baseText).toBe("First draft");
+  });
 });

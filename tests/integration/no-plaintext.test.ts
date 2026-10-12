@@ -1,7 +1,14 @@
+import { randomUUID, createHash } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { forProject } from "../../src/server/dal/scope";
 import { bootstrapFirstUser } from "../../src/server/dal/install";
+import { INSTALL_CREDENTIAL_OWNER } from "../../src/server/dal/credential-owners";
+import { clearCreditHold } from "../../src/server/dal/credit-holds";
+import { createAnthropicProvider } from "../../src/server/llm/anthropic";
+import { createOpenAiProvider } from "../../src/server/llm/openai";
+import type { LlmConfig } from "../../src/server/llm/config";
+import { generateSingle } from "../../src/server/services/generation/single";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import * as invitations from "../../src/server/services/invitations";
 import * as members from "../../src/server/services/members";
@@ -11,6 +18,8 @@ import * as slots from "../../src/server/services/slots";
 import { mockProvider } from "../../src/providers/mock";
 import { runTick } from "../../src/server/scheduler";
 import { atTime } from "../helpers/clock";
+import { createFakeLlmFetch } from "../helpers/fake-llm-http";
+import { jobsEnv } from "../helpers/jobs-env";
 import { parkAllDueTargets } from "../helpers/scheduling";
 import { fakeSession } from "../helpers/auth";
 import { closeDb, createThrowawayDb, testDb } from "../helpers/db";
@@ -24,16 +33,72 @@ const APP_PASSWORD = "bsky-app-password-canary-3";
 
 const PASSWORD = "plaintext-canary-password-1";
 const SETUP_PASSWORD = "setup-canary-password-2";
+const OPENAI_API_KEY_CANARY = "sk-plaintext-canary-openai-0123456789abcdef";
+const ANTHROPIC_API_KEY_CANARY = "sk-ant-plaintext-canary-0123456789abcdef";
+const sha256Hex = (s: string) => createHash("sha256").update(s).digest("hex");
 
 describe("SC-009: no plaintext secrets at rest or in logs", () => {
   it("never stores or logs tokens, passwords or the encryption key", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-no-plaintext-configured-0123456789abcdef");
+    vi.stubEnv("OPENAI_API_KEY", "sk-no-plaintext-configured-0123456789abcdef");
     const logged: string[] = [];
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) =>
       vi.spyOn(console, m).mockImplementation((...args: unknown[]) => {
         logged.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
       }),
     );
-    const secrets: string[] = [PASSWORD, SETUP_PASSWORD, process.env.CREDENTIALS_ENCRYPTION_KEY!, process.env.BETTER_AUTH_SECRET!];
+    const secrets: string[] = [
+      PASSWORD,
+      SETUP_PASSWORD,
+      process.env.CREDENTIALS_ENCRYPTION_KEY!,
+      process.env.BETTER_AUTH_SECRET!,
+      process.env.ANTHROPIC_API_KEY!,
+      process.env.OPENAI_API_KEY!,
+      sha256Hex(process.env.ANTHROPIC_API_KEY!),
+      sha256Hex(process.env.OPENAI_API_KEY!),
+      OPENAI_API_KEY_CANARY,
+      ANTHROPIC_API_KEY_CANARY,
+      sha256Hex(OPENAI_API_KEY_CANARY),
+      sha256Hex(ANTHROPIC_API_KEY_CANARY),
+    ];
+    // Drive one real billing refusal through withCreditHold (via generateSingle's own wrapping), with the
+    // configured key embedded in the provider's error body, so llm_credit_holds and the service result are
+    // exercised by a path that could actually produce a hit (FR-033): the hold row must record only the
+    // owner and timestamps, never a credential value or a hash of one.
+    const genEnv = await jobsEnv();
+    const anthropicConfig: LlmConfig = { provider: "anthropic", model: "test-model", apiKey: process.env.ANTHROPIC_API_KEY!, timeoutMs: 10_000, maxOutputTokens: 1000 };
+    const anthropicFetch = createFakeLlmFetch([
+      {
+        status: 400,
+        json: {
+          type: "error",
+          error: { type: "invalid_request_error", message: `Your credit balance is too low to access the Anthropic API (${process.env.ANTHROPIC_API_KEY}). Please go to Plans & Billing to upgrade or purchase credits.` },
+        },
+      },
+    ]);
+    const anthropicLlm = createAnthropicProvider(anthropicConfig, { fetch: anthropicFetch, maxRetries: 0 });
+    const genResult = await generateSingle(
+      genEnv.scope,
+      { requestId: randomUUID(), voiceProfileId: genEnv.profile.id, brief: "Announce the spring sale", targetAccountIds: [genEnv.account.id] },
+      anthropicLlm,
+    );
+    logged.push(JSON.stringify(genResult));
+
+    const openAiConfig: LlmConfig = { provider: "openai", model: "test-model", apiKey: process.env.OPENAI_API_KEY!, timeoutMs: 10_000, maxOutputTokens: 1000 };
+    const openAiFetch = createFakeLlmFetch([
+      {
+        status: 429,
+        json: { error: { message: `You exceeded your current quota, please check your plan and billing details. (${process.env.OPENAI_API_KEY})`, type: "insufficient_quota", code: "insufficient_quota", param: null } },
+      },
+    ]);
+    const openAiLlm = createOpenAiProvider(openAiConfig, { fetch: openAiFetch, maxRetries: 0 });
+    const openAiResult = await generateSingle(
+      genEnv.scope,
+      { requestId: randomUUID(), voiceProfileId: genEnv.profile.id, brief: "Announce the spring sale", targetAccountIds: [genEnv.account.id] },
+      openAiLlm,
+    );
+    logged.push(JSON.stringify(openAiResult));
+
     const tmp = await createThrowawayDb();
     try {
       // Setup flow (isolated database).
@@ -77,6 +142,8 @@ describe("SC-009: no plaintext secrets at rest or in logs", () => {
     } finally {
       spies.forEach((s) => s.mockRestore());
       await tmp.drop();
+      await clearCreditHold(INSTALL_CREDENTIAL_OWNER);
+      vi.unstubAllEnvs();
     }
   });
 });

@@ -7,6 +7,7 @@ import type { GenerationRecord } from "@/lib/validation/generation";
 import { voiceContentSchema } from "@/lib/validation/voice";
 import * as clock from "../../dal/clock";
 import { ConflictError } from "../../dal/errors";
+import { rewindCreditProbe } from "../../dal/credit-holds";
 import type { ClaimedJobItem } from "../../dal/job-claims";
 import { forJobRunner, type ProjectScope } from "../../dal/scope";
 import type { JobItemPatch } from "../../dal/jobs";
@@ -82,6 +83,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
   const t0 = Date.now();
   let outcome = "stale";
   let scope: ProjectScope | null = null;
+  let calledModel = false;
   const sourceKey = item.externalId ? apiSourceMetaSchema.parse(job.sourceMeta).sourceKey : null;
   const external = item.externalId && sourceKey ? { sourceKey, externalId: item.externalId } : undefined;
 
@@ -133,6 +135,22 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     if (ok) {
       counts.retried++;
       outcome = `retried:${kind}`;
+    }
+  }
+
+  /** A billing refusal never fails an item (FR-007..FR-009, C5). */
+  async function requeueForCredit(): Promise<void> {
+    const ok = await commit({
+      status: "queued",
+      nextAttemptAt: await clock.now(),
+      ...UNLEASED,
+      pendingRetry: null,
+      lastErrorKind: "credit_exhausted",
+      lastError: llmFailureMessage("credit_exhausted"),
+    });
+    if (ok) {
+      counts.requeued++;
+      outcome = "requeued:credit_exhausted";
     }
   }
 
@@ -303,6 +321,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
         },
       },
     );
+    calledModel = true;
 
     if (step.ok === "retry") {
       const ok = await commit(
@@ -317,6 +336,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     }
     if (step.ok === false) {
       const kind: LlmFailureKind = step.kind;
+      if (kind === "credit_exhausted") return await requeueForCredit();
       return TEMPORARY.has(kind) ? await retryLater(kind, llmFailureMessage(kind)) : await fail(kind, llmFailureMessage(kind));
     }
 
@@ -393,6 +413,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       outcome = "stale";
     }
   } finally {
+    if (claimed.probe && !calledModel) await rewindCreditProbe(claimed.owner, await clock.now());
     logLine(`generation_job_item job=${job.id} item=${item.id} outcome=${outcome} latency_ms=${Date.now() - t0}`);
   }
 }

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runMigrations } from "../../../src/server/db/migrate";
 import { poolTolerantOfDrops } from "../../setup/test-databases";
 
-const DB = `docket_mig0023_${process.pid}_test`;
+const DB = `docket_mig0024_${process.pid}_test`;
 const q = (n: string) => `"${n}"`;
 
 let admin: pg.Pool;
@@ -50,25 +50,25 @@ async function problem(projectId: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  folder = await mkdtemp(join(tmpdir(), "docket-mig0023-"));
+  folder = await mkdtemp(join(tmpdir(), "docket-mig0024-"));
   await cp("drizzle", folder, { recursive: true });
 
   admin = poolTolerantOfDrops(new pg.Pool({ connectionString: urlFor("postgres"), max: 1 }));
   await admin.query(`drop database if exists ${q(DB)} with (force)`);
   await admin.query(`create database ${q(DB)}`);
 
-  // Apply every migration except 0023 first, so there is existing data under the old schema.
+  // Apply every migration except 0024 first, so there is existing data under the old schema.
   const journal = JSON.parse(await (await import("node:fs/promises")).readFile(join(folder, "meta/_journal.json"), "utf8")) as {
     entries: { idx: number; tag: string }[];
   };
-  const before0023 = journal.entries.filter((e) => e.tag !== "0023_bizarre_kingpin");
-  const partialJournal = { ...journal, entries: before0023 };
+  const before0024 = journal.entries.filter((e) => e.tag !== "0024_graceful_pepper_potts");
+  const partialJournal = { ...journal, entries: before0024 };
   await (await import("node:fs/promises")).writeFile(join(folder, "meta/_journal.json"), JSON.stringify(partialJournal));
   await runMigrations(urlFor(DB), folder);
 
   pool = poolTolerantOfDrops(new pg.Pool({ connectionString: urlFor(DB), max: 1 }));
 
-  projectA = await project("mig0023-a");
+  projectA = await project("mig0024-a");
   userA = await person(projectA, "ann");
   eventId = await problem(projectA);
   await pool.query(`insert into notification_states (project_id, user_id, seen_seq) values ($1, $2, 0)`, [projectA, userA]);
@@ -83,7 +83,7 @@ beforeAll(async () => {
     [projectA, userA, eventId, eventRow.seq],
   );
 
-  // Now restore the full journal and apply 0023 on top of the seeded data.
+  // Now restore the full journal and apply 0024 on top of the seeded data.
   await (await import("node:fs/promises")).writeFile(join(folder, "meta/_journal.json"), JSON.stringify(journal));
   await runMigrations(urlFor(DB), folder);
 });
@@ -95,7 +95,7 @@ afterAll(async () => {
   await rm(folder, { recursive: true, force: true });
 });
 
-describe("0023 activity_events_attention_global_seq_idx migration", () => {
+describe("0024 activity_events_attention_global_seq_idx migration", () => {
   it("creates the partial index", async () => {
     const row = await one<{ indexdef: string } | undefined>(
       `select indexdef from pg_indexes where indexname = 'activity_events_attention_global_seq_idx'`,

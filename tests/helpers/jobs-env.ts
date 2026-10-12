@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { inArray } from "drizzle-orm";
+import { vi } from "vitest";
 import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
+import * as credentialOwners from "../../src/server/dal/credential-owners";
+import { readCreditHold, type CreditHold } from "../../src/server/dal/credit-holds";
+import { llmCreditHolds } from "../../src/server/db/schema/generation";
 import { generationJobItems } from "../../src/server/db/schema";
 import { setLlmForTests } from "../../src/server/llm";
 import { setStorageForTests } from "../../src/server/storage";
@@ -17,6 +21,49 @@ export async function parkAllJobs(): Promise<void> {
   await runCrossProject("test: park job items", async () => {
     await getDb().update(generationJobItems).set({ status: "cancelled", leaseOwner: null, leaseUntil: null, pendingRetry: null }).where(inArray(generationJobItems.status, ["queued", "running"]));
   });
+  await clearHolds();
+}
+
+/** Seeds a credit hold row directly, bypassing `holdCredit` (US1/US2 tests pinning an existing hold). */
+export async function seedCreditHold(
+  owner: string,
+  over: { heldSince: Date; nextProbeAt: Date; lastRefusalAt?: Date },
+): Promise<void> {
+  await getDb()
+    .insert(llmCreditHolds)
+    .values({
+      owner,
+      heldSince: over.heldSince,
+      lastRefusalAt: over.lastRefusalAt ?? over.heldSince,
+      nextProbeAt: over.nextProbeAt,
+    })
+    .onConflictDoUpdate({
+      target: llmCreditHolds.owner,
+      set: { heldSince: over.heldSince, lastRefusalAt: over.lastRefusalAt ?? over.heldSince, nextProbeAt: over.nextProbeAt },
+    });
+}
+
+/** Reads a hold row for assertions. */
+export async function readHold(owner: string): Promise<CreditHold | null> {
+  return readCreditHold(owner);
+}
+
+/** Clears every hold row, so one test file's hold cannot leak into another's ticks. */
+export async function clearHolds(): Promise<void> {
+  await runCrossProject("test: clear credit holds", async () => {
+    await getDb().delete(llmCreditHolds);
+  });
+}
+
+/**
+ * Makes `credentialOwnerFor` answer two owners for the SC-010 two-owner edge case: projects whose id is in
+ * `heldProjectIds` resolve to `heldOwner`; every other project resolves to the default install owner.
+ * Restored with `vi.restoreAllMocks()` in the usual `afterEach`.
+ */
+export function routeCredentialOwners(heldOwner: string, heldProjectIds: readonly string[]): void {
+  vi.spyOn(credentialOwners, "credentialOwnerFor").mockImplementation(async (projectId: string) =>
+    heldProjectIds.includes(projectId) ? heldOwner : credentialOwners.INSTALL_CREDENTIAL_OWNER,
+  );
 }
 
 /** A valid model answer for the mock account (and one alt text per image when `images` > 0). */

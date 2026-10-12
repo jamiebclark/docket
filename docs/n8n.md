@@ -77,6 +77,8 @@ Set the HTTP Request node to retry on failure (3 tries, 2–5 seconds apart) and
 
 Other 4xx answers are mistakes in the request; the body is `{"error":{"code","message","details","requestId"}}`. Quote `requestId` when asking for help.
 
+A job item can sit `queued` carrying a `credit_exhausted` error while the provider account is out of credit or quota; it needs no retry and resumes on its own once the account is spending again. The response schema is unchanged.
+
 ## 5. Optional: start on `post.published`
 
 Instead of polling, add a webhook endpoint in **Settings → Webhooks** and point it at an n8n **Webhook** node. Subscribe to `post.published` (and `post.failed` if you want alerts). Deliveries are signed. Verify the signature before trusting the body.

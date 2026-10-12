@@ -4,7 +4,9 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { z } from "zod";
+import { INSTALL_CREDENTIAL_OWNER } from "../src/server/dal/credential-owners";
 import { getLlm, getLlmStatus } from "../src/server/llm";
+import { withCreditHold } from "../src/server/services/generation/credit";
 import { JOB_MIN_CALL_MS, JOB_PERSIST_RESERVE_MS } from "../src/server/scheduler/config";
 import type { LlmProvider } from "../src/server/llm/types";
 
@@ -86,7 +88,7 @@ export async function main(
     log(UNMEASURED_LINE);
     return 0;
   }
-  const llm = deps.llm ?? getLlm();
+  const llm = withCreditHold(deps.llm ?? getLlm(), INSTALL_CREDENTIAL_OWNER);
   const result = await llm.generate({
     label: "llm.check",
     system: "You write one short, friendly sentence.",

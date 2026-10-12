@@ -15,10 +15,28 @@ export function anthropicImageSource(image: LlmImage) {
   return { type: "url" as const, url: image.url };
 }
 
+/** The verified credit-balance wording (research A5). One list, so another observed phrase is one line. */
+export const ANTHROPIC_CREDIT_PHRASES: readonly RegExp[] = [/credit balance/i];
+
+/**
+ * The provider refusing to spend: either the SDK's declared `billing_error` type, or an
+ * `invalid_request_error` whose body message names a credit balance (FR-002, C2).
+ * Reads `APIError.type` and the body's `error.message` — never the composed `Error.message`.
+ */
+export function isCreditRefusal(error: unknown): boolean {
+  if (!(error instanceof Anthropic.APIError)) return false;
+  if (error.type === "billing_error") return true;
+  if (error.type !== "invalid_request_error") return false;
+  const body = error.error as { error?: { message?: unknown } } | undefined;
+  const message = body?.error?.message;
+  return typeof message === "string" && ANTHROPIC_CREDIT_PHRASES.some((re) => re.test(message));
+}
+
 function kindOfError(error: unknown, timedOut: boolean): LlmFailureKind {
   if (timedOut || error instanceof Anthropic.APIConnectionTimeoutError || error instanceof Anthropic.APIUserAbortError) {
     return "timeout";
   }
+  if (isCreditRefusal(error)) return "credit_exhausted";
   if (error instanceof Anthropic.RateLimitError) return "rate_limited";
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return "auth";
   if (

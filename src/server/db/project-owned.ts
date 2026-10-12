@@ -53,4 +53,5 @@ export const notProjectOwned = [
   "scheduler_heartbeats",
   "email_settings",
   "email_delivery_attempts",
+  "llm_credit_holds",
 ] as const;

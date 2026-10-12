@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readSettings } from "../../../src/server/dal/email";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
@@ -9,8 +9,9 @@ import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { validateConfiguration } from "../../../src/server/startup/validate";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
+import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 
+beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 afterEach(() => {

@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { llmFailureMessage } from "../../../../src/server/llm/messages";
 import { setLlmForTests } from "../../../../src/server/llm";
 import { runTick } from "../../../../src/server/scheduler";
 import { setStorageForTests } from "../../../../src/server/storage";
@@ -215,4 +216,35 @@ describe("open jobs over HTTP", () => {
     expect(csv.status).toBeGreaterThanOrEqual(400);
     expect(csv.status).toBeLessThan(500);
   });
+
+  it("shows a held item as queued over the API, and a concurrent POST /generate as 503 credit_exhausted", async () => {
+    const e = await setup();
+    const image = await e.asset();
+    const made = await e.create();
+    const jobId = made.json.id as string;
+    await e.add(jobId, [item(1, { mediaId: image.id })]);
+    await api("POST", `/jobs/${jobId}/close`, { key: e.key });
+
+    setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
+    await runTick({ config: { jobMaxItems: 3 } });
+
+    const items = await api("GET", `/jobs/${jobId}/items`, { key: e.key });
+    expect(items.json.data).toHaveLength(1);
+    expect(items.json.data[0]).toMatchObject({
+      status: "queued",
+      error: { kind: "credit_exhausted", message: llmFailureMessage("credit_exhausted") },
+    });
+
+    const jobRead = await api("GET", `/jobs/${jobId}`, { key: e.key });
+    expect(jobRead.json.counts).toMatchObject({ queued: 1, failed: 0 });
+
+    setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
+    const generateKey = (await createKey(e.scope, ["read", "generate"], { rateLimitPerMinute: 1000 })).secret;
+    const generated = await api("POST", "/generate", {
+      key: generateKey,
+      body: { brief: "Announce the thing", accountIds: [e.account.id], voiceProfileId: e.profile.id },
+    });
+    expect(generated.status).toBe(503);
+    expect(generated.json.error).toMatchObject({ code: "generation_unavailable", details: { kind: "credit_exhausted" } });
+  }, 60_000);
 });

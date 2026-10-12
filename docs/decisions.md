@@ -1962,7 +1962,133 @@ keyboard/focus, 390 px width, no-JS) and report each row as pass or fail.
   `mailer.send()` — never a DAL parameter, never in an outcome, heartbeat, thrown error or `console` call,
   so the secrets assertion is checkable by reading the call sites.
 
-## 045 — Real-time updates (2026-10-12)
+## 045 — Credit hold (2026-10-11)
+
+Spec: `specs/043-llm-credit-hold`. The section number follows this file's own sequence (044 is Email
+delivery, whose spec directory is 060), not the spec directory: parallel branches were each assigned spec
+number 043 by speckit, because each was cut from a `main` whose highest spec was 042.
+
+latency: unmeasured; live path verified with mocks only.
+
+Roadmap entry 1 of 3 (`.specify/roadmaps/llm-credentials.md`, slug `credit-hold`): a provider refusing a
+call on billing used to permanently fail every item it touched. Full text in
+`specs/043-llm-credit-hold/spec.md` (C1–C14) and `specs/043-llm-credit-hold/research.md` (H1–H19).
+
+### Spec decisions (C1–C14)
+
+- **C1 — One new kind, `credit_exhausted`**, in both pgEnums (`llm_failure_kind`, `generation_job_item_error`),
+  named for the condition rather than the provider, and distinct from `refused` (the model declining to
+  write a post). *Reverse:* drop the enum value (migration) and its callers.
+- **C2 — Detection is per provider, structured, and conservative.** Anthropic: an `invalid_request_error`
+  (or declared `billing_error`) whose body names a credit balance. OpenAI: `code === "insufficient_quota"`,
+  checked before the `RateLimitError → rate_limited` mapping. *Reverse:* make both predicates return false.
+- **C3 — An unrecognised shape keeps today's behaviour.** A missed detection costs today's behaviour; a false
+  positive would stall an install, so the predicate stays narrow.
+- **C4 — `bad_request`'s sentence is untouched**; the new kind gets its own, and is not added to the
+  in-request `RETRYABLE` sets (a correction retry cannot buy credit).
+- **C5 — A billing refusal never fails a job item.** It returns to `queued`, immediately due, no attempt
+  counted, lease released, following the existing deferred-correction-retry precedent.
+- **C6 — The hold, not `TEMPORARY`.** Adding the kind to `TEMPORARY` was explicitly rejected: three attempts
+  over about 20 minutes still mass-fails an outage that lasts until someone tops up. While held, the runner
+  claims nothing for that credential.
+- **C7 — The hold is scoped by credential owner from day one**, even though there is exactly one owner
+  today, so roadmap entry 2 (`per-project-llm`) can widen the scope to per-project by changing one function
+  and the stored owner values, without reworking the hold, the probe, the notices or the claim's shape.
+- **C8 — No credential value, and no fingerprint of one, is stored.** The hold records that an owner is
+  refusing, never which key, keeping the env-only invariant true and the new table outside the
+  secret-scan's concern.
+- **C9 — Recovery is detected by a successful call, never guessed.** While held, one item is let through
+  every 5 minutes as a probe; any outcome other than a billing refusal clears the hold.
+- **C10 — The probe is single-flight**, decided inside the same transaction that writes the next probe time
+  — no advisory lock, per the Neon transaction-mode pooler constraint.
+- **C11 — Interactive generation is not blocked**, and every call site (single, series, regenerate, voice
+  "Try it", job item, `pnpm llm:check`) sets or refreshes the hold on a billing refusal and clears it on any
+  other outcome — a free probe.
+- **C12 — No give-up timeout.** A hold lasts until credit returns or the job is cancelled; nothing is
+  destroyed.
+- **C13 — Honest notices on both Batch jobs screens, naming billing**, in the shape and tone of the two
+  existing notices; no new job or item status is introduced.
+- **C14 — Items already failed by an earlier outage are not touched.** No migration rewrites history;
+  "Retry failed items" is what recovers them, and after this entry it is safe to press during an outage.
+
+### Plan decisions (H1–H19)
+
+- **H1 — One install-wide table, `llm_credit_holds`**, keyed by `owner`, next to `llmFailureKind` in
+  `src/server/db/schema/generation.ts`, registered in `notProjectOwned`. *Rejected:* a column on
+  `scheduler_heartbeats` (overwritten every tick); a JSON blob on a singleton (loses "at most one per
+  owner" as a database fact); a project-owned table (a hold belongs to a credential, not a project).
+- **H2 — The credential-owner seam is `src/server/dal/credential-owners.ts`**, async and SQL-aware from day
+  one (`credentialOwnerFor`, `jobsExcludingProjects`) even though today's implementation is a constant — the
+  whole point of C7/SC-010, so entry 2 rewrites one file and nothing else.
+- **H3 — Detection is one named predicate per provider**, reading structured fields (`error.type`,
+  `error.code`), because `APIError.error` means a different thing in each SDK (the whole body in Anthropic,
+  the inner object in OpenAI) — one shared body-walker would be wrong for one of them.
+- **H4 — The predicate runs immediately after the timeout branch**, before every other branch, in both
+  `kindOfError` functions — satisfies FR-003 literally and cannot shadow `auth`.
+- **H5 — The gate is two statements inside the existing claim transaction**: an unlocked read of every held
+  owner, then `FOR UPDATE SKIP LOCKED` on the due ones. A row locked by another tick reads as held-and-not-
+  probing, never as not-held — the conservative direction, and why exactly one probe happens per interval
+  with no blocking wait.
+- **H6 — `next_probe_at` is always `now + CREDIT_PROBE_INTERVAL_MS`**, never accumulated, so a missed
+  window, a long outage or a clock moving backwards all yield exactly one probe. The 5-minute interval is a
+  documented constant, no environment variable.
+- **H7 — A granted probe is rewound unless a model call was actually made** (`rewindCreditProbe`, update
+  only, never an insert), so a probe skipped for tick budget, a lost lease or an exception does not consume
+  the interval.
+- **H8 — `itemDue` (queued-and-due, or `running` with an expired lease) is the item predicate for every
+  owner, probing or not**; US1 AS5 is protected instead by gating the lease-recovery attempt increment and
+  the `interrupted` failure on `!probe` (`job-claims.ts`). A probing owner whose only due work is a
+  lease-expired `running` item can still probe it, without the probe ever counting an attempt or failing
+  that item.
+- **H9 — `claimDueJobItems` returns `{ items, held, probing }`** so the tick summary needs no second, racy
+  read after the transaction.
+- **H10 — Blocked owners are excluded in SQL; probing owners are capped in memory at one item**, so an
+  empty hold table leaves the claim's SQL byte-identical to `main`'s (SC-007) and a held owner cannot starve
+  a free owner's budget.
+- **H11 — The requeue is `release()` plus the recorded reason**, counted as `requeued` — distinct from
+  `retried` (counts an attempt) and `released` (no reason). The runner's dispatch becomes three-way:
+  `credit_exhausted` → requeue, `TEMPORARY` → `retryLater`, otherwise → `fail`.
+- **H12 — `withCreditHold(llm, owner)` wraps the provider inside `runGenerationStep` and `planSeries`**, the
+  only two places a provider's `generate` is called, so a test-injected provider is observed too; the hold
+  write is awaited and its errors swallowed, so a database hiccup never turns a good generation into a
+  failure.
+- **H13 — `pnpm llm:check` uses the same wrapper** and tolerates having no database, because write errors
+  are swallowed by H12.
+- **H14 — `credit_exhausted` is added to neither `RETRYABLE` set**, and `FAILURE_PROBLEM` gains no entry —
+  the absence of a change.
+- **H15 — One route-local notice component**, `JobNotice`, rendering `role="note"` (not `Alert`'s
+  `role="alert"`, which would announce more aggressively than today's two existing notices).
+- **H16 — The waiting row shows its reason only for a `queued` item whose kind is `credit_exhausted`**, so
+  an old `rate_limited` error on a `queued` item renders exactly as it does today.
+- **H17 — The fixed sentence names credit and what to do**, and says nothing about jobs resuming (the
+  notice carries that), because the same sentence serves a single generation, a stored failure, an API
+  503, a waiting job row and `llm:check`.
+- **H18 — `credit_exhausted` maps to the existing 503 `generation_unavailable`**, with no new API error
+  code — the honest reading, since nothing about the request is wrong and a caller is already told that
+  retrying the same key later is safe.
+- **H19 — The secret-scan extension**: a generation section inside the existing scanned run, with a real
+  provider's error body embedding the configured key, a tick against a held job, and both Batch jobs screens
+  rendered held — proven able to fail by the file's existing deliberate-leak test. `no-plaintext.test.ts`
+  gains the two keys and their SHA-256 hex, and a hold row before its all-tables dump.
+
+### What this entry does not do
+
+- **Per-project or per-user LLM keys, models or settings** — roadmap entry 2, `per-project-llm`. This entry
+  leaves the env-only invariant true and provides the credential-owner seam (H2) entry 2 widens.
+- **Persisting token usage or cost** — roadmap entry 3, `llm-cost-visibility`. Usage stays logged and
+  unpersisted.
+- **Budgets, caps or throttling on spend** — out of the roadmap entirely.
+- **Re-specifying the `bad_request` operator message** — already landed; untouched here (C4).
+- **Notifying anyone about a hold**, and **a hold notice outside the Batch jobs screens** — the notifications
+  roadmap owns attention events; interactive generation answers with its own sentence instead.
+- **An operator control to lift, force or inspect a hold** — recovery is a successful call; the tick summary
+  and heartbeat carry the fact.
+- **A give-up timeout**, and **retro-classifying items failed by outages before this release** — neither is
+  owned by any roadmap entry (C12, C14).
+- **Detecting any other provider condition** (expired cards, suspended accounts, spend limits, regional
+  restrictions) beyond the two verified shapes, and **any provider beyond `openai` and `anthropic`**.
+
+## 046 — Real-time updates (2026-10-12)
 
 The bell's count moves from a 60-second poll to a server push, with the poll kept as its fallback. See
 the N12 reversal recorded in place above, and the extensions recorded next to N39, R10, R11, R12 and R15.

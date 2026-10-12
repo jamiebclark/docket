@@ -50,6 +50,7 @@ export const generationJobItemError = pgEnum("generation_job_item_error", [
   "image_deleted",
   "image_unavailable",
   "no_targets",
+  "credit_exhausted",
 ]);
 
 /** `status` is derived: only `refreshJobStatus` writes it (research D10). */

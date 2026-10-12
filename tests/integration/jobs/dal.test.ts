@@ -1,10 +1,16 @@
+import { and, asc, inArray, sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
+import { jobsExcludingProjects } from "../../../src/server/dal/credential-owners";
+import { claimDueJobItems } from "../../../src/server/dal/job-claims";
 import { createJobItemsRepo, createJobsRepo } from "../../../src/server/dal/jobs";
 import { createMediaRepo } from "../../../src/server/dal/media";
 import { getDb } from "../../../src/server/db/client";
+import { generationJobs } from "../../../src/server/db/schema";
 import { projectOwnedTables } from "../../../src/server/db/project-owned";
 import { checkScope } from "../../helpers/scope-check";
+import { clearHolds } from "../../helpers/jobs-env";
 import { closeDb } from "../../helpers/db";
+import { getRecordedQueries } from "../../setup/scope-recorder";
 import { createImageAssets, createJob, createProject, csvBuilder } from "../../helpers/factories";
 
 afterAll(async () => {
@@ -56,6 +62,42 @@ describe("job schema and repositories", () => {
     expect(await repo.updateWithLease(items[0]!.id, crypto.randomUUID(), { status: "queued" })).toBeNull();
     // Nothing failed yet, so a retry changes nothing.
     expect(await repo.retryFailed(items[0]!.jobId, new Date())).toEqual([]);
+  });
+
+  it("jobsExcludingProjects([]) does not change a hand-built statement", () => {
+    const now = new Date();
+    const dueCondition = sql`EXISTS (SELECT 1 FROM "generation_job_items" "i" WHERE "i"."project_id" = ${generationJobs.projectId} AND "i"."job_id" = ${generationJobs.id} AND (("i"."status" = 'queued' AND "i"."next_attempt_at" <= ${now}) OR ("i"."status" = 'running' AND "i"."lease_until" <= ${now})))`;
+    const base = () =>
+      getDb()
+        .select()
+        .from(generationJobs)
+        .orderBy(sql`${generationJobs.lastClaimedAt} ASC NULLS FIRST`, asc(generationJobs.createdAt), asc(generationJobs.id))
+        .limit(5)
+        .for("update", { skipLocked: true });
+    const withSeam = base().where(and(inArray(generationJobs.status, ["queued", "running"]), dueCondition, jobsExcludingProjects([])));
+    const withoutSeam = base().where(and(inArray(generationJobs.status, ["queued", "running"]), dueCondition));
+    expect(withSeam.toSQL()).toEqual(withoutSeam.toSQL());
+  });
+
+  it("with no holds, claimDueJobItems' actual job SELECT is byte-identical to main's (SC-007, invariant 5)", async () => {
+    await clearHolds();
+    const project = await createProject();
+    await createJob(project.id, { items: 1 });
+    const now = new Date();
+    const dueCondition = sql`EXISTS (SELECT 1 FROM "generation_job_items" "i" WHERE "i"."project_id" = ${generationJobs.projectId} AND "i"."job_id" = ${generationJobs.id} AND (("i"."status" = 'queued' AND "i"."next_attempt_at" <= ${now}) OR ("i"."status" = 'running' AND "i"."lease_until" <= ${now})))`;
+    const expected = getDb()
+      .select()
+      .from(generationJobs)
+      .where(and(inArray(generationJobs.status, ["queued", "running"]), dueCondition))
+      .orderBy(sql`${generationJobs.lastClaimedAt} ASC NULLS FIRST`, asc(generationJobs.createdAt), asc(generationJobs.id))
+      .limit(5)
+      .for("update", { skipLocked: true })
+      .toSQL();
+    await claimDueJobItems({ now, limit: 5, leaseMs: 60_000, maxAttempts: 3 });
+    const jobSelect = getRecordedQueries().find((q) => q.sql.includes('from "generation_jobs"') && q.sql.toLowerCase().includes("for update"));
+    expect(jobSelect).toBeDefined();
+    expect(jobSelect!.sql).toBe(expected.sql);
+    expect(jobSelect!.params).toEqual(expected.params);
   });
 
   it("builds CSV bytes with quoting", () => {

@@ -166,8 +166,15 @@
     {
       "idx": 23,
       "version": "7",
-      "when": 1791787788775,
-      "tag": "0023_bizarre_kingpin",
+      "when": 1791784943195,
+      "tag": "0023_chemical_elektra",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791796455380,
+      "tag": "0024_graceful_pepper_potts",
       "breakpoints": true
     }
   ]

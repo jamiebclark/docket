@@ -1,6 +1,7 @@
-import { expect } from "vitest";
+import OpenAI from "openai";
+import { describe, expect, test } from "vitest";
 import { runLlmScenarios } from "../../../tests/helpers/llm-scenarios";
-import { createOpenAiProvider } from "./openai";
+import { createOpenAiProvider, isCreditRefusal } from "./openai";
 
 const message = (text: string, extra: object = {}) => ({
   id: "resp_1",
@@ -32,6 +33,21 @@ runLlmScenarios({
     status: 200,
     json: { ...message('{"text":"cut'), status: "incomplete", incomplete_details: { reason: "max_output_tokens" } },
   }),
+  creditRefusal: (keyEcho) => ({
+    status: 429,
+    json: {
+      error: {
+        message: `You exceeded your current quota, please check your plan and billing details.${keyEcho ? ` (${keyEcho})` : ""}`,
+        type: "insufficient_quota",
+        code: "insufficient_quota",
+        param: null,
+      },
+    },
+  }),
+  nonBillingAtSameStatus: () => ({
+    status: 429,
+    json: { error: { message: "Rate limit reached", type: "rate_limit_error", code: "rate_limit_exceeded" } },
+  }),
   expectBody(body, e) {
     const b = body as {
       instructions: string;
@@ -50,4 +66,32 @@ runLlmScenarios({
       { type: "input_text", text: e.user },
     ]);
   },
+});
+
+describe("openai isCreditRefusal", () => {
+  const generate = (status: number, body: object | undefined) =>
+    OpenAI.APIError.generate(status, body, undefined, new Headers());
+
+  test("true for code === insufficient_quota", () => {
+    const err = generate(429, { error: { message: "quota", type: "insufficient_quota", code: "insufficient_quota" } });
+    expect(isCreditRefusal(err)).toBe(true);
+  });
+
+  test("false for a 429 with no code", () => {
+    const err = generate(429, { error: { message: "rate limited" } });
+    expect(isCreditRefusal(err)).toBe(false);
+  });
+
+  test("false for a 429 with code rate_limit_exceeded", () => {
+    const err = generate(429, { error: { message: "rate limited", code: "rate_limit_exceeded" } });
+    expect(isCreditRefusal(err)).toBe(false);
+  });
+
+  test("false for a malformed body", () => {
+    expect(isCreditRefusal(generate(429, {}))).toBe(false);
+  });
+
+  test("false for a non-APIError", () => {
+    expect(isCreditRefusal(new Error("boom"))).toBe(false);
+  });
 });

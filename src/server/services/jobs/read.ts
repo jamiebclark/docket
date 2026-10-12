@@ -4,6 +4,8 @@ import { apiSourceMetaSchema } from "@/lib/validation/api";
 import { jobInstructionsSnapshotSchema } from "@/lib/validation/jobs";
 import { alreadyPostedReason } from "@/lib/jobs/skipped";
 import { getEnv } from "../../env";
+import { credentialOwnerFor } from "../../dal/credential-owners";
+import { readCreditHold } from "../../dal/credit-holds";
 import { NotFoundError } from "../../dal/errors";
 import type { JobCounts, JobItemRecord, JobRecord, JobStatus, JobItemStatus } from "../../dal/jobs";
 import type { ApprovalPolicy, ProjectScope, SchedulingPolicy } from "../../dal/scope";
@@ -50,6 +52,13 @@ const pageSchema = z.object({
 
 function canView(scope: ProjectScope): void {
   need(scope, { post: ["view"] });
+}
+
+/** Whether a credit hold covers this project's credential, and since when (contracts/services.md §7). */
+export async function generationCreditHold(scope: ProjectScope): Promise<{ since: Date } | null> {
+  canView(scope);
+  const hold = await readCreditHold(await credentialOwnerFor(scope.project.id));
+  return hold ? { since: hold.heldSince } : null;
 }
 
 async function creatorNames(scope: ProjectScope, ids: readonly (string | null)[]): Promise<Map<string, string>> {
@@ -143,6 +152,7 @@ export async function getJob(scope: ProjectScope, jobId: string) {
   );
   const budget = schedulerConfig(getEnv()).timeBudgetMs;
   const needed = JOB_MIN_CALL_MS + JOB_PERSIST_RESERVE_MS;
+  const creditHold = await generationCreditHold(scope);
   return {
     ...toListItem(job, counts, names, keys),
     voice: {
@@ -157,6 +167,7 @@ export async function getJob(scope: ProjectScope, jobId: string) {
     requested: { approval: job.requestedApproval, scheduling: job.requestedScheduling },
     sourceMeta: (job.sourceMeta ?? {}) as Record<string, unknown>,
     generationConfigured: getLlmStatus().configured,
+    creditHold,
     jobsRunnable:
       budget >= needed
         ? ({ ok: true } as const)

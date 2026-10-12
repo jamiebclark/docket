@@ -1,12 +1,14 @@
 import type { GenerationRecord } from "../../../lib/validation/generation";
 import type { VoiceContent } from "../../../lib/validation/voice";
 import type { GenerationInputs } from "../../../lib/validation/generation";
+import { credentialOwnerFor } from "../../dal/credential-owners";
 import { ConflictError } from "../../dal/errors";
 import type { MediaRow } from "../../dal/media";
 import type { ProjectScope } from "../../dal/scope";
 import { getLlm } from "../../llm";
 import { imagesForModel } from "../../llm/images";
 import type { LlmFailureKind, LlmProvider, LlmProviderName, LlmResult } from "../../llm/types";
+import { withCreditHold } from "./credit";
 import type { VariantGroup } from "../../../lib/generation/groups";
 import {
   PREVIOUS_OUTPUT_MAX,
@@ -106,6 +108,7 @@ export async function runGenerationStep(
   llm: LlmProvider,
   opts: StepOptions = {},
 ): Promise<CoreStep> {
+  llm = withCreditHold(llm, await credentialOwnerFor(scope.project.id));
   const prepared = await imagesForModel(scope, req.assets);
   if (!prepared.ok) throw new ConflictError(prepared.message);
 

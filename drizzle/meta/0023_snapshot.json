@@ -1,5 +1,5 @@
 {
-  "id": "fee82ce7-3898-4a01-94d0-e1a410982b27",
+  "id": "c4fbf623-7ebd-459c-a464-bb770a123ddf",
   "prevId": "a37343cf-e947-4ccd-b27d-6e441b0ae926",
   "version": "7",
   "dialect": "postgresql",
@@ -667,22 +667,6 @@
           ],
           "isUnique": false,
           "where": "\"activity_events\".\"outcome\" = 'connect_failed'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "activity_events_attention_global_seq_idx": {
-          "name": "activity_events_attention_global_seq_idx",
-          "columns": [
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"activity_events\".\"outcome\" IN ('failed', 'ambiguous', 'needs_reauth', 'connect_failed')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3181,6 +3165,48 @@
         "generation_series_planned_count_range": {
           "name": "generation_series_planned_count_range",
           "value": "\"generation_series\".\"planned_count\" BETWEEN 2 AND 10"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.llm_credit_holds": {
+      "name": "llm_credit_holds",
+      "schema": "",
+      "columns": {
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "held_since": {
+          "name": "held_since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_refusal_at": {
+          "name": "last_refusal_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "next_probe_at": {
+          "name": "next_probe_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "llm_credit_holds_owner_nonempty": {
+          "name": "llm_credit_holds_owner_nonempty",
+          "value": "length(\"llm_credit_holds\".\"owner\") > 0"
         }
       },
       "isRLSEnabled": false
@@ -7982,7 +8008,8 @@
         "rate_limited",
         "unavailable",
         "auth",
-        "bad_request"
+        "bad_request",
+        "credit_exhausted"
       ]
     },
     "public.approval_policy": {
@@ -8073,7 +8100,8 @@
         "bad_request",
         "image_deleted",
         "image_unavailable",
-        "no_targets"
+        "no_targets",
+        "credit_exhausted"
       ]
     },
     "public.generation_job_item_status": {
