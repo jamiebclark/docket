@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { NotificationPanel } from "@/components/notifications/NotificationPanel";
-import { browserPollEnv, startPolling } from "@/components/notifications/poll";
+import { browserRefreshEnv, startRefreshing, type RefreshHandle } from "@/components/notifications/refresh";
 import { Icon } from "@/components/ui/Icon";
 import type { UnreadSummary } from "@/lib/notifications/types";
 
@@ -25,22 +25,36 @@ export function NotificationBellClient({ initial }: { initial: UnreadSummary }) 
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const onSummary = useCallback((value: UnreadSummary) => setOverride({ base: initial, value }), [initial]);
+  const [panelKey, setPanelKey] = useState(0);
+  const onSummary = useCallback(
+    (value: UnreadSummary) => {
+      setOverride({ base: initial, value });
+      refreshHandle.current?.noteLocalChange(value);
+    },
+    [initial],
+  );
   const [announcement, setAnnouncement] = useState("");
   const initialSummary = useRef(summary);
+  const refreshHandle = useRef<RefreshHandle | null>(null);
   useEffect(() => {
     initialSummary.current = summary;
   }, [summary]);
 
-  // Visible-only 60 s refresh of the count, plus a one-shot timer for the soonest snooze; never
-  // refreshes the page (no router.refresh()).
+  // The push stream when it can be held, the existing 60 s poll otherwise; never refreshes the page
+  // (no router.refresh()).
   useEffect(() => {
     if (!hydrated) return;
-    return startPolling(initialSummary.current, browserPollEnv(), {
-      onSummary,
+    const handle = startRefreshing(initialSummary.current, browserRefreshEnv(), {
+      onSummary: (value) => setOverride({ base: initial, value }),
       onAnnounce: (value) => setAnnouncement(value.label),
+      onPanelRefresh: () => setPanelKey((n) => n + 1),
     });
-  }, [hydrated, onSummary]);
+    refreshHandle.current = handle;
+    return () => {
+      refreshHandle.current = null;
+      handle.stop();
+    };
+  }, [hydrated, initial]);
 
   useEffect(() => {
     if (!open) return;
@@ -102,7 +116,7 @@ export function NotificationBellClient({ initial }: { initial: UnreadSummary }) 
       >
         {children}
       </button>
-      {open ? <NotificationPanel onSummary={onSummary} /> : null}
+      {open ? <NotificationPanel onSummary={onSummary} refreshKey={panelKey} /> : null}
     </div>
   );
 }

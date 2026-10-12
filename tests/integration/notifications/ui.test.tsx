@@ -415,6 +415,27 @@ describe("problems callout", () => {
   });
 });
 
+describe("no-JavaScript floor (022 FR-014, FR-018, SC-006, scoped to US2)", () => {
+  it("renders a correct count, a working bell link, working panel links and a form-submit Mark all as read, with no client JavaScript", async () => {
+    const p = await createProject({ name: "NoJs" });
+    const u = await createUser();
+    await addMember(p.id, u.id);
+    await startReading(p.id, u.id);
+    actAs(u);
+    await recordEvent(p.id, "target_failed");
+    const html = (await renderAsync(await NotificationsPage({ searchParams: Promise.resolve({}) }))).replaceAll("<!-- -->", "");
+    expect(html).toContain("1 unread problem");
+
+    const bellHtml = bell(1);
+    expect(bellHtml).toContain('<a href="/notifications"');
+    expect(bellHtml).not.toContain("<button");
+
+    expect(html).toContain('href="/notifications"');
+    expect(html).toContain('<form action="');
+    expect(html).toContain("Mark all as read");
+  });
+});
+
 describe("panel focus after marking", () => {
   it("moves focus to the heading only when the mark succeeded", () => {
     const heading = { focus: vi.fn() };
