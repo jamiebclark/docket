@@ -314,12 +314,12 @@ proof that the repository is left working.
   every generation golden/snapshot file — must pass **unchanged**, not re-snapshotted (SC-001, FR-032);
   fix any regression found rather than adjusting its expectation
 - [ ] T053 Human-owned: the manual walk-through in quickstart.md §4 — needs a signed-in browser session as
-  owner, admin and editor against `pnpm dev`. Set a credential, check it, generate, remove it, check again
-  as owner; repeat as admin; confirm the editor sees no sub-nav item and the URL 404s; operate every
-  control keyboard-only including the `SegmentedControl` and the remove `Dialog`; confirm save/check/remove
-  work with client JavaScript disabled; confirm no screen, toast or page source contains any part of the
-  key. If this window has closed before the task is picked up, mark it so and state why rather than leaving
-  it open.
+  owner, admin and editor against `pnpm dev`, so no pipeline phase can tick it. Five parts: (1) owner sets
+  a credential, checks it, generates, removes it, checks again; (2) admin does the same, and an editor
+  confirms the sub-nav item is absent and `/p/<slug>/settings/model` 404s; (3) keyboard only — tab to every
+  control, operate the SegmentedControl with arrows, open and confirm the remove dialog with Enter, dismiss
+  with Escape, confirm focus returns; (4) with client JavaScript disabled, save, check and remove all still
+  work; (5) no screen, toast or page source contains any part of the key.
   NOT DONE: left unchecked by the automated implement pass (2026-10-12) — this is a headless agent with no
   signed-in browser session to drive `pnpm dev` through. Needs a human (or a browser-capable agent) to run
   the quickstart.md §4 walk-through before this task can be ticked.
@@ -418,3 +418,45 @@ and the Foundational-only parts of US3 (T034, T038) in parallel, then converge f
 Nothing in this feature is reported done until T052's full gate (`lint`, `typecheck`, `test`, `db:check`,
 `build`) is green and T053's manual walk-through has either been performed or explicitly recorded as
 unachievable with a reason.
+
+---
+
+## Phase 8: Review remediation
+
+**Purpose**: The blocking findings from [review.md](./review.md) — one BLOCKER and six MAJORs, all local.
+Each task carries its finding id and location so it can be traced back to the review's reasoning.
+
+- [ ] T054 Write the full audit details `{ fromProvider, fromModel, toProvider, toModel, keyChanged }` from
+  both `audit.insert` calls (reading `current` inside the transaction, with T056) and assert the row's
+  contents in a test — review F1 (BLOCKER), src/server/services/generation/credential.ts:99,
+  src/server/services/generation/credential.ts:117, docs/generator.md:23
+- [ ] T055 Throw the two "key required" refusals in the array form
+  (`new ValidationIssuesError([{ code: "required", field: "apiKey", message }], message)`) so the action
+  returns a field-level message instead of "Some posts have validation problems.", and test both refusals
+  — review F2 (MAJOR), src/server/services/generation/credential.ts:84,
+  src/server/services/generation/credential.ts:88
+- [ ] T056 Pass `{ lockProject: true }` to both `scope.transaction` calls and move the
+  `scope.projectLlm.status()` read inside the transaction, so the "blank keeps the stored key" decision is
+  made under the project lock — review F3 (MAJOR), src/server/services/generation/credential.ts:76,
+  src/server/services/generation/credential.ts:91, src/server/services/generation/credential.ts:114
+- [ ] T057 Stop reporting a credential change that never happened: gate `lastChange` on an actual
+  credential write rather than on the row's existence (the check's `claimCheck` creates the row), and
+  assert it after a check on a project with no credential — review F4 (MAJOR),
+  src/server/services/generation/credential.ts:54, src/server/dal/project-llm.ts:138
+- [ ] T058 Import `LLM_CHECK_BUSY` and `LLM_KEY_UNREADABLE` in `check.ts` and delete its local
+  `BUSY_MESSAGE`/`KEY_UNREADABLE_MESSAGE` copies; use `LLM_SOURCE_INSTALL`/`LLM_SOURCE_PROJECT` in
+  `ModelPanel`'s "in use now" line or delete them — review F5 (MAJOR),
+  src/server/services/generation/check.ts:14, src/lib/generation/llm-source.ts:3
+- [ ] T059 Render `LLM_KEY_UNREADABLE` from the generate page's `ai` prerequisite when
+  `readiness.ai.keyUnreadable` is true, pointing the owner at `/p/<slug>/settings/model` instead of the
+  environment-variable setup guide — review F6 (MAJOR), src/lib/roles/prerequisites.ts:28,
+  src/server/services/generation/readiness.ts:45
+- [ ] T060 Prove FR-027 through the real path: assert the hold is gone after `saveProjectLlm` and after
+  `removeProjectLlm` on a held project, and route every `project:<id>` owner string through one exported
+  helper in `credential-owners.ts` (including `pruneOrphanCreditHolds`'s `"project:%"` and `from 9`) —
+  review F7 (MAJOR) with F14, tests/integration/llm/hold-scope.test.ts:180,
+  src/server/services/generation/credential.ts:104, src/server/dal/credit-holds.ts:98
+
+**Checkpoint**: the review's blocking set is closed. The nine MINOR findings and three NOTEs in
+[review.md](./review.md) are not in this phase; they are safe to ship and are recorded there for a
+hardening entry.
