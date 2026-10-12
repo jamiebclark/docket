@@ -269,7 +269,7 @@ describe("project overview, server setup (US4)", () => {
     const owner = await render(env);
     expect(owner).toContain("Server setup");
     expect(owner).toContain("The scheduler isn&#x27;t running");
-    expect(owner).toContain(`${DOCS_BASE_URL}deployment/#9-is-the-scheduler-running`);
+    expect(owner).toContain(`${DOCS_BASE_URL}deployment/#10-is-the-scheduler-running`);
     expect(owner).toContain("Media storage isn&#x27;t set up");
     expect(owner).toContain(`${DOCS_BASE_URL}storage/`);
     // Unconfigured platforms share one line; none of them is reported as missing.
