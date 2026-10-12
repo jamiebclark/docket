@@ -10,6 +10,8 @@ export const LLM_FAILURE_MESSAGES: Record<LlmFailureKind, string> = {
   unavailable: "The model provider is unavailable. Try again shortly.",
   auth: "The model provider refused Docket's API key. Check the LLM settings.",
   bad_request: "The model provider rejected the request. Check LLM_MODEL and the provider account's credit balance.",
+  credit_exhausted:
+    "The model provider refused: the account has no credit or quota left. Add credit to the provider account.",
 };
 
 export function llmFailureMessage(kind: LlmFailureKind): string {

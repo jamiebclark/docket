@@ -65,6 +65,14 @@ describe("planSeries", () => {
     const res = await planSeries(t.env.scope, t.input(), createFakeLlm([plan(4), plan(3)]));
     expect(res).toMatchObject({ ok: false, kind: "invalid_output" });
   });
+
+  it("returns credit_exhausted after one call with no retry", async () => {
+    const t = await setup();
+    const llm = createFakeLlm([{ fail: "credit_exhausted" }]);
+    const res = await planSeries(t.env.scope, t.input(), llm);
+    expect(res).toMatchObject({ ok: false, kind: "credit_exhausted" });
+    expect(llm.requests).toHaveLength(1);
+  });
 });
 
 describe("startSeries", () => {
@@ -150,6 +158,17 @@ describe("writeSeriesPost", () => {
     state = await getSeries(t.env.scope, id);
     expect(state.posts.map((p) => p?.baseText)).toEqual(["a", "b", "c"]);
     expect(state.failures).toEqual([null, null, null]);
+  });
+
+  it("returns credit_exhausted after one call, writing no post", async () => {
+    const t = await setup();
+    const id = await t.start(2);
+    const llm = createFakeLlm([{ fail: "credit_exhausted" }]);
+    const res = await writeSeriesPost(t.env.scope, id, 0, llm);
+    expect(res).toMatchObject({ ok: false, kind: "credit_exhausted", position: 0 });
+    expect(llm.requests).toHaveLength(1);
+    const state = await getSeries(t.env.scope, id);
+    expect(state.posts[0]).toBeNull();
   });
 
   it("leaves one post under two concurrent calls", async () => {

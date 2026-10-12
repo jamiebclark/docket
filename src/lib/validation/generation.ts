@@ -42,6 +42,7 @@ const failureKind = z.enum([
   "unavailable",
   "auth",
   "bad_request",
+  "credit_exhausted",
 ]);
 const usage = z.object({ inputTokens: z.number().nullable(), outputTokens: z.number().nullable() });
 

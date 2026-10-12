@@ -14,7 +14,9 @@ Generation is off until `LLM_PROVIDER` is set. The rest of Docket works without 
 | `LLM_TIMEOUT_SECONDS` | 10–600, default 90 |
 | `LLM_MAX_OUTPUT_TOKENS` | 256–32000, default 4000 |
 
-Keys are read from the environment only and never stored, logged or rendered. To check a configuration against the live API, run `pnpm llm:check`; it prints `provider=… model=… outcome=… latency_ms=…`.
+Keys are read from the environment only and never stored, logged or rendered. To check a configuration against the live API, run `pnpm llm:check`; it prints `provider=… model=… outcome=… latency_ms=…`; a billing refusal prints `outcome=credit_exhausted`.
+
+**Billing refusals.** If the provider refuses a call because the account has no spendable credit or quota left, that is not a lasting failure: generation for that credential pauses, and resumes on its own the moment a call succeeds again — nobody needs to retry anything or restart Docket. While paused, the runner still lets exactly one call through every 5 minutes as a probe, so recovery is noticed quickly without hammering the provider. Nothing is failed, cancelled or unreserved while paused: queued items simply wait. The only thing to do is add credit (or quota) to the provider account; every other generation path (single, series, regenerate, "Try it" and `pnpm llm:check`) is unaffected and answers immediately with the same honest message.
 
 ## Policies
 
@@ -58,6 +60,7 @@ A job generates one post per item, in the background, so a person can hand the g
 - **Runner.** The worker's tick claims due items, runs each with one bounded model call, and saves the post through the same save helper and policies as single posts. A correction retry that cannot fit in the tick is deferred to a later tick without counting an attempt.
 - **Throughput.** At the defaults (worker interval 60 s, `GENERATION_TICK_MAX_ITEMS=2`) about **120 items an hour**, so a 500-item job takes about 4 hours. Raise `GENERATION_TICK_MAX_ITEMS` (1–10) to go faster, within your provider's rate limits. Claims rotate across jobs, so a large job does not starve a small one.
 - **Limits.** 500 items per job; CSV up to 1 MB, UTF-8, 500 data rows, 50,000 characters per row; instructions up to 2,000 characters; 3 automatic attempts for temporary failures (backoff 60 s growing to 15 min). Lasting failures (refused, invalid output, deleted image) are not retried automatically.
+- **Billing refusals.** An item refused on billing is not failed and no attempt is counted: it goes straight back to the queue, waiting, with a notice on both Batch jobs screens naming billing as the cause and saying since when. The runner claims nothing else for that credential until a probe call (one every 5 minutes) succeeds again, at which point every waiting item resumes with no retry needed. Cancelling a held job, or pressing "Retry failed items", both work exactly as they do otherwise.
 - **Tick budget.** A call needs at least 8 s plus a 3 s save reserve. If `SCHEDULER_TICK_BUDGET_SECONDS` is below 11, no item can start; startup logs it and the Batch jobs screen says so.
 - **Slot order.** Under "add to queue", slots follow claim order, but two items finishing in the same tick can swap slots.
 - **Template fields.** Media items expose `{{alt_text}}`, `{{tags}}` (comma-separated) and `{{filename}}`. CSV items expose one field per column header.

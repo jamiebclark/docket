@@ -15,7 +15,9 @@ import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic"
 import { UNREVIEWED_QUEUE_LABEL } from "../../generate/PolicyPicker";
 import { CancelJobDialog } from "./CancelJobDialog";
 import { CloseJobDialog } from "./CloseJobDialog";
+import { CreditHoldNotice } from "../CreditHoldNotice";
 import { JobItemsTable } from "./JobItemsTable";
+import { JobNotice } from "../JobNotice";
 import { RetryButton } from "./RetryButtons";
 
 export const dynamic = "force-dynamic";
@@ -92,15 +94,10 @@ export default async function JobPage({ params, searchParams }: Props) {
       </div>
 
       {active && !llm.configured ? (
-        <p role="note" className="rounded-md border border-warning-border p-3 text-sm">
-          Generation is not configured, so these items are waiting. Set: {llm.problems.map((p) => p.name).join(", ")}.
-        </p>
+        <JobNotice>Generation is not configured, so these items are waiting. Set: {llm.problems.map((p) => p.name).join(", ")}.</JobNotice>
       ) : null}
-      {active && !job.jobsRunnable.ok ? (
-        <p role="note" className="rounded-md border border-warning-border p-3 text-sm">
-          Jobs cannot run: {job.jobsRunnable.message}
-        </p>
-      ) : null}
+      {active && !job.jobsRunnable.ok ? <JobNotice>Jobs cannot run: {job.jobsRunnable.message}</JobNotice> : null}
+      {active && job.creditHold ? <CreditHoldNotice since={job.creditHold.since} timeZone={tz} /> : null}
 
       <dl className="grid max-w-2xl grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
         <dt className="font-medium">Voice</dt>

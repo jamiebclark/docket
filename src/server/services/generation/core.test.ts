@@ -8,7 +8,7 @@ import { runGeneration, type CoreRequest } from "./core";
 const prepare = vi.hoisted(() => vi.fn());
 vi.mock("../../llm/images", () => ({ imagesForModel: prepare }));
 
-const scope = { media: {} } as unknown as ProjectScope;
+const scope = { media: {}, project: { id: "project-1" } } as unknown as ProjectScope;
 const req: CoreRequest = {
   label: "generate.single",
   voice: { content: EMPTY_VOICE_CONTENT },
@@ -71,7 +71,7 @@ describe("runGeneration", () => {
     expect(llm.remaining()).toBe(0);
   });
 
-  it.each(["rate_limited", "unavailable", "auth", "bad_request"] as const)("does not retry %s", async (kind) => {
+  it.each(["rate_limited", "unavailable", "auth", "bad_request", "credit_exhausted"] as const)("does not retry %s", async (kind) => {
     const llm = createFakeLlm([{ fail: kind }, { ok: good }]);
     expect(await runGeneration(scope, req, llm)).toMatchObject({ ok: false, kind });
     expect(llm.requests).toHaveLength(1);

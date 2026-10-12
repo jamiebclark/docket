@@ -1,7 +1,10 @@
+import { and, asc, inArray, sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
+import { jobsExcludingOwners } from "../../../src/server/dal/credential-owners";
 import { createJobItemsRepo, createJobsRepo } from "../../../src/server/dal/jobs";
 import { createMediaRepo } from "../../../src/server/dal/media";
 import { getDb } from "../../../src/server/db/client";
+import { generationJobs } from "../../../src/server/db/schema";
 import { projectOwnedTables } from "../../../src/server/db/project-owned";
 import { checkScope } from "../../helpers/scope-check";
 import { closeDb } from "../../helpers/db";
@@ -56,6 +59,21 @@ describe("job schema and repositories", () => {
     expect(await repo.updateWithLease(items[0]!.id, crypto.randomUUID(), { status: "queued" })).toBeNull();
     // Nothing failed yet, so a retry changes nothing.
     expect(await repo.retryFailed(items[0]!.jobId, new Date())).toEqual([]);
+  });
+
+  it("with no holds, the claim's job SELECT is byte-identical to main's (SC-007, invariant 5)", () => {
+    const now = new Date();
+    const dueCondition = sql`EXISTS (SELECT 1 FROM "generation_job_items" "i" WHERE "i"."project_id" = ${generationJobs.projectId} AND "i"."job_id" = ${generationJobs.id} AND (("i"."status" = 'queued' AND "i"."next_attempt_at" <= ${now}) OR ("i"."status" = 'running' AND "i"."lease_until" <= ${now})))`;
+    const base = () =>
+      getDb()
+        .select()
+        .from(generationJobs)
+        .orderBy(sql`${generationJobs.lastClaimedAt} ASC NULLS FIRST`, asc(generationJobs.createdAt), asc(generationJobs.id))
+        .limit(5)
+        .for("update", { skipLocked: true });
+    const withSeam = base().where(and(inArray(generationJobs.status, ["queued", "running"]), dueCondition, jobsExcludingOwners([])));
+    const withoutSeam = base().where(and(inArray(generationJobs.status, ["queued", "running"]), dueCondition));
+    expect(withSeam.toSQL()).toEqual(withoutSeam.toSQL());
   });
 
   it("builds CSV bytes with quoting", () => {
