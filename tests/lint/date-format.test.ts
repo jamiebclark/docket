@@ -27,6 +27,7 @@ const BANNED = [
 const ALLOWED = new Set([
   "src/lib/time/format.ts", // the one formatter
   "src/app/p/new/new-project-form.tsx", // reads the browser's own zone
+  "src/components/email/BrowserTimeZone.tsx", // reads the browser's own zone to pre-fill the picker
   "src/components/ui/TimeZoneField.tsx", // "GMT+1" labels in the zone picker
   "src/lib/compose/first-post.ts", // a yyyy-mm-dd key, never displayed
   "src/lib/validation/timezone.ts", // throws on an unknown zone

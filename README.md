@@ -36,7 +36,7 @@ docker compose ps        # web healthy, worker and db-backup running
 ```
 
 **On Unraid**, use the template in [`unraid/docket.xml`](unraid/docket.xml): one container next to your Postgres. See
-[docs/deployment.md](docs/deployment.md#5-unraid-or-any-home-server). From a source checkout, build the image yourself with
+[docs/deployment.md](docs/deployment.md#6-unraid-or-any-home-server). From a source checkout, build the image yourself with
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 Generate the two secrets with `openssl rand -base64 32`. **Back up `CREDENTIALS_ENCRYPTION_KEY`**: without it, stored
@@ -85,7 +85,7 @@ step. If anything is invalid the process stops and names every offending variabl
 
 Posts only go out while something ticks the scheduler: the `worker` service (recommended), a cron calling
 `POST /api/internal/tick` with `TICK_SECRET`, or `RUN_WORKER_IN_PROCESS=true`. A red banner on every project page means no tick
-has been recorded recently. Details: [docs/deployment.md](docs/deployment.md#9-is-the-scheduler-running).
+has been recorded recently. Details: [docs/deployment.md](docs/deployment.md#10-is-the-scheduler-running).
 
 ## Architecture overview
 

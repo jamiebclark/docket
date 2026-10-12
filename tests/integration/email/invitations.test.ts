@@ -43,10 +43,15 @@ describe("invitations arrive by email, and still work when they cannot", () => {
     setMailerForTests(null);
     const { scope } = await asOwner();
     const email = `fresh-${uniq()}@example.test`;
+    // An invitation for an address with no account has no user id to key an attempt row to, so
+    // `attemptsFor(null)` cannot narrow by user and counts every invitation attempt in the database.
+    // Assert the delta rather than an absolute zero: another test file sharing this database may
+    // legitimately have written one, and this test is about whether *this* send wrote a row.
+    const before = (await attemptsFor(null)).length;
     const result = await invitations.create(scope, { email, role: "editor" });
     expect(result.delivery.kind).toBe("manual_link");
     expect(result.delivery.email).toBe("unavailable");
-    expect(await attemptsFor(null)).toHaveLength(0);
+    expect(await attemptsFor(null)).toHaveLength(before);
   });
 
   it("has account, mailer accepts: in_app, email sent, a sent attempt under the invitee's user id", async () => {
