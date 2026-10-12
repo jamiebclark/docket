@@ -49,4 +49,5 @@ export const notProjectOwned = [
   "verification",
   "install_state",
   "scheduler_heartbeats",
+  "llm_credit_holds",
 ] as const;

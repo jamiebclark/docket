@@ -14,6 +14,10 @@ export interface LlmWire {
   ok(text: string, usage: { input: number; output: number }): FakeLlmResponse;
   refusal(): FakeLlmResponse;
   incomplete(): FakeLlmResponse;
+  /** This provider's billing-refusal response. `keyEcho` is embedded in the body message when given. */
+  creditRefusal(keyEcho?: string): FakeLlmResponse;
+  /** The same HTTP status, a different cause — must keep today's kind. */
+  nonBillingAtSameStatus(): FakeLlmResponse;
   /** Asserts the request body carries system, user, the image before the text and the schema format. */
   expectBody(body: unknown, expected: { system: string; user: string; imageUrl: string; schemaName: string }): void;
 }
@@ -107,6 +111,26 @@ export function runLlmScenarios(wire: LlmWire): void {
       const r = await llm.generate(request());
       expect(r).toMatchObject({ ok: false, kind });
       expect(JSON.stringify(r)).not.toContain("SDK-DETAIL");
+    });
+
+    test("credit refusal → credit_exhausted with the fixed message", async () => {
+      const { llm } = setup([wire.creditRefusal()]);
+      const r = await llm.generate(request());
+      expect(r).toMatchObject({ ok: false, kind: "credit_exhausted" });
+      expect(r).toMatchObject({ message: "The model provider refused: the account has no credit or quota left. Add credit to the provider account." });
+    });
+
+    test("the same HTTP status for a non-billing cause keeps today's kind", async () => {
+      const { llm } = setup([wire.nonBillingAtSameStatus()]);
+      const r = await llm.generate(request());
+      expect(r.ok).toBe(false);
+      expect((r as { kind: string }).kind).not.toBe("credit_exhausted");
+    });
+
+    test("credit refusal: the key does not appear anywhere in the result", async () => {
+      const { llm } = setup([wire.creditRefusal(SCENARIO_KEY)]);
+      const r = await llm.generate(request());
+      expect(JSON.stringify(r)).not.toContain(SCENARIO_KEY);
     });
 
     test("timeout → fixed message", async () => {

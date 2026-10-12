@@ -7,11 +7,12 @@ import { generationJobItems } from "../../../src/server/db/schema";
 import { setLlmForTests } from "../../../src/server/llm";
 import type { LlmProvider } from "../../../src/server/llm/types";
 import { runTick } from "../../../src/server/scheduler";
-import { cancelJob, createJob } from "../../../src/server/services/jobs";
+import { appendItems, cancelJob, createJob, retryFailedItems } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
+import { jobsEnv, modelOk, parkAllJobs, readHold, seedCreditHold } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -171,5 +172,63 @@ describe("cancelling a job (SC-007)", () => {
     expect((await e.scope.jobItems.countByStatus(failJob.jobId)).failed).toBe(1);
     const afterFail = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-fail" }], false));
     expect(afterFail).toMatchObject({ itemCount: 1, skippedAlreadyPosted: 0 });
+  }, 30_000);
+
+  it("FR-038: cancelling a held job leaves the hold untouched and releases reserved images", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    const [asset] = await e.assets(1);
+    const { jobId } = await createJob(e.scope, e.input());
+    expect(await e.scope.media.reservedAmong([asset!.id])).toEqual([asset!.id]);
+
+    await seedCreditHold(INSTALL_CREDENTIAL_OWNER, { heldSince: new Date(), nextProbeAt: new Date(Date.now() + 60_000) });
+
+    const result = await cancelJob(e.scope, jobId);
+    expect(result.changed).toBe(true);
+    expect(await e.scope.media.reservedAmong([asset!.id])).toEqual([]);
+    expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
+  }, 30_000);
+
+  it("FR-038: retryFailedItems resets failed items to queued, and the next tick fails none of them while held", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.assets(2);
+    const { jobId } = await createJob(e.scope, e.input());
+    const [first] = await e.scope.jobItems.listForJob(jobId);
+    await e.scope.jobItems.update(first!.id, {
+      status: "failed",
+      leaseOwner: null,
+      leaseUntil: null,
+      lastErrorKind: "internal",
+      lastError: "Something went wrong while generating this post.",
+      finishedAt: new Date(),
+    });
+    expect((await e.scope.jobItems.countByStatus(jobId)).failed).toBe(1);
+
+    await seedCreditHold(INSTALL_CREDENTIAL_OWNER, { heldSince: new Date(), nextProbeAt: new Date(Date.now() + 60_000) });
+
+    const retry = await retryFailedItems(e.scope, jobId);
+    expect(retry).toMatchObject({ changed: true, count: 1 });
+    expect((await e.scope.jobItems.countByStatus(jobId)).queued).toBe(2);
+    expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
+
+    const tick = await runTick({ config: { jobMaxItems: 5 } });
+    expect(tick.generation.counts.held).toBe(1);
+    expect((await e.scope.jobItems.countByStatus(jobId)).failed).toBe(0);
+    expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
+  }, 30_000);
+
+  it("FR-038: an open job still accepts items while held", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    const apiInput = (items: { fields: Record<string, string>; externalId?: string }[], open = true) =>
+      e.input({ source: { kind: "api", fields: ["product"], items, open }, template: "Announce {{product}}." });
+    const { jobId } = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-held-open" }]));
+
+    await seedCreditHold(INSTALL_CREDENTIAL_OWNER, { heldSince: new Date(), nextProbeAt: new Date(Date.now() + 60_000) });
+
+    const result = await appendItems(e.scope, jobId, { items: [{ fields: { product: "B" }, externalId: "ext-held-open-2" }] });
+    expect(result).toMatchObject({ added: 1, itemCount: 2 });
+    expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
   }, 30_000);
 });

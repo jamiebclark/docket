@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeLlm } from "../tests/helpers/fake-llm";
 import { setLlmForTests } from "../src/server/llm";
 import { main, UNMEASURED_LINE } from "./llm-check";
@@ -26,6 +26,28 @@ describe("llm-check main()", () => {
     const code = await main({ llm: createFakeLlm([{ fail: "auth" }]), log: (l) => void lines.push(l) });
     expect(code).toBe(1);
     expect(lines[0]).toContain("outcome=auth");
+  });
+
+  it("prints outcome=credit_exhausted and exits non-zero when the call is refused on billing", async () => {
+    const lines: string[] = [];
+    const code = await main({ llm: createFakeLlm([{ fail: "credit_exhausted" }]), log: (l) => void lines.push(l) });
+    expect(code).toBe(1);
+    expect(lines[0]).toContain("outcome=credit_exhausted");
+  });
+
+  it("behaves identically for a credit_exhausted call with no DATABASE_URL", async () => {
+    vi.resetModules();
+    const saved = process.env.DATABASE_URL;
+    delete process.env.DATABASE_URL;
+    try {
+      const fresh = await import("./llm-check");
+      const lines: string[] = [];
+      const code = await fresh.main({ llm: createFakeLlm([{ fail: "credit_exhausted" }]), log: (l) => void lines.push(l) });
+      expect(code).toBe(1);
+      expect(lines[0]).toContain("outcome=credit_exhausted");
+    } finally {
+      if (saved !== undefined) process.env.DATABASE_URL = saved;
+    }
   });
 
   it("prints the unmeasured line and exits 0 with no configuration", async () => {

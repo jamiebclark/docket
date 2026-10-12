@@ -36,6 +36,7 @@ vi.mock("next/navigation", async () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import AccountsPage from "../../../src/app/p/[projectSlug]/accounts/page";
 import ApiKeysPage from "../../../src/app/p/[projectSlug]/settings/api-keys/page";
@@ -46,13 +47,21 @@ import { POST as composeCheck } from "../../../src/app/p/[projectSlug]/compose/c
 import { GET as authGet, POST as authPost } from "../../../src/app/api/auth/[...all]/route";
 import { GET as health } from "../../../src/app/api/health/route";
 import { POST as tickPost } from "../../../src/app/api/internal/tick/route";
+import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
+import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
 import { connectAttempts, installState, membershipAuditLog, session as sessionTable, user } from "../../../src/server/db/schema";
 import { publishAttempts } from "../../../src/server/db/schema/attempts";
 import { postTargets } from "../../../src/server/db/schema/posts";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
+import { createAnthropicProvider } from "../../../src/server/llm/anthropic";
+import { createOpenAiProvider } from "../../../src/server/llm/openai";
+import type { LlmConfig } from "../../../src/server/llm/config";
+import { setLlmForTests } from "../../../src/server/llm";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
 import * as connect from "../../../src/server/services/connect";
+import { generateSingle } from "../../../src/server/services/generation/single";
+import { createJob } from "../../../src/server/services/jobs";
 import * as posts from "../../../src/server/services/posts";
 import * as setup from "../../../src/server/services/setup";
 import * as slots from "../../../src/server/services/slots";
@@ -64,7 +73,10 @@ import { api } from "../../helpers/api";
 import { closeDb, testDb } from "../../helpers/db";
 import { addMember } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
+import { createFakeLlm } from "../../helpers/fake-llm";
+import { createFakeLlmFetch } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
+import { clearHolds, jobsEnv } from "../../helpers/jobs-env";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { eventsFor } from "../../helpers/activity";
@@ -383,6 +395,48 @@ describe("secret scan (FR-020, SC-005)", () => {
     for (const [place, render] of pages) {
       pieces.push({ place, text: renderToStaticMarkup((await render()) as never) });
     }
+
+    // Generation: a billing refusal whose provider error body embeds the configured key, through the real
+    // provider layer, plus a held job's two Batch jobs screens (FR-033, H19).
+    const genEnv = await jobsEnv();
+    const anthropicConfig: LlmConfig = { provider: "anthropic", model: "test-model", apiKey: ENV.ANTHROPIC_API_KEY, timeoutMs: 10_000, maxOutputTokens: 1000 };
+    const anthropicFetch = createFakeLlmFetch([
+      { status: 400, json: { type: "error", error: { type: "invalid_request_error", message: `Your credit balance is too low to access the Anthropic API (${ENV.ANTHROPIC_API_KEY}). Please go to Plans & Billing to upgrade or purchase credits.` } } },
+    ]);
+    const anthropicLlm = createAnthropicProvider(anthropicConfig, { fetch: anthropicFetch, maxRetries: 0 });
+    const genSingleInput = (over: Record<string, unknown> = {}) => ({
+      requestId: randomUUID(),
+      voiceProfileId: genEnv.profile.id,
+      brief: "Announce the spring sale",
+      targetAccountIds: [genEnv.account.id],
+      ...over,
+    });
+    pieces.push({
+      place: "service result: generation (anthropic credit refusal)",
+      text: JSON.stringify(await generateSingle(genEnv.scope, genSingleInput(), anthropicLlm)),
+    });
+
+    const openAiConfig: LlmConfig = { provider: "openai", model: "test-model", apiKey: ENV.OPENAI_API_KEY, timeoutMs: 10_000, maxOutputTokens: 1000 };
+    const openAiFetch = createFakeLlmFetch([
+      { status: 429, json: { error: { message: `You exceeded your current quota, please check your plan and billing details. (${ENV.OPENAI_API_KEY})`, type: "insufficient_quota", code: "insufficient_quota", param: null } } },
+    ]);
+    const openAiLlm = createOpenAiProvider(openAiConfig, { fetch: openAiFetch, maxRetries: 0 });
+    pieces.push({
+      place: "service result: generation (openai credit refusal)",
+      text: JSON.stringify(await generateSingle(genEnv.scope, genSingleInput(), openAiLlm)),
+    });
+
+    await genEnv.asset();
+    setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
+    const { jobId: heldJobId } = await createJob(genEnv.scope, genEnv.input());
+    await runTick({ config: { jobMaxItems: 5 } });
+    setLlmForTests(null);
+    const sessionBefore = session.current;
+    session.current = { user: { id: genEnv.owner.id }, session: { id: "scan-jobs-session" } };
+    pieces.push({ place: "page: jobs list (held)", text: renderToStaticMarkup(await JobsPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) })) });
+    pieces.push({ place: "page: job detail (held)", text: renderToStaticMarkup((await JobPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, jobId: heldJobId }), searchParams: Promise.resolve({}) })) as never) });
+    session.current = sessionBefore;
+    await clearHolds();
 
     // Stored rows.
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });

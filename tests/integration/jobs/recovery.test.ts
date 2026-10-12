@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
-import { posts } from "../../../src/server/db/schema";
+import { generationJobItems, posts } from "../../../src/server/db/schema";
 import { claimDueJobItems } from "../../../src/server/dal/job-claims";
 import { setLlmForTests } from "../../../src/server/llm";
 import { JOB_PERSIST_RESERVE_MS } from "../../../src/server/scheduler/config";
@@ -13,7 +13,8 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, seedCreditHold } from "../../helpers/jobs-env";
+import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -34,7 +35,7 @@ describe("recovering an interrupted tick (US2 scenarios 6–7)", () => {
     setLlmForTests(fake);
     await e.asset();
     const { jobId } = await createJob(e.scope, e.input());
-    const [first] = await claim(new Date());
+    const [first] = (await claim(new Date())).items;
     expect(first).toMatchObject({ kind: "run", recovered: false });
 
     const t = later(LEASE_MS + 1_000);
@@ -93,14 +94,14 @@ describe("recovering an interrupted tick (US2 scenarios 6–7)", () => {
     await e.asset();
     const { jobId } = await createJob(e.scope, e.input());
     let t = Date.now();
-    expect(await claim(new Date(t))).toHaveLength(1);
+    expect((await claim(new Date(t))).items).toHaveLength(1);
     for (let i = 0; i < 2; i++) {
       t += LEASE_MS + 1_000;
-      const [again] = await claim(new Date(t));
+      const [again] = (await claim(new Date(t))).items;
       expect(again).toMatchObject({ recovered: true, kind: "run" });
     }
     t += LEASE_MS + 1_000;
-    expect(await claim(new Date(t))).toHaveLength(0);
+    expect((await claim(new Date(t))).items).toHaveLength(0);
     const [item] = await e.scope.jobItems.listForJob(jobId);
     expect(item).toMatchObject({
       status: "failed",
@@ -116,11 +117,43 @@ describe("recovering an interrupted tick (US2 scenarios 6–7)", () => {
     setLlmForTests(fake);
     await e.asset();
     const { jobId } = await createJob(e.scope, e.input());
-    expect(await claim(new Date())).toHaveLength(1);
+    expect((await claim(new Date())).items).toHaveLength(1);
     const tick = await tickAt(later(60_000));
     expect(tick.generation.counts.claimed).toBe(0);
     expect((await e.scope.jobItems.listForJob(jobId))[0]!.status).toBe("running");
     expect(fake.requests).toHaveLength(0);
+  }, 60_000);
+
+  it("AS5: lease recovery never counts an attempt or fails a held item as interrupted", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
+    await e.asset();
+    const { jobId } = await createJob(e.scope, e.input());
+    const t0 = new Date();
+    await tickAt(t0);
+    const [item] = await e.scope.jobItems.listForJob(jobId);
+    expect(item).toMatchObject({ status: "queued", attemptCount: 0, lastErrorKind: "credit_exhausted" });
+
+    // Force the item to `running` with an already-expired lease while held.
+    await runCrossProject("test: force item running with expired lease", async () => {
+      await getDb()
+        .update(generationJobItems)
+        .set({ status: "running", leaseOwner: randomUUID(), leaseUntil: new Date(t0.getTime() - 1_000) })
+        .where(eq(generationJobItems.id, item!.id));
+    });
+    // nextProbeAt stays well past every tick below: this covers the merely-held (non-probing) owner, not the
+    // probe itself — see credit-probe.test.ts "F1" for the lease-expired item as a probe candidate.
+    await seedCreditHold(INSTALL_CREDENTIAL_OWNER, { heldSince: t0, nextProbeAt: new Date(t0.getTime() + 10 * LEASE_MS) });
+
+    for (let i = 1; i <= 3; i++) {
+      const t = new Date(t0.getTime() + i * LEASE_MS);
+      const tick = await tickAt(t);
+      expect(tick.generation.counts.claimed).toBe(0);
+    }
+    const [after] = await e.scope.jobItems.listForJob(jobId);
+    expect(after).toMatchObject({ status: "running", attemptCount: 0 });
+    expect(after!.lastErrorKind).not.toBe("interrupted");
+    expect(after!.lastError).not.toBe("Generation was interrupted too many times.");
   }, 60_000);
 
   it("keeps the smallest lease longer than the largest tick budget plus the persist reserve", () => {

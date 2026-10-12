@@ -37,7 +37,8 @@ export type LlmFailureKind =
   | "rate_limited"
   | "unavailable"
   | "auth"
-  | "bad_request";
+  | "bad_request"
+  | "credit_exhausted";
 
 export const LLM_FAILURE_KINDS: readonly LlmFailureKind[] = [
   "invalid_output",
@@ -48,6 +49,7 @@ export const LLM_FAILURE_KINDS: readonly LlmFailureKind[] = [
   "unavailable",
   "auth",
   "bad_request",
+  "credit_exhausted",
 ];
 
 export type LlmResult<T> =

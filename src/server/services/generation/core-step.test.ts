@@ -8,7 +8,7 @@ import { runGenerationStep, type CoreRequest } from "./core";
 const prepare = vi.hoisted(() => vi.fn());
 vi.mock("../../llm/images", () => ({ imagesForModel: prepare }));
 
-const scope = { media: {} } as unknown as ProjectScope;
+const scope = { media: {}, project: { id: "project-1" } } as unknown as ProjectScope;
 const req: CoreRequest = {
   label: "generate.job_item",
   voice: { content: EMPTY_VOICE_CONTENT },

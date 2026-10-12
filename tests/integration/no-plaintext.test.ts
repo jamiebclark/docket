@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { forProject } from "../../src/server/dal/scope";
 import { bootstrapFirstUser } from "../../src/server/dal/install";
+import { INSTALL_CREDENTIAL_OWNER } from "../../src/server/dal/credential-owners";
+import { clearCreditHold, holdCredit } from "../../src/server/dal/credit-holds";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import * as invitations from "../../src/server/services/invitations";
 import * as members from "../../src/server/services/members";
@@ -24,6 +27,9 @@ const APP_PASSWORD = "bsky-app-password-canary-3";
 
 const PASSWORD = "plaintext-canary-password-1";
 const SETUP_PASSWORD = "setup-canary-password-2";
+const OPENAI_API_KEY_CANARY = "sk-plaintext-canary-openai-0123456789abcdef";
+const ANTHROPIC_API_KEY_CANARY = "sk-ant-plaintext-canary-0123456789abcdef";
+const sha256Hex = (s: string) => createHash("sha256").update(s).digest("hex");
 
 describe("SC-009: no plaintext secrets at rest or in logs", () => {
   it("never stores or logs tokens, passwords or the encryption key", async () => {
@@ -33,7 +39,19 @@ describe("SC-009: no plaintext secrets at rest or in logs", () => {
         logged.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
       }),
     );
-    const secrets: string[] = [PASSWORD, SETUP_PASSWORD, process.env.CREDENTIALS_ENCRYPTION_KEY!, process.env.BETTER_AUTH_SECRET!];
+    const secrets: string[] = [
+      PASSWORD,
+      SETUP_PASSWORD,
+      process.env.CREDENTIALS_ENCRYPTION_KEY!,
+      process.env.BETTER_AUTH_SECRET!,
+      OPENAI_API_KEY_CANARY,
+      ANTHROPIC_API_KEY_CANARY,
+      sha256Hex(OPENAI_API_KEY_CANARY),
+      sha256Hex(ANTHROPIC_API_KEY_CANARY),
+    ];
+    // A credit hold row, so llm_credit_holds is exercised by the all-tables dump below (FR-033): it must
+    // record only the owner and timestamps, never a credential value or a hash of one.
+    await holdCredit(INSTALL_CREDENTIAL_OWNER, new Date());
     const tmp = await createThrowawayDb();
     try {
       // Setup flow (isolated database).
@@ -77,6 +95,7 @@ describe("SC-009: no plaintext secrets at rest or in logs", () => {
     } finally {
       spies.forEach((s) => s.mockRestore());
       await tmp.drop();
+      await clearCreditHold(INSTALL_CREDENTIAL_OWNER);
     }
   });
 });

@@ -14,10 +14,11 @@ import { forProject, NotFoundError } from "@/server/dal";
 import { PREREQUISITES_TITLE } from "@/lib/roles/prerequisites";
 import { mediaStatus } from "@/server/services/media";
 import type { JobCounts } from "@/server/dal/jobs";
-import { JOBS_PAGE_SIZE, listJobs } from "@/server/services/jobs/read";
+import { generationCreditHold, JOBS_PAGE_SIZE, listJobs } from "@/server/services/jobs/read";
 import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../generate/generate-logic";
 import { loadPrerequisites } from "../generate/prerequisites";
 import { UNREVIEWED_QUEUE_LABEL } from "../generate/PolicyPicker";
+import { CreditHoldNotice } from "./CreditHoldNotice";
 
 export const metadata: Metadata = { title: "Batch jobs" };
 export const dynamic = "force-dynamic";
@@ -56,6 +57,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
   const rawPage = Array.isArray(raw.page) ? raw.page[0] : raw.page;
   const page = Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1);
   const { items, total } = await listJobs(scope, { page });
+  const hold = await generationCreditHold(scope);
   const canRun = scope.can({ generation: ["run"] });
   const prerequisites = canRun ? await loadPrerequisites(scope, projectSlug) : null;
   const storageOn = scope.can({ media: ["view"] }) ? (await mediaStatus(scope)).enabled : false;
@@ -78,6 +80,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
     <section className="flex flex-col gap-4">
       <PageHeader title="Batch jobs" description="Generate many posts at once from images or a CSV file." actions={actions} />
       {prerequisites ? <SetupNotice title={PREREQUISITES_TITLE} items={prerequisites} icon="jobs" /> : null}
+      {hold ? <CreditHoldNotice since={hold.since} timeZone={scope.project.timezone} /> : null}
       {items.length === 0 ? (
         prerequisites ? null : (
           <EmptyState

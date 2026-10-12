@@ -2,6 +2,8 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { NotFoundError } from "../../../src/server/dal/errors";
+import { generationRecordSchema } from "../../../src/lib/validation/generation";
+import { llmFailureMessage } from "../../../src/server/llm/messages";
 import type { LlmProvider } from "../../../src/server/llm/types";
 import * as accounts from "../../../src/server/services/accounts";
 import * as members from "../../../src/server/services/members";
@@ -224,6 +226,22 @@ describe("generateSingle", () => {
     await expect(generateSingle(editorScope, t.input({ targetAccountIds: [a.id] }), llm)).rejects.toThrow();
     const rows = await t.env.scope.posts.findByRequestId(randomUUID());
     expect(rows).toBeNull();
+  });
+
+  it("records a credit_exhausted failure with the fixed sentence and no provider text or key", async () => {
+    const t = await setup();
+    const a = await t.account("bluesky");
+    const llm = createFakeLlm([{ fail: "credit_exhausted" }]);
+    const res = await generateSingle(t.env.scope, t.input({ targetAccountIds: [a.id] }), llm);
+    expect(res).toMatchObject({ ok: false, kind: "credit_exhausted", message: llmFailureMessage("credit_exhausted") });
+    expect(llm.requests).toHaveLength(1);
+    if (res.ok) return;
+    const rows = await t.env.scope.generationFailures.listRecent(5);
+    expect(rows.map((r) => r.id)).toEqual([res.failureId]);
+    expect(rows[0]).toMatchObject({ kind: "credit_exhausted", message: llmFailureMessage("credit_exhausted") });
+    expect(() => generationRecordSchema.shape.attempts.parse(rows[0]!.attempts)).not.toThrow();
+    expect(JSON.stringify(rows)).not.toContain(FAKE_KEY);
+    expect(rows[0]!.message).toBe(llmFailureMessage("credit_exhausted"));
   });
 
   it("treats a foreign or archived reference as not found, and refuses oversized text before any call", async () => {

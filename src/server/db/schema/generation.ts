@@ -29,7 +29,28 @@ export const llmFailureKind = pgEnum("llm_failure_kind", [
   "unavailable",
   "auth",
   "bad_request",
+  "credit_exhausted",
 ]);
+
+/**
+ * System-wide (not project-owned): at most one row per credential owner that is currently refusing on
+ * billing. Records that an owner is refusing, never which credential refused — no key, hash or prefix
+ * (FR-020, C8). Read and written only through src/server/dal/credit-holds.ts (FR-030).
+ */
+export const llmCreditHolds = pgTable(
+  "llm_credit_holds",
+  {
+    /** The credential owner (FR-011). Today the single constant "install"; entry 2 adds per-project owners. */
+    owner: text("owner").primaryKey(),
+    /** When this hold began. Not moved by a later refusal: the screens say "paused since" (FR-022). */
+    heldSince: timestamp("held_since", { withTimezone: true }).notNull(),
+    /** The most recent billing refusal seen for this owner. */
+    lastRefusalAt: timestamp("last_refusal_at", { withTimezone: true }).notNull(),
+    /** When one item may go through as a probe. Always now + CREDIT_PROBE_INTERVAL_MS when written (H6). */
+    nextProbeAt: timestamp("next_probe_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [check("llm_credit_holds_owner_nonempty", sql`length(${t.owner}) > 0`)],
+);
 
 export const voiceProfiles = pgTable(
   "voice_profiles",

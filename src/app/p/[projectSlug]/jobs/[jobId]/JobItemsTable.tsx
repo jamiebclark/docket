@@ -7,6 +7,7 @@ import { RetryButton } from "./RetryButtons";
 /** Why an item is not a post yet: the failure message, or the reason it was skipped. */
 function Detail({ slug, item }: { slug: string; item: JobItemView }) {
   if (item.status === "failed" && item.error) return <Sub>{item.error.message}</Sub>;
+  if (item.status === "queued" && item.error?.kind === "credit_exhausted") return <Sub>{item.error.message}</Sub>;
   if (item.status === "skipped" && item.skipped)
     return (
       <Sub>

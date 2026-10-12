@@ -15,6 +15,14 @@ import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
 import { CsvProblemList } from "../../../src/app/p/[projectSlug]/jobs/new/csv/CsvJobForm";
 import MediaPage from "../../../src/app/p/[projectSlug]/media/page";
 import { AutoRefresh } from "../../../src/components/ui/AutoRefresh";
+import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
+import {
+  CREDIT_HOLD_ACTION,
+  CREDIT_HOLD_CAUSE,
+  CREDIT_HOLD_RESUME,
+  CREDIT_HOLD_SINCE_LABEL,
+  CREDIT_HOLD_WAITING,
+} from "../../../src/lib/jobs/credit-hold";
 import { setLlmForTests } from "../../../src/server/llm";
 import { runTick } from "../../../src/server/scheduler";
 import { createJob } from "../../../src/server/services/jobs";
@@ -22,8 +30,10 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold } from "../../helpers/jobs-env";
 import { expectPageHeader } from "../../helpers/page-header";
+
+const HOLD_STRINGS = [CREDIT_HOLD_CAUSE, CREDIT_HOLD_SINCE_LABEL, CREDIT_HOLD_WAITING, CREDIT_HOLD_RESUME, CREDIT_HOLD_ACTION];
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -260,6 +270,84 @@ describe("CSV form", () => {
     expect(html).toContain("Line 4: Row has 3 values; the header has 2");
     expect(html).toContain("The file is larger than 1 MB.");
   });
+});
+
+describe("Credit hold notice (US3)", () => {
+  async function heldJob() {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
+    await e.asset();
+    const { jobId } = await createJob(e.scope, e.input());
+    await runTick({ config: { jobMaxItems: 5 } });
+    return { e, jobId };
+  }
+
+  it("list, held: shows the five fixed strings and the instant, with one role=note", async () => {
+    const { e } = await heldJob();
+    const html = await jobsHtml(e);
+    for (const s of HOLD_STRINGS) expect(html).toContain(s);
+    expect(html.match(/role="note"/g)).toHaveLength(1);
+  }, 60_000);
+
+  it("job page, held and active: shows the notice beside the existing ones; a completed job shows none", async () => {
+    const { e, jobId } = await heldJob();
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    for (const s of HOLD_STRINGS) expect(html).toContain(s);
+
+    await clearHolds();
+    setLlmForTests(createFakeLlm([modelOk("Done", 1)]));
+    await runTick({ config: { jobMaxItems: 5 } });
+    const finishedHtml = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(finishedHtml).not.toContain(CREDIT_HOLD_CAUSE);
+  }, 60_000);
+
+  it("waiting row: reads Queued with the fixed sentence, no retry, and its unchanged attempt count", async () => {
+    const { e, jobId } = await heldJob();
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("0 attempts");
+    expect(html).toContain("Queued");
+    expect(html).not.toContain(">Retry<");
+  }, 60_000);
+
+  it("counts: Failed is 0, Queued includes the waiting item", async () => {
+    const { e, jobId } = await heldJob();
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("0 done, 0 failed, 1 queued");
+  }, 60_000);
+
+  it("not held: the list and job page are unaffected, matching the row with the hold deleted", async () => {
+    const { e, jobId } = await heldJob();
+    await clearHolds();
+    // The waiting item's own row still carries its fixed sentence (unaffected by the hold); only the
+    // notice — unique to CREDIT_HOLD_CAUSE/SINCE_LABEL/WAITING/RESUME — must disappear.
+    const noticeOnly = [CREDIT_HOLD_CAUSE, CREDIT_HOLD_SINCE_LABEL, CREDIT_HOLD_WAITING, CREDIT_HOLD_RESUME];
+    const listHtml = await jobsHtml(e);
+    for (const s of noticeOnly) expect(listHtml).not.toContain(s);
+    const jobHtml = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    for (const s of noticeOnly) expect(jobHtml).not.toContain(s);
+  }, 60_000);
+
+  it("auto-refresh still renders active while held", async () => {
+    const { e, jobId } = await heldJob();
+    expect(find((await jobElement(e, jobId)) as never, AutoRefresh)!.props).toMatchObject({ active: true, intervalMs: 5000 });
+  }, 60_000);
+
+  it("an editor sees the same notice as the owner", async () => {
+    const { e } = await heldJob();
+    const html = await jobsHtml(e, e.editor);
+    for (const s of HOLD_STRINGS) expect(html).toContain(s);
+  }, 60_000);
+
+  it("names no provider and no key-shaped string anywhere in either screen (FR-032)", async () => {
+    const { e, jobId } = await heldJob();
+    const listHtml = await jobsHtml(e);
+    const jobHtml = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    for (const html of [listHtml, jobHtml]) {
+      expect(html).not.toMatch(/openai|anthropic/i);
+      expect(html).not.toMatch(/sk-[a-zA-Z0-9_-]{8,}/);
+    }
+    expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
+  }, 60_000);
 });
 
 describe("Batch job page header", () => {

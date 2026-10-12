@@ -30,6 +30,12 @@ export interface GenerationCounts {
   notConfigured: 0 | 1;
   /** The tick budget is too short for any item. */
   notRunnable: 0 | 1;
+  /** Items a billing refusal sent back to the queue with no attempt counted (FR-009). */
+  requeued: number;
+  /** At least one credential owner was held, so its items were not claimed (FR-021). */
+  held: 0 | 1;
+  /** A held owner was allowed one item through as a probe this tick (FR-021). */
+  probed: 0 | 1;
 }
 
 export const emptyGenerationCounts = (): GenerationCounts => ({
@@ -46,6 +52,9 @@ export const emptyGenerationCounts = (): GenerationCounts => ({
   staleResults: 0,
   notConfigured: 0,
   notRunnable: 0,
+  requeued: 0,
+  held: 0,
+  probed: 0,
 });
 
 /** Claims up to `jobMaxItems` due items and processes them concurrently, each isolated from the others. */
@@ -76,11 +85,13 @@ export async function runGenerationJobs(opts: {
     return counts;
   }
 
-  const claimed = await claimDueJobItems({ now, limit: cfg.maxItems, leaseMs: cfg.leaseMs, maxAttempts: cfg.maxAttempts });
-  counts.claimed = claimed.length;
-  counts.recovered = claimed.filter((c) => c.recovered).length;
+  const claim = await claimDueJobItems({ now, limit: cfg.maxItems, leaseMs: cfg.leaseMs, maxAttempts: cfg.maxAttempts });
+  counts.claimed = claim.items.length;
+  counts.recovered = claim.items.filter((c) => c.recovered).length;
+  counts.held = claim.held.length > 0 ? 1 : 0;
+  counts.probed = claim.probing.length > 0 ? 1 : 0;
   await Promise.all(
-    claimed.map((c) =>
+    claim.items.map((c) =>
       processClaimedItem(c, { config: opts.config, deadline, counts }).catch(() => {
         counts.staleResults++;
       }),

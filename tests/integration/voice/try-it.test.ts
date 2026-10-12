@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ConflictError } from "../../../src/server/dal/errors";
+import { llmFailureMessage } from "../../../src/server/llm/messages";
 import * as accounts from "../../../src/server/services/accounts";
 import * as voice from "../../../src/server/services/voice";
 import { closeDb, testDb } from "../../helpers/db";
@@ -78,5 +79,17 @@ describe("tryVoice", () => {
     );
     expect(llm.requests.length).toBeLessThanOrEqual(2);
     expect(await rowCounts()).toEqual(before);
+  });
+
+  it("surfaces credit_exhausted with the fixed sentence after exactly one call", async () => {
+    const { env, versionId, accountId } = await setup();
+    const before = await rowCounts();
+    const llm = createFakeLlm([{ fail: "credit_exhausted" }]);
+    await expect(voice.tryVoice(env.scope, { brief: "b", accountIds: [accountId], versionId }, llm)).rejects.toThrow(
+      llmFailureMessage("credit_exhausted"),
+    );
+    expect(llm.requests).toHaveLength(1);
+    // The credential-owner hold table is the one exception: a billing refusal writes a hold row (US1/US2).
+    expect(await rowCounts()).toEqual({ ...before, llm_credit_holds: 1 });
   });
 });

@@ -13,10 +13,20 @@ export function openAiImageUrl(image: LlmImage): string {
   return image.url;
 }
 
+/** The verified quota code (research A5). One set, so another observed code is one line. */
+export const OPENAI_CREDIT_CODES: ReadonlySet<string> = new Set(["insufficient_quota"]);
+
+/** The provider refusing to spend, by its own error code (FR-003, C2). */
+export function isCreditRefusal(error: unknown): boolean {
+  if (!(error instanceof OpenAI.APIError)) return false;
+  return typeof error.code === "string" && OPENAI_CREDIT_CODES.has(error.code);
+}
+
 function kindOfError(error: unknown, timedOut: boolean): LlmFailureKind {
   if (timedOut || error instanceof OpenAI.APIConnectionTimeoutError || error instanceof OpenAI.APIUserAbortError) {
     return "timeout";
   }
+  if (isCreditRefusal(error)) return "credit_exhausted";
   if (error instanceof OpenAI.RateLimitError) return "rate_limited";
   if (error instanceof OpenAI.AuthenticationError || error instanceof OpenAI.PermissionDeniedError) return "auth";
   if (
