@@ -1,6 +1,6 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, test } from "vitest";
-import { credentialOwnerFor, INSTALL_CREDENTIAL_OWNER, jobsExcludingOwners } from "./credential-owners";
+import { credentialOwnerFor, INSTALL_CREDENTIAL_OWNER, jobsExcludingProjects } from "./credential-owners";
 
 const dialect = new PgDialect();
 
@@ -10,12 +10,12 @@ describe("credential-owners", () => {
     expect(await credentialOwnerFor("")).toBe(INSTALL_CREDENTIAL_OWNER);
   });
 
-  test("jobsExcludingOwners([]) is undefined", () => {
-    expect(jobsExcludingOwners([])).toBeUndefined();
+  test("jobsExcludingProjects([]) is undefined", () => {
+    expect(jobsExcludingProjects([])).toBeUndefined();
   });
 
-  test("jobsExcludingOwners excludes exactly the given project ids", () => {
-    const predicate = jobsExcludingOwners(["project-a", "project-b"]);
+  test("jobsExcludingProjects excludes exactly the given project ids", () => {
+    const predicate = jobsExcludingProjects(["project-a", "project-b"]);
     expect(predicate).toBeDefined();
     const { sql, params } = dialect.sqlToQuery(predicate!);
     expect(sql).toContain("not in");

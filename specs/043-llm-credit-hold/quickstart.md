@@ -176,7 +176,7 @@ it has lasted.
 | SC-007 | the existing `tests/integration/jobs`, `tests/integration/generation`, `tests/integration/api` and `src/server/llm` suites pass with **no assertion relaxed**, plus an explicit "hold row deleted → markup identical" render check and the claim statement being unchanged with an empty table |
 | SC-008 | the `psql` checks above and `pnpm db:check`, run against a database seeded with jobs, items and failures before the migration |
 | SC-009 | the shared provider scenario table: a non-billing 400 and a non-billing 429 keep today's kind for both providers, and create no hold |
-| SC-010 | the two-owner edge case above, driven through `credentialOwnerFor`/`jobsExcludingOwners` with no change to the hold, the probe, the notices or the claim's shape |
+| SC-010 | the two-owner edge case above, driven through `credentialOwnerFor`/`jobsExcludingProjects` with no change to the hold, the probe, the notices or the claim's shape |
 
 ## Test helpers this needs
 

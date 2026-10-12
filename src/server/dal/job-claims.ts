@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { generationJobItems, generationJobs, posts } from "../db/schema";
-import { credentialOwnerFor, jobsExcludingOwners } from "./credential-owners";
+import { credentialOwnerFor, jobsExcludingProjects } from "./credential-owners";
 import { gateCreditHolds, rewindCreditProbe } from "./credit-holds";
 import { createWebhooksRepo } from "./webhooks";
 import { refreshJobStatus } from "../services/jobs/status";
@@ -88,7 +88,7 @@ export function claimDueJobItems(opts: {
           and(
             inArray(generationJobs.status, ["queued", "running"]),
             sql`EXISTS (SELECT 1 FROM "generation_job_items" "i" WHERE "i"."project_id" = ${generationJobs.projectId} AND "i"."job_id" = ${generationJobs.id} AND (("i"."status" = 'queued' AND "i"."next_attempt_at" <= ${now}) OR ("i"."status" = 'running' AND "i"."lease_until" <= ${now})))`,
-            jobsExcludingOwners(blockedProjects),
+            jobsExcludingProjects(blockedProjects),
           ),
         )
         .orderBy(sql`${generationJobs.lastClaimedAt} ASC NULLS FIRST`, asc(generationJobs.createdAt), asc(generationJobs.id))

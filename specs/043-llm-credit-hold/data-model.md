@@ -103,9 +103,10 @@ probe interval (C8, US2 AS4).
 4. **No row is ever created by a rewind or a clear.** `rewindCreditProbe` and `clearCreditHold` are an
    `UPDATE` and a `DELETE`; only `holdCredit` inserts. A hold cleared by a concurrent success cannot be
    resurrected by a late rewind (H7).
-5. **An empty table is `main`.** The gate returns `{ held: [], probing: [] }`, `jobsExcludingOwners([])`
-   returns `undefined`, so no predicate is added to the job `SELECT` and every owner's budget is the tick's
-   `limit`. The claim statement is byte-identical to today's (FR-031, SC-007).
+5. **An empty table is `main`.** The gate returns `{ held: [], probing: [] }`, `resolveBlockedProjectIds`
+   returns `[]`, and `jobsExcludingProjects([])` returns `undefined`, so no predicate is added to the job
+   `SELECT` and every owner's budget is the tick's `limit`. The claim statement is byte-identical to today's
+   (FR-031, SC-007).
 
 ## 4. The migration
 
@@ -219,34 +220,34 @@ Today:
 ))
 ```
 
-After, with `blocked = held.filter((o) => !probing.includes(o))`:
+After, with `blocked = held.filter((o) => !probing.includes(o))` resolved to project ids via
+`resolveBlockedProjectIds`:
 
 ```ts
 .where(and(
   inArray(generationJobs.status, ["queued", "running"]),
   sql`EXISTS (… due item …)`,
-  jobsExcludingOwners(blocked),   // undefined when blocked is empty → drizzle omits it
+  jobsExcludingProjects(blockedProjects),   // undefined when blockedProjects is empty → drizzle omits it
 ))
 ```
 
-`jobsExcludingOwners` today returns `undefined` for an empty set and `sql\`false\`` otherwise, because every
-job has the one install owner. Entry 2 replaces its body with a condition on the project's credential. With
-no hold, the emitted SQL is unchanged (invariant 5).
+`jobsExcludingProjects` returns `undefined` for an empty set and a `NOT IN` predicate over the resolved
+project ids otherwise. Entry 2 only changes what `credentialOwnerFor` answers; `resolveBlockedProjectIds`
+keeps working against whatever it returns. With no hold, the emitted SQL is unchanged (invariant 5).
 
 ### 6.2 The item `SELECT` in `claimDueJobItems`
 
-The predicate is chosen per job by its owner (H8):
+The predicate is the same `itemDue` for every job, probing or not (H8):
 
 ```ts
 const queuedDue = and(eq(generationJobItems.status, "queued"), lte(generationJobItems.nextAttemptAt, now));
 const itemDue = or(queuedDue, and(eq(generationJobItems.status, "running"), lte(generationJobItems.leaseUntil, now)));
-// per job:
-const due = probing.has(owner) ? queuedDue : itemDue;
+// per job: always itemDue
 ```
 
-So a probing owner can never reach the claim's recovery branch, which is the branch that increments
-`attempt_count` or fails an item as `interrupted` (US1 AS5, FR-019). For every owner that is not probing the
-predicate is `itemDue`, exactly as today.
+So a probing owner's one item may be a lease-expired `running` row. US1 AS5 is protected instead by gating
+the claim's recovery branch — the `attempt_count` increment and the `interrupted` failure at `maxAttempts` —
+on `!probe` (FR-019). For every owner, probing or not, the item predicate is `itemDue`, exactly as today.
 
 ### 6.3 The round-robin keep
 

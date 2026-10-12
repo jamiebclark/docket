@@ -2017,7 +2017,7 @@ call on billing used to permanently fail every item it touched. Full text in
   `scheduler_heartbeats` (overwritten every tick); a JSON blob on a singleton (loses "at most one per
   owner" as a database fact); a project-owned table (a hold belongs to a credential, not a project).
 - **H2 — The credential-owner seam is `src/server/dal/credential-owners.ts`**, async and SQL-aware from day
-  one (`credentialOwnerFor`, `jobsExcludingOwners`) even though today's implementation is a constant — the
+  one (`credentialOwnerFor`, `jobsExcludingProjects`) even though today's implementation is a constant — the
   whole point of C7/SC-010, so entry 2 rewrites one file and nothing else.
 - **H3 — Detection is one named predicate per provider**, reading structured fields (`error.type`,
   `error.code`), because `APIError.error` means a different thing in each SDK (the whole body in Anthropic,
@@ -2034,8 +2034,11 @@ call on billing used to permanently fail every item it touched. Full text in
 - **H7 — A granted probe is rewound unless a model call was actually made** (`rewindCreditProbe`, update
   only, never an insert), so a probe skipped for tick budget, a lost lease or an exception does not consume
   the interval.
-- **H8 — A probing owner's item is chosen from `queued`-and-due rows only**, never the lease-recovery
-  branch, so the one item a hold lets through can never be the one the claim fails.
+- **H8 — `itemDue` (queued-and-due, or `running` with an expired lease) is the item predicate for every
+  owner, probing or not**; US1 AS5 is protected instead by gating the lease-recovery attempt increment and
+  the `interrupted` failure on `!probe` (`job-claims.ts`). A probing owner whose only due work is a
+  lease-expired `running` item can still probe it, without the probe ever counting an attempt or failing
+  that item.
 - **H9 — `claimDueJobItems` returns `{ items, held, probing }`** so the tick summary needs no second, racy
   read after the transaction.
 - **H10 — Blocked owners are excluded in SQL; probing owners are capped in memory at one item**, so an

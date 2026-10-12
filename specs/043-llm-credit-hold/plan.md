@@ -28,8 +28,9 @@ SC-010). Inside the claim transaction a gate reads who is held, then takes `FOR 
 held rows that are due a probe and moves `next_probe_at` forward in the same transaction — exactly one probe per
 five minutes however many workers tick, with no advisory lock and no wait (FR-015, C10). Blocked owners are
 excluded in SQL so they cannot crowd a free owner's jobs out of the tick's `limit`; a probing owner is capped at
-one item, and its item is picked from `queued`-and-due rows only, so lease recovery can never count an attempt
-or fail a held item as `interrupted` (FR-013, US1 AS5).
+one item from the same `itemDue` predicate every owner uses, with the lease-recovery attempt increment and the
+`interrupted` failure gated on `!probe`, so lease recovery can never count an attempt or fail a held item as
+`interrupted` (FR-013, US1 AS5).
 
 **3. Nothing fails, and the screens say why.** A billing refusal in the runner is `release()` plus a recorded
 reason: `queued`, `nextAttemptAt = now`, lease cleared, `pendingRetry` cleared, **attempt count untouched**,
