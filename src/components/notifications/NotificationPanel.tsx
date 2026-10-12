@@ -16,7 +16,13 @@ type Load = { status: "loading" } | { status: "error" } | { status: "ready"; pan
 type MarkResult = ActionResult<{ unread: UnreadSummary; busy: string[]; snoozesCleared: number }> | null;
 
 /** The popover under the bell: the 10 newest problems with "Mark all as read". Opening and closing it marks nothing. */
-export function NotificationPanel({ onSummary }: { onSummary: (summary: UnreadSummary) => void }) {
+export function NotificationPanel({
+  onSummary,
+  refreshKey,
+}: {
+  onSummary: (summary: UnreadSummary) => void;
+  refreshKey: number;
+}) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [now, setNow] = useState(() => new Date());
@@ -58,7 +64,7 @@ export function NotificationPanel({ onSummary }: { onSummary: (summary: UnreadSu
         if ((error as Error).name !== "AbortError") setLoad({ status: "error" });
       });
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, refreshKey]);
 
   const result = marked && marked.ok ? marked.data : null;
   useEffect(() => {
