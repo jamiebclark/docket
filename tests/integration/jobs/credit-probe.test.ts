@@ -138,6 +138,14 @@ describe("credit probe (US2)", () => {
     const before = await readHold(INSTALL_CREDENTIAL_OWNER);
     expect(before).not.toBeNull();
 
+    // Two more due jobs, each with its own item, so each concurrent tick can lock a *different* job row
+    // via its own `FOR UPDATE SKIP LOCKED` — that lock alone cannot be what limits this to one probe.
+    // Only `gateCreditHolds`' single-flight lock on the hold row can.
+    await e.asset();
+    await createJob(e.scope, e.input());
+    await e.asset();
+    await createJob(e.scope, e.input());
+
     const t1 = new Date(t0.getTime() + CREDIT_PROBE_INTERVAL_MS);
     const probing = createFakeLlm([modelOk("One probe only.", 1)]);
     setLlmForTests(probing);
@@ -145,6 +153,31 @@ describe("credit probe (US2)", () => {
     expect(probing.requests).toHaveLength(1);
     const after = await readHold(INSTALL_CREDENTIAL_OWNER);
     expect(after).toBeNull();
+  }, 60_000);
+
+  it("AS5: two concurrent ticks still make exactly one probe call when it is refused again, and nextProbeAt advances by exactly one interval", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
+    await e.asset();
+    await createJob(e.scope, e.input());
+    const t0 = new Date();
+    await tickAt(t0, { jobMaxItems: 1 });
+    expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
+
+    // Two more due jobs, each with its own item, for the same reason as the sibling test above.
+    await e.asset();
+    await createJob(e.scope, e.input());
+    await e.asset();
+    await createJob(e.scope, e.input());
+
+    const t1 = new Date(t0.getTime() + CREDIT_PROBE_INTERVAL_MS);
+    const refusingAgain = createFakeLlm([{ fail: "credit_exhausted" }]);
+    setLlmForTests(refusingAgain);
+    await Promise.all([tickAt(t1, { jobMaxItems: 1 }), tickAt(t1, { jobMaxItems: 1 })]);
+    expect(refusingAgain.requests).toHaveLength(1);
+    const after = await readHold(INSTALL_CREDENTIAL_OWNER);
+    expect(after).not.toBeNull();
+    expect(after!.nextProbeAt.getTime()).toBe(t1.getTime() + CREDIT_PROBE_INTERVAL_MS);
   }, 60_000);
 
   it("AS6: refuse, clear, refuse again yields a fresh heldSince and still one row", async () => {

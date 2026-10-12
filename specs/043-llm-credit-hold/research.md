@@ -141,8 +141,9 @@ entry 2 will still key it by owner, not by project row ownership).
 
 **H2 — The credential-owner seam is `src/server/dal/credential-owners.ts`, and it is async and SQL-aware from
 day one.** It exports `INSTALL_CREDENTIAL_OWNER = "install"`, `credentialOwnerFor(projectId): Promise<string>`
-(today: the constant, ignoring its argument) and `jobsExcludingOwners(owners): SQL | undefined` (today:
-`undefined` when `owners` is empty, otherwise a predicate that keeps no job). It sits in the DAL because
+(today: the constant, ignoring its argument) and `jobsExcludingProjects(projectIds): SQL | undefined`
+(`undefined` when `projectIds` is empty, otherwise a `NOT IN` predicate over those ids — resolved from the
+blocked owners by `job-claims.ts`'s `resolveBlockedProjectIds`, SC-010). It sits in the DAL because
 entry 2 will have to read the project's stored credential to answer, and because `job-claims.ts` needs it
 inside the claim transaction — a service module there would invert the layering.
 Async and SQL-aware **now**, even though a constant needs neither, is the whole point of C7/SC-010: entry 2
@@ -236,16 +237,17 @@ must be in the gate's transaction to be single-flight, H5); accepting the lost i
 every few minutes under a short tick budget would never probe).
 *Reverse:* delete both rewind calls; a skipped probe then costs one interval.
 
-**H8 — A probing owner's item is chosen from `queued`-and-due rows only.**
-The per-job item predicate becomes `status = 'queued' AND next_attempt_at <= now` for a probing owner,
-instead of that `OR (status = 'running' AND lease_until <= now)`. So the claim's recovery branch — which
-increments `attempt_count`, or fails an item as `interrupted` at `maxAttempts` — is unreachable while held.
-Without this, the single item a hold lets through could be the one item the claim *fails*, contradicting
-US1 AS5 and FR-019.
-*Rejected:* letting the probe claim anything and special-casing the recovery branch (two rules to keep in
-step instead of one narrower predicate); skipping recovery globally while any hold exists (it would strand
-other owners' items).
-*Reverse:* use `itemDue` for every owner.
+**H8 — `itemDue` (queued-and-due, or `running` with an expired lease) is the item predicate for every owner,
+probing or not.** US1 AS5 is protected instead by gating the recovery branch — the `attempt_count` increment
+and the `interrupted` failure at `maxAttempts` — on `!probe`. So a probing owner whose only due work is a
+lease-expired `running` item can still claim and probe it, with no attempt counted and no failure possible.
+Without this gate, a hold whose only owner has nothing `queued`-and-due could never probe at all, starving
+the hold forever (the shipped fix for the first review's F1).
+*Rejected:* a narrower `queuedDue`-only predicate for probing owners (the original design): it fixes US1 AS5
+but starves the probe whenever the owner's sole due item is lease-expired `running`, which is common after
+any outage long enough to expire a lease.
+*Reverse:* narrow the per-job item predicate back to `queuedDue` for a probing owner, and drop the `!probe`
+gates on the recovery branch.
 
 **H9 — `claimDueJobItems` returns `{ items, held, probing }`.**
 The gate must run inside the claim's transaction (FR-015), so its result has to come back with the items;
@@ -257,7 +259,8 @@ transaction (racy, and would double-count a probe).
 *Reverse:* return the array and drop the two flags from the summary.
 
 **H10 — Blocked owners are excluded in SQL; probing owners are capped in memory at one item.**
-`jobsExcludingOwners(blocked)` is added to the job `SELECT`'s `WHERE` **only when `blocked` is non-empty**,
+`jobsExcludingProjects(blockedProjects)` is added to the job `SELECT`'s `WHERE` **only when
+`blockedProjects` is non-empty**,
 so with an empty hold table the statement is byte-identical to `main`'s (SC-007). Excluding in SQL is what
 keeps FR-013's "a held owner MUST NOT consume the tick's item budget" true: the `SELECT` has `LIMIT $limit`,
 so a held owner's jobs filtered only after the fact would eat slots a free owner could have used. A probing

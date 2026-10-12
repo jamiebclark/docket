@@ -18,21 +18,20 @@ export const INSTALL_CREDENTIAL_OWNER = "install";
 export function credentialOwnerFor(projectId: string): Promise<string>;
 
 /**
- * A predicate over `generation_jobs` keeping only jobs whose credential owner is NOT in `owners`.
- * `undefined` when `owners` is empty, so the claim's statement is unchanged with no hold in place.
- * Today every job has the one install owner, so a non-empty set keeps nothing.
- * Entry 2 replaces the body with a condition on the project's credential.
+ * A predicate over `generation_jobs` keeping only jobs whose project id is NOT in `projectIds` — already
+ * resolved from the blocked owners by `job-claims.ts`'s `resolveBlockedProjectIds`, a genuine per-owner
+ * lookup (SC-010). `undefined` when `projectIds` is empty, so the claim's statement is unchanged with no
+ * hold in place.
  */
-export function jobsExcludingOwners(owners: readonly string[]): SQL | undefined;
+export function jobsExcludingProjects(projectIds: readonly string[]): SQL | undefined;
 ```
 
 Invariants the unit test pins (`src/server/dal/credential-owners.test.ts`):
 
 - `credentialOwnerFor(anyProjectId)` resolves to `INSTALL_CREDENTIAL_OWNER` for any input, including an
   empty string.
-- `jobsExcludingOwners([])` is `undefined`.
-- `jobsExcludingOwners([INSTALL_CREDENTIAL_OWNER])` is a predicate that matches nothing.
-- `jobsExcludingOwners(["someone-else"])` is `undefined` — an owner that does not exist today blocks nothing.
+- `jobsExcludingProjects([])` is `undefined`.
+- `jobsExcludingProjects([projectId])` excludes exactly that project id (`NOT IN`).
 - The owner value is never derived from, and never contains, an API key or any part of one (FR-020).
 
 ## 2. `src/server/dal/credit-holds.ts` — the one hold module (NEW)
@@ -151,12 +150,13 @@ export function claimDueJobItems(opts: {
 
 Order of work inside the one existing transaction:
 
-1. `gateCreditHolds(exec, now)` → `{ held, probing }`; `blocked = held \ probing`.
-2. The job `SELECT` gains `jobsExcludingOwners(blocked)` — omitted entirely when `blocked` is empty, so with
-   no hold the statement is unchanged (FR-031, SC-007).
-3. Per job, the due-item predicate is `queuedDue` for a probing owner and today's `itemDue` for everyone
-   else, so a probe can never reach the recovery branch that counts an attempt or fails an item as
-   `interrupted` (US1 AS5, FR-019).
+1. `gateCreditHolds(exec, now)` → `{ held, probing }`; `blocked = held \ probing`, resolved to project ids
+   via `resolveBlockedProjectIds`.
+2. The job `SELECT` gains `jobsExcludingProjects(blockedProjects)` — omitted entirely when `blockedProjects`
+   is empty, so with no hold the statement is unchanged (FR-031, SC-007).
+3. Per job, the due-item predicate is `itemDue` for every owner, probing or not; the recovery branch that
+   counts an attempt or fails an item as `interrupted` is gated on `!probe`, so a probe can claim a
+   lease-expired `running` item without ever counting an attempt or failing it (US1 AS5, FR-019).
 4. Round-robin and keep, respecting `budgetFor(owner) = probing.has(owner) ? 1 : opts.limit` as well as the
    global `limit`.
 5. Each kept item is stamped with its `owner` and `probe = probing.has(owner)`.

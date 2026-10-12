@@ -22,7 +22,7 @@ export async function credentialOwnerFor(_projectId: string): Promise<string> {
  * all-or-nothing guess, SC-010). `undefined` when `projectIds` is empty, so the claim's statement is
  * unchanged with no hold in place.
  */
-export function jobsExcludingOwners(projectIds: readonly string[]): SQL | undefined {
+export function jobsExcludingProjects(projectIds: readonly string[]): SQL | undefined {
   if (projectIds.length === 0) return undefined;
   return notInArray(generationJobs.projectId, [...projectIds]);
 }
