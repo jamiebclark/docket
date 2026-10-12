@@ -3,6 +3,7 @@ import { getDb, type Database } from "../db/client";
 import { projectLlmSettings } from "../db/schema";
 import type { LlmProviderName } from "../llm/types";
 import { now } from "./clock";
+import { crossProject } from "./scope";
 
 export interface ProjectLlmRow {
   projectId: string;
@@ -51,6 +52,11 @@ const statusColumns = {
   updatedAt: projectLlmSettings.updatedAt,
   updatedByUserId: projectLlmSettings.updatedByUserId,
 };
+
+/** Resolution's own repo: `src/server/llm/resolve.ts` is outside the DAL, so it reaches the default database here. */
+export function projectLlmRepoFor(projectId: string): ProjectLlmRepo {
+  return createProjectLlmRepo(getDb(), projectId);
+}
 
 export function createProjectLlmRepo(exec: Database, projectId: string): ProjectLlmRepo {
   const mine = eq(projectLlmSettings.projectId, projectId);
@@ -154,11 +160,13 @@ export function createProjectLlmRepo(exec: Database, projectId: string): Project
 }
 
 /** Once per tick, for the runner's gate (L27). Cross-project by design. */
-export async function anyProjectHasCredential(exec: Database = getDb()): Promise<boolean> {
-  const rows = await exec
-    .select({ projectId: projectLlmSettings.projectId })
-    .from(projectLlmSettings)
-    .where(isNotNull(projectLlmSettings.provider))
-    .limit(1);
-  return rows.length > 0;
+export async function anyProjectHasCredential(exec?: Database): Promise<boolean> {
+  return crossProject("llm: any project has credential", async () => {
+    const rows = await (exec ?? getDb())
+      .select({ projectId: projectLlmSettings.projectId })
+      .from(projectLlmSettings)
+      .where(isNotNull(projectLlmSettings.provider))
+      .limit(1);
+    return rows.length > 0;
+  });
 }

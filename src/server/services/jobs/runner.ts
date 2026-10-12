@@ -11,9 +11,9 @@ import { rewindCreditProbe } from "../../dal/credit-holds";
 import type { ClaimedJobItem } from "../../dal/job-claims";
 import { forJobRunner, type ProjectScope } from "../../dal/scope";
 import type { JobItemPatch } from "../../dal/jobs";
-import { getLlm } from "../../llm";
+import { resolveLlmForProject } from "../../llm/resolve";
 import { imagesForModel } from "../../llm/images";
-import { parseLlmConfig } from "../../llm/config";
+import { parseLlmLimits } from "../../llm/config";
 import { llmFailureMessage } from "../../llm/messages";
 import type { LlmFailureKind, LlmProvider } from "../../llm/types";
 import { jobConfig, type SchedulerConfig } from "../../scheduler/config";
@@ -66,14 +66,11 @@ function withinBudget<T>(work: Promise<T>, ms: number): Promise<T> {
 }
 
 function llmTimeoutMs(): number {
-  const parsed = parseLlmConfig(process.env);
-  return parsed.ok ? parsed.config.timeoutMs : 90_000;
+  return parseLlmLimits(process.env).timeoutMs;
 }
 
-function logLine(parts: string): void {
-  const parsed = parseLlmConfig(process.env);
-  const keys = parsed.ok ? [parsed.config.apiKey] : [];
-  console.log(redact(parts, keys));
+function logLine(parts: string, resolvedKey: string | null): void {
+  console.log(redact(parts, resolvedKey ? [resolvedKey] : []));
 }
 
 export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerContext): Promise<void> {
@@ -84,6 +81,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
   let outcome = "stale";
   let scope: ProjectScope | null = null;
   let calledModel = false;
+  let resolvedKey: string | null = null;
   const sourceKey = item.externalId ? apiSourceMetaSchema.parse(job.sourceMeta).sourceKey : null;
   const external = item.externalId && sourceKey ? { sourceKey, externalId: item.externalId } : undefined;
 
@@ -287,11 +285,25 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     const window = Math.min(llmTimeoutMs(), (await remaining()) - cfg.persistReserveMs);
     if (window < cfg.minCallMs) return await release();
 
+    let llm: LlmProvider;
+    let owner: string | undefined;
+    if (ctx.llm) {
+      llm = ctx.llm;
+    } else {
+      const resolved = await resolveLlmForProject(job.projectId);
+      if (!resolved.ok) {
+        counts.notConfigured++;
+        return await release();
+      }
+      llm = resolved.llm;
+      owner = resolved.owner;
+      resolvedKey = resolved.apiKey;
+    }
+
     const payload = itemPayloadSchema.safeParse(item.payload);
     const fields = payload.success ? payload.data.fields : {};
     const instructions = renderTemplate(job.template, fields, { mark: true });
     const brief = sourceFor(job.sourceKind).brief;
-    const llm = ctx.llm ?? getLlm();
     const pending = (item.pendingRetry as PendingRetry | null) ?? null;
 
     const parsedSnapshot = jobInstructionsSnapshotSchema.nullable().safeParse(job.postingInstructionsSnapshot ?? null);
@@ -315,6 +327,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       llm,
       {
         pending,
+        owner,
         retryWindowMs: async () => {
           const w = Math.min(llmTimeoutMs(), (await remaining()) - cfg.persistReserveMs);
           return w >= cfg.minCallMs ? w : null;
@@ -414,6 +427,6 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     }
   } finally {
     if (claimed.probe && !calledModel) await rewindCreditProbe(claimed.owner, await clock.now());
-    logLine(`generation_job_item job=${job.id} item=${item.id} outcome=${outcome} latency_ms=${Date.now() - t0}`);
+    logLine(`generation_job_item job=${job.id} item=${item.id} outcome=${outcome} latency_ms=${Date.now() - t0}`, resolvedKey);
   }
 }

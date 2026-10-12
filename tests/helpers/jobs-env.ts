@@ -56,13 +56,16 @@ export async function clearHolds(): Promise<void> {
 }
 
 /**
- * Makes `credentialOwnerFor` answer two owners for the SC-010 two-owner edge case: projects whose id is in
- * `heldProjectIds` resolve to `heldOwner`; every other project resolves to the default install owner.
- * Restored with `vi.restoreAllMocks()` in the usual `afterEach`.
+ * Makes `credentialOwnerFor`/`credentialOwnersFor` answer two owners for the SC-010 two-owner edge case:
+ * projects whose id is in `heldProjectIds` resolve to `heldOwner`; every other project resolves to the
+ * default install owner. Restored with `vi.restoreAllMocks()` in the usual `afterEach`.
  */
 export function routeCredentialOwners(heldOwner: string, heldProjectIds: readonly string[]): void {
-  vi.spyOn(credentialOwners, "credentialOwnerFor").mockImplementation(async (projectId: string) =>
-    heldProjectIds.includes(projectId) ? heldOwner : credentialOwners.INSTALL_CREDENTIAL_OWNER,
+  const ownerFor = (projectId: string) =>
+    heldProjectIds.includes(projectId) ? heldOwner : credentialOwners.INSTALL_CREDENTIAL_OWNER;
+  vi.spyOn(credentialOwners, "credentialOwnerFor").mockImplementation(async (projectId: string) => ownerFor(projectId));
+  vi.spyOn(credentialOwners, "credentialOwnersFor").mockImplementation(async (projectIds: readonly string[]) =>
+    new Map(projectIds.map((id) => [id, ownerFor(id)])),
   );
 }
 

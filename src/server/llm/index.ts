@@ -8,8 +8,12 @@ export { createAnthropicProvider, createOpenAiProvider };
 export type { LlmConfig };
 
 export class LlmNotConfiguredError extends Error {
-  constructor(missing: readonly string[]) {
-    super(`Generation is not configured. Set: ${missing.join(", ")}.`);
+  constructor(missingOrMessage: readonly string[] | string) {
+    super(
+      typeof missingOrMessage === "string"
+        ? missingOrMessage
+        : `Generation is not configured. Set: ${missingOrMessage.join(", ")}.`,
+    );
     this.name = "LlmNotConfiguredError";
   }
 }

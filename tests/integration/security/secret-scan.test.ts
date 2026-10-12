@@ -53,14 +53,17 @@ import { GET as health } from "../../../src/app/api/health/route";
 import { POST as tickPost } from "../../../src/app/api/internal/tick/route";
 import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
 import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
-import { connectAttempts, installState, membershipAuditLog, session as sessionTable, user } from "../../../src/server/db/schema";
+import { connectAttempts, installState, membershipAuditLog, projectLlmSettings, session as sessionTable, user } from "../../../src/server/db/schema";
 import { publishAttempts } from "../../../src/server/db/schema/attempts";
 import { postTargets } from "../../../src/server/db/schema/posts";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
 import { createAnthropicProvider } from "../../../src/server/llm/anthropic";
 import { createOpenAiProvider } from "../../../src/server/llm/openai";
 import type { LlmConfig } from "../../../src/server/llm/config";
-import { setLlmForTests } from "../../../src/server/llm";
+import { setLlmForTests, setLlmFactoryForTests } from "../../../src/server/llm";
+import ModelPage from "../../../src/app/p/[projectSlug]/settings/model/page";
+import { saveProjectModel, removeProjectModel, checkProjectModel } from "../../../src/app/p/[projectSlug]/settings/model/actions";
+import { NotFoundSignal } from "../../helpers/actions";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
 import * as connect from "../../../src/server/services/connect";
@@ -78,7 +81,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { addMember } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { createFakeLlmFetch } from "../../helpers/fake-llm-http";
+import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
 import { clearHolds, jobsEnv } from "../../helpers/jobs-env";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
@@ -434,6 +437,81 @@ describe("secret scan (FR-020, SC-005)", () => {
       text: JSON.stringify(await generateSingle(genEnv.scope, genSingleInput(), openAiLlm)),
     });
 
+    // Per-project LLM credential (L32): set, changed and removed through the real server actions; the
+    // settings page rendered for owner, admin and editor; a check; and a tick that generates on it, with
+    // the provider's billing refusal embedding the then-current key.
+    const PROJECT_LLM_KEY = "sk-scan-project-llm-initial-7c9e2b4d6f810395a7c1";
+    const PROJECT_LLM_KEY_2 = "sk-scan-project-llm-changed-3b5d7f901a2c4e6809d3";
+    const sessionBeforeLlm = session.current;
+    const asUser = (u: { id: string }) => {
+      session.current = { user: { id: u.id }, session: { id: `scan-llm-session-${u.id}` } };
+    };
+    const modelForm = (fields: Record<string, string> = {}) => {
+      const fd = new FormData();
+      fd.set("slug", genEnv.project.slug);
+      for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+      return fd;
+    };
+
+    asUser(genEnv.owner);
+    pieces.push({ place: "action result: save project llm", text: JSON.stringify(await saveProjectModel(null, modelForm({ provider: "openai", model: "scan-model", apiKey: PROJECT_LLM_KEY }))) });
+    pieces.push({ place: "action result: change project llm", text: JSON.stringify(await saveProjectModel(null, modelForm({ provider: "openai", model: "scan-model-2", apiKey: PROJECT_LLM_KEY_2 }))) });
+
+    const openAiCheckOk: FakeLlmResponse = {
+      status: 200,
+      json: {
+        id: "r",
+        object: "response",
+        created_at: 1,
+        model: "m",
+        status: "completed",
+        error: null,
+        incomplete_details: null,
+        output: [{ type: "message", id: "m", role: "assistant", status: "completed", content: [{ type: "output_text", text: JSON.stringify({ text: "Welcome to the bakery's spring opening!" }), annotations: [] }] }],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      },
+    };
+    const projectLlmFetch = createFakeLlmFetch([
+      openAiCheckOk,
+      { status: 429, json: { error: { message: `You exceeded your current quota, please check your plan and billing details. (${PROJECT_LLM_KEY_2})`, type: "insufficient_quota", code: "insufficient_quota", param: null } } },
+    ]);
+    setLlmFactoryForTests((config) => createOpenAiProvider(config, { fetch: projectLlmFetch, maxRetries: 0 }));
+
+    const renderModelPage = async (u: { id: string }) => {
+      asUser(u);
+      return renderToStaticMarkup((await ModelPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }) })) as never);
+    };
+    pieces.push({ place: "page: model (owner)", text: await renderModelPage(genEnv.owner) });
+    pieces.push({ place: "page: model (admin)", text: await renderModelPage(genEnv.admin) });
+    try {
+      await renderModelPage(genEnv.editor);
+      throw new Error("expected the editor's model page to 404");
+    } catch (error) {
+      if (!(error instanceof NotFoundSignal)) throw error;
+    }
+
+    asUser(genEnv.owner);
+    pieces.push({ place: "action result: check project llm", text: JSON.stringify(await checkProjectModel(null, modelForm())) });
+
+    await genEnv.asset();
+    const { jobId: projectLlmJobId } = await createJob(genEnv.scope, genEnv.input());
+    await runTick({ config: { jobMaxItems: 5 } });
+    pieces.push({
+      place: "page: job detail (project llm refusal)",
+      text: renderToStaticMarkup((await JobPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, jobId: projectLlmJobId }), searchParams: Promise.resolve({}) })) as never),
+    });
+
+    setLlmFactoryForTests(null);
+    await clearHolds();
+    asUser(genEnv.owner);
+    pieces.push({ place: "action result: remove project llm", text: JSON.stringify(await removeProjectModel(null, modelForm())) });
+    session.current = sessionBeforeLlm;
+
+    const projectLlmSecrets: Secret[] = [
+      { name: "project llm key (initial)", value: PROJECT_LLM_KEY },
+      { name: "project llm key (changed)", value: PROJECT_LLM_KEY_2 },
+    ];
+
     await genEnv.asset();
     setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
     const { jobId: heldJobId } = await createJob(genEnv.scope, genEnv.input());
@@ -450,6 +528,8 @@ describe("secret scan (FR-020, SC-005)", () => {
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });
     pieces.push({ place: "post_targets", text: JSON.stringify(await db.select().from(postTargets).where(eq(postTargets.projectId, env.project.id))) });
     pieces.push({ place: "membership_audit_log", text: JSON.stringify(await db.select().from(membershipAuditLog).where(eq(membershipAuditLog.projectId, env.project.id))) });
+    pieces.push({ place: "membership_audit_log (project llm)", text: JSON.stringify(await db.select().from(membershipAuditLog).where(eq(membershipAuditLog.projectId, genEnv.project.id))) });
+    pieces.push({ place: "project_llm_settings", text: JSON.stringify(await db.select().from(projectLlmSettings).where(eq(projectLlmSettings.projectId, genEnv.project.id))) });
     pieces.push({ place: "connect_attempts", text: JSON.stringify(await db.select().from(connectAttempts).where(eq(connectAttempts.projectId, env.project.id))) });
     const accountRows = await db.select().from(socialAccounts).where(eq(socialAccounts.projectId, env.project.id));
     pieces.push({ place: "social_accounts", text: JSON.stringify(accountRows.map((r) => ({ ...r, credentialsEncrypted: undefined }))) });
@@ -463,6 +543,7 @@ describe("secret scan (FR-020, SC-005)", () => {
       ...[ACCESS, REFRESH, NEW_ACCESS, NEW_REFRESH].map((value, i) => ({ name: `bluesky token ${i + 1}`, value })),
       { name: "setup password", value: SETUP_PASSWORD },
       { name: "session token", value: sessionToken },
+      ...projectLlmSecrets,
     ];
     // Something was captured from every kind of place, so an empty corpus cannot pass.
     expect(new Set(pieces.map((p) => p.place.split(":")[0])).size).toBeGreaterThan(6);

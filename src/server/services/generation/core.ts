@@ -1,12 +1,14 @@
 import type { GenerationRecord } from "../../../lib/validation/generation";
 import type { VoiceContent } from "../../../lib/validation/voice";
 import type { GenerationInputs } from "../../../lib/validation/generation";
+import { LLM_KEY_UNREADABLE } from "../../../lib/generation/llm-source";
 import { credentialOwnerFor } from "../../dal/credential-owners";
 import { ConflictError } from "../../dal/errors";
 import type { MediaRow } from "../../dal/media";
 import type { ProjectScope } from "../../dal/scope";
-import { getLlm } from "../../llm";
+import { LlmNotConfiguredError, missingLlmSettings } from "../../llm";
 import { imagesForModel } from "../../llm/images";
+import { resolveLlmForProject } from "../../llm/resolve";
 import type { LlmFailureKind, LlmProvider, LlmProviderName, LlmResult } from "../../llm/types";
 import { withCreditHold } from "./credit";
 import type { VariantGroup } from "../../../lib/generation/groups";
@@ -99,6 +101,8 @@ export interface StepOptions {
    * or null to defer it. Absent: the step never makes a second call and returns `retry`.
    */
   retryWindowMs?: () => Promise<number | null>;
+  /** The resolved credential's owner, so the step does not have to ask a second time (L11). */
+  owner?: string;
 }
 
 /** Runs one model call (the first, or the retry when `opts.pending` is given), plus the retry when `retryWindowMs` allows it. */
@@ -108,7 +112,7 @@ export async function runGenerationStep(
   llm: LlmProvider,
   opts: StepOptions = {},
 ): Promise<CoreStep> {
-  llm = withCreditHold(llm, await credentialOwnerFor(scope.project.id));
+  llm = withCreditHold(llm, opts.owner ?? (await credentialOwnerFor(scope.project.id)));
   const prepared = await imagesForModel(scope, req.assets);
   if (!prepared.ok) throw new ConflictError(prepared.message);
 
@@ -232,11 +236,22 @@ export async function runGenerationStep(
 export async function runGeneration(
   scope: ProjectScope,
   req: CoreRequest,
-  llm: LlmProvider = getLlm(),
+  llm?: LlmProvider,
 ): Promise<CoreOutcome> {
-  const step = await runGenerationStep(scope, req, llm);
+  let owner: string | undefined;
+  if (!llm) {
+    const resolved = await resolveLlmForProject(scope.project.id);
+    if (!resolved.ok) {
+      throw new LlmNotConfiguredError(
+        resolved.reason === "key_unreadable" ? LLM_KEY_UNREADABLE : missingLlmSettings(resolved.problems),
+      );
+    }
+    llm = resolved.llm;
+    owner = resolved.owner;
+  }
+  const step = await runGenerationStep(scope, req, llm, { owner });
   if (step.ok !== "retry") return step;
-  const second = await runGenerationStep(scope, req, llm, { pending: step.pending });
+  const second = await runGenerationStep(scope, req, llm, { pending: step.pending, owner });
   if (second.ok === "retry") throw new Error("A resumed generation step never defers.");
   return second;
 }

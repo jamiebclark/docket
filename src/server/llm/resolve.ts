@@ -1,7 +1,6 @@
 import { decryptSecret, SecretDecryptionError } from "../crypto/secrets";
-import { getDb } from "../db/client";
 import { INSTALL_CREDENTIAL_OWNER } from "../dal/credential-owners";
-import { createProjectLlmRepo } from "../dal/project-llm";
+import { projectLlmRepoFor } from "../dal/project-llm";
 import type { EnvIssue } from "../env";
 import { parseLlmConfig, parseLlmLimits, type LlmConfig } from "./config";
 import { createLlmProviderForConfig, currentLlmTestOverride, getLlm } from "./index";
@@ -20,6 +19,8 @@ export type ResolvedLlm =
       limits: { timeoutMs: number; maxOutputTokens: number };
       /** Holds the key. Never serialised, logged, returned to a caller outside the server, or cached. */
       llm: LlmProvider;
+      /** For `redact()` only (L30, FR-010). Never logged, serialised, or returned outside the server. */
+      apiKey: string;
     }
   | { ok: false; reason: "not_configured"; problems: EnvIssue[] }
   | { ok: false; reason: "key_unreadable" };
@@ -41,10 +42,11 @@ export async function resolveLlmForProject(projectId: string): Promise<ResolvedL
       owner: INSTALL_CREDENTIAL_OWNER,
       limits,
       llm: testOverride,
+      apiKey: "",
     };
   }
 
-  const row = await createProjectLlmRepo(getDb(), projectId).read();
+  const row = await projectLlmRepoFor(projectId).read();
   if (row?.provider) {
     try {
       const apiKey = decryptSecret(row.apiKeyEncrypted!, { aad: `project_llm_credential:${projectId}` });
@@ -57,6 +59,7 @@ export async function resolveLlmForProject(projectId: string): Promise<ResolvedL
         owner: `project:${projectId}`,
         limits,
         llm: createLlmProviderForConfig(config),
+        apiKey,
       };
     } catch (err) {
       if (err instanceof SecretDecryptionError) return { ok: false, reason: "key_unreadable" };
@@ -74,5 +77,6 @@ export async function resolveLlmForProject(projectId: string): Promise<ResolvedL
     owner: INSTALL_CREDENTIAL_OWNER,
     limits,
     llm: getLlm(),
+    apiKey: r.config.apiKey,
   };
 }

@@ -4,7 +4,7 @@ import { apiSourceMetaSchema } from "@/lib/validation/api";
 import { jobInstructionsSnapshotSchema } from "@/lib/validation/jobs";
 import { alreadyPostedReason } from "@/lib/jobs/skipped";
 import { getEnv } from "../../env";
-import { credentialOwnerFor } from "../../dal/credential-owners";
+import { credentialOwnerFor, INSTALL_CREDENTIAL_OWNER } from "../../dal/credential-owners";
 import { readCreditHold } from "../../dal/credit-holds";
 import { NotFoundError } from "../../dal/errors";
 import type { JobCounts, JobItemRecord, JobRecord, JobStatus, JobItemStatus } from "../../dal/jobs";
@@ -55,10 +55,13 @@ function canView(scope: ProjectScope): void {
 }
 
 /** Whether a credit hold covers this project's credential, and since when (contracts/services.md §7). */
-export async function generationCreditHold(scope: ProjectScope): Promise<{ since: Date } | null> {
+export async function generationCreditHold(
+  scope: ProjectScope,
+): Promise<{ since: Date; scope: "project" | "install" } | null> {
   canView(scope);
-  const hold = await readCreditHold(await credentialOwnerFor(scope.project.id));
-  return hold ? { since: hold.heldSince } : null;
+  const owner = await credentialOwnerFor(scope.project.id);
+  const hold = await readCreditHold(owner);
+  return hold ? { since: hold.heldSince, scope: owner === INSTALL_CREDENTIAL_OWNER ? "install" : "project" } : null;
 }
 
 async function creatorNames(scope: ProjectScope, ids: readonly (string | null)[]): Promise<Map<string, string>> {

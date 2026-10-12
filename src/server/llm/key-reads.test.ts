@@ -41,3 +41,19 @@ test("project-llm.ts never decrypts the ciphertext it reads", () => {
   const src = readFileSync(join("src", "server", "dal", "project-llm.ts"), "utf8");
   expect(src).not.toMatch(/\bdecryptSecret\b/);
 });
+
+// runLlmCheck has no permission check (cli.md §4), so it must stay unreachable from anything web-facing.
+const RUN_LLM_CHECK_IMPORT = /\brunLlmCheck\b/;
+const ALLOWED_RUN_LLM_CHECK_FILES = [
+  join("src", "server", "services", "generation", "check.ts"),
+  join("scripts", "llm-check.ts"),
+];
+
+test("runLlmCheck is imported only by check.ts's own siblings and scripts/llm-check.ts", () => {
+  const offenders = [...files("src"), ...files("scripts")].filter(
+    (f) =>
+      !ALLOWED_RUN_LLM_CHECK_FILES.some((allowed) => f.endsWith(allowed)) &&
+      RUN_LLM_CHECK_IMPORT.test(readFileSync(f, "utf8")),
+  );
+  expect(offenders).toEqual([]);
+});

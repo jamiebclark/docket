@@ -1,6 +1,6 @@
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, eq, inArray, like, lte, notExists, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
-import { llmCreditHolds } from "../db/schema";
+import { llmCreditHolds, projects } from "../db/schema";
 
 /** One item every five minutes while held. A documented constant, not an environment variable (FR-014). */
 export const CREDIT_PROBE_INTERVAL_MS = 5 * 60_000;
@@ -82,4 +82,24 @@ export async function readCreditHold(owner: string): Promise<CreditHold | null> 
 export async function readCreditHolds(): Promise<CreditHold[]> {
   const rows = await getDb().select().from(llmCreditHolds);
   return rows.map(toHold);
+}
+
+/**
+ * Deletes `project:<id>` hold rows whose project no longer exists (AS7): a project's own credential's
+ * hold has no FK to clean it up on delete, unlike `project_llm_settings`. One bounded batch per call.
+ */
+export async function pruneOrphanCreditHolds(limit: number): Promise<number> {
+  const orphans = await getDb()
+    .select({ owner: llmCreditHolds.owner })
+    .from(llmCreditHolds)
+    .where(
+      and(
+        like(llmCreditHolds.owner, "project:%"),
+        notExists(getDb().select({ one: sql`1` }).from(projects).where(eq(projects.id, sql`substring(${llmCreditHolds.owner} from 9)::uuid`))),
+      ),
+    )
+    .limit(limit);
+  if (orphans.length === 0) return 0;
+  await getDb().delete(llmCreditHolds).where(inArray(llmCreditHolds.owner, orphans.map((o) => o.owner)));
+  return orphans.length;
 }

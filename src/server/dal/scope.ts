@@ -95,6 +95,9 @@ function keyCan(permissions: readonly ApiKeyPermission[], request: PermissionReq
 
 export interface ProjectScope {
   readonly actor: ScopeActor;
+  /** The database or transaction this scope is pinned to. For a write that spans a DAL this scope has no repo for
+   * (e.g. clearing a credit hold inside the same transaction as a credential save). */
+  readonly exec: Database;
   readonly project: {
     id: string;
     slug: string;
@@ -216,6 +219,7 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
   const scope: ProjectScope = {
     ...data,
     actor,
+    exec,
     can:
       actor.kind === "api_key"
         ? (request) => keyCan(actor.permissions, request)

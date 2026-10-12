@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { generationJobItems, generationJobs, posts } from "../db/schema";
-import { credentialOwnerFor, jobsExcludingProjects } from "./credential-owners";
+import { credentialOwnerFor, credentialOwnersFor, INSTALL_CREDENTIAL_OWNER, jobsExcludingProjects } from "./credential-owners";
 import { gateCreditHolds, rewindCreditProbe } from "./credit-holds";
 import { createWebhooksRepo } from "./webhooks";
 import { refreshJobStatus } from "../services/jobs/status";
@@ -40,9 +40,8 @@ export const INTERRUPTED_MESSAGE = "Generation was interrupted too many times.";
 
 /**
  * Resolves `owners` to the project ids of their currently active (`queued`/`running`) jobs, by asking
- * `credentialOwnerFor` about each candidate project — a genuine per-owner lookup rather than an
- * all-or-nothing guess (SC-010). Entry 2 still only has to change `credentialOwnerFor`'s body: this keeps
- * working against whatever it answers.
+ * `credentialOwnersFor` about all candidate projects in one round trip — a genuine per-owner lookup rather
+ * than an all-or-nothing guess (SC-010), whose statement count no longer grows with project count.
  */
 async function resolveBlockedProjectIds(exec: Database, owners: readonly string[]): Promise<string[]> {
   if (owners.length === 0) return [];
@@ -51,11 +50,9 @@ async function resolveBlockedProjectIds(exec: Database, owners: readonly string[
     .selectDistinct({ projectId: generationJobs.projectId })
     .from(generationJobs)
     .where(inArray(generationJobs.status, ["queued", "running"]));
-  const ids: string[] = [];
-  for (const { projectId } of rows) {
-    if (blocked.has(await credentialOwnerFor(projectId))) ids.push(projectId);
-  }
-  return ids;
+  const projectIds = rows.map((r) => r.projectId);
+  const ownersByProject = await credentialOwnersFor(projectIds, exec);
+  return projectIds.filter((id) => blocked.has(ownersByProject.get(id) ?? INSTALL_CREDENTIAL_OWNER));
 }
 
 /**

@@ -7,8 +7,12 @@ const managers: Manager[] = [
   { name: "Robin", role: "owner" },
   { name: "Sam", role: "admin" },
 ];
-const none: GenerationReadiness = { ai: { configured: false, missingSettings: null }, accounts: 0, voiceProfiles: 0 };
-const ownerReadiness: GenerationReadiness = { ...none, ai: { configured: false, missingSettings: ["LLM_PROVIDER", "LLM_MODEL"] } };
+const aiBase = { source: null, provider: null, model: null, keyUnreadable: false } as const;
+const none: GenerationReadiness = { ai: { ...aiBase, configured: false, missingSettings: null }, accounts: 0, voiceProfiles: 0 };
+const ownerReadiness: GenerationReadiness = {
+  ...none,
+  ai: { ...aiBase, configured: false, missingSettings: ["LLM_PROVIDER", "LLM_MODEL"] },
+};
 const owner = { isOwner: true, canManageAccounts: true, canManageVoice: true };
 const admin = { isOwner: false, canManageAccounts: true, canManageVoice: true };
 const editor = { isOwner: false, canManageAccounts: false, canManageVoice: false };
@@ -48,7 +52,7 @@ describe("generationPrerequisites", () => {
   });
 
   it("marks done items done and keeps the rest", () => {
-    const items = run(owner, { ai: { configured: true, missingSettings: null }, accounts: 1, voiceProfiles: 0 });
+    const items = run(owner, { ai: { ...aiBase, configured: true, missingSettings: null }, accounts: 1, voiceProfiles: 0 });
     expect(status(items, "ai")).toEqual({ kind: "done" });
     expect(status(items, "voice")).toEqual({ kind: "todo" });
     expect(items.find((i) => i.key === "ai")?.action).toBeNull();
@@ -58,7 +62,7 @@ describe("generationPrerequisites", () => {
     expect(
       generationPrerequisites({
         slug: "p",
-        readiness: { ai: { configured: true, missingSettings: null }, accounts: 1, voiceProfiles: 1 },
+        readiness: { ai: { ...aiBase, configured: true, missingSettings: null }, accounts: 1, voiceProfiles: 1 },
         viewer: owner,
         managers,
       }),
@@ -66,7 +70,7 @@ describe("generationPrerequisites", () => {
   });
 
   it("adds the images item, which keeps the list even when all else is done", () => {
-    const items = run(owner, { ai: { configured: true, missingSettings: null }, accounts: 1, voiceProfiles: 1 }, { message: "No images to generate for." });
+    const items = run(owner, { ai: { ...aiBase, configured: true, missingSettings: null }, accounts: 1, voiceProfiles: 1 }, { message: "No images to generate for." });
     expect(items.map((i) => i.key)).toEqual(["ai", "account", "voice", "images"]);
     expect(items[3]).toMatchObject({ description: "No images to generate for.", action: { label: "Back to Media", href: "/p/p/media" } });
   });

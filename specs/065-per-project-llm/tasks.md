@@ -114,38 +114,38 @@ override, and check that each call used the credential its own project resolves 
 
 ### Tests for User Story 1
 
-- [ ] T017 [P] [US1] Write `src/server/llm/resolve.test.ts` covering AS1 (env-only unchanged), AS3 (no
+- [X] T017 [P] [US1] Write `src/server/llm/resolve.test.ts` covering AS1 (env-only unchanged), AS3 (no
   restart/no cache), AS4 (`LLM_PROVIDER` unset: project with credential available, project without still
   not-configured), AS5 (removal reverts to install), AS6 (install-wide limits apply from either source)
-- [ ] T018 [P] [US1] Write `tests/integration/llm/per-project-resolution.test.ts`: two projects on two
+- [X] T018 [P] [US1] Write `tests/integration/llm/per-project-resolution.test.ts`: two projects on two
   `setLlmFactoryForTests` stubs, one single generation, one series plan, one regenerate, one "Try it", one
   job item and one public-API generation in each project, asserting each call carried its own project's
   key (AS2)
 
 ### Implementation for User Story 1
 
-- [ ] T019 [P] [US1] Update `src/server/services/generation/core.ts`: `runGeneration`'s default resolves
+- [X] T019 [P] [US1] Update `src/server/services/generation/core.ts`: `runGeneration`'s default resolves
   via `resolveLlmForProject(scope.project.id)`; `runGenerationStep` calls
   `withCreditHold(llm, resolved.owner)` instead of a second `credentialOwnerFor` call (L11)
-- [ ] T020 [P] [US1] Update `src/server/services/generation/series.ts`: `planSeries`'s default resolves via
+- [X] T020 [P] [US1] Update `src/server/services/generation/series.ts`: `planSeries`'s default resolves via
   `resolveLlmForProject`
-- [ ] T021 [P] [US1] Update `src/server/services/generation/regenerate.ts`: its optional `llm` parameter is
+- [X] T021 [P] [US1] Update `src/server/services/generation/regenerate.ts`: its optional `llm` parameter is
   still passed through unchanged; its default now resolves
-- [ ] T022 [P] [US1] Update `src/server/services/jobs/runner.ts`: per item,
+- [X] T022 [P] [US1] Update `src/server/services/jobs/runner.ts`: per item,
   `ctx.llm ?? (await resolveLlmForProject(job.projectId))`; a non-`ok` resolution calls the existing
   `release()` (item returns to `queued`, no attempt counted, nothing failed) and increments a new
   `notConfigured` per-item counter; `llmTimeoutMs()` uses `parseLlmLimits(process.env)`; `logLine()` redacts
   the resolved key, not only the environment's (L8, L27, L30)
-- [ ] T023 [P] [US1] Update `src/server/services/jobs/create.ts`: resolve per scope instead of calling
+- [X] T023 [P] [US1] Update `src/server/services/jobs/create.ts`: resolve per scope instead of calling
   `getLlmStatus()`
-- [ ] T024 [P] [US1] Update `src/server/services/generation/readiness.ts`: `getGenerationReadiness`'s `ai`
+- [X] T024 [P] [US1] Update `src/server/services/generation/readiness.ts`: `getGenerationReadiness`'s `ai`
   field becomes `{ configured, source, provider, model, missingSettings, keyUnreadable }` from resolution
-- [ ] T025 [P] [US1] Update `src/server/services/overview.ts`: `getOverview`'s LLM facts come from
+- [X] T025 [P] [US1] Update `src/server/services/overview.ts`: `getOverview`'s LLM facts come from
   resolution, so a project with its own credential reports generation available even when the install has
   none
-- [ ] T026 [P] [US1] Update `src/server/scheduler/generation.ts`: the early-return gate becomes
+- [X] T026 [P] [US1] Update `src/server/scheduler/generation.ts`: the early-return gate becomes
   `!getLlmStatus().configured && !(await anyProjectHasCredential())`
-- [ ] T027 [US1] Confirm `src/server/services/voice.ts`'s "Try it" path needs no direct change (it resolves
+- [X] T027 [US1] Confirm `src/server/services/voice.ts`'s "Try it" path needs no direct change (it resolves
   through `runGeneration`'s default from T019) and add a regression assertion for it in
   `per-project-resolution.test.ts` if one is not already present
 
@@ -166,24 +166,24 @@ outcome in each case.
 
 ### Tests for User Story 2
 
-- [ ] T028 [P] [US2] Write `tests/integration/llm/check.test.ts` covering AS1–AS6 (success reports and
+- [X] T028 [P] [US2] Write `tests/integration/llm/check.test.ts` covering AS1–AS6 (success reports and
   saves nothing; a wrong key reports the one fixed sentence; no credential checks the install default; at
   most one check at a time with the cooldown refusing a second; a billing refusal sets then clears the
   project's hold) and SC-003 (the call's timeout is `min(installTimeoutMs, LLM_CHECK_TIMEOUT_MS)`)
-- [ ] T029 [P] [US2] Extend `scripts/llm-check.test.ts` for the `--project <slug>` path (prints
+- [X] T029 [P] [US2] Extend `scripts/llm-check.test.ts` for the `--project <slug>` path (prints
   `source=… provider=… model=… outcome=… latency_ms=…`, exits non-zero on failure) while asserting the
   no-argument path's lines and exit codes are byte-identical to today; extend the guard test from T016 to
   assert `runLlmCheck` is imported only by `check.ts`'s own siblings and `scripts/llm-check.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T030 [US2] Create `src/server/services/generation/check.ts`: `LLM_CHECK_COOLDOWN_MS` (30000),
+- [X] T030 [US2] Create `src/server/services/generation/check.ts`: `LLM_CHECK_COOLDOWN_MS` (30000),
   `LLM_CHECK_LEASE_MS` (60000), `LLM_CHECK_TIMEOUT_MS` (30000), `LlmCheckResult`,
   `runLlmCheck(projectId, repo)` (resolve → claim-or-refuse-as-busy → one call through
   `withCreditHold(resolved.llm, resolved.owner)` → release in `finally` → map to the fixed sentence) and
   `checkProjectLlm(scope)` (`need(scope)` then `runLlmCheck`), per contracts/services.md §3 (depends on
   T007, T009)
-- [ ] T031 [US2] Update `scripts/llm-check.ts`: add the optional `--project <slug>` argument (usage error on
+- [X] T031 [US2] Update `scripts/llm-check.ts`: add the optional `--project <slug>` argument (usage error on
   a bad flag, exit 2), resolve the slug to a project id via a named
   `crossProject("llm:check: resolve project", …)` read with no session, call the same `checkProjectLlm`
   path (`runLlmCheck` with a pinned repo), print the one `key=value` line, and keep the no-argument path
@@ -206,29 +206,29 @@ items stay queued with no attempt counted and none failed.
 
 ### Tests for User Story 3
 
-- [ ] T032 [P] [US3] Write `tests/integration/llm/hold-scope.test.ts` covering AS1–AS7 (isolation,
+- [X] T032 [P] [US3] Write `tests/integration/llm/hold-scope.test.ts` covering AS1–AS7 (isolation,
   install-default projects held together, independent probe schedules, a save clearing the hold at once,
   the notice naming whose account, no notice in a different funded project, deletion leaving nothing
   behind) and SC-006 (unchanged throughput for the funded project)
-- [ ] T033 [P] [US3] Extend `tests/integration/jobs/credit-hold.test.ts` to confirm entry 1's full suite
+- [X] T033 [P] [US3] Extend `tests/integration/jobs/credit-hold.test.ts` to confirm entry 1's full suite
   (probe single-flight, rewind, kill-recovery, no-retry-on-ambiguous, nothing failed while held) passes
   unchanged with the widened owner
 
 ### Implementation for User Story 3
 
-- [ ] T034 [P] [US3] Update `src/server/dal/job-claims.ts`: `resolveBlockedProjectIds` uses
+- [X] T034 [P] [US3] Update `src/server/dal/job-claims.ts`: `resolveBlockedProjectIds` uses
   `credentialOwnersFor` (T010) instead of one round trip per candidate project, so the claim transaction's
   statement count stops growing with project count
-- [ ] T035 [US3] Update `src/server/services/jobs/read.ts`: `generationCreditHold(scope)` returns
+- [X] T035 [US3] Update `src/server/services/jobs/read.ts`: `generationCreditHold(scope)` returns
   `{ since, scope: "project" | "install" }`; `getJobView`'s `creditHold` field carries that scope (depends
   on T034)
-- [ ] T036 [US3] Update `src/app/p/[projectSlug]/jobs/CreditHoldNotice.tsx`: add a `scope` prop that picks
+- [X] T036 [US3] Update `src/app/p/[projectSlug]/jobs/CreditHoldNotice.tsx`: add a `scope` prop that picks
   `CREDIT_HOLD_ACCOUNT_PROJECT` for `"project"` and keeps the existing `CREDIT_HOLD_ACTION` for `"install"`
   (depends on T015, T035)
-- [ ] T037 [US3] Update `src/app/p/[projectSlug]/jobs/[jobId]/page.tsx`: pass the resolved `scope` through
+- [X] T037 [US3] Update `src/app/p/[projectSlug]/jobs/[jobId]/page.tsx`: pass the resolved `scope` through
   to the notice, and add the `key_unreadable` branch rendering `LLM_KEY_UNREADABLE` instead of the
   "Set: …" list (depends on T036)
-- [ ] T038 [P] [US3] Add `pruneOrphanCreditHolds()` (`ORPHAN_HOLD_BATCH = 100`) to
+- [X] T038 [P] [US3] Add `pruneOrphanCreditHolds()` (`ORPHAN_HOLD_BATCH = 100`) to
   `src/server/scheduler/housekeeping.ts` and `orphanHoldsPruned` to `HousekeepingCounts`, through the
   existing named `crossProject` hatch the other purges use
 
@@ -249,41 +249,41 @@ appears nowhere in any form.
 
 ### Tests for User Story 4
 
-- [ ] T039 [P] [US4] Write `tests/integration/llm/credential-authz.test.ts`: an editor's sub-nav has no
+- [X] T039 [P] [US4] Write `tests/integration/llm/credential-authz.test.ts`: an editor's sub-nav has no
   item, the page 404s, and `saveProjectLlm`/`removeProjectLlm`/`checkProjectLlm` each throw `ForbiddenError`
   with nothing changed; the rendered page for owner and admin contains neither the key nor any 4-character
   substring of it
-- [ ] T040 [P] [US4] Extend `tests/integration/security/secret-scan.test.ts` with the project-key section
+- [X] T040 [P] [US4] Extend `tests/integration/security/secret-scan.test.ts` with the project-key section
   (L32): set, change and remove through the real server actions; the settings page rendered for owner,
   admin and editor; a check; a tick that generates on that credential; a billing refusal whose provider
   error body embeds that key — scanned in raw, base64, base64url, URL-encoded and hex across console,
   responses, rendered pages, audit rows and every database column, with nothing exempted, and the file's
   deliberate-leak test still failing on a planted leak
-- [ ] T041 [P] [US4] Extend `tests/integration/no-plaintext.test.ts` to include the stored project key and
+- [X] T041 [P] [US4] Extend `tests/integration/no-plaintext.test.ts` to include the stored project key and
   its SHA-256 hex, and to dump `project_llm_settings` before the existing all-tables scan
 
 ### Implementation for User Story 4
 
-- [ ] T042 [US4] Create `src/server/services/generation/credential.ts`: `ProjectLlmView`,
+- [X] T042 [US4] Create `src/server/services/generation/credential.ts`: `ProjectLlmView`,
   `getProjectLlm(scope)` (via `scope.projectLlm.status()`, which cannot return a ciphertext),
   `saveProjectLlm(scope, input)` (parse → `need(scope)` → decide the key per FR-015/K8 →
   one `scope.transaction({ lockProject: true })` doing save + audit + `clearCreditHold("project:<id>", tx)`)
   and `removeProjectLlm(scope)` (same transaction shape, nulling the credential) per
   contracts/services.md §2 (depends on T008, T009, T011, T012, T013)
-- [ ] T043 [US4] Create `src/app/p/[projectSlug]/settings/model/page.tsx` (server component: calls
+- [X] T043 [US4] Create `src/app/p/[projectSlug]/settings/model/page.tsx` (server component: calls
   `getProjectLlm(scope)`, `notFound()` on `ForbiddenError`/no access) (depends on T042)
-- [ ] T044 [P] [US4] Create `src/app/p/[projectSlug]/settings/model/loading.tsx` (`Skeleton`, matching the
+- [X] T044 [P] [US4] Create `src/app/p/[projectSlug]/settings/model/loading.tsx` (`Skeleton`, matching the
   api-keys page)
-- [ ] T045 [US4] Create `src/app/p/[projectSlug]/settings/model/ModelPanel.tsx` (client component: the
+- [X] T045 [US4] Create `src/app/p/[projectSlug]/settings/model/ModelPanel.tsx` (client component: the
   "in use now" line, "Last changed by … on …" via `LocalTime`, the `SegmentedControl` provider choice, the
   write-only `type="password"` model/key `Field`s with `keyMaxLength` from the server view, the save form,
   "Check this credential" with its `role="status"` outcome, and the confirmed remove `Dialog`) per
   contracts/ui.md §2 (depends on T043)
-- [ ] T046 [US4] Create `src/app/p/[projectSlug]/settings/model/actions.ts`: `saveProjectModel`,
+- [X] T046 [US4] Create `src/app/p/[projectSlug]/settings/model/actions.ts`: `saveProjectModel`,
   `removeProjectModel`, `checkProjectModel`, each through the existing `runAction` helper, calling
   `saveProjectLlm`/`removeProjectLlm`/`checkProjectLlm` and `revalidatePath`ing the settings page (depends
   on T030, T042, T045)
-- [ ] T047 [US4] Update `src/app/p/[projectSlug]/settings/layout.tsx`: add the "Model & API key" sub-nav
+- [X] T047 [US4] Update `src/app/p/[projectSlug]/settings/layout.tsx`: add the "Model & API key" sub-nav
   item behind `scope.can({ llm_credential: ["manage"] })`, beside the existing `canManageApi` check
   (depends on T012)
 

@@ -1,11 +1,17 @@
 // Measures one sample generation through the configured provider (FR-037, research D7).
 // Without LLM settings it says so and exits 0: an unconfigured install is not a failure.
+import { eq } from "drizzle-orm";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { z } from "zod";
+import { crossProject } from "../src/server/dal/scope";
 import { INSTALL_CREDENTIAL_OWNER } from "../src/server/dal/credential-owners";
+import { createProjectLlmRepo } from "../src/server/dal/project-llm";
+import { getDb } from "../src/server/db/client";
+import { projects } from "../src/server/db/schema";
 import { getLlm, getLlmStatus } from "../src/server/llm";
+import { runLlmCheck } from "../src/server/services/generation/check";
 import { withCreditHold } from "../src/server/services/generation/credit";
 import { JOB_MIN_CALL_MS, JOB_PERSIST_RESERVE_MS } from "../src/server/scheduler/config";
 import type { LlmProvider } from "../src/server/llm/types";
@@ -108,13 +114,71 @@ export async function main(
   return 1;
 }
 
+/** `--project <slug>`, or nothing. `null` means a usage error (unknown flag, missing value, repeated flag). */
+export function parseArgs(argv: readonly string[]): { project: string | null } | null {
+  let project: string | null = null;
+  for (let i = 0; i < argv.length; i += 2) {
+    if (argv[i] !== "--project" || project !== null) return null;
+    const value = argv[i + 1];
+    if (value === undefined) return null;
+    project = value;
+  }
+  return { project };
+}
+
+/** The same check the settings surface runs, for one project resolved by slug with no session (cli.md §3). */
+export async function mainForProject(slug: string, deps: { log?: (line: string) => void } = {}): Promise<number> {
+  const log = deps.log ?? console.log;
+  if (!process.env.DATABASE_URL) {
+    console.error("Set DATABASE_URL to check a project's credential.");
+    return 2;
+  }
+  const projectId = await crossProject("llm:check: resolve project", async () => {
+    const rows = await getDb().select({ id: projects.id }).from(projects).where(eq(projects.slug, slug)).limit(1);
+    return rows[0]?.id ?? null;
+  });
+  if (!projectId) {
+    console.error("project not found");
+    return 2;
+  }
+  const result = await runLlmCheck(projectId, createProjectLlmRepo(getDb(), projectId));
+  if (result.ok) {
+    log(`source=${result.source} provider=${result.provider} model=${result.model} outcome=ok latency_ms=${Math.round(result.latencyMs)}`);
+    return 0;
+  }
+  if (result.reason === "failed") {
+    log(
+      `source=${result.source} provider=${result.provider} model=${result.model} outcome=${result.kind} latency_ms=${Math.round(result.latencyMs)}`,
+    );
+  } else if (result.reason === "not_configured") {
+    log(`source=install outcome=not_configured missing=${result.missingSettings.join(",")}`);
+  } else {
+    log(`source=project outcome=${result.reason}`);
+  }
+  return 1;
+}
+
 // Run only as the entry point; realpath so a symlinked output directory (macOS /tmp) still matches.
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
-  main().then(
-    (code) => process.exit(code),
-    () => {
-      console.error("llm:check failed unexpectedly.");
-      process.exit(1);
-    },
-  );
+  const parsed = parseArgs(process.argv.slice(2));
+  if (!parsed) {
+    console.error("Usage: llm:check [-- --project <slug>]");
+    process.exit(2);
+  } else if (parsed.project) {
+    mainForProject(parsed.project).then(
+      (code) => process.exit(code),
+      () => {
+        console.error("llm:check failed unexpectedly.");
+        process.exit(1);
+      },
+    );
+  } else {
+    main().then(
+      (code) => process.exit(code),
+      () => {
+        console.error("llm:check failed unexpectedly.");
+        process.exit(1);
+      },
+    );
+  }
 }
