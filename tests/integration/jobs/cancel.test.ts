@@ -12,12 +12,15 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
-import { jobsEnv, modelOk, parkAllJobs, readHold, seedCreditHold } from "../../helpers/jobs-env";
+import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold, seedCreditHold } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);
+  // Worker databases are shared across the files a worker runs, and `parkAllJobs` only clears holds in
+  // `beforeEach` — which protects the next test in this file, never the next file (review F6).
+  await clearHolds();
   await closeDb();
 });
 

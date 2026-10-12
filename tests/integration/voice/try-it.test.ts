@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ConflictError } from "../../../src/server/dal/errors";
 import { llmFailureMessage } from "../../../src/server/llm/messages";
@@ -6,10 +6,20 @@ import * as accounts from "../../../src/server/services/accounts";
 import * as voice from "../../../src/server/services/voice";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
+import { clearHolds } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
 
-afterAll(closeDb);
+// This file's row-count assertions cover every table, so a stray `llm_credit_holds` row left by any
+// earlier file in this worker fails them — and a successful call clears such a row, which is what the
+// "writes nothing" assertions see. Clearing before each test makes them order-independent rather than
+// trusting every other file's teardown; the afterAll keeps this file's own hold from leaking out
+// (review F6).
+beforeEach(clearHolds);
+afterAll(async () => {
+  await clearHolds();
+  await closeDb();
+});
 
 const ok = (variants: Record<string, string>): FakeStep => ({
   ok: { variants: Object.fromEntries(Object.entries(variants).map(([k, text]) => [k, { text }])) },

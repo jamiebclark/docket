@@ -39,6 +39,8 @@ beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);
+  // See cancel.test.ts: a hold seeded by the last test would otherwise outlive this file (review F6).
+  await clearHolds();
   await closeDb();
 });
 
