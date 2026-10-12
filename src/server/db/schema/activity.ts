@@ -74,6 +74,11 @@ export const activityEvents = pgTable(
     index("activity_events_connect_failed_actor_idx")
       .on(t.projectId, t.actorUserId, t.seq)
       .where(sql`${t.outcome} = 'connect_failed'`),
+    // The stream watcher's install-wide change probe (045): max(seq) over attention events in one
+    // index-only row fetch. Literals, never parameters, so the planner matches the partial predicate.
+    index("activity_events_attention_global_seq_idx")
+      .on(t.seq)
+      .where(sql`${t.outcome} IN ('failed', 'ambiguous', 'needs_reauth', 'connect_failed')`),
   ],
 );
 
