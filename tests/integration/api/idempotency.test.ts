@@ -151,7 +151,10 @@ describe("idempotency", () => {
       route: "/test/idem",
       idemKey: "stuck",
       bodyHash: await hashBody(body),
-      holdMs: 1000,
+      // Long enough that real elapsed time cannot reach it: the `during` request below must find the hold
+      // still live, and under a loaded parallel suite a 1s hold can expire before that request lands. The
+      // takeover half does not depend on this value — it moves the clock forward ten minutes with `atTime`.
+      holdMs: 60_000,
     });
     expect(claim.kind).toBe("claimed");
     const during = await t.post("stuck");

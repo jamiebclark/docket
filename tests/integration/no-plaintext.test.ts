@@ -20,13 +20,15 @@ import { mockProvider } from "../../src/providers/mock";
 import { runTick } from "../../src/server/scheduler";
 import { atTime } from "../helpers/clock";
 import { createFakeLlmFetch } from "../helpers/fake-llm-http";
-import { jobsEnv } from "../helpers/jobs-env";
+import { clearProjectCredentials, jobsEnv } from "../helpers/jobs-env";
 import { parkAllDueTargets } from "../helpers/scheduling";
 import { fakeSession } from "../helpers/auth";
 import { closeDb, createThrowawayDb, testDb } from "../helpers/db";
 import { createProjectWithMembers } from "../helpers/factories";
 
 afterAll(async () => {
+  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
+  await clearProjectCredentials();
   await closeDb();
 });
 

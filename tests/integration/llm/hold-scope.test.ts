@@ -18,7 +18,7 @@ import { removeProjectLlm, saveProjectLlm } from "../../../src/server/services/g
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold } from "../../helpers/jobs-env";
+import { clearHolds, clearProjectCredentials, jobsEnv, modelOk, parkAllJobs, readHold } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterEach(() => {
@@ -26,6 +26,8 @@ afterEach(() => {
   setLlmForTests(null);
 });
 afterAll(async () => {
+  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
+  await clearProjectCredentials();
   await clearHolds();
   await closeDb();
 });

@@ -5,9 +5,12 @@ import { setLlmForTests } from "../../../src/server/llm";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
+import { clearProjectCredentials } from "../../helpers/jobs-env";
 
 afterEach(() => setLlmForTests(null));
 afterAll(async () => {
+  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
+  await clearProjectCredentials();
   await closeDb();
 });
 

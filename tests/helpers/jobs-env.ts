@@ -5,7 +5,7 @@ import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import * as credentialOwners from "../../src/server/dal/credential-owners";
 import { readCreditHold, type CreditHold } from "../../src/server/dal/credit-holds";
-import { llmCreditHolds } from "../../src/server/db/schema/generation";
+import { llmCreditHolds, projectLlmSettings } from "../../src/server/db/schema/generation";
 import { generationJobItems } from "../../src/server/db/schema";
 import { setLlmForTests } from "../../src/server/llm";
 import { setStorageForTests } from "../../src/server/storage";
@@ -22,6 +22,7 @@ export async function parkAllJobs(): Promise<void> {
     await getDb().update(generationJobItems).set({ status: "cancelled", leaseOwner: null, leaseUntil: null, pendingRetry: null }).where(inArray(generationJobItems.status, ["queued", "running"]));
   });
   await clearHolds();
+  await clearProjectCredentials();
 }
 
 /** Seeds a credit hold row directly, bypassing `holdCredit` (US1/US2 tests pinning an existing hold). */
@@ -52,6 +53,20 @@ export async function readHold(owner: string): Promise<CreditHold | null> {
 export async function clearHolds(): Promise<void> {
   await runCrossProject("test: clear credit holds", async () => {
     await getDb().delete(llmCreditHolds);
+  });
+}
+
+/**
+ * Removes every project's stored LLM credential.
+ *
+ * Worker databases are shared across the files a worker runs, so a credential one file saves makes a later
+ * file's project *configured* — and a tick that should have reported `notConfigured` claims the item
+ * instead. `parkAllJobs` clears it for the same reason it clears holds: a jobs suite must start from the
+ * install's own configuration, whatever ran before it in the worker.
+ */
+export async function clearProjectCredentials(): Promise<void> {
+  await runCrossProject("test: clear project LLM credentials", async () => {
+    await getDb().delete(projectLlmSettings);
   });
 }
 

@@ -83,7 +83,7 @@ import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
-import { clearHolds, jobsEnv } from "../../helpers/jobs-env";
+import { clearHolds, clearProjectCredentials, jobsEnv } from "../../helpers/jobs-env";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { eventsFor } from "../../helpers/activity";
@@ -99,6 +99,8 @@ import { getMailer, setMailerForTests } from "../../../src/server/mail";
 import { recordingMailer } from "../../helpers/mailer";
 
 afterAll(async () => {
+  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
+  await clearProjectCredentials();
   setStorageForTests(undefined);
   await closeDb();
 });
