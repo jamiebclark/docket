@@ -71,7 +71,11 @@ over fancy.** Every screen must be fully usable from the keyboard.
 - One-of-many choices never use a native `<select>`: 2–6 short options are a
   `SegmentedControl` (option `cards` when each needs explaining), lists that
   grow with data use `ChoiceField`, long lists (time zones) use `Combobox` /
-  `TimeZoneField`. See `docs/design-system.md` §7.
+  `TimeZoneField` — **except** a long list on a screen that must stay
+  changeable with client JavaScript unavailable, which uses `Select` instead:
+  `Combobox` submits through a hidden input that a no-JavaScript visible box
+  cannot update, so it would look changeable while silently not working. See
+  `docs/design-system.md` §7.
 - Long forms end in an `ActionBar` (sticky from `md`); anything sticky inside
   the shell offsets from `var(--sticky-top)`, never `top-0`.
 

@@ -10,7 +10,11 @@ import * as invitations from "@/server/services/invitations";
 import * as members from "@/server/services/members";
 
 /** The one-time link shown after invite or regenerate. `null` when delivery was in-app. */
-export type DeliveryDto = { invitationId: string; link: { url: string; expiresAt: string } | null };
+export type DeliveryDto = {
+  invitationId: string;
+  link: { url: string; expiresAt: string } | null;
+  email: invitations.InvitationEmail;
+};
 
 function toDto(result: invitations.CreateResult): DeliveryDto {
   return {
@@ -19,6 +23,7 @@ function toDto(result: invitations.CreateResult): DeliveryDto {
       result.delivery.kind === "manual_link"
         ? { url: result.delivery.url, expiresAt: result.delivery.expiresAt.toISOString() }
         : null,
+    email: result.delivery.email,
   };
 }
 
@@ -74,7 +79,7 @@ export async function revokeInvitation(
     const scope = await scopeFor(slug);
     await invitations.revoke(scope, { invitationId: String(formData.get("invitationId") ?? "") });
     refresh(slug);
-    return ok({ invitationId: String(formData.get("invitationId") ?? ""), link: null });
+    return ok({ invitationId: String(formData.get("invitationId") ?? ""), link: null, email: "unavailable" });
   } catch (error) {
     return failFromError(error);
   }

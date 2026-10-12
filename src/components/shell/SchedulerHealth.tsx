@@ -87,7 +87,7 @@ export function SchedulerHealth({
       </ul>
       <p className="mt-1">
         <a
-          href={docsUrl("deployment", "9-is-the-scheduler-running")}
+          href={docsUrl("deployment", "10-is-the-scheduler-running")}
           className="rounded-md font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           How to fix this

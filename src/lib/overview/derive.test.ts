@@ -316,7 +316,7 @@ describe("serverSetupItems (US4)", () => {
       "Media storage isn't set up",
       "More platforms you can set up: Meta",
     ]);
-    expect(items[0]?.href).toContain("deployment/#9-is-the-scheduler-running");
+    expect(items[0]?.href).toContain("deployment/#10-is-the-scheduler-running");
     expect(items[1]?.href).toContain("generator/#configuring-a-provider");
     expect(items[2]?.href).toContain("storage/");
     expect(items[3]?.href).toBe(platform.setupDoc);

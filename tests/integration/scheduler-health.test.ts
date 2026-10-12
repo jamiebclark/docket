@@ -114,7 +114,7 @@ describe("SchedulerHealth by viewer", () => {
       const html = render("banner", h);
       expect(html).toContain("docker compose up -d worker");
       expect(html).toContain("How to fix this");
-      expect(html).toContain("9-is-the-scheduler-running");
+      expect(html).toContain("10-is-the-scheduler-running");
     }
   });
 

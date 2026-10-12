@@ -78,7 +78,7 @@ describe("invitations.create", () => {
     const { scope } = await asOwner();
     const existing = await createUser();
     const a = await invitations.create(scope, { email: existing.email, role: "editor" });
-    expect(a.delivery).toEqual({ kind: "in_app" });
+    expect(a.delivery).toEqual({ kind: "in_app", email: "unavailable" });
 
     const b = await invitations.create(scope, { email: `fresh-${uniq()}@example.test`, role: "editor" });
     expect(b.delivery.kind).toBe("manual_link");
@@ -98,7 +98,7 @@ describe("invitations.create", () => {
 
   it("passes the invitation to an injected delivery, and a throwing delivery leaves it pending", async () => {
     const { scope, project } = await asOwner();
-    const deliver = vi.fn<InvitationDelivery["deliver"]>().mockResolvedValue({ kind: "in_app" });
+    const deliver = vi.fn<InvitationDelivery["deliver"]>().mockResolvedValue({ kind: "in_app", email: "unavailable" });
     const email = `inj-${uniq()}@example.test`;
     await invitations.create(scope, { email, role: "admin" }, { deliver });
     expect(deliver).toHaveBeenCalledOnce();

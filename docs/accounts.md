@@ -39,10 +39,16 @@ Source of truth: `src/server/auth/access.ts`.
 
 ### Inviting people
 
-Docket sends no email. An owner or admin invites someone by email address with a role:
+An owner or admin invites someone by email address with a role:
 
 - If that email already has a Docket login, they see the invitation in the app and can accept or decline.
 - Otherwise Docket shows a single-use sign-up link. Copy it and send it to them yourself.
+
+When a mail server is configured ([deployment.md](./deployment.md)), the invitation is also emailed to
+them, in addition to the paths above — the in-app notification and the copyable link are unchanged either
+way, and the inviter is always told whether the mail went out. Without a mail server, or if the send
+fails, nothing here is different: Docket sends no email and the copyable link is how the invitation
+travels.
 
 Invitations expire after `INVITATION_TTL_DAYS` (default 7) and can be revoked or regenerated.
 

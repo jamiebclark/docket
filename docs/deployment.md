@@ -152,7 +152,37 @@ Also keep, somewhere safe and separate from the dump:
 - **`BETTER_AUTH_SECRET`** (sessions; losing it signs everyone out).
 - **The media bucket**, which is backed up separately by your storage provider.
 
-## 5. Unraid (or any home server)
+## 5. Email
+
+Docket sends email for two things: an invitation (always, once mail is configured) and problem
+notifications (only once a person turns their own email on at `/notifications`). Neither is required —
+without a mail server, invitations fall back to today's copyable single-use link and nobody's email
+settings are offered.
+
+**Configuring a mail server.** Set the `--- Email ---` group in `.env`: `SMTP_HOST` and `SMTP_FROM` are the
+group (both or neither); `SMTP_USER`/`SMTP_PASSWORD` are an all-or-none credential pair for servers that
+need one — leave both unset for an unauthenticated relay on a private network; `SMTP_PORT`,
+`SMTP_SECURITY` and `SMTP_FROM_NAME` are optional satellites with documented defaults. Restart the
+containers after editing (§2). Setting any satellite or one credential without the group is refused at
+startup, naming the variable and never its value.
+
+**What happens without one.** With the group unset, email is off entirely: `/notifications` offers no
+email control, invitations use today's link-only flow, and nothing is attempted or logged. If the group is
+set but the server cannot reach it (the mail package not installed, or the host unreachable), startup logs
+one line saying so, every would-be send is recorded as unavailable rather than retried in a loop, and
+nobody is told mail went out when it did not.
+
+**Delivery reports are invisible to Docket.** Docket only knows whether the SMTP conversation itself
+accepted or refused a message. A bounce or a "mailbox full" notice that your mail server generates and
+sends back later never reaches Docket — there is no inbound mail handling, so a person whose address later
+starts bouncing keeps being tried until the SMTP conversation itself refuses them.
+
+**Backup caveat.** `CREDENTIALS_ENCRYPTION_KEY` (§4) also encrypts the unsubscribe link in every problem
+email. Rotating or losing that key does not affect sending, but it invalidates every unsubscribe link
+already mailed — anyone who clicks an old link gets the same neutral "this link no longer works" page as a
+tampered one, and needs the current settings page at `/notifications` instead.
+
+## 6. Unraid (or any home server)
 
 Two ways in. The template is one container and needs a Postgres you already run. Compose brings its own Postgres, a
 separate worker and nightly backups.
@@ -197,7 +227,7 @@ These steps assume you can run `docker compose` on the box.
 
 Unverified, so check against your Unraid version: how Unraid exposes Compose, where it stores appdata, and how it starts containers at boot. This guide gives no plugin names, menu paths or default paths for Compose, because none were checked.
 
-## 6. Reverse proxy and HTTPS
+## 7. Reverse proxy and HTTPS
 
 - Set `BETTER_AUTH_URL=https://docket.example.com` (the public address).
 - Set `TRUSTED_IP_HEADERS` and `TRUSTED_PROXIES` so Docket takes the client address from your proxy's header only when the request comes from your proxy. Otherwise rate limits see every visitor as the proxy.
@@ -207,7 +237,7 @@ Unverified, so check against your Unraid version: how Unraid exposes Compose, wh
 
 Proxy-product configuration is not given here: it is specific to each product and has not been researched.
 
-## 7. Container host + Neon
+## 8. Container host + Neon
 
 - **Use the published image** `ghcr.io/jamiebclark/docket` (see "The published image" in §2) and run it with the variables from `.env.example`. The web service listens on port 3000 (`PORT`) and serves `/api/health`; the worker runs the same image with the command `node worker.mjs`.
 - **Migrations run on start.** The web container applies migrations before serving (`MIGRATE_ON_START`, default `true`), using `DATABASE_URL_DIRECT` (or `DATABASE_URL` when that is unset). The worker never migrates, so start it after the web service is healthy.
@@ -225,7 +255,7 @@ Proxy-product configuration is not given here: it is specific to each product an
   - `RUN_WORKER_IN_PROCESS=true` on a single always-on service.
 - **Confirm ticks** with the "last successful tick" indicator in the header, or the JSON the tick endpoint returns.
 
-## 8. Render free tier: why it is fragile
+## 9. Render free tier: why it is fragile
 
 - Free web services spin down after 15 minutes without traffic.
 - The free tier has no background workers or cron jobs.
@@ -234,16 +264,16 @@ Proxy-product configuration is not given here: it is specific to each product an
 
 Use a paid always-on service or another host for real use.
 
-## 9. Is the scheduler running?
+## 10. Is the scheduler running?
 
 - The header shows the **last successful tick**. A red **stale** banner appears when there has been none for `SCHEDULER_STALE_AFTER_MINUTES` (default 5).
 - If it is stale, check: the worker container logs; that `TICK_SECRET` is set when cron is the trigger; and the cron schedule.
 - If `TICK_SECRET` is unset and cron is the only trigger, every call is refused and the banner appears.
 
-## 10. Behind a TLS-intercepting proxy (build only)
+## 11. Behind a TLS-intercepting proxy (build only)
 
 If your network intercepts TLS, build with `--secret id=extra_ca,src=<pem>`. This is machine-specific and not needed elsewhere.
 
-## 11. Netlify
+## 12. Netlify
 
 Netlify is **not supported**: Docket needs an always-on worker or cron and long-running Node processes. No instructions are given.

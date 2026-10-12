@@ -76,6 +76,34 @@ Docket tells you about problems without you opening Activity. A **bell** in the 
 - **Fresh start, every time.** Turning any switch back on — a kind, a platform, or "Turn all on" — starts counting from that moment: only events after it may notify you through that switch. Events from while it was off never show up later as unread; they stay in Activity, for everyone, exactly as before.
 - **Starting points.** A new member starts at the moment they joined, so an invited person sees no old problems. A rejoin starts again. The first deploy marked everything before it as read.
 - **Refresh.** The count updates every 60 seconds while the tab is visible, once when it becomes visible again, and once more exactly when your soonest snooze is due to come back. It is quiet: screen readers hear a mark, a snooze or a rising count, never a falling one from the background refresh alone. Without JavaScript the bell is a link to `/notifications`.
-- **Only inside Docket.** Docket only notifies you inside Docket; to get problems by email, chat or phone, send its webhooks to a tool such as n8n (see [n8n.md](n8n.md)).
+- **Inside Docket, and by email when a mail server is configured.** For chat or phone, send the webhooks to a tool such as n8n (see [n8n.md](n8n.md)).
 - **Callout.** A project's home and Posts show "Problems since you last looked" with a link to Activity with Problems.
 - **API.** `GET /api/me/notifications` (count) and `/api/me/notifications/recent` (up to 10 items) serve the signed-in session only; they never carry event details, tokens or post text.
+
+### Email
+
+When a mail server is configured ([deployment.md](./deployment.md)), the Email card on your **Notifications**
+page lets you choose how problems reach your inbox. It is a separate choice from the bell above: email is
+off for everyone by default, including people who already have every in-app notification on, and turning
+it on never changes what the bell shows. What may be emailed is the same per-kind, per-platform rule as the
+bell — there is no second, email-only notion of what you care about.
+
+- **Cadence.** Off, immediate, or a daily digest at an hour you choose. Immediate sends on the next tick
+  after an eligible problem appears, coalescing everything into one message rather than one email per
+  event. A digest sends at most once per local day, late if the worker was briefly down, and skipped
+  (rather than sent stale) if it was down for days — its problems simply appear in the next one.
+- **Time zone.** Stored with your email settings, since a digest hour and quiet hours are both wall-clock
+  rules. Until you choose one, Docket uses the zone your projects agree on, UTC otherwise, and always says
+  so in words next to the hour.
+- **Quiet hours.** An optional window, which may wrap midnight, during which immediate mail is held and
+  sent as one message at the window's end rather than dropped or sent as a burst. A chosen digest hour is
+  exempt, since picking an hour is already telling Docket when you want it.
+- **Pausing.** Repeated delivery failure, or one hard rejection from your mail server, pauses your email
+  with a plain-words reason on the settings page and a button to resume it. A pause never touches your
+  in-app notifications, and you see only your own delivery outcome, never anyone else's.
+- **Unsubscribe.** Every problem email carries a link that works without signing in and names nobody in
+  its address. It opens a page — it does not act just by being fetched — offering to turn off every
+  problem email, turn off just that project's, switch to a digest, or turn back on; a mail client's own
+  one-click unsubscribe button acts immediately. The link keeps working for 60 days after it was sent.
+
+Invitations are a separate, one-time email, unaffected by any of the above: see [accounts.md](./accounts.md).

@@ -268,7 +268,7 @@ public bucket ([storage.md](storage.md)).
 6. Open `https://docket.local:3000`, sign in and choose Connect with Threads.
 
 **With Compose instead:** put a reverse proxy with a trusted certificate in front of the `web` service and set
-`BETTER_AUTH_URL` to the proxy's `https://` address ([deployment.md](deployment.md#6-reverse-proxy-and-https)).
+`BETTER_AUTH_URL` to the proxy's `https://` address ([deployment.md](deployment.md#7-reverse-proxy-and-https)).
 
 **Troubleshooting**
 

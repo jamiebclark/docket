@@ -163,9 +163,13 @@ export function listPendingForEmail(email: string, db: Database = getDb()): Prom
   );
 }
 
-export async function userExistsByEmail(email: string, db: Database = getDb()): Promise<boolean> {
+export async function findUserIdByEmail(email: string, db: Database = getDb()): Promise<string | null> {
   const [row] = await db.select({ id: user.id }).from(user).where(eq(user.email, email.trim().toLowerCase())).limit(1);
-  return Boolean(row);
+  return row?.id ?? null;
+}
+
+export async function userExistsByEmail(email: string, db: Database = getDb()): Promise<boolean> {
+  return (await findUserIdByEmail(email, db)) !== null;
 }
 
 /** Creates the user and its credential account for an invited sign-up (inside the caller's transaction). */

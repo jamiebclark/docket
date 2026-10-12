@@ -29,6 +29,15 @@ export interface SchedulerConfig {
   webhookDisableAfterFailures?: number;
   webhookRetentionDays?: number;
   webhookMinWindowMs?: number;
+  /** Outgoing email (044). */
+  emailMaxPerTick?: number;
+  emailConcurrency?: number;
+  emailMinWindowMs?: number;
+  emailBackoffBaseMs?: number;
+  emailBackoffMaxMs?: number;
+  emailPauseAfterFailures?: number;
+  emailUnavailableRetryMs?: number;
+  emailRetentionDays?: number;
 }
 
 export const WEBHOOK_DEFAULTS = {
@@ -55,6 +64,33 @@ export function webhookConfig(config: SchedulerConfig) {
     disableAfterFailures: config.webhookDisableAfterFailures ?? WEBHOOK_DEFAULTS.disableAfterFailures,
     retentionDays: config.webhookRetentionDays ?? WEBHOOK_DEFAULTS.retentionDays,
     minWindowMs: config.webhookMinWindowMs ?? WEBHOOK_DEFAULTS.minWindowMs,
+    leaseMs: config.leaseMs,
+    timeBudgetMs: config.timeBudgetMs,
+  };
+}
+
+export const EMAIL_DEFAULTS = {
+  maxPerTick: 50,
+  concurrency: 8,
+  minWindowMs: 11_000,
+  backoffBaseMs: 60_000,
+  backoffMaxMs: 21_600_000,
+  pauseAfterFailures: 5,
+  unavailableRetryMs: 3_600_000,
+  retentionDays: 30,
+} as const;
+
+/** The email-delivery settings with defaults filled in. */
+export function emailConfig(config: SchedulerConfig) {
+  return {
+    maxPerTick: config.emailMaxPerTick ?? EMAIL_DEFAULTS.maxPerTick,
+    concurrency: config.emailConcurrency ?? EMAIL_DEFAULTS.concurrency,
+    minWindowMs: config.emailMinWindowMs ?? EMAIL_DEFAULTS.minWindowMs,
+    backoffBaseMs: config.emailBackoffBaseMs ?? EMAIL_DEFAULTS.backoffBaseMs,
+    backoffMaxMs: config.emailBackoffMaxMs ?? EMAIL_DEFAULTS.backoffMaxMs,
+    pauseAfterFailures: config.emailPauseAfterFailures ?? EMAIL_DEFAULTS.pauseAfterFailures,
+    unavailableRetryMs: config.emailUnavailableRetryMs ?? EMAIL_DEFAULTS.unavailableRetryMs,
+    retentionDays: config.emailRetentionDays ?? EMAIL_DEFAULTS.retentionDays,
     leaseMs: config.leaseMs,
     timeBudgetMs: config.timeBudgetMs,
   };
