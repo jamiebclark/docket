@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { and, eq } from "drizzle-orm";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "../../../src/server/db/client";
 import { lastAttempts } from "../../../src/server/dal/email";
 import { notificationStates } from "../../../src/server/db/schema";
@@ -10,7 +10,7 @@ import { runEmailDeliveries } from "../../../src/server/scheduler/email";
 import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { seedDuePerson, seedEmailSettings, seedProjectWithProblem } from "../../helpers/email";
+import { parkAllEmail, seedDuePerson, seedEmailSettings, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
 import { createProject, createUser, addMember } from "../../helpers/factories";
 import { markEventFor, recordEvent } from "../../helpers/notifications";
@@ -20,6 +20,7 @@ function dueAt(date: string, hour: number) {
   return atLocalHour(Temporal.PlainDate.from(date), hour, NY);
 }
 
+beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 const SCHED_CONFIG: SchedulerConfig = {
