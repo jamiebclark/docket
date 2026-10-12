@@ -33,13 +33,14 @@ runLlmScenarios({
     status: 200,
     json: { ...message('{"text":"cut'), status: "incomplete", incomplete_details: { reason: "max_output_tokens" } },
   }),
+  // The live shape (verified 2026-10-12): the quota marker is `type`; `code` is the more specific reason.
   creditRefusal: (keyEcho) => ({
     status: 429,
     json: {
       error: {
-        message: `You exceeded your current quota, please check your plan and billing details.${keyEcho ? ` (${keyEcho})` : ""}`,
+        message: `You have no credits remaining. Add credits to continue using the API.${keyEcho ? ` (${keyEcho})` : ""}`,
         type: "insufficient_quota",
-        code: "insufficient_quota",
+        code: "credit_balance_exhausted",
         param: null,
       },
     },
@@ -72,7 +73,27 @@ describe("openai isCreditRefusal", () => {
   const generate = (status: number, body: object | undefined) =>
     OpenAI.APIError.generate(status, body, undefined, new Headers());
 
-  test("true for code === insufficient_quota", () => {
+  // The shape a live 429 actually has (verified 2026-10-12). The quota marker is the `type`; the `code` is
+  // more specific. An earlier fixture set both to "insufficient_quota", which no real response does, so it
+  // confirmed the assumption the code was written from instead of checking it.
+  test("true for the real shape: type insufficient_quota, code credit_balance_exhausted", () => {
+    const err = generate(429, {
+      error: {
+        message: "You have no credits remaining. Add credits to continue using the API at https://example.test/billing.",
+        type: "insufficient_quota",
+        code: "credit_balance_exhausted",
+        param: null,
+      },
+    });
+    expect(isCreditRefusal(err)).toBe(true);
+  });
+
+  test("true for type === insufficient_quota with no code at all", () => {
+    const err = generate(429, { error: { message: "quota", type: "insufficient_quota" } });
+    expect(isCreditRefusal(err)).toBe(true);
+  });
+
+  test("true for code === insufficient_quota (kept: either field is accepted)", () => {
     const err = generate(429, { error: { message: "quota", type: "insufficient_quota", code: "insufficient_quota" } });
     expect(isCreditRefusal(err)).toBe(true);
   });

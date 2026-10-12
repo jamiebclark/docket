@@ -13,12 +13,26 @@ export function openAiImageUrl(image: LlmImage): string {
   return image.url;
 }
 
-/** The verified quota code (research A5). One set, so another observed code is one line. */
-export const OPENAI_CREDIT_CODES: ReadonlySet<string> = new Set(["insufficient_quota"]);
+/**
+ * OpenAI carries the quota signal in the error **`type`**, not the `code`. Verified against a live 429 on
+ * 2026-10-12: `type: "insufficient_quota"`, `code: "credit_balance_exhausted"`, message "You have no credits
+ * remaining." Research A5 assumed `code === "insufficient_quota"`, which no real response sets — so every
+ * real credit refusal fell through to `rate_limited`, was retried three times and then failed the item, which
+ * is the behaviour this feature exists to prevent.
+ *
+ * Both are matched, so a response that carries the quota marker in either field is detected (FR-003, C2);
+ * each is a set, so another observed value is one line.
+ */
+export const OPENAI_CREDIT_TYPES: ReadonlySet<string> = new Set(["insufficient_quota"]);
+export const OPENAI_CREDIT_CODES: ReadonlySet<string> = new Set([
+  "insufficient_quota",
+  "credit_balance_exhausted",
+]);
 
-/** The provider refusing to spend, by its own error code (FR-003, C2). */
+/** The provider refusing to spend, by its own error type or code (FR-003, C2). */
 export function isCreditRefusal(error: unknown): boolean {
   if (!(error instanceof OpenAI.APIError)) return false;
+  if (typeof error.type === "string" && OPENAI_CREDIT_TYPES.has(error.type)) return true;
   return typeof error.code === "string" && OPENAI_CREDIT_CODES.has(error.code);
 }
 

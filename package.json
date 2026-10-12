@@ -29,7 +29,7 @@
   "scripts": {
     "build:video-smoke": "esbuild scripts/video-smoke.ts --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/scripts/video-smoke.mjs --external:pg-native --external:sharp --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "test:watch": "vitest",
-    "llm:check": "esbuild scripts/llm-check.ts --bundle --platform=node --target=node24 --format=esm --outfile=${TMPDIR:-/tmp}/llm-check.mjs --external:pg-native --external:sharp --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node ${TMPDIR:-/tmp}/llm-check.mjs",
+    "llm:check": "esbuild scripts/llm-check.ts --bundle --platform=node --target=node24 --format=esm --outfile=node_modules/.cache/llm-check.mjs --external:pg-native --external:sharp --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node node_modules/.cache/llm-check.mjs",
     "db:generate": "drizzle-kit generate",
     "build:smoke": "esbuild scripts/smoke.ts --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/scripts/smoke.mjs --external:pg-native --external:sharp --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "start": "node scripts/next-with-env.mjs start",
@@ -46,7 +46,7 @@
     "test": "vitest run",
     "icons": "node scripts/generate-icons.mjs",
     "build:storage-init": "esbuild scripts/storage-init.mjs --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/scripts/storage-init.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
-    "db:test:clean": "esbuild scripts/test-db-clean.ts --bundle --platform=node --target=node24 --format=esm --outfile=${TMPDIR:-/tmp}/test-db-clean.mjs --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node ${TMPDIR:-/tmp}/test-db-clean.mjs",
+    "db:test:clean": "esbuild scripts/test-db-clean.ts --bundle --platform=node --target=node24 --format=esm --outfile=node_modules/.cache/test-db-clean.mjs --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node node_modules/.cache/test-db-clean.mjs",
     "db:migrate": "drizzle-kit migrate"
   },
   "devDependencies": {
