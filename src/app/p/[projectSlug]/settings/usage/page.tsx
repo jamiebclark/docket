@@ -51,6 +51,14 @@ function moneyCoverageSentence(money: NonNullable<UsageView["money"]>): string {
   return `${covers} Leaves out ${calls.toLocaleString("en-US")} call${calls === 1 ? "" : "s"} and ${tokens.toLocaleString("en-US")} token${tokens === 1 ? "" : "s"} on ${models}.`;
 }
 
+/** "all on this project's key" / "all on the install's" / "5 on this project's key, 12 on the install's" (FR-015). */
+function modelCredentialSentence(row: UsageView["byModel"][number]): string {
+  const { projectCredentialCalls, installCredentialCalls } = row;
+  if (installCredentialCalls === 0) return "all on this project's key";
+  if (projectCredentialCalls === 0) return "all on the install's";
+  return `${projectCredentialCalls.toLocaleString("en-US")} on this project's key, ${installCredentialCalls.toLocaleString("en-US")} on the install's`;
+}
+
 export default async function UsagePage({
   params,
   searchParams,
@@ -87,7 +95,7 @@ export default async function UsagePage({
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Usage"
-        description="What this project's generations have asked of the model, and what it would cost at the rates this install has configured."
+        description="What this project's generations have asked of the model, and what that usage would be worth at the rates this install has configured."
       />
       <FilterTabs label="Filter usage by period" tabs={tabs} />
       <p className="text-sm text-muted-foreground">
@@ -169,6 +177,7 @@ export default async function UsagePage({
                 <Cell header>
                   <div>{row.model}</div>
                   <Sub>{row.provider}</Sub>
+                  <Sub>{modelCredentialSentence(row)}</Sub>
                 </Cell>
                 <Cell>
                   <div>{row.calls.toLocaleString("en-US")}</div>

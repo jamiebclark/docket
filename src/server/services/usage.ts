@@ -8,9 +8,9 @@ import { estimateMicros, getLlmRates, rateFor } from "../llm/rates";
 export type { UsagePeriod, UsageTotals };
 export { USAGE_PERIODS, DEFAULT_USAGE_PERIOD } from "../../lib/generation/usage-period";
 
-/** The one sentence that carries every money figure (FR-020, SC-005). */
+/** The one sentence that carries every money figure (FR-020, M12, SC-005). */
 export const ESTIMATE_DISCLAIMER =
-  "Estimated upper bound from the rates this install has configured. Docket ships no prices and fetches none, and has no way to know what the provider's invoice will say.";
+  "Estimated upper bound from the rates this install has configured. The provider may have charged less or nothing — free tiers and data-sharing offers are invisible to the API. The provider's own dashboard is the only record of what was billed.";
 
 export interface ModelUsageRow extends ModelTotals {
   /** Present only when a rate matched; absent (not zero) otherwise (FR-021). */

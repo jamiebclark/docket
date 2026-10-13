@@ -475,6 +475,47 @@ Nothing in this feature is reported done until T052's full gate (`lint`, `typech
 
 ---
 
+## Phase 10: Review remediation
+
+**From** [review.md](./review.md). Four blocking findings (three BLOCKER, one MAJOR); F5–F9 are
+MINOR and F10–F12 are notes, so neither appears here. Every task names its finding id and location
+so it can be traced back to the review's reasoning.
+
+**Placed above Phase 9 on purpose**, despite being the later phase: Phase 9's only task is
+human-owned, and the implement loop cannot finish a phase while an unticked human-only task sits
+inside it — so a remediation phase appended *after* Phase 9 would never be reached. Phase 9 stays
+last in the file, which is what its own header asks for. No existing task was modified, reordered or
+re-ticked.
+
+- [X] T054 Restore the three clauses **FR-020**/**M12** require in `ESTIMATE_DISCLAIMER` — the
+  provider may have charged less or nothing, free tiers and data-sharing offers are invisible to the
+  API, and the provider's own dashboard is the only record of what was billed — and narrow
+  `tests/integration/llm/usage-rates.test.ts`'s spend/cost/charged/billed assertion so it tests
+  **figure labels**, not the disclaimer's own prose (FR-020 bans those words as labels on a figure,
+  not as descriptions of what the provider did) — review F1 (BLOCKER),
+  `src/server/services/usage.ts:12`
+- [X] T055 Reword the Usage page's `PageHeader` description so it does not call the money figure a
+  "cost" (**FR-020**, **M12**); it currently reads "…and what it would cost at the rates this install
+  has configured" and renders even when no rates are configured and no money is shown. Fix
+  `contracts/ui.md`'s matching line in the same pass so the contract stops carrying the defect —
+  review F2 (BLOCKER), `src/app/p/[projectSlug]/settings/usage/page.tsx:90`
+- [X] T056 Make the **SC-005** test actually render: render `UsagePage` with `LLM_RATES` and
+  `LLM_RATE_CURRENCY` set (reuse this file's existing `vi.resetModules()` helper, which already works
+  around `getLlmRates()`'s memo), assert the markup contains the currency code **and**
+  `ESTIMATE_DISCLAIMER`, and assert none of "spend", "cost", "charged" or "billed" appears in the
+  render. It must fail against the current `page.tsx:90` before T055 fixes it — review F3 (BLOCKER),
+  `tests/integration/llm/usage-rates.test.ts:98`
+- [X] T057 Render **FR-015**'s per-model-row credential split — the by-model table's Model cell shows
+  only the provider, while every row already carries `projectCredentialCalls`/`installCredentialCalls`
+  from `byModel`'s SQL; add the `Sub` line `contracts/ui.md:67` specifies ("all on this project's
+  key" / "12 on the install's") and assert it in a test — review F4 (MAJOR),
+  `src/app/p/[projectSlug]/settings/usage/page.tsx:168`
+
+**Checkpoint**: the money figure says what the spec requires it to say, a render-level test keeps it
+that way, and the per-model credential split is on screen.
+
+---
+
 ## Phase 9: Human verification (runs last, after Polish)
 
 **Positioned last on purpose**: a human-owned task inside an earlier phase starves the implement

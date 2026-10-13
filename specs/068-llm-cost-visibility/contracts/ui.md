@@ -40,8 +40,8 @@ Under the tabs, one line names the window and the zone through `formatLocal` /
 
 ```
 PageHeader  "Usage"
-            "What this project's generations have asked of the model, and what it would cost
-             at the rates this install has configured."
+            "What this project's generations have asked of the model, and what that usage would
+             be worth at the rates this install has configured."
 FilterTabs  period
 Card        headline figures  (<dl>, not a table — three facts, no rows)
               Model calls        1,284

@@ -1,7 +1,14 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { LlmUsageInsert } from "../../../src/server/dal/llm-usage";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
+
+vi.mock("@/server/auth/session", async () => (await import("../../helpers/actions")).sessionModule);
+vi.mock("next/navigation", async () => ({
+  ...(await import("../../helpers/actions")).navigationModule,
+  usePathname: () => "/",
+}));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -95,12 +102,35 @@ describe("the Usage report's money (US2)", () => {
     expect(after.totals.outputTokens).toBe(before.totals.outputTokens);
   });
 
-  it("a render containing a currency code always carries ESTIMATE_DISCLAIMER, never spend/cost/charged/billed (SC-005)", async () => {
+  it("a render containing a currency code always carries ESTIMATE_DISCLAIMER, and no money figure is ever labelled spend/cost/charged/billed (SC-005)", async () => {
+    const { scope, owner } = await postsEnv();
+    const now = new Date();
+    await scope.llmUsage.record([row({ calledAt: now })]);
+
+    vi.resetModules();
     vi.stubEnv("LLM_RATES", "openai:model-a=0.25/2.00");
     vi.stubEnv("LLM_RATE_CURRENCY", "USD");
-    const mod = await import("../../../src/server/services/usage");
-    expect(mod.ESTIMATE_DISCLAIMER.length).toBeGreaterThan(0);
-    expect(mod.ESTIMATE_DISCLAIMER).not.toMatch(/\b(spend|cost|charged|billed)\b/i);
+    const helpers = await import("../../helpers/actions");
+    helpers.actAs(owner);
+    const { ESTIMATE_DISCLAIMER } = await import("../../../src/server/services/usage");
+    const { default: UsagePage } = await import("../../../src/app/p/[projectSlug]/settings/usage/page");
+
+    const html = renderToStaticMarkup(
+      (await UsagePage({
+        params: Promise.resolve({ projectSlug: scope.project.slug }),
+        searchParams: Promise.resolve({}),
+      })) as never,
+    );
+    helpers.actAs(null);
+
+    // React escapes apostrophes to `&#x27;` in static markup.
+    const disclaimerAsRendered = ESTIMATE_DISCLAIMER.replace(/'/g, "&#x27;");
+    expect(html).toContain("USD");
+    expect(html).toContain(disclaimerAsRendered);
+    // SC-005/FR-020: the four forbidden words may never *label a money figure*. The disclaimer's own
+    // prose is allowed to describe what the provider did (M12) — it is excluded from this check.
+    const withoutDisclaimer = html.replace(disclaimerAsRendered, "");
+    expect(withoutDisclaimer).not.toMatch(/\b(spend|cost|charged|billed)\b/i);
   });
 });
 
