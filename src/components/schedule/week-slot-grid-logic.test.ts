@@ -8,6 +8,7 @@ import {
   announceRefused,
   announceResumed,
   announceRetimed,
+  announceWeekAdded,
   applyOverrides,
   clampToDay,
   clearResolved,
@@ -23,6 +24,7 @@ import {
   timeAtPosition,
   timeOfMinutes,
   topPercentOf,
+  weekdaysMissingAt,
   type Addition,
   type GridSlotState,
   type Override,
@@ -293,5 +295,58 @@ describe("hourTicks", () => {
     for (const { hour, topPercent } of hourTicks()) {
       expect(topPercent).toBeCloseTo(topPercentOf(`${String(hour).padStart(2, "0")}:00`), 6);
     }
+  });
+});
+
+describe("weekdaysMissingAt", () => {
+  const at = (weekday: Weekday, localTime: string) => slot({ id: `${weekday}-${localTime}`, weekday, localTime });
+
+  it("is all seven days when nothing is booked at that time", () => {
+    expect(weekdaysMissingAt([], "09:30")).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("skips the days that already have the time, keeping the rest in column order", () => {
+    const slots = [at(2, "09:30:00"), at(5, "09:30:00")];
+    expect(weekdaysMissingAt(slots, "09:30")).toEqual([1, 3, 4, 6, 7]);
+  });
+
+  it("is empty when every day has it, so the grid can refuse without a round trip", () => {
+    const slots = ([1, 2, 3, 4, 5, 6, 7] as Weekday[]).map((d) => at(d, "09:30:00"));
+    expect(weekdaysMissingAt(slots, "09:30")).toEqual([]);
+  });
+
+  it("ignores a slot at another time on the same day", () => {
+    expect(weekdaysMissingAt([at(1, "10:00:00")], "09:30")).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("counts a paused slot as present: the time is taken either way", () => {
+    const paused = { ...at(1, "09:30:00"), paused: true };
+    expect(weekdaysMissingAt([paused], "09:30")).toEqual([2, 3, 4, 5, 6, 7]);
+  });
+});
+
+describe("announceWeekAdded", () => {
+  const all: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
+
+  it("says 'every day' rather than listing seven names", () => {
+    expect(announceWeekAdded("09:30", all, [])).toBe("Added 09:30 on every day.");
+  });
+
+  it("names the days added and the days that already had it", () => {
+    expect(announceWeekAdded("09:30", [1, 3, 4, 6, 7], [2, 5])).toBe(
+      "Added 09:30 on Monday, Wednesday, Thursday, Saturday and Sunday. Tuesday and Friday already had it.",
+    );
+  });
+
+  it("names a single day without a list", () => {
+    expect(announceWeekAdded("18:00", [4], [1, 2, 3, 5, 6, 7])).toContain("Added 18:00 on Thursday.");
+  });
+
+  it("says nothing was added when the server created no rows", () => {
+    expect(announceWeekAdded("09:30", [], all)).toBe("09:30 was already set on every day. Nothing added.");
+  });
+
+  it("normalises a stored HH:MM:SS time", () => {
+    expect(announceWeekAdded("09:30:00", all, [])).toBe("Added 09:30 on every day.");
   });
 });

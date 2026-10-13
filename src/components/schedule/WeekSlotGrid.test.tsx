@@ -217,3 +217,39 @@ describe("WeekSlotGrid drag preview", () => {
     expect(html).not.toContain("z-10");
   });
 });
+
+describe("WeekSlotGrid week-add control", () => {
+  it("renders nothing when the caller passes no onAddWeek", () => {
+    const html = render({ canManage: true });
+    expect(html).not.toContain("Add to every day");
+  });
+
+  it("renders a labelled half-hour time field and a submit button for a manager", () => {
+    const html = render({ canManage: true, onAddWeek: vi.fn(async () => ({ ok: true as const, added: [], alreadySet: [] })) });
+    expect(html).toContain("Add a time to every day");
+    expect(html).toContain("Add to every day");
+    expect(html).toContain('type="time"');
+    // Half-hour steps, the same granularity the columns snap clicks to.
+    expect(html).toContain('step="1800"');
+    expect(html).toContain("Days that already have it are left alone.");
+  });
+
+  it("hides the control from a viewer who cannot manage slots", () => {
+    const html = render({ canManage: false, onAddWeek: vi.fn(async () => ({ ok: true as const, added: [], alreadySet: [] })) });
+    expect(html).not.toContain("Add to every day");
+  });
+
+  it("does not let the browser validate the step, so an off-grid typed time reaches our own error path", () => {
+    const html = render({ canManage: true, onAddWeek: vi.fn(async () => ({ ok: true as const, added: [], alreadySet: [] })) });
+    expect(html).toContain("noValidate");
+    // `required` still marks the field, so an empty time is named by us rather than by the browser.
+    expect(html).toContain("required");
+  });
+
+  it("gives the time field a real label association, not a placeholder", () => {
+    const html = render({ canManage: true, onAddWeek: vi.fn(async () => ({ ok: true as const, added: [], alreadySet: [] })) });
+    const forMatch = /<label for="([^"]+)"[^>]*>Add a time to every day<\/label>/.exec(html);
+    expect(forMatch).not.toBeNull();
+    expect(html).toContain(`id="${forMatch![1]}"`);
+  });
+});

@@ -32,6 +32,9 @@ const LAST_STEP_START = MINUTES_PER_DAY - STEP_MINUTES;
 
 export const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
+/** The seven ISO weekdays in column order, for the paths that act on the whole week at once. */
+export const WEEKDAYS: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 7];
+
 export const DUPLICATE_REFUSAL = "That account already has a slot at that time.";
 
 /** "09:30:00" → "09:30". Already-normalised input passes through unchanged. */
@@ -219,3 +222,31 @@ export const announceResumed = (weekday: Weekday, localTime: string): string => 
 
 export const announceRefused = (weekday: Weekday, localTime: string, reason: string): string =>
   `${reason} ${describe(weekday, localTime)} unchanged.`;
+
+/** Every weekday with no slot at `localTime` yet, ascending. The days a week add would create. */
+export function weekdaysMissingAt(slots: readonly GridSlotState[], localTime: string): Weekday[] {
+  const target = hhmm(localTime);
+  return WEEKDAYS.filter((d) => !slots.some((s) => s.weekday === d && hhmm(s.localTime) === target));
+}
+
+/** "Monday", "Monday and Friday", "Monday, Friday and Sunday" — the Oxford-comma-free house style. */
+function listDays(days: readonly Weekday[]): string {
+  const names = days.map((d) => WEEKDAY_NAMES[d - 1]!);
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+export const WEEK_ALREADY_SET = "Every day already has that time.";
+
+/**
+ * What a week add did, named in days rather than counts so it reads the same whether one day was
+ * missing or seven. `added` and `alreadySet` come from the server, which is the only party that knows
+ * how a concurrent add landed.
+ */
+export function announceWeekAdded(localTime: string, added: readonly Weekday[], alreadySet: readonly Weekday[]): string {
+  const time = hhmm(localTime);
+  if (added.length === 0) return `${time} was already set on every day. Nothing added.`;
+  if (added.length === WEEKDAYS.length) return `Added ${time} on every day.`;
+  const skipped = alreadySet.length > 0 ? ` ${listDays(alreadySet)} already had it.` : "";
+  return `Added ${time} on ${listDays(added)}.${skipped}`;
+}
