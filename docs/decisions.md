@@ -2511,7 +2511,98 @@ admin that the project uses the install default (K4).
   silently revokes whatever link was already sent, and someone who cannot see the row's note has no
   other way to learn that.
 
-## 058 — A project's tagline, description and website (2026-10-13)
+## 058 — LLM cost visibility (2026-10-13)
+
+### Spec decisions (M1–M19 — this entry's; the M1–M18 under 056 are a different set)
+
+- **M1 — One row per model call, not per generation.** A project-owned, call-level ledger, each row
+  naming the generation it belongs to — post, series, job item — where one exists, and naming its
+  purpose where one does not.
+- **M2 — Every call that reached the provider is recorded, whatever its outcome.** The outcome (`ok`
+  or the failure kind) is stored beside the counts, so the report can say how much went on calls that
+  produced nothing.
+- **M3 — Unknown counts stay unknown; null is never 0.** A call with no counts to report is counted
+  as a call, excluded from token sums, and the exclusion is stated on the screen.
+- **M4 — Each row records which credential it spent, and the provider and model as used at the
+  time.** Model is stored as the literal string used, not a reference.
+- **M5 — A call that was never made is not a row.** The ledger records calls to a provider, not
+  intentions.
+- **M6 — Bookkeeping never fails a generation.** A failure to write is logged and swallowed; the
+  ledger can under-count but never over-counts, so the report is a floor on calls and tokens and the
+  money figure (M12) is an upper bound.
+- **M7 — No prompt, output, error text or credential ever enters the ledger.** A row holds ids,
+  provider, model, source, purpose, outcome, two token counts, latency and a timestamp.
+- **M8 — Rates are operator-supplied install configuration with no built-in defaults, and Docket
+  never fetches them.** The install's own environment configuration, validated at startup and
+  documented in `.env.example`.
+- **M9 — A rate is keyed by provider and model, with separate input and output prices, expressed per
+  million tokens, in one install-wide currency code.** Not per project; the trade-off is accepted and
+  stated on the screen.
+- **M10 — The estimate is computed when the screen is rendered, from the rates configured now.**
+  Rates are not snapshotted per call; correcting a rate corrects every past estimate.
+- **M11 — Zero is a legal rate and means zero**, distinct from "no rate configured" (M13).
+- **M12 — The surface is called Usage, tokens are the headline, and the money figure is never called
+  "spend", "cost", "charged" or "billed".** It is an estimated upper bound, carried by one fixed
+  sentence wherever it appears.
+- **M13 — An unpriced model shows no money at all — never zero, never a guess.** Its row shows calls
+  and tokens with an explicit "no rate configured" marker; totals cover only priced models and say so.
+- **M14 — With no rates configured at all, the money column is absent, not empty.**
+- **M15 — Owner and admin only, gated on the existing `llm_credential: ["manage"]`; an editor sees no
+  sub-nav item and the URL 404s** — absent, not disabled, following entry 2's precedent exactly.
+- **M16 — It is a screen, and only a screen.** Nothing is added to the public API, no webhook event,
+  no notification, no email, no activity-log entry, no export.
+- **M17 — The screen answers for a period in the project's own time zone**, defaulting to the last 30
+  days, with this month, last month and all time available, grouped by model with a breakdown by
+  purpose.
+- **M18 — A total you cannot trace is not trustworthy.** A generated post's generation detail gains
+  its calls' token counts next to the latencies it already shows, and a batch job's page gains its
+  own totals.
+- **M19 — Rows live as long as their project and are never pruned by this entry.** They cascade with
+  the project like every other project-owned table; no entry owns pruning or rollups.
+
+### Plan decisions (P1–P19)
+
+- **P1 — The ledger is written by a provider decorator, not derived from the `attempts` blob** —
+  `attempts` has no per-call timestamp and carries a resumed step's earlier attempts forward.
+- **P2 — `UsageRecorder.wrap(llm)` mirrors `withCreditHold(llm, owner)`**: wrap, observe, swallow,
+  return unchanged. One reviewed idiom, not a second one.
+- **P3 — The series plan call carries no series link**: `planSeries` runs before `startSeries` writes
+  the row, and the person may never start it. **FR-003** allows it.
+- **P4 — Rows are buffered and flushed once, when the link is known.** A dedup collision flushes with
+  no post link.
+- **P5 — `purpose` is an explicit argument, never parsed from `label`**, plus a source-scanning guard
+  test.
+- **P6 — Outcome is `ok boolean` + nullable `failure_kind llm_failure_kind` with `CHECK (ok =
+  (failure_kind IS NULL))`.**
+- **P7 — The ledger records the provider's outcome, not Docket's acceptance of it.** Stated in
+  `docs/generator.md` so nobody reads `ok` as "this output was used".
+- **P8 — Rate problems are non-fatal**: `ConfigValidation` gains `warnings`, logged by name and reason
+  and never exiting.
+- **P9 — The rate variables sit in a new `LLM_RATE_VARIABLES`, outside `LLM_VARIABLES`**, because
+  `llmEnvIssues` would otherwise demand `LLM_PROVIDER`.
+- **P10 — Format: `<provider>:<model>=<input>/<output>`, whitespace- or comma-separated.**
+- **P11 — The currency is validated by shape (three ASCII letters), never against a remembered code
+  list**, and `Intl.NumberFormat`'s `style: "currency"` is not used.
+- **P12 — Money arithmetic is exact integer `BigInt` micro-units.** A non-zero amount rounding to
+  `0.00` renders "under 0.01", so a configured zero stays distinct.
+- **P13 — A dedicated `usagePeriodWindow` with explicit `disambiguation: "compatible"`**, not
+  Activity's `windowFor`.
+- **P14 — Two accessors, like `project_llm_settings`**: `scope.llmUsage` and `llmUsageRepoFor(projectId)`
+  for `runLlmCheck`, which has a project id and no scope.
+- **P15 — `(project_id, called_at DESC)` plus a partial `(project_id, generation_job_id)`. No rollup
+  table and no unique index** — a duplicate-suppressing key would turn a swallowed retry into an
+  over-count.
+- **P16 — `generation_job_id` is stored beside `generation_job_item_id`**, so **FR-028** is one
+  indexed aggregate instead of a join.
+- **P17 — The secret scan extends the existing scanned run** — it does not add a second one.
+- **P18 — FR-029 reads the existing `attempts` blob, not the ledger.** It already carries `usage` per
+  attempt, it is already loaded with the post, and it covers posts generated before this entry
+  shipped — so the post generation detail needs no query, no migration and no backfill.
+- **P19 — Money appears only on the Usage surface.** The job page and the post generation detail show
+  calls and tokens alone, keeping money behind the owner/admin gate so **SC-003** holds by
+  construction on both pages.
+
+## 059 — A project's tagline, description and website (2026-10-13)
 
 Spec B1-B14, plan P1-P28 (`specs/069-brand-profile-fields/{spec,research}.md`).
 

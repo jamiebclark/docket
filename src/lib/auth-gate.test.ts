@@ -60,3 +60,26 @@ describe("lastProjectSlugFor", () => {
     expect(lastProjectSlugFor("/p/%E0%A4%A")).toBeNull();
   });
 });
+
+describe("unsubscribing never needs a session", () => {
+  // Found by sending a real message through an SMTP catcher and following its unsubscribe link with no
+  // cookies: both routes answered 307 → /login, so nobody could ever unsubscribe. The route handlers
+  // were correct; the gate in front of them was not, which is why handler-level tests all passed.
+  it("lets the emailed unsubscribe page through unauthenticated", () => {
+    expect(isPublicPath("/email/unsubscribe")).toBe(true);
+    expect(loginRedirectFor("/email/unsubscribe", "?t=enc:v1:abc", false)).toBeNull();
+  });
+
+  it("lets RFC 8058's one-click POST through unauthenticated", () => {
+    // The mail client sends this itself and has no cookies to send.
+    expect(isPublicPath("/api/email/unsubscribe")).toBe(true);
+    expect(loginRedirectFor("/api/email/unsubscribe", "?t=enc:v1:abc", false)).toBeNull();
+  });
+
+  it("does not open up anything else under those prefixes", () => {
+    expect(isPublicPath("/email")).toBe(false);
+    expect(isPublicPath("/email/unsubscribe/other")).toBe(false);
+    expect(isPublicPath("/api/email")).toBe(false);
+    expect(isPublicPath("/api/email/send")).toBe(false);
+  });
+});

@@ -132,6 +132,14 @@ describe("SC-009: no plaintext secrets at rest or in logs", () => {
       expect(llmSettingsRow.rows.length).toBe(1);
       expect(llmSettingsRow.rows[0]!.r.includes(PROJECT_LLM_API_KEY_CANARY)).toBe(false);
 
+      // The usage ledger rows the two billing refusals above must have written, named explicitly
+      // before the all-tables scan below also covers them (FR-005).
+      const llmUsageRows = await runCrossProject("test: scan llm_call_usage for plaintext", async () =>
+        testDb().execute<{ r: string }>(sql`select t::text as r from llm_call_usage t`),
+      );
+      expect(llmUsageRows.rows.length).toBeGreaterThan(0);
+      for (const { r } of llmUsageRows.rows) for (const s of secrets) expect(r.includes(s)).toBe(false);
+
       // Scan every table (both databases) as text.
       const scan = async (db: ReturnType<typeof testDb>) => {
         const tables = await db.execute<{ table_name: string }>(

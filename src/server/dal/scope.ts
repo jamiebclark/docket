@@ -22,6 +22,7 @@ import { createWebhooksRepo, type WebhooksRepo } from "./webhooks";
 import { ForbiddenError, InvalidApiKeyError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
 import { createJobItemsRepo, createJobsRepo, type JobItemsRepo, type JobsRepo } from "./jobs";
+import { createLlmUsageRepo, type LlmUsageRepo } from "./llm-usage";
 import { createMediaRepo, type MediaRepo } from "./media";
 import { createVideoVersionsRepo, type VideoVersionsRepo } from "./video-versions";
 import { createUploadsRepo, type UploadsRepo } from "./uploads";
@@ -139,6 +140,7 @@ export interface ProjectScope {
   readonly webhooks: WebhooksRepo;
   readonly externalClaims: ExternalClaimsRepo;
   readonly projectLlm: ProjectLlmRepo;
+  readonly llmUsage: LlmUsageRepo;
   /** The caller's own reading position and mute setting; job-runner and API-key scopes throw `ForbiddenError`. */
   readonly notifications: NotificationsRepo;
   readonly projects: {
@@ -233,6 +235,7 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     apiKeys: createApiKeysRepo(exec, data.project.id),
     idempotency: createIdempotencyRepo(exec, data.project.id),
     projectLlm: createProjectLlmRepo(exec, data.project.id),
+    llmUsage: createLlmUsageRepo(exec, data.project.id),
     notifications:
       actor.kind === "member"
         ? createNotificationsRepo(exec, data.project.id, data.membership.userId)

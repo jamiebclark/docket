@@ -44,7 +44,7 @@ User Story 1 (storage/settings) and User Story 2 (generation) depend on.
 
 - [X] T001 Add nullable `tagline`, `description`, `websiteUrl` text columns to `src/server/db/schema/projects.ts`, placed after `defaultVoiceProfileId` (data-model.md §1)
 - [X] T002 [P] Add the `project_brand_update` value to the `membershipAction` pgEnum in `src/server/db/schema/audit.ts`, appended after `llm_credential_update` (data-model.md §2)
-- [X] T003 Run `pnpm db:generate` to produce migration `0026` (one `ALTER TYPE … ADD VALUE` plus three `ALTER TABLE "projects" ADD COLUMN … text`, no data step), review the SQL by hand against data-model.md §3, commit it with its `meta/`/journal entries under `drizzle/`, and confirm `pnpm db:check` is green (depends on T001, T002)
+- [X] T003 Run `pnpm db:generate` to produce migration `0027` (one `ALTER TYPE … ADD VALUE` plus three `ALTER TABLE "projects" ADD COLUMN … text`, no data step), review the SQL by hand against data-model.md §3, commit it with its `meta/`/journal entries under `drizzle/`, and confirm `pnpm db:check` is green (depends on T001, T002)
 - [X] T004 [P] Create `src/lib/validation/link.ts`: `LINK_URL_MAX`, `LINK_URL_LENGTH_MESSAGE`, `HTTP_LINK_MESSAGE`, `isHttpUrl`, `linkUrlSchema`, extracted verbatim from the existing rule in `src/lib/validation/voice.ts` (contracts/validation.md §1)
 - [X] T005 Update `src/lib/validation/voice.ts`: `preferredLinks`'s `url` field imports `linkUrlSchema` from `./link.ts` in place of its inline check; confirm `src/lib/validation/voice.test.ts` passes unedited (depends on T004)
 - [X] T006 Create `src/lib/validation/brand.ts`: `TAGLINE_MAX = 200`, `BRAND_DESCRIPTION_MAX = 1000`, `normaliseBrandLine`, `normaliseBrandText`, `taglineSchema`, `brandDescriptionSchema`, `brandWebsiteSchema` (the last built on `linkUrlSchema`) (contracts/validation.md §2; depends on T004)
@@ -124,7 +124,7 @@ nothing is written (spec.md US3).
 
 **Purpose**: Documentation and the whole-repository checks that prove nothing else moved.
 
-- [X] T032 [P] Record decision **058 — A project's tagline, description and website** in `docs/decisions.md`: B1-B14 and P1-P28, stating how brand context and the voice profile are ordered, why, and exactly what an empty field does (FR-033)
+- [X] T032 [P] Record decision **059 — A project's tagline, description and website** in `docs/decisions.md`: B1-B14 and P1-P28, stating how brand context and the voice profile are ordered, why, and exactly what an empty field does (FR-033)
 - [X] T033 [P] Update `docs/generator.md`: add a **Brand context** section (the three fields, who may set them, how they reach a post) and update the existing "Prompt order" paragraph in place to state the distinction between the brand's website and a voice profile's preferred links (FR-034)
 - [X] T034 [P] Run `pnpm vitest run tests/integration/api` and confirm the generated API document and every API test are unchanged (FR-038, SC-008)
 - [X] T035 Run the final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` (depends on all prior tasks)

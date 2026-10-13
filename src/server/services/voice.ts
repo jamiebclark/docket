@@ -289,6 +289,7 @@ export async function tryVoice(scope: ProjectScope, input: unknown, llm?: LlmPro
     scope,
     {
       label: "voice.try",
+      purpose: "voice.try",
       voice: { content },
       groups,
       assets: [],
@@ -296,6 +297,7 @@ export async function tryVoice(scope: ProjectScope, input: unknown, llm?: LlmPro
     },
     llm,
   );
+  await outcome.usage.flush({});
   if (!outcome.ok) throw new ConflictError(outcome.message);
 
   const variants = groups.map((group): TryItVariant => {

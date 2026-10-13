@@ -142,6 +142,12 @@ export default async function ResultPage({ params }: { params: Promise<{ project
           </dd>
           <dt>Latency</dt>
           <dd>{record.attempts.map((a) => `${a.latencyMs} ms`).join(", ")}</dd>
+          <dt>Tokens</dt>
+          <dd>
+            {record.attempts
+              .map((a) => (a.usage.inputTokens === null || a.usage.outputTokens === null ? "no counts reported" : `${a.usage.inputTokens} in / ${a.usage.outputTokens} out`))
+              .join(", ")}
+          </dd>
           <dt>Retried</dt>
           <dd>{record.retried ? `Yes (${record.retried.reason.replaceAll("_", " ")})` : "No"}</dd>
         </dl>

@@ -1,5 +1,5 @@
 {
-  "id": "384dfc82-1308-41b1-9cb7-31ec29288852",
+  "id": "28724afe-d11b-449f-b56b-8f4f608772b2",
   "prevId": "25a87914-203e-4261-b768-55d192e2cb30",
   "version": "7",
   "dialect": "postgresql",
@@ -3169,6 +3169,273 @@
       },
       "isRLSEnabled": false
     },
+    "public.llm_call_usage": {
+      "name": "llm_call_usage",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "llm_usage_purpose",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "credential_source": {
+          "name": "credential_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ok": {
+          "name": "ok",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "failure_kind": {
+          "name": "failure_kind",
+          "type": "llm_failure_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "input_tokens": {
+          "name": "input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "output_tokens": {
+          "name": "output_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latency_ms": {
+          "name": "latency_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "called_at": {
+          "name": "called_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "series_id": {
+          "name": "series_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "series_position": {
+          "name": "series_position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation_job_id": {
+          "name": "generation_job_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation_job_item_id": {
+          "name": "generation_job_item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "llm_call_usage_project_called_idx": {
+          "name": "llm_call_usage_project_called_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "called_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "llm_call_usage_project_job_idx": {
+          "name": "llm_call_usage_project_job_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "generation_job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"llm_call_usage\".\"generation_job_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "llm_call_usage_project_id_projects_id_fk": {
+          "name": "llm_call_usage_project_id_projects_id_fk",
+          "tableFrom": "llm_call_usage",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "llm_call_usage_post_id_posts_id_fk": {
+          "name": "llm_call_usage_post_id_posts_id_fk",
+          "tableFrom": "llm_call_usage",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "llm_call_usage_series_fk": {
+          "name": "llm_call_usage_series_fk",
+          "tableFrom": "llm_call_usage",
+          "tableTo": "generation_series",
+          "columnsFrom": [
+            "project_id",
+            "series_id"
+          ],
+          "columnsTo": [
+            "project_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "llm_call_usage_job_fk": {
+          "name": "llm_call_usage_job_fk",
+          "tableFrom": "llm_call_usage",
+          "tableTo": "generation_jobs",
+          "columnsFrom": [
+            "project_id",
+            "generation_job_id"
+          ],
+          "columnsTo": [
+            "project_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "llm_call_usage_job_item_fk": {
+          "name": "llm_call_usage_job_item_fk",
+          "tableFrom": "llm_call_usage",
+          "tableTo": "generation_job_items",
+          "columnsFrom": [
+            "project_id",
+            "generation_job_item_id"
+          ],
+          "columnsTo": [
+            "project_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "llm_call_usage_outcome": {
+          "name": "llm_call_usage_outcome",
+          "value": "\"llm_call_usage\".\"ok\" = (\"llm_call_usage\".\"failure_kind\" IS NULL)"
+        },
+        "llm_call_usage_series_pair": {
+          "name": "llm_call_usage_series_pair",
+          "value": "(\"llm_call_usage\".\"series_id\" IS NULL) = (\"llm_call_usage\".\"series_position\" IS NULL)"
+        },
+        "llm_call_usage_tokens_nonneg": {
+          "name": "llm_call_usage_tokens_nonneg",
+          "value": "(\"llm_call_usage\".\"input_tokens\" IS NULL OR \"llm_call_usage\".\"input_tokens\" >= 0) AND (\"llm_call_usage\".\"output_tokens\" IS NULL OR \"llm_call_usage\".\"output_tokens\" >= 0)"
+        },
+        "llm_call_usage_latency_nonneg": {
+          "name": "llm_call_usage_latency_nonneg",
+          "value": "\"llm_call_usage\".\"latency_ms\" >= 0"
+        },
+        "llm_call_usage_provider": {
+          "name": "llm_call_usage_provider",
+          "value": "\"llm_call_usage\".\"provider\" IN ('openai','anthropic')"
+        },
+        "llm_call_usage_source": {
+          "name": "llm_call_usage_source",
+          "value": "\"llm_call_usage\".\"credential_source\" IN ('project','install')"
+        },
+        "llm_call_usage_model_shape": {
+          "name": "llm_call_usage_model_shape",
+          "value": "length(\"llm_call_usage\".\"model\") BETWEEN 1 AND 200 AND \"llm_call_usage\".\"model\" !~ '\\s'"
+        },
+        "llm_call_usage_job_pair": {
+          "name": "llm_call_usage_job_pair",
+          "value": "\"llm_call_usage\".\"generation_job_item_id\" IS NULL OR \"llm_call_usage\".\"generation_job_id\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.llm_credit_holds": {
       "name": "llm_credit_holds",
       "schema": "",
@@ -3628,24 +3895,6 @@
         "default_voice_profile_id": {
           "name": "default_voice_profile_id",
           "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tagline": {
-          "name": "tagline",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "website_url": {
-          "name": "website_url",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         }
@@ -8148,8 +8397,7 @@
         "webhook_enable",
         "webhook_disable",
         "account_posting_instructions_update",
-        "llm_credential_update",
-        "project_brand_update"
+        "llm_credential_update"
       ]
     },
     "public.generation_mode": {
@@ -8175,6 +8423,19 @@
         "auth",
         "bad_request",
         "credit_exhausted"
+      ]
+    },
+    "public.llm_usage_purpose": {
+      "name": "llm_usage_purpose",
+      "schema": "public",
+      "values": [
+        "generate.single",
+        "generate.series_plan",
+        "generate.series_post",
+        "generate.regenerate",
+        "generate.job_item",
+        "voice.try",
+        "llm.check"
       ]
     },
     "public.approval_policy": {

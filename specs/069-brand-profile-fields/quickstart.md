@@ -9,7 +9,7 @@ call: prompt composition is asserted against fixtures and snapshots only (consti
 
 ```bash
 pnpm install                       # already installed in pipeline phases; no new dependency
-pnpm db:migrate                    # applies 0026 (one enum value, three columns)
+pnpm db:migrate                    # applies 0027 (one enum value, three columns)
 pnpm db:check                      # the committed SQL matches the schema
 ```
 

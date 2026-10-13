@@ -16,12 +16,12 @@ Read in full: `src/lib/validation/brand.test.ts` (the remediated file, line by l
 `src/lib/validation/{link,brand}.ts`, `src/lib/validation/voice.ts` and `index.ts` diffs,
 `src/server/services/projects.ts`, `src/server/services/generation/prompt.ts`,
 `src/server/dal/{project-columns,projects,scope,api-keys,audit}.ts`, `src/server/services/audit.ts`,
-`src/server/db/schema/{projects,audit}.ts`, `drizzle/0026_black_stingray.sql`,
+`src/server/db/schema/{projects,audit}.ts`, `drizzle/0027_faulty_miracleman.sql`,
 `src/app/p/[projectSlug]/settings/{page,actions,settings-form}.tsx` and `settings-form.test.tsx`,
 `.../settings/members/{page,activity-list}.tsx` and `activity-list.test.tsx`,
 `src/components/ui/{Field,TextareaField}.tsx`, `src/server/api/operations/activity.ts`,
 `tests/integration/project-brand.test.ts`, `tests/integration/generation/brand-context.test.ts`,
-the `docs/decisions.md` (058), `docs/generator.md` and `docs/brand-onboarding.md` diffs, `mkdocs.yml`,
+the `docs/decisions.md` (059), `docs/generator.md` and `docs/brand-onboarding.md` diffs, `mkdocs.yml`,
 and `spec.md` / `plan.md` / `research.md` / `tasks.md` / `contracts/prompt.md`.
 
 Sampled: `src/server/services/generation/{core,series,failures}.ts` (the brand call sites and the one
@@ -139,7 +139,7 @@ anyway.
       why:    Carried forward unchanged from the first review (its F3); nothing since `b145a30` touched
               either doc. FR-035 requires the spec, plan **and docs** to state the exclusions and their
               owner. `spec.md` ("Out of scope"), `plan.md:64-68` ("What this entry does not do") and
-              `quickstart.md` section 5 all do. Decision 058 (`docs/decisions.md:2514`) names
+              `quickstart.md` section 5 all do. Decision 059 (`docs/decisions.md:2514`) names
               `setup-write-api` only in passing, as the cost of reversing B1, and never says that API
               read and write of these values is out of scope and owned by it; `docs/generator.md:51`'s
               new "Brand context" section says nothing about logos or avatars, per-platform profile
@@ -151,7 +151,7 @@ anyway.
               the log of judgement calls — and cannot tell from it that a brand logo was considered and
               excluded rather than forgotten, so entry 2 (`image-generation`) or entry 5
               (`setup-write-api`) re-decides it from scratch.
-      owed:   two or three sentences in decision 058 and in `docs/generator.md`'s "Brand context"
+      owed:   two or three sentences in decision 059 and in `docs/generator.md`'s "Brand context"
               naming the exclusions (no logo or avatar, no per-platform profile copy, no profile sync,
               no API read or write) and their owners (`setup-write-api`, `image-generation`).
       traces: FR-035
@@ -271,11 +271,11 @@ Spot checks worth recording, because they are the cheap ways this could have bee
 - **SC-001's "under a minute"** and SC-004's "someone reviewing the log can tell" are human-timing and
   human-comprehension claims. The mechanics are proven; the experience is not measured.
 - **FR-003 against a populated install.** Every integration test creates its projects *after* migration
-  `0026`, so "applying the migration to an install with existing projects leaves all three values
+  `0027`, so "applying the migration to an install with existing projects leaves all three values
   empty" is argued from the DDL (three text columns added, no `DEFAULT`, no data step) rather than
-  executed against a pre-`0026` database holding rows in `projects`. The repo has the harness for it —
+  executed against a pre-`0027` database holding rows in `projects`. The repo has the harness for it —
   `tests/integration/migrations/copy-platform-guidance.test.ts` migrates partway, inserts rows and
-  finishes — but that test exists because `0009` had a data step and `0026` has none.
+  finishes — but that test exists because `0009` had a data step and `0027` has none.
 - **`pnpm build` and the remaining 256 test files** (providers, scheduler, media, video, webhooks,
   compose, queue, review, overview). Nothing in the diff touches them; the branch is not pushed, so
   there is no CI result to read, and implement's ticked `T035` is the only evidence for `pnpm build`.

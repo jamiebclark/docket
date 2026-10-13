@@ -3,7 +3,7 @@
 **Feature**: `specs/069-brand-profile-fields` | **Branch**: `069-brand-profile-fields` | **Date**: 2026-10-13
 
 Phase 0 of the plan. Two jobs: close every unknown the Technical Context would otherwise have to mark,
-and record the plan decisions (**P1–P28**) that `docs/decisions.md` § 058 will carry next to the spec's
+and record the plan decisions (**P1–P28**) that `docs/decisions.md` § 059 will carry next to the spec's
 B1–B14.
 
 ## 1. Unknowns, and how each was closed
@@ -15,7 +15,7 @@ to establish.
 
 | Question | Answer | Where it was read |
 |---|---|---|
-| What is the next migration number? | `0026`. The newest is `0025_overrated_yellowjacket` (idx 25 in the journal), which is itself the "add one `membership_action` value, then DDL" shape this entry needs. | `drizzle/`, `drizzle/meta/_journal.json` |
+| What is the next migration number? | `0027`. The newest is `0025_overrated_yellowjacket` (idx 25 in the journal), which is itself the "add one `membership_action` value, then DDL" shape this entry needs. | `drizzle/`, `drizzle/meta/_journal.json` |
 | Is the "add an enum value and use it later" split actually required? | The migration only *adds* `project_brand_update` and three columns; no statement in it inserts a row using the new label, so the in-transaction restriction never applies. `0025` and `0008` are the same shape. | `drizzle/0025_overrated_yellowjacket.sql`, `drizzle/0008_lazy_guardsmen.sql` |
 | Does `projects` carry CHECK constraints for the lengths of its text columns? | No. `name`, `slug` and `timezone` are bare `text`; their limits live in Zod (`projectNameSchema` 80, `slugSchema` 48). The only CHECKs in the schema are on `project_llm_settings` and the email tables, where they encode an *atomicity* invariant, not a length. | `src/server/db/schema/projects.ts`, `src/lib/validation/{name,slug}.ts`, `drizzle/0025_*.sql` |
 | How does a generation request reach the project row? | Through `ProjectScope.project`, which is populated once by `resolve()` from a fixed column list (`projectColumns`) and carried by `forProject`, `forJobRunner` and `forApiKey`. `runGenerationStep(scope, …)` and `planSeries(scope, …)` both already hold it; **no generation path lacks a scope**. | `src/server/dal/scope.ts:155-165, 252-331`, `src/server/services/generation/core.ts:108`, `series.ts:100` |
@@ -62,7 +62,7 @@ package. Constitution I is satisfied by every row above naming a path in this re
   SC-002's "every generation path" would be false in production while green in tests that use member
   scopes. Fixing it is cheaper than testing around it. *Rejected:* reading the project row again inside
   `core.ts` — the scope already carries it, so that is a second query per generation for nothing.
-- **P4 — One migration, `0026`**: `ALTER TYPE "public"."membership_action" ADD VALUE
+- **P4 — One migration, `0027`**: `ALTER TYPE "public"."membership_action" ADD VALUE
   'project_brand_update'` plus three `ALTER TABLE "projects" ADD COLUMN … text`. Purely additive DDL, no
   `UPDATE`, no data step, no operator action; every existing project ends with three `NULL`s, which is
   FR-003 and SC-003 by construction. The new enum label is not *used* by any statement in the same
@@ -218,11 +218,11 @@ package. Constitution I is satisfied by every row above naming a path in this re
 
 | Requirements | Where |
 |---|---|
-| FR-001 – FR-003 | migration `0026`, `schema/projects.ts`, `schema/audit.ts` (P1, P2, P4) |
+| FR-001 – FR-003 | migration `0027`, `schema/projects.ts`, `schema/audit.ts` (P1, P2, P4) |
 | FR-004 – FR-011 | `lib/validation/{link,brand}.ts`, `updateSettingsSchema` (P5–P11) |
 | FR-012 – FR-014 | `services/projects.ts` (unchanged permission and scope shape), `dal/projects.ts` (P12) |
 | FR-015 – FR-019 | `services/projects.ts` audit block, `activity-list.tsx`, members page (P13–P16, P27) |
 | FR-020 – FR-024 | `settings-form.tsx`, `settings/actions.ts`, `settings/page.tsx` (P24–P26, P28) |
 | FR-025 – FR-032 | `generation/prompt.ts`, two call sites in `core.ts` and `series.ts` (P17–P23) |
-| FR-033 – FR-035 | `docs/decisions.md` § 058, `docs/generator.md` |
+| FR-033 – FR-035 | `docs/decisions.md` § 059, `docs/generator.md` |
 | FR-036 – FR-038 | satisfied by touching no media, provider or API module at all |

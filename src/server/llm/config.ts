@@ -87,6 +87,13 @@ export const LLM_VARIABLES: readonly string[] = [
 ];
 
 /**
+ * Deliberately separate from `LLM_VARIABLES` (P9): an install may have no provider configured at
+ * all while its projects generate on their own keys, and that install is exactly the one most
+ * interested in rates — `llmEnvIssues` must not make these require `LLM_PROVIDER`.
+ */
+export const LLM_RATE_VARIABLES: readonly string[] = ["LLM_RATES", "LLM_RATE_CURRENCY"];
+
+/**
  * Strict wrapper for startup (research D25). A wholly absent group is not an issue (generation is
  * disabled); setting any variable of the group without `LLM_PROVIDER`, or a malformed or
  * incomplete provider setup, is. Names and reasons only, never values.

@@ -53,7 +53,7 @@ import { GET as health } from "../../../src/app/api/health/route";
 import { POST as tickPost } from "../../../src/app/api/internal/tick/route";
 import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
 import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
-import { connectAttempts, installState, membershipAuditLog, projectLlmSettings, session as sessionTable, user } from "../../../src/server/db/schema";
+import { connectAttempts, installState, llmCallUsage, membershipAuditLog, projectLlmSettings, session as sessionTable, user } from "../../../src/server/db/schema";
 import { publishAttempts } from "../../../src/server/db/schema/attempts";
 import { postTargets } from "../../../src/server/db/schema/posts";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
@@ -62,6 +62,7 @@ import { createOpenAiProvider } from "../../../src/server/llm/openai";
 import type { LlmConfig } from "../../../src/server/llm/config";
 import { setLlmForTests, setLlmFactoryForTests } from "../../../src/server/llm";
 import ModelPage from "../../../src/app/p/[projectSlug]/settings/model/page";
+import UsagePage from "../../../src/app/p/[projectSlug]/settings/usage/page";
 import { saveProjectModel, removeProjectModel, checkProjectModel } from "../../../src/app/p/[projectSlug]/settings/model/actions";
 import { NotFoundSignal } from "../../helpers/actions";
 import { runTick } from "../../../src/server/scheduler";
@@ -83,7 +84,7 @@ import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
-import { clearHolds, clearProjectCredentials, jobsEnv } from "../../helpers/jobs-env";
+import { clearHolds, clearProjectCredentials, jobsEnv, modelOk } from "../../helpers/jobs-env";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { eventsFor } from "../../helpers/activity";
@@ -514,6 +515,37 @@ describe("secret scan (FR-020, SC-005)", () => {
       { name: "project llm key (changed)", value: PROJECT_LLM_KEY_2 },
     ];
 
+    // A completed job on the install's own credential, so the job page carries real token totals (FR-028)
+    // and the Usage page below has a non-empty report to render.
+    await genEnv.asset();
+    setLlmForTests(createFakeLlm([modelOk("Scan success post.")]));
+    const { jobId: usageJobId } = await createJob(genEnv.scope, genEnv.input());
+    await runTick({ config: { jobMaxItems: 5 } });
+    setLlmForTests(null);
+    const sessionBeforeUsage = session.current;
+    session.current = { user: { id: genEnv.owner.id }, session: { id: "scan-usage-job-session" } };
+    pieces.push({
+      place: "page: job detail (real usage)",
+      text: renderToStaticMarkup((await JobPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, jobId: usageJobId }), searchParams: Promise.resolve({}) })) as never),
+    });
+    session.current = sessionBeforeUsage;
+
+    // The Usage page (FR-026, SC-010): owner and admin see it; the editor gets the same not-found as
+    // any page they may not manage.
+    const renderUsagePage = async (u: { id: string }) => {
+      session.current = { user: { id: u.id }, session: { id: `scan-usage-session-${u.id}` } };
+      return UsagePage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) });
+    };
+    pieces.push({ place: "page: usage (owner)", text: renderToStaticMarkup((await renderUsagePage(genEnv.owner)) as never) });
+    pieces.push({ place: "page: usage (admin)", text: renderToStaticMarkup((await renderUsagePage(genEnv.admin)) as never) });
+    try {
+      await renderUsagePage(genEnv.editor);
+      throw new Error("expected the editor's usage page to 404");
+    } catch (error) {
+      if (!(error instanceof NotFoundSignal)) throw error;
+    }
+    session.current = sessionBeforeUsage;
+
     await genEnv.asset();
     setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
     const { jobId: heldJobId } = await createJob(genEnv.scope, genEnv.input());
@@ -532,6 +564,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     pieces.push({ place: "membership_audit_log", text: JSON.stringify(await db.select().from(membershipAuditLog).where(eq(membershipAuditLog.projectId, env.project.id))) });
     pieces.push({ place: "membership_audit_log (project llm)", text: JSON.stringify(await db.select().from(membershipAuditLog).where(eq(membershipAuditLog.projectId, genEnv.project.id))) });
     pieces.push({ place: "project_llm_settings", text: JSON.stringify(await db.select().from(projectLlmSettings).where(eq(projectLlmSettings.projectId, genEnv.project.id))) });
+    pieces.push({ place: "llm_call_usage", text: JSON.stringify(await db.select().from(llmCallUsage).where(eq(llmCallUsage.projectId, genEnv.project.id))) });
     pieces.push({ place: "connect_attempts", text: JSON.stringify(await db.select().from(connectAttempts).where(eq(connectAttempts.projectId, env.project.id))) });
     const accountRows = await db.select().from(socialAccounts).where(eq(socialAccounts.projectId, env.project.id));
     pieces.push({ place: "social_accounts", text: JSON.stringify(accountRows.map((r) => ({ ...r, credentialsEncrypted: undefined }))) });

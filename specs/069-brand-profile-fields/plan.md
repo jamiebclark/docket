@@ -8,7 +8,7 @@
 
 A brand's identity becomes project data. **Three nullable `text` columns on `projects`** — `tagline`,
 `description`, `website_url` — plus **one `membership_action` value**, `project_brand_update`, in **one
-additive migration, `0026`**. No new table, no new index, no new permission, no new dependency, no new
+additive migration, `0027`**. No new table, no new index, no new permission, no new dependency, no new
 environment variable, no new UI primitive.
 
 **The write path is the one that already exists.** The three fields ride the existing General settings
@@ -83,7 +83,7 @@ with the path recorded in [research.md §1](./research.md).
 
 **Storage**: Postgres. **Three nullable `text` columns** on the existing `projects` table (`tagline`,
 `description`, `website_url`) and **one** new `membership_action` enum value, `project_brand_update`. One
-migration, `0026`, purely additive DDL. **No new table, no index, no foreign key, no CHECK constraint,
+migration, `0027`, purely additive DDL. **No new table, no index, no foreign key, no CHECK constraint,
 no default**, and no change to any existing column anywhere. Details and the migration body in
 [data-model.md](./data-model.md).
 
@@ -139,12 +139,12 @@ with 2 call sites, 1 changed form + 1 action + 1 page, 2 changed activity-log fi
 | V. Providers are plug-ins | **Pass, not engaged** | Nothing under `src/providers/` is touched; no capability, scheduler path, composer or provider schema changes. The brand is project data, not platform data — which is exactly why FR-037 excludes per-platform profile copy and profile sync. |
 | VI. Boring, few dependencies | **Pass** | **No** runtime dependency, **no** infrastructure, **no** queue, **no** second process, **no** `docker-compose.yml` change, **no** environment variable, **no** new UI primitive (`Field` and `TextareaField` already exist, and the skill requires the latter for multi-line text). No new table where three nullable columns on a row that already has one locked write path will do — the alternative is argued and rejected in B1, and the reversal (move them into a project-owned table) is recorded with it. The limits 200/1000/500 are constants in `src/lib/validation/brand.ts`, not configuration. |
 | VII. Secrets never leak | **Pass, not engaged** | No credential, token or key is read, stored, rendered or logged. The three brand values are deliberately public-facing text — a tagline, a description and a website — authored by an owner or admin and intended to reach a generated post. The one place secrecy touches this entry is the audit guard: `details` uses `{ field, previous, next }` and introduces no key matching `/token\|url\|password\|secret/i`, which a test asserts rather than the reader trusting (FR-019, B12's caveat). The website is not a secret and is not redacted. |
-| Engineering: Neon-safe, no session features | **Pass** | No advisory lock, no `LISTEN`, no session-level feature. The only locking is the row-level `SELECT … FOR UPDATE` the settings save already takes; the before-read's correctness rests on READ COMMITTED's per-statement snapshot, which is the same guarantee on Neon as on local Postgres. Migrations keep using the direct URL; `0026` is additive DDL with no data step. |
+| Engineering: Neon-safe, no session features | **Pass** | No advisory lock, no `LISTEN`, no session-level feature. The only locking is the row-level `SELECT … FOR UPDATE` the settings save already takes; the before-read's correctness rests on READ COMMITTED's per-statement snapshot, which is the same guarantee on Neon as on local Postgres. Migrations keep using the direct URL; `0027` is additive DDL with no data step. |
 | Engineering: bounded, concurrent-safe, kill-safe tick | **Pass, not engaged** | No change to `runTick()`, its budget, its claims or its leases. Generation does the same number of reads as before (the brand rides a scope that is already resolved), so no tick section gets slower. A job running while the brand is edited picks up the new value on its next item, by design (P22) — no snapshot to invalidate and nothing to recover. |
 | Engineering: UTC and Temporal | **Pass, not engaged** | No wall-clock arithmetic, no time-zone rule, no DST question. The only instant written is the audit row's `created_at` (`now()`, UTC `timestamptz`), rendered by the activity list's existing `LocalTime` in the project's zone. |
 | Engineering: accessibility, server components | **Pass** | Three controls on the existing client leaf form inside a server-component page; no component becomes a client component that was not one. Each has a visible `<label>`, hint text and its error linked through `aria-describedby`, with the error in the `aria-live="polite"` region `Field`/`TextareaField` already render; success and failure keep the form's existing `role="status"` / `role="alert"` treatments. Multi-line text uses `TextareaField`, never a raw `<textarea>`, per the `docket-ui` skill. Full keyboard reach and the shared visible focus ring come from `controlStyles`; nothing is conveyed by colour alone; the fields work with client JavaScript unavailable because they ride the existing form post. A member who cannot edit sees the values, disabled, under the note that already explains why — the convention this form already uses for its other five fields. [contracts/ui.md](./contracts/ui.md) also records the one accessibility gap this entry **inherits** rather than introduces (the form does not move focus to the first invalid field), so a reviewer does not read it as new. |
-| Workflow: migration ships committed, `db:check` green | **Pass** | One migration, `0026`: `ALTER TYPE … ADD VALUE` plus three `ADD COLUMN`. Generated by `pnpm db:generate`, reviewed by hand, committed with the schema change, and `pnpm db:check` green. The new enum label is added and **not used** by any statement in the same migration, so Postgres' in-transaction restriction never applies — the shape `0025` and `0008` already ship. Applies identically to an empty database and to one with existing projects; no data step, no operator action, no backfill. |
-| Workflow: docs | **Pass** | FR-033/FR-034/FR-035: `docs/decisions.md` gains **058 — A project's tagline, description and website**, carrying B1–B14 and P1–P28 and stating plainly how brand context and the voice profile are ordered, why, and exactly what an empty field does; `docs/generator.md` gains a **Brand context** section (what the three fields are, who may set them, how they reach a post) and its "Prompt order" paragraph is updated **in place** under the heading other documents link to, including the distinction between the brand's website and a voice profile's preferred links; both state what this entry does not do and which later entry owns it. |
+| Workflow: migration ships committed, `db:check` green | **Pass** | One migration, `0027`: `ALTER TYPE … ADD VALUE` plus three `ADD COLUMN`. Generated by `pnpm db:generate`, reviewed by hand, committed with the schema change, and `pnpm db:check` green. The new enum label is added and **not used** by any statement in the same migration, so Postgres' in-transaction restriction never applies — the shape `0025` and `0008` already ship. Applies identically to an empty database and to one with existing projects; no data step, no operator action, no backfill. |
+| Workflow: docs | **Pass** | FR-033/FR-034/FR-035: `docs/decisions.md` gains **059 — A project's tagline, description and website**, carrying B1–B14 and P1–P28 and stating plainly how brand context and the voice profile are ordered, why, and exactly what an empty field does; `docs/generator.md` gains a **Brand context** section (what the three fields are, who may set them, how they reach a post) and its "Prompt order" paragraph is updated **in place** under the heading other documents link to, including the distinction between the brand's website and a voice profile's preferred links; both state what this entry does not do and which later entry owns it. |
 
 **No violations.** The Complexity Tracking table below is therefore empty.
 
@@ -154,7 +154,7 @@ Two things worth stating plainly rather than leaving implicit:
   `project: ['edit']`; `src/server/auth/access.ts` declares `project: ["view", "update"]`. The existing
   `project: ["update"]` is already owner-and-admin, already guards this exact form and already fails
   closed for an editor, so `access.ts` is not touched (B9, FR-012). The near-miss is recorded in the
-  spec's Assumptions and in decisions 058 so the next entry does not repeat it.
+  spec's Assumptions and in decisions 059 so the next entry does not repeat it.
 - **Two pre-existing defects are fixed in passing** (P3, P27), both because leaving them would make this
   entry's own claims false: the duplicated project-column list would starve API-key generation of brand
   context while every member-scoped test passed, and the activity list's missing
@@ -170,7 +170,7 @@ specs/069-brand-profile-fields/
 ├── spec.md               # Input
 ├── plan.md               # This file
 ├── research.md           # Phase 0: every unknown closed, and plan decisions P1-P28
-├── data-model.md         # Phase 1: the three columns, the enum value, migration 0026, invariants
+├── data-model.md         # Phase 1: the three columns, the enum value, migration 0027, invariants
 ├── quickstart.md         # Phase 1: how to run it, and the checks that prove each story
 ├── contracts/
 │   ├── validation.md     # The shared link rule, the three field schemas, patch semantics, messages
@@ -221,14 +221,14 @@ src/
 │       ├── activity-list.test.tsx   # NEW  every membership_action value has a sentence (P27)
 │       └── page.tsx                 # detailSubject also handles project_brand_update
 drizzle/
-└── 0026_*.sql                       # NEW  one enum value + three ADD COLUMN (+ meta/)
+└── 0027_*.sql                       # NEW  one enum value + three ADD COLUMN (+ meta/)
 tests/integration/
 ├── project-brand.test.ts            # NEW  US1 + US3: storage, validation, authz, audit, concurrency
 ├── generation/brand-context.test.ts # NEW  US2: every generation path carries the section
 ├── terminology/page-headers.test.tsx  # the updated settings description (P28)
 └── notifications/ui.test.tsx          # the same string, asserted a second time (P28)
 docs/
-├── decisions.md                     # + 058 - A project's tagline, description and website (B1-B14, P1-P28)
+├── decisions.md                     # + 059 - A project's tagline, description and website (B1-B14, P1-P28)
 └── generator.md                      # + Brand context; "Prompt order" updated in place
 ```
 
