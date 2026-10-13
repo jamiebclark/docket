@@ -32,6 +32,16 @@ Leaving the key field blank when saving keeps the stored key, so the model can b
 
 An install that only ever uses environment variables needs to do nothing: with no project credential stored, every project keeps using the install default exactly as before, and the only visible change is a settings section saying so.
 
+## Usage
+
+Under a project's **Settings → Usage**, an owner or admin reads what their project has used: calls, input and output tokens, a per-model and per-purpose breakdown, and the split between the install's credential and the project's own, for a chosen period (last 30 days, this month, last month or all time, in the project's own time zone). An editor does not see this sub-nav item at all, and the URL 404s for them (absent, not disabled, the same rule as "Model & API key"). The screen is complete and useful with no rate configured anywhere: calls and tokens are recorded for every call that reaches a provider, whatever its outcome, and a call with no reported counts is shown as a call with its tokens excluded from the sums, never coerced to zero.
+
+**A row's `ok` means the provider answered, not that Docket accepted the output.** A call whose output then failed Docket's own platform checks still reads `ok` on the ledger — the ledger is a record of what the provider did, not of what got used.
+
+**Pricing is optional and entirely the operator's.** Docket ships no prices and never fetches any. Setting `LLM_RATES` (and `LLM_RATE_CURRENCY`) in the install's environment adds a money figure to the Usage screen for the models it names — an **estimated upper bound**, never "spend", "cost", "charged" or "billed", because the provider may have charged less, or nothing at all, and the provider's own dashboard is the only record of what was actually billed. A model with no configured rate keeps showing its calls and tokens with a "no rate configured" marker, and any total on the screen names what it leaves out rather than silently dropping or zeroing it. Malformed rate configuration is non-fatal: a problem is logged by name and reason at startup and the money figure is simply unavailable for the affected model.
+
+A batch job's page and a generated post's "Generation details" each show that job's or that attempt's own calls and tokens beside the counts and latency already there — no money figure on either, by design, so a surprising total can always be traced back to the generation that caused it.
+
 ## Policies
 
 Each project has a default approval policy (`review_required` or `auto_approve`) and scheduling policy (`leave_as_draft` or `add_to_queue`). A generation request can override either one.
@@ -86,6 +96,7 @@ A job generates one post per item, in the background, so a person can hand the g
 - **Policies** are authorised once, when the job is created, against the creator's role. The same approval and scheduling rules as single posts then apply to every item; a post that fails validation always goes to review.
 - **Series** stay in-request (not jobs).
 - **Measuring.** `pnpm llm:check` prints `job_call` lines and a `jobs budget_ms=…` line with a key; without one it prints `latency: unmeasured; live path verified with mocks only`. `fits=no` means a typical call is too slow for the tick budget. Measured against the live API on 2026-10-12 with `LLM_MODEL=gpt-5.4-mini`: about **1.3 s** a call (1.1 s image, 1.5 s text), **58 input / 42 output tokens** on a trivial prompt, and `fits=yes` for both call kinds against the default 17 s window — so the batch runner is not latency-bound on this model. `pnpm llm:check -- --project <slug>` runs the same check on one project's resolved credential and prints `source=project` or `source=install`, which is the quickest way to tell which credential a project is actually spending.
+- **Usage.** A job's own page shows its calls and input/output token totals, labelled "to date" while it is still running, with no money figure under any rate configuration — see "Usage" above for where rates are set and what they mean.
 
 ## Out of scope
 

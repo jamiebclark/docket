@@ -12,9 +12,9 @@ import { clearRecordedQueries } from "../../setup/scope-recorder";
 
 // This file's row-count assertions cover every table, so a stray `llm_credit_holds` row left by any
 // earlier file in this worker fails them — and a successful call clears such a row, which is what the
-// "writes nothing" assertions see. Clearing before each test makes them order-independent rather than
-// trusting every other file's teardown; the afterAll keeps this file's own hold from leaking out
-// (review F6).
+// "writes nothing" assertions see (beyond the usage ledger row every call now records). Clearing
+// before each test makes them order-independent rather than trusting every other file's teardown; the
+// afterAll keeps this file's own hold from leaking out (review F6).
 beforeEach(clearHolds);
 afterAll(async () => {
   await clearHolds();
@@ -57,7 +57,8 @@ describe("tryVoice", () => {
     const llm = createFakeLlm([ok({ mock: "Hello Mock" })]);
     const before = await rowCounts();
     const res = await voice.tryVoice(env.scope, { brief: "Say hi", accountIds: [accountId], versionId }, llm);
-    expect(await rowCounts()).toEqual(before);
+    // Voice "try it" calls are recorded on the usage ledger too (US1), with every link null (P2).
+    expect(await rowCounts()).toEqual({ ...before, llm_call_usage: before.llm_call_usage! + llm.requests.length });
     expect(res.variants.map((v) => v.providerKey)).toEqual(["mock"]);
     expect(res.variants[0]).toMatchObject({ text: "Hello Mock", count: 10, accountNames: ["Acme"], issues: [] });
     expect(res.variants[0]!.limit).toBeGreaterThan(0);
@@ -88,7 +89,7 @@ describe("tryVoice", () => {
       ConflictError,
     );
     expect(llm.requests.length).toBeLessThanOrEqual(2);
-    expect(await rowCounts()).toEqual(before);
+    expect(await rowCounts()).toEqual({ ...before, llm_call_usage: before.llm_call_usage! + llm.requests.length });
   });
 
   it("surfaces credit_exhausted with the fixed sentence after exactly one call", async () => {
@@ -100,6 +101,11 @@ describe("tryVoice", () => {
     );
     expect(llm.requests).toHaveLength(1);
     // The credential-owner hold table is the one exception: a billing refusal writes a hold row (US1/US2).
-    expect(await rowCounts()).toEqual({ ...before, llm_credit_holds: 1 });
+    // The usage ledger also gains the one call that reached the provider before the refusal.
+    expect(await rowCounts()).toEqual({
+      ...before,
+      llm_credit_holds: 1,
+      llm_call_usage: before.llm_call_usage! + llm.requests.length,
+    });
   });
 });

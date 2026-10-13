@@ -363,21 +363,21 @@ both the job page and the post detail.
 **Purpose**: The documentation obligations FR-033 attaches to this entry by name, and the full-suite
 proof that the repository is left working.
 
-- [ ] T048 [P] Update `docs/generator.md`: document the Usage surface (what it shows, where, who may
+- [X] T048 [P] Update `docs/generator.md`: document the Usage surface (what it shows, where, who may
   see it), "Configuring a provider"/Jobs sections widened with where rates live (`LLM_RATES`,
   `LLM_RATE_CURRENCY`), that Docket ships no prices and never fetches any, that the money figure is an
   estimated upper bound, and the P7 note that an `ok` row means the provider answered, not that Docket
   accepted the output (FR-033)
-- [ ] T049 [P] Add `docs/decisions.md` a new heading "### Spec decisions (M1–M19 — this entry's; the
+- [X] T049 [P] Add `docs/decisions.md` a new heading "### Spec decisions (M1–M19 — this entry's; the
   M1–M18 under 056 are a different set)" and "## 058 — LLM cost visibility" carrying P1–P19, next to
   entries 1 and 2's sets (FR-033, plan.md "Two things the spec says that the code does not allow")
-- [ ] T050 [P] Update `docs/security.md`: add or update the rows covering `llm_call_usage` and the
+- [X] T050 [P] Update `docs/security.md`: add or update the rows covering `llm_call_usage` and the
   Usage/job/post-detail screens, naming the tests that prove no leak (checked by
   `tests/integration/docs/security-findings.test.ts`) (FR-033)
-- [ ] T051 [P] Confirm `.env.example`'s `LLM_RATES`/`LLM_RATE_CURRENCY` blocks (added in T038) carry the
+- [X] T051 [P] Confirm `.env.example`'s `LLM_RATES`/`LLM_RATE_CURRENCY` blocks (added in T038) carry the
   same "no default on purpose" care as the rest of the Generator group (FR-033, checked by
   `tests/lint/env-coverage.test.ts`)
-- [ ] T052 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`; confirm
+- [X] T052 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`; confirm
   `src/server/llm/log.test.ts` is unchanged (FR-031) and no existing generation/jobs/scheduler test
   needed a new stub beyond the recorder wiring itself (SC-012); fix any regression found rather than
   adjusting its expectation
