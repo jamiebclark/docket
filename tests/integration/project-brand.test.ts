@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { ZodError } from "zod";
-import { ConflictError } from "../../src/server/dal/errors";
+import { ConflictError, ForbiddenError } from "../../src/server/dal/errors";
 import { assertAuditDetailsSafe } from "../../src/server/dal/audit";
 import { forProject } from "../../src/server/dal/scope";
 import { runCrossProject } from "../../src/server/db/cross-project";
@@ -145,6 +145,32 @@ describe("project brand fields", () => {
     const after = await row(ctx.project.id);
     expect(after.tagline).toBe("Before");
     expect(await brandRows(ctx.project.id)).toHaveLength(1);
+  });
+
+  it("an editor's hand-built save, including brand values, is refused server-side with nothing written and no audit row", async () => {
+    const ctx = await createProjectWithMembers();
+    const err = await projectsService
+      .updateSettings(await as(ctx, ctx.editor), valid({ slug: ctx.project.slug, tagline: "Hacked", description: "Hacked", websiteUrl: "https://evil.test" }))
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ForbiddenError);
+    const after = await row(ctx.project.id);
+    expect(after).toMatchObject({ tagline: null, description: null, websiteUrl: null });
+    expect(await brandRows(ctx.project.id)).toHaveLength(0);
+  });
+
+  it("an admin's save naming another project is refused and that project's brand values are unchanged", async () => {
+    const ctx = await createProjectWithMembers();
+    const other = await createProject();
+    await runCrossProject("test", () =>
+      testDb().update(projects).set({ tagline: "Other brand" }).where(eq(projects.id, other.id)),
+    );
+    const err = await projectsService
+      .updateSettings(await as(ctx, ctx.admin), valid({ slug: other.slug, tagline: "Stolen" }))
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ConflictError);
+    const otherAfter = await row(other.id);
+    expect(otherAfter.tagline).toBe("Other brand");
+    expect(await brandRows(other.id)).toHaveLength(0);
   });
 
   it("assertAuditDetailsSafe accepts all three fields' details", () => {

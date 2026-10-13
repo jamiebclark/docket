@@ -56,4 +56,22 @@ describe("SettingsForm brand fields", () => {
     expect(html).toContain('id="description-error"');
     expect(html).toContain('id="websiteUrl-error"');
   });
+
+  it("for an editor, renders the brand fields' current values, disabled, under the owner/admin note, with no save button", () => {
+    const html = render(
+      values({ tagline: "Make it snappy", description: "A longer explanation of the brand.", websiteUrl: "https://example.com" }),
+      false,
+    );
+    const noteIndex = html.indexOf("Only owners and admins can change project settings.");
+    const taglineIndex = html.indexOf('name="tagline"');
+    expect(noteIndex).toBeGreaterThan(-1);
+    expect(taglineIndex).toBeGreaterThan(noteIndex);
+    expect(html).toMatch(/name="tagline"[^>]*value="Make it snappy"/);
+    expect(html).toMatch(/<input id="tagline"[^>]*disabled="" name="tagline"/);
+    expect(html).toContain("A longer explanation of the brand.");
+    expect(html).toMatch(/<textarea id="description"[^>]*name="description" disabled=""/);
+    expect(html).toMatch(/name="websiteUrl"[^>]*value="https:\/\/example\.com"/);
+    expect(html).toMatch(/<input id="websiteUrl"[^>]*disabled="" name="websiteUrl"/);
+    expect(html).not.toContain("Save settings");
+  });
 });

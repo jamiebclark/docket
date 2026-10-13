@@ -18,7 +18,7 @@ import { recordFailure } from "./failures";
 import { saveGeneratedPost } from "./save";
 import { runGeneration } from "./core";
 import { applyApprovalPolicy, resolvePolicies } from "./policy";
-import { buildSeriesPlanPrompt, platformRulesFor, promptGroupsFor } from "./prompt";
+import { brandOf, buildSeriesPlanPrompt, platformRulesFor, promptGroupsFor } from "./prompt";
 import { assertGroupLimit, groupsForAccounts } from "./groups";
 import { checkSeriesPlan, problemLine, seriesPlanSchema, ANGLE_DESCRIPTION_MAX, ANGLE_TITLE_MAX } from "./schema";
 import {
@@ -112,6 +112,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmP
     brief: parsed.brief,
     sourceText: parsed.sourceText?.trim() ? parsed.sourceText : null,
     count: parsed.count,
+    brand: brandOf(scope.project),
   };
   const attempts: Attempts = [];
   const call = async (retry: { previousOutput: string; problems: string[] } | null) =>
