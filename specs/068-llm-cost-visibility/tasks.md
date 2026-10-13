@@ -297,7 +297,7 @@ excluded calls and tokens.
 
 ### Tests for User Story 3
 
-- [ ] T041 [P] [US3] Extend `tests/integration/llm/usage-rates.test.ts`: rates for model A only, usage
+- [X] T041 [P] [US3] Extend `tests/integration/llm/usage-rates.test.ts`: rates for model A only, usage
   on A and B — the total covers A, names B verbatim with its excluded calls and tokens, and the test
   fails if the total were A+B's arithmetic (SC-004); rates configured but none matching this period's
   models — no total at all, with the stated reason (FR-024); a rate whose model differs only in case
@@ -305,11 +305,11 @@ excluded calls and tokens.
 
 ### Implementation for User Story 3
 
-- [ ] T042 [US3] Update `src/server/services/usage.ts`: partition `byModel` into `priced`/`unpriced`,
+- [X] T042 [US3] Update `src/server/services/usage.ts`: partition `byModel` into `priced`/`unpriced`,
   compute `money.totalMicros` over `priced` only, `money.excluded` listing every unpriced row with its
   calls and tokens, and `money.noPricedUsage` when `pricedModels === 0` but the period has usage
   (depends on T039)
-- [ ] T043 [US3] Update `src/app/p/[projectSlug]/settings/usage/page.tsx`: render "No rate configured"
+- [X] T043 [US3] Update `src/app/p/[projectSlug]/settings/usage/page.tsx`: render "No rate configured"
   text (not a dash) on an unpriced model's row with the exact unmatched `provider:model` verbatim and a
   pointer to where rates are set; render the total's "Covers N priced model(s). Leaves out …" sentence;
   render "No model used in this period has a rate configured, so no estimate is shown." when

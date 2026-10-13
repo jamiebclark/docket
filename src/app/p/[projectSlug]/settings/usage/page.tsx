@@ -5,7 +5,7 @@ import { ForbiddenError, forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { USAGE_PURPOSE_LABELS } from "@/lib/generation/usage-purpose";
 import { DEFAULT_USAGE_PERIOD, USAGE_PERIODS, type UsagePeriod } from "@/lib/generation/usage-period";
-import { ESTIMATE_DISCLAIMER, getProjectUsage } from "@/server/services/usage";
+import { ESTIMATE_DISCLAIMER, getProjectUsage, type UsageView } from "@/server/services/usage";
 import { formatMoney } from "@/server/llm/rates";
 import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -39,6 +39,16 @@ const PERIOD_LABEL: Record<UsagePeriod, string> = {
 
 function periodHref(slug: string, period: UsagePeriod): string {
   return period === DEFAULT_USAGE_PERIOD ? `/p/${slug}/settings/usage` : `/p/${slug}/settings/usage?period=${period}`;
+}
+
+/** "Covers 1 priced model. Leaves out 94 calls and 29,006 tokens on anthropic:<model>." (FR-022). */
+function moneyCoverageSentence(money: NonNullable<UsageView["money"]>): string {
+  const covers = `Covers ${money.pricedModels.toLocaleString("en-US")} priced model${money.pricedModels === 1 ? "" : "s"}.`;
+  if (money.excluded.length === 0) return covers;
+  const calls = money.excluded.reduce((n, row) => n + row.calls, 0);
+  const tokens = money.excluded.reduce((n, row) => n + row.tokens, 0);
+  const models = money.excluded.map((row) => `${row.provider}:${row.model}`).join(", ");
+  return `${covers} Leaves out ${calls.toLocaleString("en-US")} call${calls === 1 ? "" : "s"} and ${tokens.toLocaleString("en-US")} token${tokens === 1 ? "" : "s"} on ${models}.`;
 }
 
 export default async function UsagePage({
@@ -139,10 +149,13 @@ export default async function UsagePage({
             </div>
           </div>
 
-          {view.money ? (
+          {view.money && !view.money.noPricedUsage ? (
             <Alert tone="info">
-              {ESTIMATE_DISCLAIMER} Estimates use the rates configured now.
+              {ESTIMATE_DISCLAIMER} Estimates use the rates configured now.{" "}
+              {moneyCoverageSentence(view.money)}
             </Alert>
+          ) : view.money ? (
+            <Alert tone="info">No model used in this period has a rate configured, so no estimate is shown.</Alert>
           ) : (
             <p className="text-sm text-muted-foreground">
               Money can be shown once an operator sets <code>LLM_RATES</code> and <code>LLM_RATE_CURRENCY</code> for this install. Calls

@@ -104,6 +104,61 @@ describe("the Usage report's money (US2)", () => {
   });
 });
 
+describe("an unpriced model never produces a confident wrong number (US3)", () => {
+  it("rate for model A only, usage on A and B: total covers A alone, excludes B verbatim with its own calls and tokens (SC-004)", async () => {
+    vi.stubEnv("LLM_RATES", "openai:model-a=1.00/1.00");
+    vi.stubEnv("LLM_RATE_CURRENCY", "USD");
+    const getProjectUsage = await freshGetProjectUsage();
+    const { scope } = await postsEnv();
+    const now = new Date();
+    await scope.llmUsage.record([
+      row({ calledAt: now, model: "model-a", inputTokens: 1_000_000, outputTokens: 1_000_000 }),
+      row({ calledAt: now, model: "model-b", inputTokens: 500_000, outputTokens: 500_000 }),
+    ]);
+
+    const view = await getProjectUsage(scope, "all");
+    expect(view.money?.totalMicros).toBe(2_000_000);
+    expect(view.money?.pricedModels).toBe(1);
+    expect(view.money?.noPricedUsage).toBe(false);
+    expect(view.money?.excluded).toEqual([{ provider: "openai", model: "model-b", calls: 1, tokens: 1_000_000 }]);
+    // Would be 3_000_000 if B's tokens were folded into the total at A's rate — they are not (SC-004).
+    expect(view.money?.totalMicros).not.toBe(3_000_000);
+  });
+
+  it("rates configured but none matching this period's models: no total, with the reason named (FR-024)", async () => {
+    vi.stubEnv("LLM_RATES", "openai:model-a=1.00/1.00");
+    vi.stubEnv("LLM_RATE_CURRENCY", "USD");
+    const getProjectUsage = await freshGetProjectUsage();
+    const { scope } = await postsEnv();
+    const now = new Date();
+    await scope.llmUsage.record([row({ calledAt: now, model: "model-b", inputTokens: 1000, outputTokens: 500 })]);
+
+    const view = await getProjectUsage(scope, "all");
+    expect(view.money?.noPricedUsage).toBe(true);
+    expect(view.money?.pricedModels).toBe(0);
+    expect(view.money?.totalMicros).toBe(0);
+    expect(view.money?.excluded).toEqual([{ provider: "openai", model: "model-b", calls: 1, tokens: 1500 }]);
+  });
+
+  it("a rate differing only by case or a trailing suffix does not match, nor does the right provider with a different model (FR-010)", async () => {
+    vi.stubEnv("LLM_RATES", "openai:model-a=1.00/1.00");
+    vi.stubEnv("LLM_RATE_CURRENCY", "USD");
+    const getProjectUsage = await freshGetProjectUsage();
+    const { scope } = await postsEnv();
+    const now = new Date();
+    await scope.llmUsage.record([
+      row({ calledAt: now, model: "Model-A", inputTokens: 1000, outputTokens: 500 }),
+      row({ calledAt: now, model: "model-a-preview", inputTokens: 1000, outputTokens: 500 }),
+      row({ calledAt: now, model: "model-a", provider: "anthropic", inputTokens: 1000, outputTokens: 500 }),
+    ]);
+
+    const view = await getProjectUsage(scope, "all");
+    expect(view.money?.pricedModels).toBe(0);
+    expect(view.money?.noPricedUsage).toBe(true);
+    expect(view.money?.excluded).toHaveLength(3);
+  });
+});
+
 describe("validateConfiguration and the rate warnings (FR-011)", () => {
   it("a duplicate pair, a negative price, a non-numeric price, a missing currency and a malformed currency are each a warning, never an issue, and runStartup does not exit", async () => {
     const { validateConfiguration } = await import("../../../src/server/startup/validate");
