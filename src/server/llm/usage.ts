@@ -1,6 +1,7 @@
 import * as clock from "../dal/clock";
 import { llmUsageRepoFor, type LlmUsageInsert, type LlmUsageLink, type LlmUsageRepo } from "../dal/llm-usage";
 import { redact } from "../scheduler/redact";
+import type { ImageProvider } from "./image-provider";
 import type { LlmProvider } from "./types";
 
 export type UsagePurpose =
@@ -10,11 +11,14 @@ export type UsagePurpose =
   | "generate.regenerate"
   | "generate.job_item"
   | "voice.try"
-  | "llm.check";
+  | "llm.check"
+  | "image.generate";
 
 export interface UsageRecorder {
   /** The provider, with recording. Delegates `generate`, returns its result unchanged. */
   wrap(llm: LlmProvider): LlmProvider;
+  /** The image provider, with the same recording (P8). Same buffer, same flush, same swallow. */
+  wrapImage(image: ImageProvider): ImageProvider;
   /** Writes every call observed so far with `link`, then forgets them. Never throws, never rejects. */
   flush(link?: LlmUsageLink): Promise<void>;
 }
@@ -41,6 +45,25 @@ export function createUsageRecorder(args: {
         ...llm,
         async generate(request) {
           const result = await llm.generate(request);
+          buffer.push({
+            provider: result.provider,
+            model: result.model,
+            ok: result.ok,
+            failureKind: result.ok ? null : result.kind,
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            latencyMs: Math.round(result.latencyMs),
+            calledAt: await clock.now(),
+          });
+          return result;
+        },
+      };
+    },
+    wrapImage(image) {
+      return {
+        ...image,
+        async generate(request) {
+          const result = await image.generate(request);
           buffer.push({
             provider: result.provider,
             model: result.model,

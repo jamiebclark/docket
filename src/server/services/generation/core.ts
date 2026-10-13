@@ -113,7 +113,7 @@ export interface StepOptions {
   recorder?: UsageRecorder;
 }
 
-const NOOP_RECORDER: UsageRecorder = { wrap: (llm) => llm, flush: async () => {} };
+const NOOP_RECORDER: UsageRecorder = { wrap: (llm) => llm, wrapImage: (image) => image, flush: async () => {} };
 
 /** Runs one model call (the first, or the retry when `opts.pending` is given), plus the retry when `retryWindowMs` allows it. */
 export async function runGenerationStep(

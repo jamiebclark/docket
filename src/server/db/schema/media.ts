@@ -62,6 +62,10 @@ export const mediaAssets = pgTable(
     indexAtFront: boolean("index_at_front"),
     factsVersion: smallint("facts_version").notNull().default(2),
     factsAttempts: smallint("facts_attempts").notNull().default(0),
+    generatedAt: timestamp("generated_at", { withTimezone: true }),
+    generationPrompt: text("generation_prompt"),
+    generationProvider: text("generation_provider"),
+    generationModel: text("generation_model"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
@@ -102,6 +106,23 @@ export const mediaAssets = pgTable(
     index("media_assets_live_idx")
       .on(t.projectId, t.createdAt.desc())
       .where(sql`${t.deletedAt} IS NULL`),
+    check(
+      "media_assets_generation_all_or_none",
+      sql`(${t.generatedAt} IS NULL AND ${t.generationPrompt} IS NULL AND ${t.generationProvider} IS NULL AND ${t.generationModel} IS NULL)
+        OR (${t.generatedAt} IS NOT NULL AND ${t.generationPrompt} IS NOT NULL AND ${t.generationProvider} IS NOT NULL AND ${t.generationModel} IS NOT NULL)`,
+    ),
+    check(
+      "media_assets_generation_prompt_shape",
+      sql`${t.generationPrompt} IS NULL OR length(${t.generationPrompt}) BETWEEN 1 AND 1000`,
+    ),
+    check(
+      "media_assets_generation_model_shape",
+      sql`${t.generationModel} IS NULL OR (length(${t.generationModel}) BETWEEN 1 AND 200 AND ${t.generationModel} !~ '\\s')`,
+    ),
+    check(
+      "media_assets_generation_provider_shape",
+      sql`${t.generationProvider} IS NULL OR length(${t.generationProvider}) BETWEEN 1 AND 50`,
+    ),
   ],
 );
 

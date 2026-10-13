@@ -14,6 +14,7 @@ const USAGE_PURPOSES: readonly UsagePurpose[] = [
   "generate.job_item",
   "voice.try",
   "llm.check",
+  "image.generate",
 ];
 
 // Only label literals shaped like a usage purpose ("word.word") are in scope — a form field's
@@ -45,7 +46,7 @@ test("every label: literal reaching llm.generate in src/server has a matching Us
   expect(offenders).toEqual([]);
 });
 
-test("the closed set names exactly the seven call sites this entry adds", () => {
+test("the closed set names exactly the eight call sites this entry adds", () => {
   const found = new Set<string>();
   for (const file of files(join("src", "server"))) {
     const source = stripComments(readFileSync(file, "utf8"));

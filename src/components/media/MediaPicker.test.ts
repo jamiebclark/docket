@@ -36,6 +36,7 @@ const view = (id: string, name: string): MediaView => ({
   processingStep: null,
   processingError: null,
   video: null,
+  generated: null,
 });
 
 const render = (props: Partial<Parameters<typeof MediaPicker>[0]>) =>

@@ -2,7 +2,7 @@ import { planImage, type MediaConstraints } from "../../providers/media";
 import type { MediaRow } from "../dal/media";
 import type { ProjectScope } from "../dal/scope";
 import { ensureVariant } from "../services/media-variants";
-import { getStorage } from "../storage";
+import { getStorage, MEDIA_STORAGE_NOT_SET_UP } from "../storage";
 import { getEnv } from "../env";
 import type { LlmImage, LlmImageMediaType } from "./types";
 
@@ -17,7 +17,6 @@ export const LLM_IMAGE_CONSTRAINTS: MediaConstraints = {
 
 export const LLM_REQUEST_IMAGE_BUDGET_BASE64 = 24_000_000;
 
-const NOT_SET_UP = "Media storage is not set up.";
 const TOO_LARGE = "These images are too large to send to the model together.";
 
 type Result =
@@ -56,7 +55,7 @@ export async function imagesForModel(scope: ProjectScope, allAssets: readonly Me
   const assets = allAssets.filter((a) => a.kind === "image");
   if (assets.length === 0) return { ok: true, images: [], record: [] };
   const storage = getStorage();
-  if (!storage) return { ok: false, message: NOT_SET_UP };
+  if (!storage) return { ok: false, message: MEDIA_STORAGE_NOT_SET_UP };
 
   const images: LlmImage[] = [];
   const record: { mediaAssetId: string; mode: "url" | "bytes" }[] = [];

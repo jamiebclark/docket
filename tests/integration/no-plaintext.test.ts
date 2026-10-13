@@ -10,6 +10,10 @@ import { createOpenAiProvider } from "../../src/server/llm/openai";
 import type { LlmConfig } from "../../src/server/llm/config";
 import { generateSingle } from "../../src/server/services/generation/single";
 import { saveProjectLlm } from "../../src/server/services/generation/credential";
+import { generateImage } from "../../src/server/services/media-generate";
+import { setImageProviderForTests } from "../../src/server/llm/image-provider";
+import { createFakeImageProvider } from "../helpers/fake-image";
+import { png } from "../helpers/images";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import * as invitations from "../../src/server/services/invitations";
 import * as members from "../../src/server/services/members";
@@ -139,6 +143,13 @@ describe("SC-009: no plaintext secrets at rest or in logs", () => {
       );
       expect(llmUsageRows.rows.length).toBeGreaterThan(0);
       for (const { r } of llmUsageRows.rows) for (const s of secrets) expect(r.includes(s)).toBe(false);
+
+      // A generated image, so the all-tables scan below also covers the generated-image columns
+      // (provider, model, prompt, timestamp) while the real configured key is live (quickstart.md §8).
+      setImageProviderForTests(createFakeImageProvider([{ bytes: await png(32, 32) }]));
+      const imageResult = await generateImage(genEnv.scope, { prompt: "a cat on a roof", aspect: "square" });
+      expect(imageResult.ok).toBe(true);
+      setImageProviderForTests(null);
 
       // Scan every table (both databases) as text.
       const scan = async (db: ReturnType<typeof testDb>) => {
