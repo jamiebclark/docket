@@ -5,7 +5,9 @@ import { ForbiddenError, forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { USAGE_PURPOSE_LABELS } from "@/lib/generation/usage-purpose";
 import { DEFAULT_USAGE_PERIOD, USAGE_PERIODS, type UsagePeriod } from "@/lib/generation/usage-period";
-import { getProjectUsage } from "@/server/services/usage";
+import { ESTIMATE_DISCLAIMER, getProjectUsage } from "@/server/services/usage";
+import { formatMoney } from "@/server/llm/rates";
+import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterTabs } from "@/components/ui/FilterTabs";
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -110,6 +112,12 @@ export default async function UsagePage({
                 <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Output tokens</dt>
                 <dd className="text-2xl font-semibold tabular-nums">{totals.outputTokens.toLocaleString("en-US")}</dd>
               </div>
+              {view.money && !view.money.noPricedUsage ? (
+                <div>
+                  <dt className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Estimated upper bound</dt>
+                  <dd className="text-2xl font-semibold tabular-nums">{formatMoney(view.money.totalMicros, view.money.currency)}</dd>
+                </div>
+              ) : null}
             </dl>
             <div className="mt-3 flex flex-col gap-1 text-sm text-muted-foreground">
               {totals.callsWithoutCounts > 0 ? (
@@ -131,12 +139,18 @@ export default async function UsagePage({
             </div>
           </div>
 
-          <p className="text-sm text-muted-foreground">
-            Money can be shown once an operator sets <code>LLM_RATES</code> and <code>LLM_RATE_CURRENCY</code> for this install. Calls
-            and tokens above need no configuration.
-          </p>
+          {view.money ? (
+            <Alert tone="info">
+              {ESTIMATE_DISCLAIMER} Estimates use the rates configured now.
+            </Alert>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Money can be shown once an operator sets <code>LLM_RATES</code> and <code>LLM_RATE_CURRENCY</code> for this install. Calls
+              and tokens above need no configuration.
+            </p>
+          )}
 
-          <Table caption="Usage by model" columns={["Model", "Calls", "Tokens"]}>
+          <Table caption="Usage by model" columns={view.money ? ["Model", "Calls", "Tokens", "Estimate"] : ["Model", "Calls", "Tokens"]}>
             {view.byModel.map((row) => (
               <Row key={`${row.provider}:${row.model}`}>
                 <Cell header>
@@ -152,6 +166,23 @@ export default async function UsagePage({
                   <div>{row.inputTokens.toLocaleString("en-US")} in</div>
                   <Sub>{row.outputTokens.toLocaleString("en-US")} out</Sub>
                 </Cell>
+                {view.money ? (
+                  <Cell>
+                    {row.estimateMicros !== undefined ? (
+                      <>
+                        <div>{formatMoney(row.estimateMicros, view.money.currency)}</div>
+                        {row.rateIsZero ? <Sub>rate configured as zero</Sub> : null}
+                      </>
+                    ) : (
+                      <>
+                        <div>No rate configured</div>
+                        <Sub>
+                          Set LLM_RATES for {row.provider}:{row.model} to price this
+                        </Sub>
+                      </>
+                    )}
+                  </Cell>
+                ) : null}
               </Row>
             ))}
           </Table>

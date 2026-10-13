@@ -145,7 +145,7 @@ export function createLlmUsageRepo(exec: Database, projectId: string): LlmUsageR
   };
 }
 
-/** For `runLlmCheck`, which is given a project id and no scope — same seam as `projectLlmRepoFor`. */
+/** For the credential check path, which is given a project id and no scope — same seam as `projectLlmRepoFor`. */
 export function llmUsageRepoFor(projectId: string): LlmUsageRepo {
   return createLlmUsageRepo(getDb(), projectId);
 }

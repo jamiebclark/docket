@@ -232,13 +232,13 @@ removes the money column entirely without touching the token figures.
 
 ### Tests for User Story 2
 
-- [ ] T031 [P] [US2] Write `src/server/llm/rates.test.ts`: `parseLlmRates` against every row of
+- [X] T031 [P] [US2] Write `src/server/llm/rates.test.ts`: `parseLlmRates` against every row of
   contracts/config.md §3's parse table (unset, valid, missing/malformed currency, malformed entry,
   duplicate pair, negative/non-numeric/>6-decimal price, unknown provider); `rateFor` matches only
   exact `(provider, model)`, never by provider alone; `estimateMicros` exact-integer arithmetic at
   realistic volumes (no float drift); `formatMoney` renders `"12.34 USD"`, `"0.00 USD"` for a
   configured zero, and `"under 0.01 USD"` for a non-zero amount rounding to zero
-- [ ] T032 [P] [US2] Write `tests/integration/llm/usage-rates.test.ts`: with `LLM_RATES` unset, no
+- [X] T032 [P] [US2] Write `tests/integration/llm/usage-rates.test.ts`: with `LLM_RATES` unset, no
   currency code and no money figure appears on the Usage page, the job page or a post's generation
   detail, while token figures are unchanged (SC-003); one rate configured — the estimate equals
   `inputTokens × inputRate + outputTokens × outputRate` to the micro-unit in the configured currency
@@ -252,31 +252,31 @@ removes the money column entirely without touching the token figures.
 
 ### Implementation for User Story 2
 
-- [ ] T033 [P] [US2] Create `src/server/llm/rates.ts`: `ModelRate`, `LlmRates`, `parseLlmRates(source)`
+- [X] T033 [P] [US2] Create `src/server/llm/rates.ts`: `ModelRate`, `LlmRates`, `parseLlmRates(source)`
   (pure, never throws, grammar and rejection table from contracts/config.md §2–3), `getLlmRates()`
   (memoised like `getEnv()`, never evaluated at import), `rateFor`, `estimateMicros` (`BigInt`
   arithmetic, research.md P12), `formatMoney` (research.md P11 — shape-only currency validation, no
   `Intl.NumberFormat` currency style)
-- [ ] T034 [US2] Update `src/server/llm/config.ts`: add `LLM_RATE_VARIABLES` (`LLM_RATES`,
+- [X] T034 [US2] Update `src/server/llm/config.ts`: add `LLM_RATE_VARIABLES` (`LLM_RATES`,
   `LLM_RATE_CURRENCY`), deliberately **not** added to `LLM_VARIABLES` (research.md P9) (depends on
   T033)
-- [ ] T035 [US2] Update `src/server/startup/validate.ts`: add `warnings: EnvIssue[]` to
+- [X] T035 [US2] Update `src/server/startup/validate.ts`: add `warnings: EnvIssue[]` to
   `ConfigValidation`, populated from `parseLlmRates(source).problems`, never placed in `issues`
   (depends on T033)
-- [ ] T036 [US2] Update `src/server/startup/index.ts`: log each warning as `Docket: <name>: <reason>`
+- [X] T036 [US2] Update `src/server/startup/index.ts`: log each warning as `Docket: <name>: <reason>`
   and, when no rates are usable, log the disabled line "estimated spend is off (LLM_RATES not set or
   not usable)"; the process does not exit on a warning (depends on T035)
-- [ ] T037 [US2] Extend `tests/lint/env-coverage.test.ts`: add `LLM_RATE_VARIABLES` to `CONFIGURABLE`
+- [X] T037 [US2] Extend `tests/lint/env-coverage.test.ts`: add `LLM_RATE_VARIABLES` to `CONFIGURABLE`
   (not to `ACCEPTED_AS_IS`), and widen the "names a malformed value" probe to accept the variable
   appearing in `issues` **or** `warnings` (depends on T034, T035)
-- [ ] T038 [US2] Update `.env.example`: add `LLM_RATES` and `LLM_RATE_CURRENCY` under the existing
+- [X] T038 [US2] Update `.env.example`: add `LLM_RATES` and `LLM_RATE_CURRENCY` under the existing
   `# --- Generator (LLM) ---` group, with the exact description blocks from contracts/config.md §1
   (depends on T034)
-- [ ] T039 [US2] Update `src/server/services/usage.ts`: add the real `ESTIMATE_DISCLAIMER` constant and
+- [X] T039 [US2] Update `src/server/services/usage.ts`: add the real `ESTIMATE_DISCLAIMER` constant and
   the `money` field to `UsageView` (absent when `getLlmRates().entries.length === 0`; `estimateMicros`
   present on a `ModelUsageRow` only when a rate matched exactly; `rateIsZero` when the matched rate is
   `0`), computed per request from `getLlmRates()` and never cached or stored (depends on T022, T033)
-- [ ] T040 [US2] Update `src/app/p/[projectSlug]/settings/usage/page.tsx`: render the Estimate column
+- [X] T040 [US2] Update `src/app/p/[projectSlug]/settings/usage/page.tsx`: render the Estimate column
   on the by-model table only when `money` exists; the headline card's estimated-upper-bound figure and
   the disclaimer alert; the "money can be shown once rates are configured" line when `money` is absent
   (depends on T023, T039)
