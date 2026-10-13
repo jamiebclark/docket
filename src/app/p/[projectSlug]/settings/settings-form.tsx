@@ -8,12 +8,18 @@ import { buttonStyles } from "@/components/ui/Button";
 import { alertStyles } from "@/components/ui/Alert";
 import { Field } from "@/components/ui/Field";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { TextareaField } from "@/components/ui/TextareaField";
 import { TimeZoneField } from "@/components/ui/TimeZoneField";
 import { checkStyles } from "@/components/ui/controls";
+import { BRAND_DESCRIPTION_MAX, TAGLINE_MAX } from "@/lib/validation/brand";
+import { LINK_URL_MAX } from "@/lib/validation/link";
 
 export interface SettingsValues {
   name: string;
   slug: string;
+  tagline: string | null;
+  description: string | null;
+  websiteUrl: string | null;
   timezone: string;
   defaultApprovalPolicy: "review_required" | "auto_approve";
   defaultSchedulingPolicy: "leave_as_draft" | "add_to_queue";
@@ -64,6 +70,37 @@ export function SettingsForm({ values, canEdit }: { values: SettingsValues; canE
         defaultValue={values.slug}
         disabled={!canEdit}
         error={errors.slug}
+      />
+      <Field
+        id="tagline"
+        name="tagline"
+        label="Tagline"
+        hint={`One sentence saying what this is. Generated posts can use it. Up to ${TAGLINE_MAX.toLocaleString("en-US")} characters.`}
+        defaultValue={values.tagline ?? ""}
+        disabled={!canEdit}
+        error={errors.tagline}
+      />
+      <TextareaField
+        id="description"
+        name="description"
+        label="Description"
+        hint={`A longer explanation of what this is, for generated posts to draw on. Up to ${BRAND_DESCRIPTION_MAX.toLocaleString("en-US")} characters.`}
+        minRows={4}
+        maxRows={12}
+        defaultValue={values.description ?? ""}
+        disabled={!canEdit}
+        error={errors.description}
+      />
+      <Field
+        id="websiteUrl"
+        name="websiteUrl"
+        label="Website"
+        hint={`The brand's own link, starting http:// or https://. Generated posts use it when a post needs a link. Up to ${LINK_URL_MAX.toLocaleString("en-US")} characters.`}
+        inputMode="url"
+        spellCheck={false}
+        defaultValue={values.websiteUrl ?? ""}
+        disabled={!canEdit}
+        error={errors.websiteUrl}
       />
       <TimeZoneField id="timezone" name="timezone" defaultValue={values.timezone} disabled={!canEdit} error={errors.timezone} />
       <SegmentedControl

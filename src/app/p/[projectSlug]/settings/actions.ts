@@ -15,6 +15,7 @@ export async function updateProjectSettings(
   formData: FormData,
 ): Promise<ActionResult<{ saved: true }>> {
   const current = String(formData.get("currentSlug") ?? "");
+  const maybe = (name: string) => (formData.has(name) ? String(formData.get(name) ?? "") : undefined);
   let slug: string;
   try {
     const session = await getSession();
@@ -27,6 +28,9 @@ export async function updateProjectSettings(
       defaultApprovalPolicy: String(formData.get("defaultApprovalPolicy") ?? ""),
       defaultSchedulingPolicy: String(formData.get("defaultSchedulingPolicy") ?? ""),
       confirmUnreviewedQueue: formData.get("confirmUnreviewedQueue") === "on",
+      tagline: maybe("tagline"),
+      description: maybe("description"),
+      websiteUrl: maybe("websiteUrl"),
     }));
   } catch (error) {
     if (error instanceof ZodError) return fail("validation", "Check the highlighted fields.", fieldErrorsFromZod(error));

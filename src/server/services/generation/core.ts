@@ -15,6 +15,7 @@ import { withCreditHold } from "./credit";
 import type { VariantGroup } from "../../../lib/generation/groups";
 import {
   PREVIOUS_OUTPUT_MAX,
+  brandOf,
   buildGenerationPrompt,
   platformRulesFor,
   promptGroupsFor,
@@ -147,6 +148,7 @@ export async function runGenerationStep(
         }
       : null,
     itemData: req.itemData ?? null,
+    brand: brandOf(scope.project),
   };
   const call = (retry: PromptInput["retry"], timeoutMs: number | undefined) => {
     const prompt = buildGenerationPrompt({ ...base, retry });

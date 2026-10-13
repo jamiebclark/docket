@@ -11,6 +11,8 @@ const LABEL: Record<string, string> = {
   role_change: "changed the role of",
   ownership_transfer: "transferred ownership to",
   account_posting_instructions_update: "changed the posting instructions for",
+  project_brand_update: "changed the brand",
+  llm_credential_update: "changed this project's model credential",
   api_key_create: "created the API key",
   api_key_revoke: "revoked the API key",
   webhook_create: "added the webhook to",

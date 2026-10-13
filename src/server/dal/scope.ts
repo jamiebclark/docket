@@ -33,6 +33,7 @@ import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
 import { createMembersRepo, type MembersRepo } from "./members";
 import { createNotificationsRepo, type NotificationsRepo } from "./notifications";
+import { projectColumns } from "./project-columns";
 import { createGenerationFailuresRepo, type GenerationFailuresRepo } from "./generation-failures";
 import { createSeriesRepo, type SeriesRepo } from "./series";
 import { createVoiceProfilesRepo, createVoiceVersionsRepo, type VoiceProfilesRepo, type VoiceVersionsRepo } from "./voice";
@@ -107,6 +108,9 @@ export interface ProjectScope {
     defaultApprovalPolicy: ApprovalPolicy;
     defaultSchedulingPolicy: SchedulingPolicy;
     defaultVoiceProfileId: string | null;
+    tagline: string | null;
+    description: string | null;
+    websiteUrl: string | null;
   };
   readonly membership: { memberId: string; userId: string; role: Role };
   can(request: PermissionRequest): boolean;
@@ -153,16 +157,6 @@ export function crossProject<T>(reason: string, fn: () => Promise<T>): Promise<T
 }
 
 type ScopeData = Pick<ProjectScope, "project" | "membership">;
-
-const projectColumns = {
-  id: projects.id,
-  slug: projects.slug,
-  name: projects.name,
-  timezone: projects.timezone,
-  defaultApprovalPolicy: projects.defaultApprovalPolicy,
-  defaultSchedulingPolicy: projects.defaultSchedulingPolicy,
-  defaultVoiceProfileId: projects.defaultVoiceProfileId,
-};
 
 /** Resolves the caller's membership of a project. `exec` is the database or a transaction. */
 async function resolve(

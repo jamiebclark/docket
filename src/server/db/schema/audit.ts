@@ -23,6 +23,7 @@ export const membershipAction = pgEnum("membership_action", [
   "webhook_disable",
   "account_posting_instructions_update",
   "llm_credential_update",
+  "project_brand_update",
 ]);
 
 /** Append-only: the DAL exposes insert and list only (FR-033). */
