@@ -8,7 +8,7 @@ import {
   TAGLINE_MAX,
   taglineSchema,
 } from "./brand";
-import { HTTP_LINK_MESSAGE, LINK_URL_LENGTH_MESSAGE } from "./link";
+import { HTTP_LINK_MESSAGE, LINK_URL_LENGTH_MESSAGE, LINK_URL_MAX } from "./link";
 
 describe("taglineSchema", () => {
   it("accepts exactly 200 characters and refuses 201", () => {
@@ -87,10 +87,35 @@ describe("brandWebsiteSchema", () => {
     ["//example.test", HTTP_LINK_MESSAGE],
     ["/about", HTTP_LINK_MESSAGE],
     ["ftp://x.test", HTTP_LINK_MESSAGE],
+    ["javascript:alert(1)", HTTP_LINK_MESSAGE],
+    ["data:text/html,x", HTTP_LINK_MESSAGE],
+    ["file:///x", HTTP_LINK_MESSAGE],
     ["https://example.test/" + "x".repeat(500), LINK_URL_LENGTH_MESSAGE],
   ])("refuses %s with %s", (input, message) => {
     const result = brandWebsiteSchema.safeParse(input);
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toBe(message);
+  });
+
+  it("accepts an uppercase scheme (the WHATWG parser lower-cases it)", () => {
+    expect(brandWebsiteSchema.parse("HTTPS://example.test/x")).toBe("HTTPS://example.test/x");
+  });
+
+  it("accepts a URL of exactly LINK_URL_MAX characters and refuses one over", () => {
+    const prefix = "https://example.test/";
+    const atMax = prefix + "x".repeat(LINK_URL_MAX - prefix.length);
+    expect(atMax.length).toBe(LINK_URL_MAX);
+    expect(brandWebsiteSchema.safeParse(atMax).success).toBe(true);
+
+    const overMax = atMax + "x";
+    expect(overMax.length).toBe(LINK_URL_MAX + 1);
+    const over = brandWebsiteSchema.safeParse(overMax);
+    expect(over.success).toBe(false);
+    expect(over.error?.issues[0]?.message).toBe(LINK_URL_LENGTH_MESSAGE);
+  });
+
+  it("stores a non-canonical but valid website verbatim apart from the trim (FR-011)", () => {
+    const input = "  HTTPS://Example.TEST/Some/Path  ";
+    expect(brandWebsiteSchema.parse(input)).toBe("HTTPS://Example.TEST/Some/Path");
   });
 });
