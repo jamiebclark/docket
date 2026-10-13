@@ -215,3 +215,12 @@ service and form changes.
 - `src/lib/validation/voice.test.ts` is **never edited** by this feature (T005) — it is the proof the
   shared link-rule extraction changed no preferred-link behaviour (FR-031).
 - No task touches `src/server/auth/access.ts` or anything under `src/server/api/` (FR-038, SC-008).
+
+---
+
+## Phase 7: Review remediation
+
+**Purpose**: Close the blocking finding from `review.md`. One task per BLOCKER/MAJOR; MINOR findings
+(F2, F3) and the two NOTEs are recorded in `review.md` and deliberately not tasked here.
+
+- [ ] T036 Pin the shared link rule's full accept/refuse table in `src/lib/validation/brand.test.ts`: add `javascript:alert(1)`, `data:text/html,x` and `file:///x` as refusals with `HTTP_LINK_MESSAGE`; `HTTPS://example.test/x` as accepted (the WHATWG parser lower-cases the scheme); a URL of exactly `LINK_URL_MAX` accepted and one of `LINK_URL_MAX + 1` refused with `LINK_URL_LENGTH_MESSAGE`; and one case proving a non-canonical but valid website (mixed-case host, trailing path, surrounding spaces) is stored verbatim apart from the trim (FR-011) — review F1 (MAJOR), src/lib/validation/brand.test.ts:85
