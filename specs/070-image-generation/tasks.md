@@ -151,9 +151,9 @@ description: "Task list for implementing image generation into the media library
 
 ### Implementation for User Story 5
 
-- [ ] T035 [P] [US5] Add the "Generated" badge and the prompt `<details>` disclosure to `src/components/media/MediaCard.tsx`, rendered only when `item.generated` is set (depends on T024) (contracts/ui.md §7)
-- [ ] T036 [P] [US5] Integration tests for provenance persistence (prompt as typed/trimmed, provider, model, `generated_at`), the all-or-none CHECK rejecting a hand-built partial insert, an uploaded asset's four nulls, and project isolation (list, search, direct get, provenance read) in `tests/integration/media/generated-provenance.test.ts` (depends on T025) (quickstart.md §5)
-- [ ] T037 [P] [US5] Integration tests for one `llm_call_usage` row per image call that reached the provider (provider, model, outcome, credential source, token counts only when reported) and no row for a call that never reached the provider, in `tests/integration/llm/image-usage.test.ts` (depends on T025) (quickstart.md §5)
+- [X] T035 [P] [US5] Add the "Generated" badge and the prompt `<details>` disclosure to `src/components/media/MediaCard.tsx`, rendered only when `item.generated` is set (depends on T024) (contracts/ui.md §7)
+- [X] T036 [P] [US5] Integration tests for provenance persistence (prompt as typed/trimmed, provider, model, `generated_at`), the all-or-none CHECK rejecting a hand-built partial insert, an uploaded asset's four nulls, and project isolation (list, search, direct get, provenance read) in `tests/integration/media/generated-provenance.test.ts` (depends on T025) (quickstart.md §5)
+- [X] T037 [P] [US5] Integration tests for one `llm_call_usage` row per image call that reached the provider (provider, model, outcome, credential source, token counts only when reported) and no row for a call that never reached the provider, in `tests/integration/llm/image-usage.test.ts` (depends on T025) (quickstart.md §5)
 
 **Checkpoint**: All five user stories are independently functional. SC-001–SC-010 are each covered by a runnable check.
 
