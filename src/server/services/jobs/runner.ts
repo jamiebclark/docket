@@ -82,8 +82,11 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
   let scope: ProjectScope | null = null;
   let calledModel = false;
   let resolvedKey: string | null = null;
-  const sourceKey = item.externalId ? apiSourceMetaSchema.parse(job.sourceMeta).sourceKey : null;
-  const external = item.externalId && sourceKey ? { sourceKey, externalId: item.externalId } : undefined;
+  // Derived inside the try below, not here: `apiSourceMetaSchema.parse` throws on a job whose sourceMeta
+  // is malformed, and a throw before the try skips the finally that gives a granted probe its interval
+  // back (FR-016, review F3). Nothing between here and there depends on them.
+  let sourceKey: string | null = null;
+  let external: { sourceKey: string; externalId: string } | undefined;
 
   const remaining = async () => ctx.deadline - (await clock.now()).getTime();
 
@@ -229,6 +232,8 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
   }
 
   try {
+    sourceKey = item.externalId ? apiSourceMetaSchema.parse(job.sourceMeta).sourceKey : null;
+    external = item.externalId && sourceKey ? { sourceKey, externalId: item.externalId } : undefined;
     scope = await forJobRunner(job.projectId, job.createdByUserId);
     const s = scope;
     if (claimed.kind === "finish") {
@@ -335,6 +340,9 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       },
     );
     calledModel = true;
+    // A granted probe only becomes a probe when the model is actually called; the tick summary and the
+    // heartbeat say "probed", so they must mean that (FR-021, review F2).
+    if (claimed.probe) counts.probed = 1;
 
     if (step.ok === "retry") {
       const ok = await commit(

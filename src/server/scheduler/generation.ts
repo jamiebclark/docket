@@ -92,7 +92,9 @@ export async function runGenerationJobs(opts: {
   counts.claimed = claim.items.length;
   counts.recovered = claim.items.filter((c) => c.recovered).length;
   counts.held = claim.held.length > 0 ? 1 : 0;
-  counts.probed = claim.probing.length > 0 ? 1 : 0;
+  // `probed` is set by the runner when a probe actually reaches the model (review F2). A grant that never
+  // became a call — the tick ran out of budget, or the item threw first — rewinds its interval and is not
+  // reported as a probe.
   await Promise.all(
     claim.items.map((c) =>
       processClaimedItem(c, { config: opts.config, deadline, counts }).catch(() => {

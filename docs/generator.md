@@ -85,7 +85,7 @@ A job generates one post per item, in the background, so a person can hand the g
 - **Cancel.** Cancelling discards work still in flight, releases reserved images and is final (a cancelled job cannot be resumed). Items that had already saved their post keep it, in review, and are marked done.
 - **Policies** are authorised once, when the job is created, against the creator's role. The same approval and scheduling rules as single posts then apply to every item; a post that fails validation always goes to review.
 - **Series** stay in-request (not jobs).
-- **Measuring.** `pnpm llm:check` prints `job_call` lines and a `jobs budget_ms=…` line with a key; without one it prints `latency: unmeasured; live path verified with mocks only`. `fits=no` means a typical call is too slow for the tick budget.
+- **Measuring.** `pnpm llm:check` prints `job_call` lines and a `jobs budget_ms=…` line with a key; without one it prints `latency: unmeasured; live path verified with mocks only`. `fits=no` means a typical call is too slow for the tick budget. Measured against the live API on 2026-10-12 with `LLM_MODEL=gpt-5.4-mini`: about **1.3 s** a call (1.1 s image, 1.5 s text), **58 input / 42 output tokens** on a trivial prompt, and `fits=yes` for both call kinds against the default 17 s window — so the batch runner is not latency-bound on this model. `pnpm llm:check -- --project <slug>` runs the same check on one project's resolved credential and prints `source=project` or `source=install`, which is the quickest way to tell which credential a project is actually spending.
 
 ## Out of scope
 

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, notInArray, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, notInArray, sql, type SQL } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { generationJobs, projectLlmSettings } from "../db/schema";
 
@@ -50,7 +50,11 @@ export async function credentialOwnersFor(
  * all-or-nothing guess, SC-010). `undefined` when `projectIds` is empty, so the claim's statement is
  * unchanged with no hold in place.
  */
-export function jobsExcludingProjects(projectIds: readonly string[]): SQL | undefined {
+export function jobsExcludingProjects(projectIds: readonly string[], allBlocked = false): SQL | undefined {
   if (projectIds.length === 0) return undefined;
+  // Every project that has an active job is blocked, so the claim cannot match anything: say so with one
+  // constant rather than a bind parameter per project. The list is still used for the mixed case, which is
+  // the one that matters once projects own credentials (review F5).
+  if (allBlocked) return sql`false`;
   return notInArray(generationJobs.projectId, [...projectIds]);
 }

@@ -43,8 +43,11 @@ export const INTERRUPTED_MESSAGE = "Generation was interrupted too many times.";
  * `credentialOwnersFor` about all candidate projects in one round trip — a genuine per-owner lookup rather
  * than an all-or-nothing guess (SC-010), whose statement count no longer grows with project count.
  */
-async function resolveBlockedProjectIds(exec: Database, owners: readonly string[]): Promise<string[]> {
-  if (owners.length === 0) return [];
+async function resolveBlockedProjectIds(
+  exec: Database,
+  owners: readonly string[],
+): Promise<{ ids: string[]; allBlocked: boolean }> {
+  if (owners.length === 0) return { ids: [], allBlocked: false };
   const blocked = new Set(owners);
   const rows = await exec
     .selectDistinct({ projectId: generationJobs.projectId })
@@ -52,7 +55,8 @@ async function resolveBlockedProjectIds(exec: Database, owners: readonly string[
     .where(inArray(generationJobs.status, ["queued", "running"]));
   const projectIds = rows.map((r) => r.projectId);
   const ownersByProject = await credentialOwnersFor(projectIds, exec);
-  return projectIds.filter((id) => blocked.has(ownersByProject.get(id) ?? INSTALL_CREDENTIAL_OWNER));
+  const ids = projectIds.filter((id) => blocked.has(ownersByProject.get(id) ?? INSTALL_CREDENTIAL_OWNER));
+  return { ids, allBlocked: ids.length > 0 && ids.length === projectIds.length };
 }
 
 /**
@@ -85,7 +89,7 @@ export function claimDueJobItems(opts: {
           and(
             inArray(generationJobs.status, ["queued", "running"]),
             sql`EXISTS (SELECT 1 FROM "generation_job_items" "i" WHERE "i"."project_id" = ${generationJobs.projectId} AND "i"."job_id" = ${generationJobs.id} AND (("i"."status" = 'queued' AND "i"."next_attempt_at" <= ${now}) OR ("i"."status" = 'running' AND "i"."lease_until" <= ${now})))`,
-            jobsExcludingProjects(blockedProjects),
+            jobsExcludingProjects(blockedProjects.ids, blockedProjects.allBlocked),
           ),
         )
         .orderBy(sql`${generationJobs.lastClaimedAt} ASC NULLS FIRST`, asc(generationJobs.createdAt), asc(generationJobs.id))
