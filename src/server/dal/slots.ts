@@ -11,6 +11,12 @@ export interface SlotsRepo {
   /** Unpaused slots only: what allocation reads. */
   listActiveForAccount(accountId: string): Promise<SlotRow[]>;
   insert(accountId: string, weekday: number, localTime: string): Promise<SlotRow>;
+  /**
+   * Inserts one time on each of `weekdays`, skipping any the account already has, and returns only the
+   * rows actually created. `ON CONFLICT DO NOTHING` rather than a read-then-write, so two people adding
+   * the same time at once each get the days they won and no conflict error.
+   */
+  insertWeek(accountId: string, weekdays: readonly number[], localTime: string): Promise<SlotRow[]>;
   /** Changes a slot's weekday and local time in place. Targets are untouched: `slot_id` keeps pointing here. */
   move(id: string, weekday: number, localTime: string): Promise<SlotRow>;
   setPaused(id: string, paused: boolean): Promise<void>;
@@ -65,6 +71,14 @@ export function createSlotsRepo(db: Database, projectId: string): SlotsRepo {
           .returning();
         return row!;
       });
+    },
+    async insertWeek(accountId, weekdays, localTime) {
+      if (weekdays.length === 0) return [];
+      return db
+        .insert(postingSlots)
+        .values(weekdays.map((weekday) => ({ projectId, socialAccountId: accountId, weekday, localTime })))
+        .onConflictDoNothing({ target: [postingSlots.socialAccountId, postingSlots.weekday, postingSlots.localTime] })
+        .returning();
     },
     async move(id, weekday, localTime) {
       return asSlotConflict(async () => {

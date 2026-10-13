@@ -2416,3 +2416,43 @@ admin that the project uses the install default (K4).
 - **Image generation credentials** — image generation is an extension point only on `main`.
 - **Validating model ids against a provider catalogue**, and **retro-fitting anything onto generations
   already made** — neither is owned by any roadmap entry.
+
+## 048 — A time booked across the whole week (2026-10-12)
+
+- **`ON CONFLICT DO NOTHING`, not read-then-write.** `SlotsRepo.insertWeek` inserts the candidate weekdays in
+  one statement and returns only the rows actually created. The service still reads the account's slots first
+  to decide which days to attempt, but that read is an optimisation, not the correctness argument: two people
+  booking the same time at once each get the days they won, and neither sees the `ConflictError` that
+  `addSlot` raises. A read-then-write would have had to either hold a lock across the whole week or surface a
+  conflict for a request whose entire point is "make sure this time is set".
+- **`alreadySet` is derived from the rows that came back, not from the pre-read.** A day lost to a concurrent
+  insert was absent from the pre-read's `taken` set but is set all the same, so the result reads the created
+  weekdays and reports every other day as already set. Reporting from `taken` would have claimed a day was
+  created when another caller created it.
+- **Days that already have the time are reported, never refused.** A partly-booked time is the common case,
+  and the user's intent is the end state. This is why the operation is also idempotent: a second call adds
+  nothing and raises nothing.
+- **A paused slot counts as present.** The time is taken either way, and resuming is a separate decision — so
+  a week add never un-pauses or replaces an existing slot, and the existing row keeps its id.
+- **No gutter of half-hour buttons.** The original request was a button per 30-minute window down the left of
+  the grid. At the grid's `min-h-[30rem]` column height that is 48 rows of about 10px — below any usable hit
+  size — so the feature ships as a time field plus a submit button above the columns instead. The requirement
+  was one action for "09:30, every day", and this satisfies it without a second layout. A clickable row gutter
+  remains possible later as a shortcut on top.
+- **Only a bad value is a field error; a valid no-op is not.** `Field` sets `aria-invalid` from its `error`,
+  so putting "every day already has that time" there would tell assistive technology that a perfectly good
+  time is invalid. Worse, `Field`'s `aria-live` node does not re-announce an unchanged string, so pressing
+  the button twice would say nothing the second time — which is exactly why `say()` launders messages
+  through `announcedText`. So the split is: an empty time is the field's error ("Pick a time"), while a
+  valid-but-no-op time and any server refusal go to the grid's own (non-live) error line *and* through
+  `say()`. One announcement, re-announced on a repeat press, and `aria-invalid` only ever on a bad value.
+  Announcements name the days rather than a count (`announceWeekAdded`).
+- **`step` is an affordance, not validation.** `step={STEP_MINUTES * 60}` makes the time picker's arrows
+  move in half hours, matching what a click on a column snaps to. The form is `noValidate` so a browser
+  cannot refuse a typed off-grid time with a native bubble that bypasses the design system's error slot
+  entirely — an exact typed time is allowed here exactly as the Move dialog allows one.
+- **One `seq` for all seven optimistic additions.** `clearResolved` filters additions by sequence number, so
+  sharing one across the week makes them clear together and makes a refusal roll the whole week back, rather
+  than leaving part of a failed add on screen.
+- **`onAddWeek` is optional.** A caller that passes no handler gets the one-at-a-time grid exactly as before
+  and no week form renders, so `WeekSlotGrid` stays usable by anything without a bulk endpoint.
