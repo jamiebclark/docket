@@ -137,6 +137,104 @@ describe("slots", () => {
     }
   });
 
+  it("books one time on every weekday in a single call", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+
+    const result = await slots.addSlotsForWeek(scope, { accountId: a.id, localTime: "09:30" });
+    expect(result.added.map((s) => s.weekday)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(result.alreadySet).toEqual([]);
+    const all = await slots.listSlots(scope, a.id);
+    expect(all).toHaveLength(7);
+    for (const slot of all) expect(slot.localTime).toMatch(/^09:30/);
+    for (const slot of all) expect(slot.paused).toBe(false);
+  });
+
+  it("fills only the missing days and reports the ones that already had the time", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+    await slots.addSlot(scope, { accountId: a.id, weekday: 2, localTime: "09:30" });
+    await slots.addSlot(scope, { accountId: a.id, weekday: 5, localTime: "09:30" });
+    // Another time on a day that also needs 09:30: it must not count as taken.
+    await slots.addSlot(scope, { accountId: a.id, weekday: 1, localTime: "18:00" });
+
+    const result = await slots.addSlotsForWeek(scope, { accountId: a.id, localTime: "09:30" });
+    expect(result.added.map((s) => s.weekday)).toEqual([1, 3, 4, 6, 7]);
+    expect(result.alreadySet).toEqual([2, 5]);
+    expect(await slots.listSlots(scope, a.id)).toHaveLength(8);
+  });
+
+  it("is idempotent: a second call adds nothing and refuses nothing", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+    await slots.addSlotsForWeek(scope, { accountId: a.id, localTime: "09:30" });
+
+    const again = await slots.addSlotsForWeek(scope, { accountId: a.id, localTime: "09:30" });
+    expect(again.added).toEqual([]);
+    expect(again.alreadySet).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(await slots.listSlots(scope, a.id)).toHaveLength(7);
+  });
+
+  it("counts a paused slot as already set, leaving it paused", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+    const existing = await slots.addSlot(scope, { accountId: a.id, weekday: 3, localTime: "09:30" });
+    await slots.setSlotPaused(scope, existing.id, true);
+
+    const result = await slots.addSlotsForWeek(scope, { accountId: a.id, localTime: "09:30" });
+    expect(result.alreadySet).toEqual([3]);
+    expect(result.added.map((s) => s.weekday)).toEqual([1, 2, 4, 5, 6, 7]);
+    const wednesday = (await slots.listSlots(scope, a.id)).find((s) => s.weekday === 3);
+    expect(wednesday!.paused).toBe(true);
+    expect(wednesday!.id).toBe(existing.id);
+  });
+
+  it("two concurrent week adds of the same time create seven slots between them, with no conflict error", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+
+    const [left, right] = await Promise.all([
+      slots.addSlotsForWeek(await as(ctx, ctx.owner), { accountId: a.id, localTime: "07:00" }),
+      slots.addSlotsForWeek(await as(ctx, ctx.admin), { accountId: a.id, localTime: "07:00" }),
+    ]);
+    expect(left.added.length + right.added.length).toBe(7);
+    // Whichever call lost a day must report it as already set, never as created.
+    for (const result of [left, right]) {
+      expect([...result.added.map((s) => s.weekday), ...result.alreadySet].sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    }
+    expect(await slots.listSlots(scope, a.id)).toHaveLength(7);
+  });
+
+  it("refuses an editor, another project's account, and a malformed time", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await as(ctx, ctx.owner);
+    const a = await accounts.connectMock(scope, { displayName: "A" });
+
+    const editor = await as(ctx, ctx.editor);
+    await expect(slots.addSlotsForWeek(editor, { accountId: a.id, localTime: "09:30" })).rejects.toBeInstanceOf(ForbiddenError);
+    expect(await slots.listSlots(scope, a.id)).toEqual([]);
+
+    const other = await createProjectWithMembers();
+    const theirs = await accounts.connectMock(await as(other, other.owner), { displayName: "Theirs" });
+    await expect(slots.addSlotsForWeek(scope, { accountId: theirs.id, localTime: "09:30" })).rejects.toBeInstanceOf(NotFoundError);
+
+    for (const bad of [
+      { accountId: a.id, localTime: "9:30" },
+      { accountId: a.id, localTime: "24:00" },
+      { accountId: a.id, localTime: "09:30:00" },
+      { accountId: a.id, localTime: "" },
+      { accountId: "not-a-uuid", localTime: "09:30" },
+    ]) {
+      await expect(slots.addSlotsForWeek(scope, bad)).rejects.toThrow();
+    }
+    expect(await slots.listSlots(scope, a.id)).toEqual([]);
+  });
+
   it("keeps a queued target's scheduled time and slot_id after the slot it points to moves", async () => {
     const ctx = await createProjectWithMembers();
     const scope = await as(ctx, ctx.owner);

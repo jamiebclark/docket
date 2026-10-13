@@ -1,11 +1,14 @@
 import { z } from "zod";
-import { addSlotSchema, moveSlotSchema } from "@/lib/validation/scheduling";
+import { addSlotSchema, addWeekSlotsSchema, moveSlotSchema } from "@/lib/validation/scheduling";
 import { ForbiddenError, NotFoundError } from "../dal/errors";
 import { listAccounts } from "./accounts";
 import type { SlotRow } from "../dal/slots";
 import type { ProjectScope } from "../dal/scope";
 
 const idSchema = z.uuid();
+
+/** ISO weekdays, Monday first — the order the grid shows them in. */
+const ALL_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
 export type SlotView = Pick<SlotRow, "id" | "socialAccountId" | "weekday" | "localTime" | "paused">;
 
@@ -23,6 +26,42 @@ export async function addSlot(scope: ProjectScope, input: unknown): Promise<Slot
     if (!tx.can({ slot: ["manage"] })) throw new ForbiddenError();
     if (!(await tx.accounts.get(accountId))) throw new NotFoundError();
     return tx.slots.insert(accountId, weekday, localTime);
+  });
+}
+
+export interface WeekSlotsResult {
+  /** The slots created, ascending by weekday. Empty when every day already had the time. */
+  added: SlotView[];
+  /** The weekdays that already had it, ascending. Not a failure: the result is the same either way. */
+  alreadySet: number[];
+}
+
+/**
+ * Puts one time on every weekday the account does not already have it on, so booking a time for the
+ * whole week is one action rather than seven. Days that already have it are reported, not refused —
+ * the point is the end state, and a partly-booked time is the common case.
+ */
+export async function addSlotsForWeek(scope: ProjectScope, input: unknown): Promise<WeekSlotsResult> {
+  const { accountId, localTime } = addWeekSlotsSchema.parse(input);
+  if (!scope.can({ slot: ["manage"] })) throw new ForbiddenError();
+  return scope.transaction(async (tx) => {
+    if (!tx.can({ slot: ["manage"] })) throw new ForbiddenError();
+    if (!(await tx.accounts.get(accountId))) throw new NotFoundError();
+    // `local_time` is a `time` column, so a row reads back as "09:30:00" against a "09:30" request.
+    const existing = await tx.slots.listForAccount(accountId);
+    const taken = new Set(existing.filter((s) => s.localTime.slice(0, 5) === localTime).map((s) => s.weekday));
+    const added = await tx.slots.insertWeek(
+      accountId,
+      ALL_WEEKDAYS.filter((d) => !taken.has(d)),
+      localTime,
+    );
+    const created = new Set(added.map((s) => s.weekday));
+    return {
+      added: [...added].sort((a, b) => a.weekday - b.weekday),
+      // Read from the weekdays that have no new row rather than from `taken`: a day lost to a
+      // concurrent insert was not in `taken` but is set all the same.
+      alreadySet: ALL_WEEKDAYS.filter((d) => !created.has(d)),
+    };
   });
 }
 
