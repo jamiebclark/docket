@@ -123,7 +123,7 @@ description: "Task list for implementing image generation into the media library
 
 ### Implementation for User Story 3
 
-- [ ] T033 [US3] Integration tests for hold write on `credit_exhausted`, hold refresh without moving `held_since`, hold clear on success, the hold write being swallowed on a forced database failure, the project-vs-install owner split, and the undecryptable-key refusal never falling back, in `tests/integration/llm/image-hold.test.ts` (depends on T025) (quickstart.md §3)
+- [X] T033 [US3] Integration tests for hold write on `credit_exhausted`, hold refresh without moving `held_since`, hold clear on success, the hold write being swallowed on a forced database failure, the project-vs-install owner split, and the undecryptable-key refusal never falling back, in `tests/integration/llm/image-hold.test.ts` (depends on T025) (quickstart.md §3)
 
 **Checkpoint**: All three P1/P2 happy-path and resilience behaviours are proven.
 
