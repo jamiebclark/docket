@@ -10,6 +10,7 @@ import { LlmNotConfiguredError, missingLlmSettings } from "../../llm";
 import { imagesForModel } from "../../llm/images";
 import { resolveLlmForProject } from "../../llm/resolve";
 import type { LlmFailureKind, LlmProvider, LlmProviderName, LlmResult } from "../../llm/types";
+import { createUsageRecorder, type UsagePurpose, type UsageRecorder } from "../../llm/usage";
 import { withCreditHold } from "./credit";
 import type { VariantGroup } from "../../../lib/generation/groups";
 import {
@@ -23,6 +24,8 @@ import { checkGenerationOutput, generationOutputSchema, problemLine, type Output
 
 export interface CoreRequest {
   label: string;
+  /** Explicit, never parsed from `label` (P5) — which call site this is, for the usage ledger. */
+  purpose: UsagePurpose;
   voice: { content: VoiceContent };
   groups: VariantGroup[];
   assets: MediaRow[];
@@ -48,6 +51,7 @@ export type CoreOutcome =
       retried: Retried;
       provider: LlmProviderName;
       model: string;
+      usage: UsageRecorder;
     }
   | {
       ok: false;
@@ -56,6 +60,7 @@ export type CoreOutcome =
       attempts: Attempts;
       provider: LlmProviderName;
       model: string;
+      usage: UsageRecorder;
     };
 
 /** What a deferred correction retry needs to run later (research D1). */
@@ -103,7 +108,11 @@ export interface StepOptions {
   retryWindowMs?: () => Promise<number | null>;
   /** The resolved credential's owner, so the step does not have to ask a second time (L11). */
   owner?: string;
+  /** Observes every call made by this step; wraps the `llm` it is handed. Absent: nothing is recorded (existing tests need no new stub). */
+  recorder?: UsageRecorder;
 }
+
+const NOOP_RECORDER: UsageRecorder = { wrap: (llm) => llm, flush: async () => {} };
 
 /** Runs one model call (the first, or the retry when `opts.pending` is given), plus the retry when `retryWindowMs` allows it. */
 export async function runGenerationStep(
@@ -112,7 +121,8 @@ export async function runGenerationStep(
   llm: LlmProvider,
   opts: StepOptions = {},
 ): Promise<CoreStep> {
-  llm = withCreditHold(llm, opts.owner ?? (await credentialOwnerFor(scope.project.id)));
+  const recorder = opts.recorder ?? NOOP_RECORDER;
+  llm = recorder.wrap(withCreditHold(llm, opts.owner ?? (await credentialOwnerFor(scope.project.id))));
   const prepared = await imagesForModel(scope, req.assets);
   if (!prepared.ok) throw new ConflictError(prepared.message);
 
@@ -153,7 +163,7 @@ export async function runGenerationStep(
   };
   const check = (value: { variants: Record<string, { text: string }>; imageAltTexts?: string[] }) =>
     checkGenerationOutput(scope, { groups: req.groups, assets: req.assets, output: value });
-  const identity = (r: LlmResult<unknown>) => ({ provider: r.provider, model: r.model });
+  const identity = (r: LlmResult<unknown>) => ({ provider: r.provider, model: r.model, usage: recorder });
 
   const runRetry = async (pending: PendingRetry, timeoutMs: number | undefined): Promise<CoreOutcome> => {
     const retried: Retried = { reason: pending.reason, problems: pending.problems };
@@ -239,6 +249,7 @@ export async function runGeneration(
   llm?: LlmProvider,
 ): Promise<CoreOutcome> {
   let owner: string | undefined;
+  let source: "project" | "install" = "install";
   if (!llm) {
     const resolved = await resolveLlmForProject(scope.project.id);
     if (!resolved.ok) {
@@ -248,10 +259,12 @@ export async function runGeneration(
     }
     llm = resolved.llm;
     owner = resolved.owner;
+    source = resolved.source;
   }
-  const step = await runGenerationStep(scope, req, llm, { owner });
+  const recorder = createUsageRecorder({ projectId: scope.project.id, purpose: req.purpose, source });
+  const step = await runGenerationStep(scope, req, llm, { owner, recorder });
   if (step.ok !== "retry") return step;
-  const second = await runGenerationStep(scope, req, llm, { pending: step.pending, owner });
+  const second = await runGenerationStep(scope, req, llm, { pending: step.pending, owner, recorder });
   if (second.ok === "retry") throw new Error("A resumed generation step never defers.");
   return second;
 }

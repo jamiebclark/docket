@@ -112,7 +112,7 @@ per-model rows and credential-source split match what the stub reported.
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Write `tests/integration/llm/usage-record.test.ts`: one case per call site from
+- [X] T012 [P] [US1] Write `tests/integration/llm/usage-record.test.ts`: one case per call site from
   quickstart.md §1 — `generate.single` (1 row, `post_id` set); a retry after `invalid_output` (2 rows,
   the first `ok=false, failure_kind='invalid_output'`); `planSeries` + two `writeSeriesPost` calls (1
   plan row with no series link, 2 post rows with `series_id`/`series_position`); `regenerate` (1 row,
@@ -121,12 +121,12 @@ per-model rows and credential-source split match what the stub reported.
   `tryVoice` and `runLlmCheck` (1 row each, every link null); held-on-billing / over the 16-group
   limit / generation not configured / key unreadable (0 rows each); a stub reporting
   `{ inputTokens: null, outputTokens: null }` (1 row, both columns `NULL`)
-- [ ] T013 [P] [US1] Write `tests/integration/llm/usage-failure.test.ts`: with `record` forced to
+- [X] T013 [P] [US1] Write `tests/integration/llm/usage-failure.test.ts`: with `record` forced to
   reject, run the same single generation twice (write succeeding, write failing) and assert the
   generation's outcome, the saved post row and the returned result are identical; assert the write
   happens after the save transaction commits; assert the logged failure line carries no prompt, output
   or credential
-- [ ] T014 [P] [US1] Write `tests/integration/llm/usage-report.test.ts`: `totals.calls ===
+- [X] T014 [P] [US1] Write `tests/integration/llm/usage-report.test.ts`: `totals.calls ===
   sum(byModel.calls) === sum(byPurpose.calls)` with input/output sums matching the stub; the
   credential-source split (ten calls on the install's credential, five more after a project key is
   stored, all fifteen appear split 5/10, the first ten keep their attribution after the key is later
@@ -136,42 +136,42 @@ per-model rows and credential-source split match what the stub reported.
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Update `src/server/services/generation/core.ts`: `runGeneration` creates a
+- [X] T015 [US1] Update `src/server/services/generation/core.ts`: `runGeneration` creates a
   `UsageRecorder` from the resolved credential's `source` and plumbs it through `StepOptions` so
   `runGenerationStep` wraps the `llm` it is handed before calling it, for both the first call and the
   correction retry (depends on T009)
-- [ ] T016 [US1] Update `src/server/services/generation/single.ts`: flush `{ postId }` after the save
+- [X] T016 [US1] Update `src/server/services/generation/single.ts`: flush `{ postId }` after the save
   transaction commits; on failure or a dedup collision, flush `{}` (P4) (depends on T015)
-- [ ] T017 [US1] Update `src/server/services/generation/series.ts`: `planSeries` creates its own
+- [X] T017 [US1] Update `src/server/services/generation/series.ts`: `planSeries` creates its own
   recorder beside `withCreditHold` and flushes `{}` immediately after the call (P3); `writeSeriesPost`
   flushes `{ seriesId, seriesPosition, postId }` after the save, or `{ seriesId, seriesPosition }` on
   failure (depends on T015)
-- [ ] T018 [US1] Update `src/server/services/generation/regenerate.ts`: flush `{ postId }` — known
+- [X] T018 [US1] Update `src/server/services/generation/regenerate.ts`: flush `{ postId }` — known
   before the call (depends on T015)
-- [ ] T019 [US1] Update `src/server/services/jobs/runner.ts`: add `recorder` to `StepOptions` beside
+- [X] T019 [US1] Update `src/server/services/jobs/runner.ts`: add `recorder` to `StepOptions` beside
   the existing `owner`, and flush `{ generationJobId, generationJobItemId }` on **every** exit of the
   step once the model has been called — deferred, failed, requeued, cancelled, stale or saved —
   keyed off the same flag the runner already keeps for "called the model" (depends on T015)
-- [ ] T020 [P] [US1] Update `src/server/services/voice.ts`: `tryVoice` flushes `{}` via `runGeneration`
+- [X] T020 [P] [US1] Update `src/server/services/voice.ts`: `tryVoice` flushes `{}` via `runGeneration`
   (depends on T015)
-- [ ] T021 [P] [US1] Update `src/server/services/generation/check.ts`: `runLlmCheck` creates its own
+- [X] T021 [P] [US1] Update `src/server/services/generation/check.ts`: `runLlmCheck` creates its own
   recorder beside `withCreditHold(resolved.llm, resolved.owner)` and flushes `{}` in the same `finally`
   that releases the check lease (depends on T009)
-- [ ] T022 [US1] Create `src/server/services/usage.ts`: `UsagePeriod` re-export, `ESTIMATE_DISCLAIMER`
+- [X] T022 [US1] Create `src/server/services/usage.ts`: `UsagePeriod` re-export, `ESTIMATE_DISCLAIMER`
   (empty placeholder string here — filled in by US2), `UsageTotals`, `ModelUsageRow`, `UsageView`
   (without the `money` field yet), `getProjectUsage(scope, period)` — `requirePermission(scope, {
   llm_credential: ["manage"] })`, resolve the window via `usagePeriodWindow` with
   `scope.project.timezone`, aggregate via `scope.llmUsage`, and shape `byModel`/`byPurpose` per
   contracts/services.md §4 — and `getJobUsage(scope, jobId)` (depends on T005, T007)
-- [ ] T023 [US1] Create `src/app/p/[projectSlug]/settings/usage/page.tsx` (server component,
+- [X] T023 [US1] Create `src/app/p/[projectSlug]/settings/usage/page.tsx` (server component,
   `export const dynamic = "force-dynamic"`, `generateMetadata` resolving the permission per request,
   mirroring `settings/model/page.tsx`): headline `<dl>` (calls, input tokens, output tokens), the
   no-counts and produced-nothing sub-lines, the credential-source split line, `FilterTabs` over
   `?period=`, the by-model and by-purpose tables (money column omitted for now), and the empty state
   (depends on T022)
-- [ ] T024 [P] [US1] Create `src/app/p/[projectSlug]/settings/usage/loading.tsx`: `Skeleton` blocks
+- [X] T024 [P] [US1] Create `src/app/p/[projectSlug]/settings/usage/loading.tsx`: `Skeleton` blocks
   matching the header, the card and the two tables, copied from `settings/model/loading.tsx`'s shape
-- [ ] T025 [US1] Update `src/app/p/[projectSlug]/settings/layout.tsx`: add the "Usage" sub-nav item
+- [X] T025 [US1] Update `src/app/p/[projectSlug]/settings/layout.tsx`: add the "Usage" sub-nav item
   behind the existing `canManageLlm` flag, beside "Model & API key" (depends on T023)
 
 **Checkpoint**: at this point, User Story 1 is fully functional and testable independently — every

@@ -25,7 +25,12 @@ export default async function SettingsLayout({
           { label: "Webhooks", href: `${base}/webhooks` },
         ]
       : []),
-    ...(canManageLlm ? [{ label: "Model & API key", href: `${base}/model` }] : []),
+    ...(canManageLlm
+      ? [
+          { label: "Model & API key", href: `${base}/model` },
+          { label: "Usage", href: `${base}/usage` },
+        ]
+      : []),
   ];
   return (
     <div className="flex flex-col gap-6">

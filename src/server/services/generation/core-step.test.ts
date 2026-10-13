@@ -12,6 +12,7 @@ vi.mock("../../dal/credential-owners", () => ({ credentialOwnerFor: vi.fn().mock
 const scope = { media: {}, project: { id: "project-1" } } as unknown as ProjectScope;
 const req: CoreRequest = {
   label: "generate.job_item",
+  purpose: "generate.job_item",
   voice: { content: EMPTY_VOICE_CONTENT },
   groups: groupsOfPlatforms(["bluesky"]),
   assets: [],

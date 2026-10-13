@@ -14,6 +14,7 @@ import { LlmNotConfiguredError, missingLlmSettings } from "../../llm";
 import { resolveLlmForProject } from "../../llm/resolve";
 import type { LlmFailureKind, LlmProvider, LlmResult } from "../../llm/types";
 import { withCreditHold } from "./credit";
+import { createUsageRecorder } from "../../llm/usage";
 import { recordFailure } from "./failures";
 import { saveGeneratedPost } from "./save";
 import { runGeneration } from "./core";
@@ -86,6 +87,7 @@ const RETRYABLE = new Set<LlmFailureKind>(["invalid_output", "refused", "incompl
 
 export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmProvider): Promise<PlanSeriesResult> {
   let owner: string | undefined;
+  let source: "project" | "install" = "install";
   if (!llm) {
     const resolved = await resolveLlmForProject(scope.project.id);
     if (!resolved.ok) {
@@ -95,8 +97,10 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmP
     }
     llm = resolved.llm;
     owner = resolved.owner;
+    source = resolved.source;
   }
-  llm = withCreditHold(llm, owner ?? (await credentialOwnerFor(scope.project.id)));
+  const recorder = createUsageRecorder({ projectId: scope.project.id, purpose: "generate.series_plan", source });
+  llm = recorder.wrap(withCreditHold(llm, owner ?? (await credentialOwnerFor(scope.project.id))));
   const parsed = planSeriesSchema.parse(input);
   need(scope, { generation: ["run"], post: ["edit"] });
   const voice = await takeVoice(scope, parsed.voiceProfileId);
@@ -141,6 +145,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmP
       attempts,
       ...identity(r),
     });
+    await recorder.flush({});
     return { ok: false, failureId: failure.id, kind, message: failure.message };
   };
   const accept = (r: Extract<LlmResult<z.infer<typeof seriesPlanSchema>>, { ok: true }>) => {
@@ -155,6 +160,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmP
     const checked = accept(first);
     if (checked.problems.length === 0) {
       attemptOf(first, "ok");
+      await recorder.flush({});
       return { ok: true, angles: checked.angles, latencyMs: first.latencyMs };
     }
     attemptOf(first, "invalid_output");
@@ -177,6 +183,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmP
     return failed("invalid_output", second);
   }
   attemptOf(second, "ok");
+  await recorder.flush({});
   return { ok: true, angles: checked.angles, latencyMs: first.latencyMs + second.latencyMs };
 }
 
@@ -246,7 +253,11 @@ export async function writeSeriesPost(
 
   const series = { id: seriesId, position, angle, otherAngles: angles.filter((_, i) => i !== position).map((a) => a.title) };
   const coreInputs = { brief: row.brief, sourceText: request.sourceText, instructions: request.instructions, series };
-  const outcome = await runGeneration(scope, { label: "generate.series_post", voice, groups, assets, inputs: coreInputs }, llm);
+  const outcome = await runGeneration(
+    scope,
+    { label: "generate.series_post", purpose: "generate.series_post", voice, groups, assets, inputs: coreInputs },
+    llm,
+  );
   const inputs: GenerationRecord["inputs"] = {
     ...coreInputs,
     mediaAssetIds: assets.map((a) => a.id),
@@ -263,6 +274,7 @@ export async function writeSeriesPost(
       provider: outcome.provider,
       model: outcome.model,
     });
+    await outcome.usage.flush({ seriesId, seriesPosition: position });
     return { ok: false, failureId: failure.id, kind: outcome.kind, message: failure.message, position };
   }
 
@@ -295,10 +307,12 @@ export async function writeSeriesPost(
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
+    await outcome.usage.flush({ seriesId, seriesPosition: position });
     const winner = await scope.posts.findBySeriesPosition(seriesId, position);
     if (!winner) throw error;
     return { ...existingResult(winner), position };
   }
+  await outcome.usage.flush({ seriesId, seriesPosition: position, postId });
 
   const applied = await applyApprovalPolicy(scope, postId, request.resolved);
   return {

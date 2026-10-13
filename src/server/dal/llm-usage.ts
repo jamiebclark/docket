@@ -71,9 +71,9 @@ const totalsSelect = {
   inputTokens: sql<number>`coalesce(sum(${llmCallUsage.inputTokens}), 0)::int`,
   outputTokens: sql<number>`coalesce(sum(${llmCallUsage.outputTokens}), 0)::int`,
   callsWithoutCounts: sql<number>`count(*) FILTER (WHERE ${llmCallUsage.inputTokens} IS NULL AND ${llmCallUsage.outputTokens} IS NULL)::int`,
-  failedCalls: sql<number>`count(*) FILTER (WHERE NOT ${llmCallUsage.ok})::int`,
-  failedInputTokens: sql<number>`coalesce(sum(${llmCallUsage.inputTokens}) FILTER (WHERE NOT ${llmCallUsage.ok}), 0)::int`,
-  failedOutputTokens: sql<number>`coalesce(sum(${llmCallUsage.outputTokens}) FILTER (WHERE NOT ${llmCallUsage.ok}), 0)::int`,
+  failedCalls: sql<number>`count(*) FILTER (WHERE ${llmCallUsage.ok} = false)::int`,
+  failedInputTokens: sql<number>`coalesce(sum(${llmCallUsage.inputTokens}) FILTER (WHERE ${llmCallUsage.ok} = false), 0)::int`,
+  failedOutputTokens: sql<number>`coalesce(sum(${llmCallUsage.outputTokens}) FILTER (WHERE ${llmCallUsage.ok} = false), 0)::int`,
   projectCredentialCalls: sql<number>`count(*) FILTER (WHERE ${llmCallUsage.credentialSource} = 'project')::int`,
   installCredentialCalls: sql<number>`count(*) FILTER (WHERE ${llmCallUsage.credentialSource} = 'install')::int`,
 };

@@ -230,7 +230,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
   };
   const outcome = await runGeneration(
     scope,
-    { label: "generate.single", voice, groups, assets, inputs: coreInputs },
+    { label: "generate.single", purpose: "generate.single", voice, groups, assets, inputs: coreInputs },
     llm,
   );
   const inputs: GenerationRecord["inputs"] = {
@@ -247,6 +247,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
       provider: outcome.provider,
       model: outcome.model,
     });
+    await outcome.usage.flush({});
     return { ok: false, failureId: failure.id, kind: outcome.kind, message: failure.message };
   }
 
@@ -280,6 +281,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
+    await outcome.usage.flush({});
     if (parsed.externalId) {
       const claim = await scope.externalClaims.find(parsed.sourceKey, parsed.externalId);
       if (claim) {
@@ -291,6 +293,7 @@ export async function generateSingle(scope: ProjectScope, input: unknown, llm?: 
     if (!winner) throw error;
     return existingResult(winner);
   }
+  await outcome.usage.flush({ postId });
 
   const applied = await applyApprovalPolicy(scope, postId, policies.resolved);
   return {

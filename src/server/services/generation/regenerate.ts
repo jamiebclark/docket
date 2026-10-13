@@ -80,6 +80,7 @@ export async function regeneratePost(
     scope,
     {
       label: "generate.regenerate",
+      purpose: "generate.regenerate",
       voice,
       groups,
       assets,
@@ -88,6 +89,7 @@ export async function regeneratePost(
     },
     llm,
   );
+  await outcome.usage.flush({ postId: id });
   if (!outcome.ok) {
     const failure = await recordFailure(scope, {
       mode: "regenerate",
