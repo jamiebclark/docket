@@ -331,12 +331,12 @@ the job page's totals equal those two items' calls and the post's detail shows i
 
 ### Tests for User Story 4
 
-- [ ] T044 [P] [US4] Write/extend an integration test asserting: a completed 2-item batch job's page
+- [X] T044 [P] [US4] Write/extend an integration test asserting: a completed 2-item batch job's page
   shows the job's own call count and input/output token totals (via `getJobUsage`); a job still running
   shows the same totals labelled "to date"; a job with no calls yet shows "No model calls yet", not
   zeros; a cancelled job keeps its figures; no money figure appears on the job page under any rate
   configuration (P19)
-- [ ] T045 [P] [US4] Extend the existing generation-detail test for
+- [X] T045 [P] [US4] Extend the existing generation-detail test for
   `src/app/p/[projectSlug]/generate/result/[postId]/page.tsx`: each attempt's row shows its input/output
   token counts beside its latency, read from the existing `attempts` blob; an attempt with null counts
   renders "no counts reported", never `0`; both rows list attempts in the same order; no money figure
@@ -344,11 +344,11 @@ the job page's totals equal those two items' calls and the post's detail shows i
 
 ### Implementation for User Story 4
 
-- [ ] T046 [US4] Update `src/app/p/[projectSlug]/jobs/[jobId]/page.tsx`: add the "Model usage" block
+- [X] T046 [US4] Update `src/app/p/[projectSlug]/jobs/[jobId]/page.tsx`: add the "Model usage" block
   from `getJobUsage(scope, jobId)` beside the existing counts, "to date" while `job.status` is `queued`
   or `running` (the same `active` flag `AutoRefresh` already uses), "No model calls yet" when empty, no
   money (depends on T022)
-- [ ] T047 [US4] Update `src/app/p/[projectSlug]/generate/result/[postId]/page.tsx`: add a **Tokens**
+- [X] T047 [US4] Update `src/app/p/[projectSlug]/generate/result/[postId]/page.tsx`: add a **Tokens**
   row beside the existing **Latency** row in the generation details `<dl>`, reading
   `record.attempts.map(a => a.usage)` from the same blob (`src/lib/validation/generation.ts:96`) —
   no ledger query, no migration (P18) — rendering "no counts reported" for a null-count attempt
