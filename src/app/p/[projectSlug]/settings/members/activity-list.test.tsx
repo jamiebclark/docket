@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ActivityList, type ActivityItem } from "./activity-list";
+// eslint-disable-next-line no-restricted-imports -- test-only: enumerates every membershipAction value
 import { membershipAction } from "@/server/db/schema/audit";
 
 const item = (over: Partial<ActivityItem> = {}): ActivityItem => ({

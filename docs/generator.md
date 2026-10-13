@@ -48,11 +48,26 @@ A post that still fails platform validation after the one retry is always placed
 
 A voice profile holds how the brand sounds. Every edit creates a new version; posts record the version they were generated with, so earlier posts keep naming their original version. Old versions can be read under the profile's history, and a profile can be archived. "Try it" on the voice screen runs a sample generation without saving a post, for the accounts you pick (it uses their saved posting instructions).
 
+## Brand context
+
+Under a project's **Settings**, an owner or admin may set a tagline (one line), a description (a
+paragraph) and a website — what the brand *is*, as distinct from how it sounds (the voice) or what it is
+promoting this month (a voice profile's preferred links). An editor sees the three fields, disabled. Any
+field left blank is simply absent; none is required, and all three can be left unset.
+
+Every generation entry point — single, regenerate, voice "Try it", a batch job item and a series plan —
+composes a labelled `BRAND` section from whichever fields are set, before `VOICE`. A project with no
+brand fields set gets exactly the prompt it got before this feature: no header, no blank lines, no
+placeholder. The brand is read current at generation time; it is not versioned and not snapshotted onto a
+post, unlike the voice profile a post records or the posting instructions a job snapshots at creation.
+Setting, changing or clearing any field is written to the project's activity log with the previous and
+new value, one row per changed field.
+
 ## Posting instructions
 
 Tactical, per-channel advice (hashtag use and placement, links, how a post opens) lives on each **social account**, not in the voice. Owners and admins edit it under **Accounts**, in the account's block just above its posting slots; editors see it read-only. It is optional and limited to 2,000 characters. Every change is written to the project's activity log with the previous and new text.
 
-**Prompt order.** The system message is: role and output rules, then the voice, then `POSTING INSTRUCTIONS`, then each platform's `PLATFORM RULES`. The one-off instructions and inputs follow in the user message. Posting instructions never override the output rules or platform rules. The section is left out when no target account has instructions and every platform has one group, so such a request produces exactly the prompt it did before this feature.
+**Prompt order.** The system message is: role and output rules, then `BRAND` (see "Brand context" above, when any field is set), then the voice, then `POSTING INSTRUCTIONS`, then each platform's `PLATFORM RULES`. The one-off instructions and inputs follow in the user message. Posting instructions never override the output rules or platform rules, and neither does the brand. The `POSTING INSTRUCTIONS` section is left out when no target account has instructions and every platform has one group, so such a request produces exactly the prompt it did before this feature. The brand's website is the link to use when a post needs one; a voice profile's `preferredLinks` is a separate, unrelated set of links to promote and stays in `VOICE` — the brand is what the project *is*, preferred links are what it is promoting right now.
 
 **Grouping.** The model writes one variant per *group* of target accounts: accounts on the same platform whose instructions are identical (after normalising line endings and trimming; an exact, case-sensitive comparison, and "no instructions" equals "no instructions"). With one account per platform, or several with identical instructions, the keys are the platform keys and behaviour is unchanged. When a platform has two or more groups the keys are numbered by first appearance (`bluesky_1`, `bluesky_2`). Each target gets its group's text; the result and Review screens show one editable text per group, and an edit changes only that group's targets.
 

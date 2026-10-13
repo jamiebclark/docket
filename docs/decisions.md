@@ -2510,3 +2510,55 @@ admin that the project uses the install default (K4).
   robin@example.test copied to the clipboard. The previous link has stopped working." Regenerating
   silently revokes whatever link was already sent, and someone who cannot see the row's note has no
   other way to learn that.
+
+## 058 — A project's tagline, description and website (2026-10-13)
+
+Spec B1-B14, plan P1-P28 (`specs/069-brand-profile-fields/{spec,research}.md`).
+
+- **Three nullable `text` columns on `projects`, not a side table, and no length CHECK.** There is
+  exactly one brand per project and the fields are not versioned — a tagline is a current fact about the
+  product, not an authored instrument like the voice whose version a post needs to remember. Length and
+  shape are Zod rules at the boundary, exactly as `name` (80) and `slug` (48) already are on this table,
+  so an over-length save is a field error, not a database error. Reverse either decision by moving the
+  three columns into a project-owned, versioned table, at the cost of a join, a second history UI and a
+  second thing for `setup-write-api` to publish.
+- **Empty is `NULL`, never `''`, and a missing key means "no change" where a present-but-empty key means
+  "clear".** One empty state, not two, for the prompt, the form and the audit log to agree on. The
+  settings form always submits all three fields, so an emptied input clears; a caller that omits a brand
+  key — an older client, or a future API operation — leaves the stored value alone instead of silently
+  wiping a description.
+- **The website shares `preferredLinks`' URL rule, verbatim, via a new `src/lib/validation/link.ts`.**
+  The roadmap asked for `websiteUrl` "validated like `preferredLinks`"; sharing one implementation is the
+  only way that claim stays true as both evolve. The value is stored as typed beyond trimming — no host
+  lower-casing, no scheme coercion, no `www` stripping — because it is shown back to the person who typed
+  it and handed to a model to put in a post. The tagline collapses any CR/LF to a single space before its
+  200-character limit is counted, so the labelled prompt line and the settings input cannot disagree
+  about what "one line" means; the description keeps its paragraph breaks, because they reach the prompt.
+- **The project's column list is unified before this entry uses it.** `projectColumns` existed twice —
+  `scope.ts` and a duplicate inline copy inside `api-keys.ts`'s `findActiveKeyByHash` — and a field added
+  to only one is invisible on API-key-authenticated generation while invisible in tests that use member
+  scopes. Both readers now import `src/server/dal/project-columns.ts`, fixed in passing because the
+  alternative was testing around a bug rather than removing it.
+- **One audit row per field that actually changed, action `project_brand_update`, `details: { field,
+  previous, next }`.** Three edited fields in one save write three rows; an unchanged field writes none.
+  One new enum value rather than three, because three per-field actions would mean an enum migration and
+  a near-identical activity-list sentence every time a brand field is added. `previous` is read inside
+  the same locked transaction as the write (`scope.transaction(…, { lockProject: true })`, then
+  `tx.projects.get()`), the same shape `setPostingInstructions` already uses, so two concurrent saves
+  record a truthful chain rather than both claiming the same stale `previous`.
+- **`BRAND` precedes `VOICE` in the composed prompt, and is omitted whole when every field is empty.**
+  What the product *is* is a fact the voice then describes, so the model reads it first; a prompt with no
+  brand fields set stays byte-identical to what it was before this entry, which is exactly what
+  `prompt.golden.test.ts` asserts. `brandOf(project)` is the one derivation, called from the two places a
+  real `PromptInput` is built (`core.ts`'s `base`, `series.ts`'s `base`), so every entry point — single,
+  series, regenerate, "Try it", the job runner, the public API's generate operation — inherits it and
+  none can forget to pass it. The brand is read live at generation time, not snapshotted like posting
+  instructions or pinned like a voice version: a tagline is a current fact, so a long-running job picking
+  up a corrected one mid-run is the right answer, and there is no column to hold a snapshot in.
+- **Brand context is stated as fact, not wrapped as source material.** Only an owner or admin can write
+  it — the same trust level as posting instructions — so it is not neutralised and not put inside
+  `<source_material>`; like posting instructions, it is told it never overrides the output rules or the
+  platform rules (a bullet between the alt-text rule and the posting-instructions rule says so, present
+  only when the section is). The brand's website is offered as the link to use when a post needs one;
+  `preferredLinks` stays in `VOICE`, unchanged — a campaign link is this month's thing to promote, the
+  brand's website is what the project *is*.

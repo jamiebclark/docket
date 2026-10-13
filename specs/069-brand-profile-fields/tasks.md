@@ -124,10 +124,10 @@ nothing is written (spec.md US3).
 
 **Purpose**: Documentation and the whole-repository checks that prove nothing else moved.
 
-- [ ] T032 [P] Record decision **058 — A project's tagline, description and website** in `docs/decisions.md`: B1-B14 and P1-P28, stating how brand context and the voice profile are ordered, why, and exactly what an empty field does (FR-033)
-- [ ] T033 [P] Update `docs/generator.md`: add a **Brand context** section (the three fields, who may set them, how they reach a post) and update the existing "Prompt order" paragraph in place to state the distinction between the brand's website and a voice profile's preferred links (FR-034)
-- [ ] T034 [P] Run `pnpm vitest run tests/integration/api` and confirm the generated API document and every API test are unchanged (FR-038, SC-008)
-- [ ] T035 Run the final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` (depends on all prior tasks)
+- [X] T032 [P] Record decision **058 — A project's tagline, description and website** in `docs/decisions.md`: B1-B14 and P1-P28, stating how brand context and the voice profile are ordered, why, and exactly what an empty field does (FR-033)
+- [X] T033 [P] Update `docs/generator.md`: add a **Brand context** section (the three fields, who may set them, how they reach a post) and update the existing "Prompt order" paragraph in place to state the distinction between the brand's website and a voice profile's preferred links (FR-034)
+- [X] T034 [P] Run `pnpm vitest run tests/integration/api` and confirm the generated API document and every API test are unchanged (FR-038, SC-008)
+- [X] T035 Run the final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` (depends on all prior tasks)
 
 ---
 
