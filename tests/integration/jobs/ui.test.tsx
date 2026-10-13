@@ -25,7 +25,7 @@ import {
 } from "../../../src/lib/jobs/credit-hold";
 import { setLlmForTests } from "../../../src/server/llm";
 import { runTick } from "../../../src/server/scheduler";
-import { createJob } from "../../../src/server/services/jobs";
+import { cancelJob, createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
@@ -350,6 +350,61 @@ describe("Credit hold notice (US3)", () => {
     }
     expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
   }, 60_000);
+});
+
+describe("Model usage on job page (US4, P19)", () => {
+  it("no calls yet shows the fixed sentence, not zeros", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    await e.asset();
+    const { jobId } = await createJob(e.scope, e.input());
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("No model calls yet");
+  });
+
+  it("a completed 2-item job shows its own calls and token totals, with no 'To date' and no money", async () => {
+    vi.stubEnv("LLM_RATES", "openai:fake-model=1.00/1.00");
+    vi.stubEnv("LLM_RATE_CURRENCY", "USD");
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([modelOk("First", 1), modelOk("Second", 1)]));
+    await e.assets(2);
+    const { jobId } = await createJob(e.scope, e.input());
+    for (let i = 0; i < 20; i++) {
+      await runTick({ config: { jobMaxItems: 2 } });
+      if ((await e.scope.jobs.get(jobId))!.status === "completed") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("2 calls");
+    expect(html).toContain("200 input tokens");
+    expect(html).toContain("100 output tokens");
+    expect(html).not.toContain("To date");
+    expect(html).not.toMatch(/\$|estimated upper bound/i);
+    vi.unstubAllEnvs();
+  }, 60_000);
+
+  it("a running job labels its own-job totals 'To date'", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([modelOk("First", 1), modelOk("Second", 1)]));
+    await e.assets(2);
+    const { jobId } = await createJob(e.scope, e.input());
+    await runTick({ config: { jobMaxItems: 1 } });
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("1 call");
+    expect(html).toContain("To date");
+  }, 30_000);
+
+  it("a cancelled job keeps the figures from the calls already made", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([modelOk("First", 1)]));
+    await e.assets(1);
+    const { jobId } = await createJob(e.scope, e.input());
+    await runTick({ config: { jobMaxItems: 1 } });
+    await cancelJob(e.scope, jobId);
+    const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
+    expect(html).toContain("1 call");
+    expect(html).not.toContain("No model calls yet");
+  }, 30_000);
 });
 
 describe("Batch job page header", () => {

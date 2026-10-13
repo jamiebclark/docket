@@ -21,6 +21,7 @@ import { nextRetryAt } from "../../scheduler/backoff";
 import { redact } from "../../scheduler/redact";
 import type { GenerationCounts } from "../../scheduler/generation";
 import { runGenerationStep, type PendingRetry } from "../generation/core";
+import { createUsageRecorder } from "../../llm/usage";
 import { applyApprovalPolicy } from "../generation/policy";
 import { saveGeneratedPost } from "../generation/save";
 import { GROUP_LIMIT, groupLimitMessage } from "../../../lib/generation/groups";
@@ -292,6 +293,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
 
     let llm: LlmProvider;
     let owner: string | undefined;
+    let source: "project" | "install" = "install";
     if (ctx.llm) {
       llm = ctx.llm;
     } else {
@@ -303,7 +305,9 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       llm = resolved.llm;
       owner = resolved.owner;
       resolvedKey = resolved.apiKey;
+      source = resolved.source;
     }
+    const recorder = createUsageRecorder({ projectId: job.projectId, purpose: "generate.job_item", source });
 
     const payload = itemPayloadSchema.safeParse(item.payload);
     const fields = payload.success ? payload.data.fields : {};
@@ -322,6 +326,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       s,
       {
         label: "generate.job_item",
+        purpose: "generate.job_item",
         voice,
         groups,
         assets,
@@ -333,6 +338,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       {
         pending,
         owner,
+        recorder,
         retryWindowMs: async () => {
           const w = Math.min(llmTimeoutMs(), (await remaining()) - cfg.persistReserveMs);
           return w >= cfg.minCallMs ? w : null;
@@ -340,6 +346,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       },
     );
     calledModel = true;
+    await recorder.flush({ generationJobId: job.id, generationJobItemId: item.id });
     // A granted probe only becomes a probe when the model is actually called; the tick summary and the
     // heartbeat say "probed", so they must mean that (FR-021, review F2).
     if (claimed.probe) counts.probed = 1;

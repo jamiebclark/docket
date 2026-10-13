@@ -6,6 +6,7 @@ import { missingLlmSettings } from "../../llm";
 import { llmFailureMessage } from "../../llm/messages";
 import { resolveLlmForProject } from "../../llm/resolve";
 import type { LlmFailureKind, LlmProviderName } from "../../llm/types";
+import { createUsageRecorder } from "../../llm/usage";
 import { withCreditHold } from "./credit";
 
 export const LLM_CHECK_COOLDOWN_MS = 30_000;
@@ -41,8 +42,9 @@ export async function runLlmCheck(projectId: string, repo: ProjectLlmRepo): Prom
   const claimed = await repo.claimCheck(new Date(), LLM_CHECK_LEASE_MS, LLM_CHECK_COOLDOWN_MS);
   if (!claimed) return { ok: false, reason: "busy", message: LLM_CHECK_BUSY };
 
+  const recorder = createUsageRecorder({ projectId, purpose: "llm.check", source: resolved.source });
   try {
-    const llm = withCreditHold(resolved.llm, resolved.owner);
+    const llm = recorder.wrap(withCreditHold(resolved.llm, resolved.owner));
     const result = await llm.generate({
       label: "llm.check",
       system: "You write one short, friendly sentence.",
@@ -72,6 +74,7 @@ export async function runLlmCheck(projectId: string, repo: ProjectLlmRepo): Prom
       latencyMs: result.latencyMs,
     };
   } finally {
+    await recorder.flush({});
     await repo.releaseCheck(new Date());
   }
 }

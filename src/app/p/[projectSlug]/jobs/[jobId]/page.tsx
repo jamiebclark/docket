@@ -7,12 +7,14 @@ import { LiveRegion } from "@/components/ui/LiveRegion";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Sub } from "@/components/ui/Table";
 import { getSession } from "@/server/auth/session";
 import { forProject, NotFoundError } from "@/server/dal";
 import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
 import { missingLlmSettings } from "@/server/llm";
 import { resolveLlmForProject } from "@/server/llm/resolve";
 import { getJob, JOB_ITEMS_PAGE_SIZE, listJobItems } from "@/server/services/jobs";
+import { getJobUsage } from "@/server/services/usage";
 import { APPROVAL_LABEL, SCHEDULING_LABEL } from "../../generate/generate-logic";
 import { UNREVIEWED_QUEUE_LABEL } from "../../generate/PolicyPicker";
 import { CancelJobDialog } from "./CancelJobDialog";
@@ -62,6 +64,7 @@ export default async function JobPage({ params, searchParams }: Props) {
   const c = job.counts;
   const announce = `${c.done} done, ${c.failed} failed, ${c.queued} queued`;
   const llm = await resolveLlmForProject(scope.project.id);
+  const usage = await getJobUsage(scope, jobId);
 
   return (
     <section className="flex flex-col gap-4">
@@ -155,6 +158,19 @@ export default async function JobPage({ params, searchParams }: Props) {
         ))}
       </dl>
       <LiveRegion message={announce} />
+
+      <div className="text-sm">
+        <span className="font-medium">Model usage</span> —{" "}
+        {usage.calls === 0 ? (
+          "No model calls yet"
+        ) : (
+          <>
+            {usage.calls.toLocaleString("en-US")} call{usage.calls === 1 ? "" : "s"} ·{" "}
+            {usage.inputTokens.toLocaleString("en-US")} input tokens · {usage.outputTokens.toLocaleString("en-US")} output tokens
+            {active ? <Sub>To date</Sub> : null}
+          </>
+        )}
+      </div>
 
       {canRun && job.status !== "cancelled" ? (
         <div className="flex gap-2">
