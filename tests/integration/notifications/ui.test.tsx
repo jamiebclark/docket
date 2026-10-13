@@ -456,7 +456,7 @@ describe("Project settings page header", () => {
     const out = await renderAsync(await ProjectSettingsPage({ params: Promise.resolve({ projectSlug: p.slug }), searchParams: Promise.resolve({}) }));
     expectPageHeader(out, {
       title: "Project settings",
-      description: "The project's name, time zone, and how new posts are approved and scheduled.",
+      description: "The project's name, what the brand is, its time zone, and how new posts are approved and scheduled.",
     });
   });
 });

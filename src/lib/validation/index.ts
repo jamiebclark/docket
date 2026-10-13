@@ -1,4 +1,6 @@
+export * from "./brand";
 export * from "./email";
+export * from "./link";
 export * from "./name";
 export * from "./password";
 export * from "./policies";

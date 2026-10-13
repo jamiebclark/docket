@@ -12,8 +12,18 @@ import { MembersPanel } from "./members-panel";
 export const metadata: Metadata = { title: "Members & invitations" };
 export const dynamic = "force-dynamic";
 
+const BRAND_FIELD_SUBJECT: Record<string, string> = {
+  tagline: "tagline",
+  description: "description",
+  websiteUrl: "website",
+};
+
 /** API key, webhook and account audit rows name their subject in `details` (a key name, an endpoint host, or an account name). */
 function detailSubject(a: { action: string; details: unknown }): string | null {
+  if (a.action === "project_brand_update") {
+    const d = (a.details ?? {}) as { field?: unknown };
+    return typeof d.field === "string" ? BRAND_FIELD_SUBJECT[d.field] ?? null : null;
+  }
   if (!/^(api_key|webhook)_|^account_posting_instructions_update$/.test(a.action)) return null;
   const d = (a.details ?? {}) as { name?: unknown; host?: unknown; displayName?: unknown };
   const label =

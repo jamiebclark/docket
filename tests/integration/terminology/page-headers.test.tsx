@@ -97,7 +97,7 @@ describe("page headers (FR-012)", () => {
       ["Batch jobs", JobsPage as Page, {}, { title: "Batch jobs", description: "Generate many posts at once from images or a CSV file." }],
       ["New batch job", NewJobPage as Page, {}, { title: "New batch job", description: "Generate one post for each image you chose." }],
       ["New batch job from CSV", CsvJobPage as Page, {}, { title: "New batch job from CSV", description: "Generate one post for each row of a CSV file." }],
-      ["Project settings", SettingsPage as Page, {}, { title: "Project settings", description: "The project's name, time zone, and how new posts are approved and scheduled." }],
+      ["Project settings", SettingsPage as Page, {}, { title: "Project settings", description: "The project's name, what the brand is, its time zone, and how new posts are approved and scheduled." }],
       ["Members", MembersPage as Page, {}, { title: "Members & invitations", description: "Who works in this project, and invitations that haven't been accepted yet." }],
       ["API keys", ApiKeysPage as Page, {}, { title: "API keys", description: "Keys let tools like n8n use this project's API." }],
       ["Webhooks", WebhooksPage as Page, {}, { title: "Webhooks", description: "Docket can tell another service when posts publish or fail, when a job finishes, or when an account needs reconnecting." }],

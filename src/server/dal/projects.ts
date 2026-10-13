@@ -21,6 +21,9 @@ export interface ProjectRecord extends ProjectSummary {
   defaultApprovalPolicy: (typeof projects.$inferSelect)["defaultApprovalPolicy"];
   defaultSchedulingPolicy: (typeof projects.$inferSelect)["defaultSchedulingPolicy"];
   defaultVoiceProfileId: string | null;
+  tagline: string | null;
+  description: string | null;
+  websiteUrl: string | null;
 }
 
 /**
@@ -92,6 +95,9 @@ export interface ProjectSettingsPatch {
   timezone: string;
   defaultApprovalPolicy: ProjectRecord["defaultApprovalPolicy"];
   defaultSchedulingPolicy: ProjectRecord["defaultSchedulingPolicy"];
+  tagline?: string | null;
+  description?: string | null;
+  websiteUrl?: string | null;
 }
 
 /**

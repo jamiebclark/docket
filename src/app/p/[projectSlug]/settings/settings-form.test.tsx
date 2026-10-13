@@ -9,12 +9,15 @@ import { SettingsForm, type SettingsValues } from "./settings-form";
 const values = (over: Partial<SettingsValues> = {}): SettingsValues => ({
   name: "P",
   slug: "p",
+  tagline: null,
+  description: null,
+  websiteUrl: null,
   timezone: "UTC",
   defaultApprovalPolicy: "review_required",
   defaultSchedulingPolicy: "leave_as_draft",
   ...over,
 });
-const render = (v: SettingsValues) => renderToStaticMarkup(createElement(SettingsForm, { values: v, canEdit: true }));
+const render = (v: SettingsValues, canEdit = true) => renderToStaticMarkup(createElement(SettingsForm, { values: v, canEdit }));
 
 describe("SettingsForm unreviewed-queue confirmation", () => {
   it("shows the explanation and required checkbox for auto + queue", () => {
@@ -28,5 +31,29 @@ describe("SettingsForm unreviewed-queue confirmation", () => {
   it("shows nothing extra for other combinations", () => {
     expect(render(values())).not.toContain("I understand");
     expect(render(values({ defaultApprovalPolicy: "auto_approve" }))).not.toContain("I understand");
+  });
+});
+
+describe("SettingsForm brand fields", () => {
+  it("renders the tagline, description and website with their current values, editable", () => {
+    const html = render(
+      values({ tagline: "Make it snappy", description: "A longer explanation of the brand.", websiteUrl: "https://example.com" }),
+    );
+    expect(html).toContain('name="tagline"');
+    expect(html).toMatch(/name="tagline"[^>]*value="Make it snappy"/);
+    expect(html).not.toMatch(/name="tagline"[^>]*disabled/);
+    expect(html).toContain('name="description"');
+    expect(html).toContain("A longer explanation of the brand.");
+    expect(html).not.toMatch(/name="description"[^>]*disabled/);
+    expect(html).toContain('name="websiteUrl"');
+    expect(html).toMatch(/name="websiteUrl"[^>]*value="https:\/\/example\.com"/);
+    expect(html).not.toMatch(/name="websiteUrl"[^>]*disabled/);
+  });
+
+  it("has an error region for each brand field for surfacing field errors", () => {
+    const html = render(values());
+    expect(html).toContain('id="tagline-error"');
+    expect(html).toContain('id="description-error"');
+    expect(html).toContain('id="websiteUrl-error"');
   });
 });

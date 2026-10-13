@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "../db/client";
 import { apiKeys, projects, user, type ApiKeyPermission, type ApiKeyRow } from "../db/schema";
 import { now } from "./clock";
+import { projectColumns } from "./project-columns";
 
 export const API_KEY_PREFIX = "dkt_";
 const KEY_PATTERN = /^dkt_[A-Za-z0-9_-]{43}$/;
@@ -154,6 +155,9 @@ export interface AuthenticatedKey {
     defaultApprovalPolicy: (typeof projects.$inferSelect)["defaultApprovalPolicy"];
     defaultSchedulingPolicy: (typeof projects.$inferSelect)["defaultSchedulingPolicy"];
     defaultVoiceProfileId: string | null;
+    tagline: string | null;
+    description: string | null;
+    websiteUrl: string | null;
   };
 }
 
@@ -163,15 +167,7 @@ export async function findActiveKeyByHash(db: Database, keyHash: string): Promis
   const rows = await db
     .select({
       key: publicColumns,
-      project: {
-        id: projects.id,
-        slug: projects.slug,
-        name: projects.name,
-        timezone: projects.timezone,
-        defaultApprovalPolicy: projects.defaultApprovalPolicy,
-        defaultSchedulingPolicy: projects.defaultSchedulingPolicy,
-        defaultVoiceProfileId: projects.defaultVoiceProfileId,
-      },
+      project: projectColumns,
     })
     .from(apiKeys)
     .innerJoin(projects, eq(projects.id, apiKeys.projectId))
