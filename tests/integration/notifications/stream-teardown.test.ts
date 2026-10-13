@@ -146,7 +146,11 @@ describe("GET /api/me/notifications/stream — teardown (US5)", () => {
       testDb().delete(member).where(and(eq(member.organizationId, project.id), eq(member.userId, user.id))),
     );
 
-    const pushed = await frames.next(PROBE_INTERVAL_MS * 3 + 2_000);
+    // Three probes plus two seconds is comfortable on an idle machine and marginal on a loaded CI shard,
+    // where each probe is a database round trip competing with three other workers: this timed out in CI
+    // while passing locally. The assertions below are what the test is about — the next snapshot carries
+    // the new count and the stream does not end — and neither depends on how long the wait is allowed to be.
+    const pushed = await frames.next(PROBE_INTERVAL_MS * 6 + 6_000);
     expect(pushed.event).toBe("snapshot");
     expect(JSON.parse(pushed.data).count).toBe(0);
   });
