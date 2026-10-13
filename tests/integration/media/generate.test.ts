@@ -41,6 +41,15 @@ describe("generateImage", () => {
     expect(storage.objects.size).toBe(2);
   });
 
+  it("defaults an omitted aspect to square", async () => {
+    const { scope } = await setup();
+    const provider = createFakeImageProvider([{ bytes: await png(256, 256) }]);
+    setImageProviderForTests(provider);
+    const result = await mediaGenerate.generateImage(scope, { prompt: "a cat on a roof" });
+    expect(result).toMatchObject({ ok: true });
+    expect(provider.requests[0]).toMatchObject({ aspect: "square" });
+  });
+
   it("rejects an empty prompt before any provider call", async () => {
     const { scope } = await setup();
     setImageProviderForTests(createFakeImageProvider([]));

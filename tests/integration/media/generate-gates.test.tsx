@@ -16,6 +16,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { createFakeImageProvider } from "../../helpers/fake-image";
+import { png } from "../../helpers/images";
 import { postsEnv } from "../../helpers/posts-env";
 import { createMemoryStorage } from "../../helpers/storage";
 
@@ -44,6 +45,25 @@ describe("generation gates (US4)", () => {
     const list = await media.listMedia(env.scope, {});
     expect(list.total).toBe(0);
   });
+
+  it.each(["owner", "admin"] as const)(
+    "storage on, image provider configured, acting as %s: the control is present in both the empty and populated library",
+    async (role) => {
+      const storage = createMemoryStorage();
+      setStorageForTests(storage);
+      setImageProviderForTests(createFakeImageProvider([]));
+      const env = await postsEnv();
+      const actor = role === "owner" ? env.owner : env.admin;
+      actAs(actor);
+
+      const emptyHtml = await render(env.project.slug);
+      expect(emptyHtml).toContain("Generate an image");
+
+      await media.uploadMedia(env.scope, { file: { name: "a.png", bytes: await png(100, 100) } });
+      const populatedHtml = await render(env.project.slug);
+      expect(populatedHtml).toContain("Generate an image");
+    },
+  );
 
   it("storage on, no image provider: no control, and the action names what to set with no fake key visible", async () => {
     vi.stubEnv("OPENAI_API_KEY", "sk-gate-test-should-not-appear-0123456789abcdef");

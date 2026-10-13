@@ -75,6 +75,12 @@ describe("generateImageSchema", () => {
     expect(generateImageSchema.safeParse({ prompt: "x", aspect: "panoramic" }).success).toBe(false);
   });
 
+  it("defaults a missing aspect to square", () => {
+    const r = generateImageSchema.safeParse({ prompt: "x" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.aspect).toBe("square");
+  });
+
   it("accepts an optional positive-integer size, rejects a non-positive or non-integer one", () => {
     expect(generateImageSchema.safeParse({ prompt: "x", aspect: "square", size: { width: 100, height: 200 } }).success).toBe(true);
     expect(generateImageSchema.safeParse({ prompt: "x", aspect: "square" }).success).toBe(true);

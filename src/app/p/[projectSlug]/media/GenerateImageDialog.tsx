@@ -58,8 +58,8 @@ export function GenerateImageDialog({ slug }: { slug: string }) {
       <Button variant="secondary" onClick={() => setOpen(true)}>
         Generate an image
       </Button>
+      <LiveRegion message={announcement} />
       <Dialog open={open} onClose={close} title="Generate an image" size="md" dismissOnBackdrop={false}>
-        <LiveRegion message={announcement} />
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { IMAGE_ASPECTS, IMAGE_PROMPT_MAX } from "../../server/llm/image-generation";
+import { DEFAULT_IMAGE_ASPECT, IMAGE_ASPECTS, IMAGE_PROMPT_MAX } from "../../server/llm/image-generation";
 
 export const TAG_MAX_LENGTH = 40;
 export const TAGS_MAX = 20;
@@ -88,7 +88,7 @@ export const generateImageSchema = z.object({
     .string()
     .transform((v) => v.trim())
     .pipe(z.string().min(1, { error: "Enter a prompt" }).max(IMAGE_PROMPT_MAX, { error: `At most ${IMAGE_PROMPT_MAX} characters` })),
-  aspect: z.enum(IMAGE_ASPECTS),
+  aspect: z.enum(IMAGE_ASPECTS).default(DEFAULT_IMAGE_ASPECT),
   size: z
     .object({
       width: z.number().int().positive(),
