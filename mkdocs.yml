@@ -30,6 +30,7 @@ nav:
       - TikTok: tiktok-setup.md
   - Using Docket:
       - Getting started: getting-started.md
+      - Onboarding a new brand: brand-onboarding.md
       - Members and accounts: accounts.md
       - Generator and jobs: generator.md
       - n8n and the public API: n8n.md
