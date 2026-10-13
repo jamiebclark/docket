@@ -89,6 +89,31 @@ describe("project brand fields", () => {
     expect(await brandRows(ctx.project.id)).toHaveLength(0);
   });
 
+  // A key submitted as an explicit `undefined` survives `.optional()`'s parse — `"tagline" in parsed`
+  // is true for `{ tagline: undefined }` and false when the key is absent — so the service strips
+  // undefined values before building the patch. Without this, a form that omits one brand input
+  // (actions.ts `maybe()` yields undefined) would clear a field the person never touched.
+  it("an explicit undefined for each brand field changes nothing and audits nothing", async () => {
+    const ctx = await createProjectWithMembers();
+    await projectsService.updateSettings(
+      await as(ctx, ctx.owner),
+      valid({ slug: ctx.project.slug, tagline: "Walkup music", description: "Longer copy", websiteUrl: "https://x.test" }),
+    );
+    const before = await row(ctx.project.id);
+    const baseline = (await brandRows(ctx.project.id)).length;
+
+    await projectsService.updateSettings(
+      await as(ctx, ctx.owner),
+      valid({ slug: ctx.project.slug, tagline: undefined, description: undefined, websiteUrl: undefined }),
+    );
+
+    const after = await row(ctx.project.id);
+    expect(after.tagline).toBe(before.tagline);
+    expect(after.description).toBe(before.description);
+    expect(after.websiteUrl).toBe(before.websiteUrl);
+    expect(await brandRows(ctx.project.id)).toHaveLength(baseline);
+  });
+
   it.each([
     ["tagline", { tagline: "x".repeat(201) }, "tagline"],
     ["description", { description: "x".repeat(1001) }, "description"],

@@ -40,8 +40,9 @@ catches up.
 
 ## What Docket does and does not hold
 
-Docket is a posting tool, not a brand system. It has **no fields for a logo, a tagline or a
-website**. The natural "brand kit" list maps onto it like this:
+Docket holds the brand's words but not its pictures: a project carries a tagline, a longer
+description and a website, and the generator reads them. It has **no logo or avatar field** —
+that lives on each platform. The natural "brand kit" list maps onto it like this:
 
 | Brand asset | Where it actually goes |
 |---|---|
@@ -49,13 +50,18 @@ website**. The natural "brand kit" list maps onto it like this:
 | URL name (slug) | `projects.slug` — see the collision note below |
 | Time zone | `projects.timezone` |
 | Logo | **Each platform's avatar only.** Media is post attachments, not a brand avatar |
-| One-sentence description | **Each platform's bio only.** Docket has no field for it |
-| Longer description | Voice profile → *Audience* and *Topics and pillars* |
-| Website URL | Voice profile → *Links*, and each account's posting instructions |
+| One-sentence description | `projects.tagline` (Settings → Brand), and each platform's bio |
+| Longer description | `projects.description` (Settings → Brand), and each platform's About |
+| Website URL | `projects.websiteUrl` (Settings → Brand), and each platform's link field |
 | Per-platform tactics | Each account's **posting instructions**, not the voice profile |
 
 Keep the brand kit in a file next to the product, not in your head, and treat it as the source
 of truth that the platform profiles and the Docket project are both copied from.
+
+> **Brand fields versus the voice profile.** The three brand fields say what the product *is*;
+> the voice profile says how to *write* about it. A voice profile's *Links* are campaign links to
+> promote this month — the project's website is what the project is, and the generator is given it
+> as brand context ahead of the voice. See [Generator and jobs](generator.md).
 
 > **Slugs are unique across the whole install, not per tenant.** `projects.slug` carries a global
 > unique constraint, so another tenant's project can hold the slug you want and all you see is
@@ -107,9 +113,11 @@ Keep brand voice here and platform tactics out of it — per-platform guidance m
 Both live on the **Accounts** screen, per account. Posting instructions are where "no link in the
 Instagram caption" and "300 graphemes on Bluesky" belong.
 
-### 7. Set the project defaults
+### 7. Fill in the brand fields and the project defaults
 
-**Settings** → approval policy and scheduling policy. Decide deliberately whether generated posts
+**Settings** → tagline, description and website, so generated posts can say what the product is
+and link it without the voice profile repeating it. Owners and admins only; each change is
+audited. Then the approval policy and scheduling policy. Decide deliberately whether generated posts
 go to Review or are auto-approved.
 
 ## Profile limits
