@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IMAGE_ASPECTS, IMAGE_PROMPT_MAX } from "../../server/llm/image-generation";
 
 export const TAG_MAX_LENGTH = 40;
 export const TAGS_MAX = 20;
@@ -80,3 +81,19 @@ export const localDateTimeSchema = z
 export function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
+
+/** FR-012: prompt trimmed 1–1000 characters, aspect one of the three, optional positive-integer size. */
+export const generateImageSchema = z.object({
+  prompt: z
+    .string()
+    .transform((v) => v.trim())
+    .pipe(z.string().min(1, { error: "Enter a prompt" }).max(IMAGE_PROMPT_MAX, { error: `At most ${IMAGE_PROMPT_MAX} characters` })),
+  aspect: z.enum(IMAGE_ASPECTS),
+  size: z
+    .object({
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    })
+    .optional(),
+});
+export type GenerateImageInput = z.infer<typeof generateImageSchema>;

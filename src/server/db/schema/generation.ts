@@ -96,6 +96,7 @@ export const llmUsagePurpose = pgEnum("llm_usage_purpose", [
   "generate.job_item",
   "voice.try",
   "llm.check",
+  "image.generate",
 ]);
 
 export const voiceProfiles = pgTable(

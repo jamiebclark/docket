@@ -35,46 +35,46 @@ description: "Task list for implementing image generation into the media library
 
 ### Schema and migration
 
-- [ ] T002 [P] Add `generated_at`, `generation_prompt`, `generation_provider`, `generation_model` columns and the four CHECK constraints (`..._all_or_none`, `..._prompt_shape`, `..._model_shape`, `..._provider_shape`) to `media_assets` in `src/server/db/schema/media.ts` (data-model.md §1)
-- [ ] T003 [P] Add the `'image.generate'` value to the `llmUsagePurpose` pgEnum in `src/server/db/schema/generation.ts` (data-model.md §2)
-- [ ] T004 Generate the Drizzle migration for T002+T003 with `pnpm db:generate`, commit the SQL file under `drizzle/`, and confirm `pnpm db:check` is green (depends on T002, T003)
-- [ ] T005 [P] Add the four provenance columns to `NewMedia` in `src/server/dal/media.ts` (depends on T002)
+- [X] T002 [P] Add `generated_at`, `generation_prompt`, `generation_provider`, `generation_model` columns and the four CHECK constraints (`..._all_or_none`, `..._prompt_shape`, `..._model_shape`, `..._provider_shape`) to `media_assets` in `src/server/db/schema/media.ts` (data-model.md §1)
+- [X] T003 [P] Add the `'image.generate'` value to the `llmUsagePurpose` pgEnum in `src/server/db/schema/generation.ts` (data-model.md §2)
+- [X] T004 Generate the Drizzle migration for T002+T003 with `pnpm db:generate`, commit the SQL file under `drizzle/`, and confirm `pnpm db:check` is green (depends on T002, T003)
+- [X] T005 [P] Add the four provenance columns to `NewMedia` in `src/server/dal/media.ts` (depends on T002)
 
 ### Configuration
 
-- [ ] T006 [P] Add `LlmImageProviderName`, `LlmImageConfig`, `parseLlmImageConfig`, `LLM_IMAGE_VARIABLES` and `llmImageEnvIssues` to `src/server/llm/config.ts`, reusing the existing `intIn`/`limitsFrom`/`KEY_NAME` helpers (contracts/config.md §3)
-- [ ] T007 [P] Add unit tests for `parseLlmImageConfig` and `llmImageEnvIssues` covering every row of the parse table, including "no reason ever contains a value", in `src/server/llm/config.test.ts` (contracts/config.md §3)
-- [ ] T008 Wire `llmImageEnvIssues(source)` into the startup issue list and add the "image generation is off (LLM_IMAGE_PROVIDER not set)" disabled line in `src/server/startup/validate.ts` (depends on T006) (contracts/config.md §4)
-- [ ] T009 [P] Add `LLM_IMAGE_VARIABLES` to the `CONFIGURABLE` list in `tests/lint/env-coverage.test.ts` (depends on T006, T001)
+- [X] T006 [P] Add `LlmImageProviderName`, `LlmImageConfig`, `parseLlmImageConfig`, `LLM_IMAGE_VARIABLES` and `llmImageEnvIssues` to `src/server/llm/config.ts`, reusing the existing `intIn`/`limitsFrom`/`KEY_NAME` helpers (contracts/config.md §3)
+- [X] T007 [P] Add unit tests for `parseLlmImageConfig` and `llmImageEnvIssues` covering every row of the parse table, including "no reason ever contains a value", in `src/server/llm/config.test.ts` (contracts/config.md §3)
+- [X] T008 Wire `llmImageEnvIssues(source)` into the startup issue list and add the "image generation is off (LLM_IMAGE_PROVIDER not set)" disabled line in `src/server/startup/validate.ts` (depends on T006) (contracts/config.md §4)
+- [X] T009 [P] Add `LLM_IMAGE_VARIABLES` to the `CONFIGURABLE` list in `tests/lint/env-coverage.test.ts` (depends on T006, T001)
 
 ### Contract vocabulary, provider interface and failure sentences
 
-- [ ] T010 [P] Add `ImageAspect`, `IMAGE_ASPECTS`, `DEFAULT_IMAGE_ASPECT`, `IMAGE_PROMPT_MAX` and `NO_REAL_PEOPLE` to `src/server/llm/image-generation.ts`; rewrite `src/server/llm/image-generation.test.ts` to assert the module exports exactly this vocabulary and no vendor value (contracts/services.md §1)
-- [ ] T011 [P] Create `ImageProviderRequest`, `ImageProviderResult`, `ImageProvider` and the registry (`createImageProviderForConfig`, `getImageProvider`, `getImageStatus`, `currentImageProviderTestOverride`, `setImageProviderForTests`, `setImageProviderFactoryForTests`) in `src/server/llm/image-provider.ts` (contracts/config.md §6, contracts/services.md §2)
-- [ ] T012 [P] Create `IMAGE_FAILURE_MESSAGES` and `imageFailureMessage()` in `src/server/llm/image-messages.ts`, with a test in `src/server/llm/image-messages.test.ts` asserting the map is keyed by every value of `LLM_FAILURE_KINDS` (contracts/services.md §3)
-- [ ] T013 [P] Export `kindOfError` from `src/server/llm/openai.ts` with no behaviour change, for reuse by the image adapter (contracts/services.md §4)
+- [X] T010 [P] Add `ImageAspect`, `IMAGE_ASPECTS`, `DEFAULT_IMAGE_ASPECT`, `IMAGE_PROMPT_MAX` and `NO_REAL_PEOPLE` to `src/server/llm/image-generation.ts`; rewrite `src/server/llm/image-generation.test.ts` to assert the module exports exactly this vocabulary and no vendor value (contracts/services.md §1)
+- [X] T011 [P] Create `ImageProviderRequest`, `ImageProviderResult`, `ImageProvider` and the registry (`createImageProviderForConfig`, `getImageProvider`, `getImageStatus`, `currentImageProviderTestOverride`, `setImageProviderForTests`, `setImageProviderFactoryForTests`) in `src/server/llm/image-provider.ts` (contracts/config.md §6, contracts/services.md §2)
+- [X] T012 [P] Create `IMAGE_FAILURE_MESSAGES` and `imageFailureMessage()` in `src/server/llm/image-messages.ts`, with a test in `src/server/llm/image-messages.test.ts` asserting the map is keyed by every value of `LLM_FAILURE_KINDS` (contracts/services.md §3)
+- [X] T013 [P] Export `kindOfError` from `src/server/llm/openai.ts` with no behaviour change, for reuse by the image adapter (contracts/services.md §4)
 
 ### Adapter
 
-- [ ] T014 Create `createOpenAiImageProvider` in `src/server/llm/openai-image.ts`: client with `maxRetries: opts.maxRetries ?? 0`, the aspect→size table, explicit-size pass-through, the request body (`model`, `prompt`, `n: 1`, `size`, `output_format: "png"`), `b64_json` reading, usage/timeout/`logLlmCall`, `OPENAI_IMAGE_REFUSAL_TYPES`/`_CODES` (empty, named, extensible) and `imageFailureKindOf` delegating to `kindOfError` (depends on T010, T011, T012, T013) (contracts/services.md §4)
-- [ ] T015 [P] Unit tests for the adapter with `createFakeLlmFetch` in `src/server/llm/openai-image.test.ts`: exact request body, aspect-to-size mapping, explicit size, response reading (success, empty `data`, missing `b64_json`), error classification for every observed status/kind including the `markers` parameter, and `maxRetries: 0` producing exactly one HTTP call per attempt (depends on T014) (quickstart.md §7)
+- [X] T014 Create `createOpenAiImageProvider` in `src/server/llm/openai-image.ts`: client with `maxRetries: opts.maxRetries ?? 0`, the aspect→size table, explicit-size pass-through, the request body (`model`, `prompt`, `n: 1`, `size`, `output_format: "png"`), `b64_json` reading, usage/timeout/`logLlmCall`, `OPENAI_IMAGE_REFUSAL_TYPES`/`_CODES` (empty, named, extensible) and `imageFailureKindOf` delegating to `kindOfError` (depends on T010, T011, T012, T013) (contracts/services.md §4)
+- [X] T015 [P] Unit tests for the adapter with `createFakeLlmFetch` in `src/server/llm/openai-image.test.ts`: exact request body, aspect-to-size mapping, explicit size, response reading (success, empty `data`, missing `b64_json`), error classification for every observed status/kind including the `markers` parameter, and `maxRetries: 0` producing exactly one HTTP call per attempt (depends on T014) (quickstart.md §7)
 
 ### Resolution
 
-- [ ] T016 Add `resolveImageLlmForProject` and `missingLlmImageSettings` to `src/server/llm/resolve.ts`, following the four-step order in contracts/config.md §5 (test override → install config → project credential → install fallback), with `key_unreadable` never falling back (depends on T006, T011)
+- [X] T016 Add `resolveImageLlmForProject` and `missingLlmImageSettings` to `src/server/llm/resolve.ts`, following the four-step order in contracts/config.md §5 (test override → install config → project credential → install fallback), with `key_unreadable` never falling back (depends on T006, T011)
 
 ### Shared credit hold and usage recorder
 
-- [ ] T017 Extract `applyCreditOutcome(owner, kind)` in `src/server/services/generation/credit.ts` and add `withImageCreditHold(image, owner)`, rewriting `withCreditHold` to delegate to `applyCreditOutcome` with its existing tests passing unchanged (depends on T011) (contracts/services.md §5)
-- [ ] T018 [P] Add `"image.generate"` to `UsagePurpose` and add `wrapImage(image)` to `UsageRecorder` in `src/server/llm/usage.ts`, buffering the same row shape `wrap` does (depends on T011) (contracts/services.md §6)
-- [ ] T019 [P] Add the `"Generated image"` label for `"image.generate"` to `USAGE_PURPOSE_LABELS` in `src/lib/generation/usage-purpose.ts` (depends on T018)
-- [ ] T020 Widen the closed call-site list from seven to eight in `src/server/llm/no-missing-usage-purpose.test.ts` (depends on T018, T019)
+- [X] T017 Extract `applyCreditOutcome(owner, kind)` in `src/server/services/generation/credit.ts` and add `withImageCreditHold(image, owner)`, rewriting `withCreditHold` to delegate to `applyCreditOutcome` with its existing tests passing unchanged (depends on T011) (contracts/services.md §5)
+- [X] T018 [P] Add `"image.generate"` to `UsagePurpose` and add `wrapImage(image)` to `UsageRecorder` in `src/server/llm/usage.ts`, buffering the same row shape `wrap` does (depends on T011) (contracts/services.md §6)
+- [X] T019 [P] Add the `"Generated image"` label for `"image.generate"` to `USAGE_PURPOSE_LABELS` in `src/lib/generation/usage-purpose.ts` (depends on T018)
+- [X] T020 Widen the closed call-site list from seven to eight in `src/server/llm/no-missing-usage-purpose.test.ts` (depends on T018, T019) — NOTE: by design (per the guard's own comment and data-model.md §2) this file's second test stays red until T025 adds the `label: "image.generate"` call site in Phase 3; it is not expected to pass until then.
 
 ### Storage constant, authorization and validation
 
-- [ ] T021 [P] Export `MEDIA_STORAGE_NOT_SET_UP = "Media storage is not set up."` from `src/server/storage/index.ts`; update `src/server/llm/images.ts` to import it instead of its private `NOT_SET_UP` constant, with a test asserting both callers return the identical string (contracts/services.md §9)
-- [ ] T022 [P] Add `"generate"` to the `media` statement in `src/server/auth/access.ts`, granted to `owner` and `admin` only (`editor` keeps `["view", "edit"]`); update the matrix in `src/server/auth/access.test.ts` (contracts/services.md §10)
-- [ ] T023 [P] Add `generateImageSchema` (prompt trimmed 1–1000 characters, aspect one of `IMAGE_ASPECTS`, optional positive-integer `size`) to `src/lib/validation/media.ts` (depends on T010)
+- [X] T021 [P] Export `MEDIA_STORAGE_NOT_SET_UP = "Media storage is not set up."` from `src/server/storage/index.ts`; update `src/server/llm/images.ts` to import it instead of its private `NOT_SET_UP` constant, with a test asserting both callers return the identical string (contracts/services.md §9)
+- [X] T022 [P] Add `"generate"` to the `media` statement in `src/server/auth/access.ts`, granted to `owner` and `admin` only (`editor` keeps `["view", "edit"]`); update the matrix in `src/server/auth/access.test.ts` (contracts/services.md §10)
+- [X] T023 [P] Add `generateImageSchema` (prompt trimmed 1–1000 characters, aspect one of `IMAGE_ASPECTS`, optional positive-integer `size`) to `src/lib/validation/media.ts` (depends on T010)
 
 **Checkpoint**: Foundational phase complete — schema, configuration, adapter, resolution, hold, ledger, authorization and validation all exist and are tested in isolation. User story work can now begin.
 
@@ -88,14 +88,14 @@ description: "Task list for implementing image generation into the media library
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Add `GenerationProvenance` and extend `uploadMedia`/`commitUpload`/`toView` in `src/server/services/media.ts` to accept and persist `generation` metadata in the same insert as the rest of the row (depends on T005) (contracts/services.md §8)
-- [ ] T025 [US1] Create `imageGenerationEnabled`, `createImageGenerator` and `generateImage` in `src/server/services/media-generate.ts`, implementing the nine-step order of operations in contracts/services.md §7 (permission → cross-project check → schema validation → storage check → resolution → recorder/hold wrapping → provider call → `uploadMedia` → result) (depends on T016, T017, T018, T021, T022, T023, T024)
-- [ ] T026 [P] [US1] Integration tests for the happy path and every refusal (empty/over-length prompt, provider failure of each kind, oversized bytes) in `tests/integration/media/generate.test.ts`, asserting no orphaned storage object on any failure path (depends on T025) (quickstart.md §1)
-- [ ] T027 [P] [US1] Integration test driving the whole generator through a non-OpenAI stub `ImageProvider` installed via `setImageProviderForTests`, proving a complete asset with provenance is produced with no vendor-specific code above the adapter, in `tests/integration/media/generate-provider-swap.test.ts` (depends on T025) (quickstart.md §10)
-- [ ] T028 [P] [US1] Integration test asserting the prompt sent to the provider always ends with `NO_REAL_PEOPLE` and contains nothing else beyond the person's words, for a plain prompt, a prompt already mentioning a person, and a prompt at the 1000-character limit, in `tests/integration/llm/image-prompt.test.ts` (depends on T025) (quickstart.md §6, SC-010)
-- [ ] T029 [US1] Add `generateImageAction` to `src/app/p/[projectSlug]/media/actions.ts`, following the existing `runAction` shape and calling `refresh()` only on success (depends on T025) (contracts/ui.md §6)
-- [ ] T030 [US1] Create `src/app/p/[projectSlug]/media/GenerateImageDialog.tsx`: `TextareaField` prompt (labelled, hinted, `maxLength=1000`), `ChoiceField` aspect selector (three options, default square), submit with `pending`/`pendingLabel`, cancel, and a kept-mounted `LiveRegion` announcing in-flight/success/failure states (depends on T029) (contracts/ui.md §4-5)
-- [ ] T031 [US1] Wire `canGenerateImage` (storage enabled AND `media:["generate"]` AND `imageGenerationEnabled`) and render the trigger in both storage-on branches of `src/app/p/[projectSlug]/media/page.tsx` (depends on T030) (contracts/ui.md §2-3)
+- [X] T024 [US1] Add `GenerationProvenance` and extend `uploadMedia`/`commitUpload`/`toView` in `src/server/services/media.ts` to accept and persist `generation` metadata in the same insert as the rest of the row (depends on T005) (contracts/services.md §8)
+- [X] T025 [US1] Create `imageGenerationEnabled`, `createImageGenerator` and `generateImage` in `src/server/services/media-generate.ts`, implementing the nine-step order of operations in contracts/services.md §7 (permission → cross-project check → schema validation → storage check → resolution → recorder/hold wrapping → provider call → `uploadMedia` → result) (depends on T016, T017, T018, T021, T022, T023, T024)
+- [X] T026 [P] [US1] Integration tests for the happy path and every refusal (empty/over-length prompt, provider failure of each kind, oversized bytes) in `tests/integration/media/generate.test.ts`, asserting no orphaned storage object on any failure path (depends on T025) (quickstart.md §1)
+- [X] T027 [P] [US1] Integration test driving the whole generator through a non-OpenAI stub `ImageProvider` installed via `setImageProviderForTests`, proving a complete asset with provenance is produced with no vendor-specific code above the adapter, in `tests/integration/media/generate-provider-swap.test.ts` (depends on T025) (quickstart.md §10)
+- [X] T028 [P] [US1] Integration test asserting the prompt sent to the provider always ends with `NO_REAL_PEOPLE` and contains nothing else beyond the person's words, for a plain prompt, a prompt already mentioning a person, and a prompt at the 1000-character limit, in `tests/integration/llm/image-prompt.test.ts` (depends on T025) (quickstart.md §6, SC-010)
+- [X] T029 [US1] Add `generateImageAction` to `src/app/p/[projectSlug]/media/actions.ts`, following the existing `runAction` shape and calling `refresh()` only on success (depends on T025) (contracts/ui.md §6)
+- [X] T030 [US1] Create `src/app/p/[projectSlug]/media/GenerateImageDialog.tsx`: `TextareaField` prompt (labelled, hinted, `maxLength=1000`), `ChoiceField` aspect selector (three options, default square), submit with `pending`/`pendingLabel`, cancel, and a kept-mounted `LiveRegion` announcing in-flight/success/failure states (depends on T029) (contracts/ui.md §4-5)
+- [X] T031 [US1] Wire `canGenerateImage` (storage enabled AND `media:["generate"]` AND `imageGenerationEnabled`) and render the trigger in both storage-on branches of `src/app/p/[projectSlug]/media/page.tsx` (depends on T030) (contracts/ui.md §2-3)
 
 **Checkpoint**: User Story 1 is fully functional and independently testable — an owner can generate an image into the library end to end.
 

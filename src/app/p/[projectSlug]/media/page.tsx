@@ -10,6 +10,8 @@ import { firstParam, mediaSearchParamsSchema, toMediaListInput, type MediaSearch
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as media from "@/server/services/media";
+import { imageGenerationEnabled } from "@/server/services/media-generate";
+import { GenerateImageDialog } from "./GenerateImageDialog";
 import { MediaSelection, SelectBox } from "./MediaSelection";
 import { MediaCardActions } from "./MediaCardActions";
 import { UploadDropzone } from "./UploadDropzone";
@@ -55,6 +57,7 @@ export default async function MediaPage({ params, searchParams }: Props) {
   const status = await media.mediaStatus(scope);
   const canEdit = scope.can({ media: ["edit"] });
   const canGenerate = scope.can({ generation: ["run"] });
+  const canGenerateImage = status.enabled && scope.can({ media: ["generate"] }) && imageGenerationEnabled(scope);
   const unusedCount = canGenerate && status.enabled ? (await scope.media.listIdsForSelection({ unusedOnly: true, limit: 501 })).length : 0;
   const filtered = !!(filter.tag || filter.unused || filter.missingAlt || filter.q);
   let list: Awaited<ReturnType<typeof media.listMedia>> | null = null;
@@ -94,11 +97,13 @@ export default async function MediaPage({ params, searchParams }: Props) {
       ) : libraryEmpty ? (
         <>
           {canEdit ? <UploadDropzone slug={projectSlug} limits={status.limits} /> : null}
+          {canGenerateImage ? <GenerateImageDialog slug={projectSlug} /> : null}
           <EmptyState message={canEdit ? "No images or videos yet. Upload your first one above." : "No images or videos yet."} />
         </>
       ) : (
         <>
           {canEdit ? <UploadDropzone slug={projectSlug} limits={status.limits} /> : null}
+          {canGenerateImage ? <GenerateImageDialog slug={projectSlug} /> : null}
           <form action={`/p/${projectSlug}/media`} method="get" role="search" className="flex gap-2">
             <label htmlFor="media-q" className="sr-only">
               Search media

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calendarSearchParamsSchema,
+  generateImageSchema,
   localDateTimeSchema,
   mediaSearchParamsSchema,
   postSearchParamsSchema,
@@ -50,6 +51,35 @@ describe("search params", () => {
       date: undefined,
       account: undefined,
     });
+  });
+});
+
+describe("generateImageSchema", () => {
+  it("trims the prompt and accepts a known aspect", () => {
+    const r = generateImageSchema.safeParse({ prompt: "  a cat  ", aspect: "square" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.prompt).toBe("a cat");
+  });
+
+  it("rejects an empty or whitespace-only prompt", () => {
+    expect(generateImageSchema.safeParse({ prompt: "", aspect: "square" }).success).toBe(false);
+    expect(generateImageSchema.safeParse({ prompt: "   ", aspect: "square" }).success).toBe(false);
+  });
+
+  it("rejects a prompt over 1000 characters, accepts exactly 1000", () => {
+    expect(generateImageSchema.safeParse({ prompt: "x".repeat(1001), aspect: "square" }).success).toBe(false);
+    expect(generateImageSchema.safeParse({ prompt: "x".repeat(1000), aspect: "square" }).success).toBe(true);
+  });
+
+  it("rejects an unknown aspect", () => {
+    expect(generateImageSchema.safeParse({ prompt: "x", aspect: "panoramic" }).success).toBe(false);
+  });
+
+  it("accepts an optional positive-integer size, rejects a non-positive or non-integer one", () => {
+    expect(generateImageSchema.safeParse({ prompt: "x", aspect: "square", size: { width: 100, height: 200 } }).success).toBe(true);
+    expect(generateImageSchema.safeParse({ prompt: "x", aspect: "square" }).success).toBe(true);
+    expect(generateImageSchema.safeParse({ prompt: "x", aspect: "square", size: { width: 0, height: 200 } }).success).toBe(false);
+    expect(generateImageSchema.safeParse({ prompt: "x", aspect: "square", size: { width: 1.5, height: 200 } }).success).toBe(false);
   });
 });
 

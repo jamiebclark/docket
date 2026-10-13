@@ -36,7 +36,8 @@ export function isCreditRefusal(error: unknown): boolean {
   return typeof error.code === "string" && OPENAI_CREDIT_CODES.has(error.code);
 }
 
-function kindOfError(error: unknown, timedOut: boolean): LlmFailureKind {
+/** Exported for reuse by the image adapter (P6); no behaviour change. */
+export function kindOfError(error: unknown, timedOut: boolean): LlmFailureKind {
   if (timedOut || error instanceof OpenAI.APIConnectionTimeoutError || error instanceof OpenAI.APIUserAbortError) {
     return "timeout";
   }

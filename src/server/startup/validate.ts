@@ -1,5 +1,5 @@
 import { formatEnvIssues, parseEnv, type Env, type EnvIssue } from "../env";
-import { llmEnvIssues } from "../llm/config";
+import { llmEnvIssues, llmImageEnvIssues } from "../llm/config";
 import { parseLlmRates } from "../llm/rates";
 import { createSmtpMailer } from "../mail/smtp";
 import { providerEnvIssues } from "../provider-env";
@@ -16,7 +16,12 @@ export type ConfigValidation =
  */
 export function validateConfiguration(source: Record<string, string | undefined>): ConfigValidation {
   const parsed = parseEnv(source);
-  const issues = [...(parsed.ok ? [] : parsed.issues), ...providerEnvIssues(source), ...llmEnvIssues(source)];
+  const issues = [
+    ...(parsed.ok ? [] : parsed.issues),
+    ...providerEnvIssues(source),
+    ...llmEnvIssues(source),
+    ...llmImageEnvIssues(source),
+  ];
   const warnings = parseLlmRates(source).problems;
 
   const disabled: string[] = [];
@@ -27,6 +32,9 @@ export function validateConfiguration(source: Record<string, string | undefined>
   }
   if (!source.LLM_PROVIDER?.trim() && llmEnvIssues(source).length === 0) {
     disabled.push("generation is off (LLM_PROVIDER not set)");
+  }
+  if (!source.LLM_IMAGE_PROVIDER?.trim() && llmImageEnvIssues(source).length === 0) {
+    disabled.push("image generation is off (LLM_IMAGE_PROVIDER not set)");
   }
   for (const { group } of listConnectGroups()) {
     if (!group.environment.configured(source)) disabled.push(`${group.displayName} connections are off (not configured)`);
