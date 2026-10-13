@@ -73,5 +73,10 @@ describe("a failed usage write never costs anyone a post", () => {
     expect(logged).not.toMatch(/sk-/);
     expect(logged).not.toMatch(/forced usage write failure/);
     expect(logged).not.toContain("Working");
+
+    // The exact shape of the swallowed write's log line (src/server/llm/usage.ts's `flush`): only the
+    // fixed, already-redacted fields, never the thrown error's own text.
+    expect(loggedCalls).toHaveLength(1);
+    expect(loggedCalls[0]).toEqual([{ event: "llm usage write failed", purpose: "generate.single", rows: 1 }]);
   });
 });

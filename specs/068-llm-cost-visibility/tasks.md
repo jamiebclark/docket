@@ -194,23 +194,23 @@ T013).
 
 ### Tests for User Story 5
 
-- [ ] T026 [P] [US5] Extend `tests/integration/security/secret-scan.test.ts` (P17): render the Usage
+- [X] T026 [P] [US5] Extend `tests/integration/security/secret-scan.test.ts` (P17): render the Usage
   page for owner and admin and assert `NotFoundSignal` for the editor; render the job page again after
   the generating tick so it carries real token totals; push an `llm_call_usage` dump as one more
   `pieces` entry; keep the corpus assertion and the file's deliberate-leak test passing unchanged
-- [ ] T027 [P] [US5] Extend `tests/integration/no-plaintext.test.ts` to dump `llm_call_usage` before
+- [X] T027 [P] [US5] Extend `tests/integration/no-plaintext.test.ts` to dump `llm_call_usage` before
   the existing all-tables scan
-- [ ] T028 [P] [US5] Write `tests/integration/llm/usage-authz.test.ts`: an editor gets `notFound()` for
+- [X] T028 [P] [US5] Write `tests/integration/llm/usage-authz.test.ts`: an editor gets `notFound()` for
   `/p/<slug>/settings/usage` and the settings sub-nav renders no Usage item for them; a non-member gets
   the same not-found as for any foreign project; `getProjectUsage` throws `ForbiddenError` for an
   editor's scope even when called directly (SC-010)
 
 ### Implementation for User Story 5
 
-- [ ] T029 [US5] Confirm `tests/integration/scope-check.test.ts` covers `llm_call_usage` with no new
+- [X] T029 [US5] Confirm `tests/integration/scope-check.test.ts` covers `llm_call_usage` with no new
   test (registration from T002 is sufficient) and run it to prove it; fix in passing if any query added
   in Phase 3 bypassed the scope
-- [ ] T030 [US5] Re-run `tests/integration/llm/usage-failure.test.ts` (T013) against the final wiring
+- [X] T030 [US5] Re-run `tests/integration/llm/usage-failure.test.ts` (T013) against the final wiring
   from Phase 3 and confirm the logged failure line (`src/server/llm/usage.ts`'s swallow path) carries
   no prompt, output or credential — add the assertion there if T013 did not already cover the exact
   log line's shape
