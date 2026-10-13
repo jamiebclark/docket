@@ -63,7 +63,12 @@ import type { LlmConfig } from "../../../src/server/llm/config";
 import { setLlmForTests, setLlmFactoryForTests } from "../../../src/server/llm";
 import ModelPage from "../../../src/app/p/[projectSlug]/settings/model/page";
 import UsagePage from "../../../src/app/p/[projectSlug]/settings/usage/page";
+import MediaPage from "../../../src/app/p/[projectSlug]/media/page";
 import { saveProjectModel, removeProjectModel, checkProjectModel } from "../../../src/app/p/[projectSlug]/settings/model/actions";
+import { generateImage } from "../../../src/server/services/media-generate";
+import { setImageProviderForTests } from "../../../src/server/llm/image-provider";
+import { createFakeImageProvider } from "../../helpers/fake-image";
+import { png } from "../../helpers/images";
 import { NotFoundSignal } from "../../helpers/actions";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
@@ -105,7 +110,10 @@ afterAll(async () => {
   setStorageForTests(undefined);
   await closeDb();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  setImageProviderForTests(null);
+});
 beforeAll(() => setStorageForTests(createMemoryStorage()));
 
 // ---- the scanner ---------------------------------------------------------------------------------------------
@@ -557,6 +565,27 @@ describe("secret scan (FR-020, SC-005)", () => {
     pieces.push({ place: "page: job detail (held)", text: renderToStaticMarkup((await JobPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, jobId: heldJobId }), searchParams: Promise.resolve({}) })) as never) });
     session.current = sessionBefore;
     await clearHolds();
+
+    // Image generation (T038, quickstart.md §8): one image through a fake provider, then the Media
+    // page rendered for owner, admin and editor — no fake key, SDK error text or raw provider
+    // payload may appear anywhere.
+    setImageProviderForTests(createFakeImageProvider([{ bytes: await png(256, 256) }]));
+    asUser(genEnv.owner);
+    const imageResult = await generateImage(genEnv.scope, { prompt: "a cat on a roof", aspect: "square" });
+    expect(imageResult.ok).toBe(true);
+    pieces.push({ place: "service result: generate image", text: JSON.stringify(imageResult) });
+    setImageProviderForTests(null);
+
+    const renderMediaPage = async (u: { id: string }) => {
+      asUser(u);
+      return renderToStaticMarkup(
+        (await MediaPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) })) as never,
+      );
+    };
+    pieces.push({ place: "page: media (owner)", text: await renderMediaPage(genEnv.owner) });
+    pieces.push({ place: "page: media (admin)", text: await renderMediaPage(genEnv.admin) });
+    pieces.push({ place: "page: media (editor)", text: await renderMediaPage(genEnv.editor) });
+    session.current = sessionBeforeLlm;
 
     // Stored rows.
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });

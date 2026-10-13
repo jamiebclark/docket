@@ -32,6 +32,26 @@ Leaving the key field blank when saving keeps the stored key, so the model can b
 
 An install that only ever uses environment variables needs to do nothing: with no project credential stored, every project keeps using the install default exactly as before, and the only visible change is a settings section saying so.
 
+## Generating images
+
+An owner or admin with `media:generate` can generate a new image into the library from a text prompt, from the **Media** screen, when storage is set up and image generation is configured. Editors never see the control.
+
+**Configuring a provider.** Image generation is off until `LLM_IMAGE_PROVIDER` is set.
+
+| Variable | Meaning |
+| --- | --- |
+| `LLM_IMAGE_PROVIDER` | `openai` (the only supported provider) |
+| `LLM_IMAGE_MODEL` | A model id your account can use. There is no default on purpose. |
+| `OPENAI_API_KEY` | The key for the image provider |
+
+These variables are deliberately separate from `LLM_PROVIDER`/`LLM_MODEL`: text generation and image generation can be configured, or not, independently. A project that stores its own OpenAI key for text generation (see "Per-project provider, model and key" above) spends that same key for its images too; a project on Anthropic, or with no stored key, spends the install's image credential.
+
+**The prompt.** 1 to 1,000 characters, plus a fixed square, portrait or landscape aspect. Docket always appends a fixed instruction forbidding any real, identifiable person, named individual or public figure — this is appended server-side and cannot be removed or overridden by the prompt.
+
+**Billing refusals.** A billing refusal on an image call behaves exactly like one on a text call: it is not a lasting failure, nothing is saved, the request fails once with a fixed message, and that credential (the install's, or a project's own) pauses and resumes on its own the moment a call succeeds again — the same probe, the same hold, the same credential ownership rules as text generation.
+
+**The result.** A successful generation adds an ordinary image to the project's media library, with its prompt, provider and model recorded alongside it (visible on the image's card) and usable anywhere an uploaded image is — selected for a post, included in a job, and so on. The call is recorded on the project's Usage page like any other generation call, under the purpose "image.generate".
+
 ## Usage
 
 Under a project's **Settings → Usage**, an owner or admin reads what their project has used: calls, input and output tokens, a per-model and per-purpose breakdown, and the split between the install's credential and the project's own, for a chosen period (last 30 days, this month, last month or all time, in the project's own time zone). An editor does not see this sub-nav item at all, and the URL 404s for them (absent, not disabled, the same rule as "Model & API key"). The screen is complete and useful with no rate configured anywhere: calls and tokens are recorded for every call that reaches a provider, whatever its outcome, and a call with no reported counts is shown as a call with its tokens excluded from the sums, never coerced to zero.
@@ -115,4 +135,4 @@ A job generates one post per item, in the background, so a person can hand the g
 
 ## Out of scope
 
-A public API (the public-api roadmap entry) and image generation. Single and series generation run inside the request; jobs run in the background.
+A public API (the public-api roadmap entry). Single and series generation run inside the request; jobs run in the background.

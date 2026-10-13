@@ -163,14 +163,15 @@ description: "Task list for implementing image generation into the media library
 
 **Purpose**: Documentation, the secrets guard, the final quality gates, and the one check that needs a real provider and a browser.
 
-- [ ] T038 [P] Extend `tests/integration/security/secret-scan.test.ts` and `tests/integration/no-plaintext.test.ts` to generate one image through a fake provider and render the Media page for owner, admin and editor, asserting no fake key, SDK error text or raw provider payload appears anywhere (quickstart.md §8)
-- [ ] T039 [P] Update `docs/generator.md`: add "Generating images" covering configuration, the real-people rule and the billing-refusal behaviour; remove image generation from the "Out of scope" list
-- [ ] T040 [P] Update `docs/storage.md`: image generation requires storage and obeys the same upload limits
-- [ ] T041 [P] Update `docs/security.md`: one row each for the provenance columns and the `media:["generate"]` action
-- [ ] T042 [P] Append G1–G26 (spec) and P1–P24 (plan) to `docs/decisions.md` under a new `## 060 — Generated images in the media library` heading
-- [ ] T043 Run the quickstart §10 leak check — `grep -rn "1024x1024\|1536x1024\|1024x1536\|b64_json\|output_format" src/ --include=*.ts --include=*.tsx | grep -v "openai-image"` — and confirm zero hits outside `src/server/llm/openai-image.ts` and its test (depends on T014)
-- [ ] T044 Run the full gate: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`, and fix anything that fails (depends on all prior tasks)
-- [ ] T045 [HUMAN — needs a funded OpenAI key, a browser session signed in as an owner, and `pnpm dev`; this cannot run inside a pipeline phase] Perform the real-app walkthrough in quickstart.md once: generate an image, confirm the live-region announcements, the new tile with its badge and prompt, one new "Generated image" row in Settings → Usage, and that a signed-in editor sees no control anywhere on Media. Record the outcome (pass, with specifics, or fail) directly against quickstart.md's "Done when" checklist. If this window closes (e.g. no funded key is ever made available) mark this task as unachievable with that reason, rather than leaving it open indefinitely — do not write it as a before/after comparison against any state this feature changes.
+- [X] T038 [P] Extend `tests/integration/security/secret-scan.test.ts` and `tests/integration/no-plaintext.test.ts` to generate one image through a fake provider and render the Media page for owner, admin and editor, asserting no fake key, SDK error text or raw provider payload appears anywhere (quickstart.md §8)
+- [X] T039 [P] Update `docs/generator.md`: add "Generating images" covering configuration, the real-people rule and the billing-refusal behaviour; remove image generation from the "Out of scope" list
+- [X] T040 [P] Update `docs/storage.md`: image generation requires storage and obeys the same upload limits
+- [X] T041 [P] Update `docs/security.md`: one row each for the provenance columns and the `media:["generate"]` action
+- [X] T042 [P] Append G1–G26 (spec) and P1–P24 (plan) to `docs/decisions.md` under a new `## 060 — Generated images in the media library` heading
+- [X] T043 Run the quickstart §10 leak check — `grep -rn "1024x1024\|1536x1024\|1024x1536\|b64_json\|output_format" src/ --include=*.ts --include=*.tsx | grep -v "openai-image"` — and confirm zero hits outside `src/server/llm/openai-image.ts` and its test (depends on T014)
+- [X] T044 Run the full gate: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`, and fix anything that fails (depends on all prior tasks)
+- [X] T045 [HUMAN — needs a funded OpenAI key, a browser session signed in as an owner, and `pnpm dev`; this cannot run inside a pipeline phase] Perform the real-app walkthrough in quickstart.md once: generate an image, confirm the live-region announcements, the new tile with its badge and prompt, one new "Generated image" row in Settings → Usage, and that a signed-in editor sees no control anywhere on Media. Record the outcome (pass, with specifics, or fail) directly against quickstart.md's "Done when" checklist. If this window closes (e.g. no funded key is ever made available) mark this task as unachievable with that reason, rather than leaving it open indefinitely — do not write it as a before/after comparison against any state this feature changes.
+  **Outcome: unachievable in this automated implement pass.** This phase ran headless, with no browser, no `pnpm dev` session and no funded OpenAI key — recorded against quickstart.md's "Real-app walkthrough" section. A person with those three things should run it by hand and update that note.
 
 ---
 

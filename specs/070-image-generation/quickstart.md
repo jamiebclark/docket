@@ -237,11 +237,16 @@ With storage configured, `LLM_IMAGE_PROVIDER=openai`, a real `LLM_IMAGE_MODEL` a
 Anything proven only by steps 1–9 above is reported as **"verified with mocks only"** until
 someone runs this walkthrough.
 
+**Outcome (T045): unachievable in an automated implement pass.** This phase runs headless, with no
+browser, no `pnpm dev` session and no funded OpenAI key — the three things this walkthrough names as
+prerequisites. Everything it would prove is covered only "verified with mocks only" by the automated
+test suite until a person with those three things runs it by hand.
+
 ## Done when
 
-- [ ] `pnpm db:check` green with the committed migration.
-- [ ] Checks 1–9 pass; check 10's `grep` is empty.
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` green in the final pass.
-- [ ] `docs/generator.md`, `docs/storage.md`, `docs/security.md`, `.env.example` and
+- [X] `pnpm db:check` green with the committed migration.
+- [X] Checks 1–9 pass; check 10's `grep` is empty.
+- [X] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` green in the final pass.
+- [X] `docs/generator.md`, `docs/storage.md`, `docs/security.md`, `.env.example` and
       `docs/decisions.md` updated (FR-038).
-- [ ] The implement phase has **committed** its work — the pipeline never auto-commits.
+- [X] The implement phase has **committed** its work — the pipeline never auto-commits.

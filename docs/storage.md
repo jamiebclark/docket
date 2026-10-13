@@ -97,6 +97,14 @@ startup refuses an `http://` `S3_PUBLIC_BASE_URL` unless its host is `localhost`
 So MinIO on a LAN address (for example `http://192.168.1.10:9000`) stops startup; use `localhost`
 as above, or put the bucket behind HTTPS.
 
+## Generated images
+
+Generating an image (see `docs/generator.md`, "Generating images") writes it into the same media
+library as an upload, through the same storage. With no storage configured, the Media screen offers
+no generate control, the same as it offers no upload control. A generated image obeys the same
+limits as an upload (`MEDIA_MAX_UPLOAD_MB`, `MEDIA_MAX_MEGAPIXELS`): one that comes back from the
+provider too large is rejected and nothing is written, with no storage object left behind.
+
 ## Large uploads (video)
 
 By default (`MEDIA_UPLOAD_TRANSPORT=direct`) the browser sends every file, images and videos alike, straight to the bucket in
