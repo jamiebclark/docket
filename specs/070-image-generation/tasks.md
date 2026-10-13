@@ -137,7 +137,7 @@ description: "Task list for implementing image generation into the media library
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] Integration tests for the three gate states — storage off, storage on with no image provider, and an editor on a fully configured install — across both page render and direct server-action call, plus the cross-project refusal, in `tests/integration/media/generate-gates.test.tsx` (depends on T031) (quickstart.md §4)
+- [X] T034 [US4] Integration tests for the three gate states — storage off, storage on with no image provider, and an editor on a fully configured install — across both page render and direct server-action call, plus the cross-project refusal, in `tests/integration/media/generate-gates.test.tsx` (depends on T031) (quickstart.md §4)
 
 **Checkpoint**: SC-006 and SC-008 are proven; all four P1/P2 user stories are complete.
 
