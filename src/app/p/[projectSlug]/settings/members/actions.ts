@@ -9,20 +9,23 @@ import { getSession } from "@/server/auth/session";
 import * as invitations from "@/server/services/invitations";
 import * as members from "@/server/services/members";
 
-/** The one-time link shown after invite or regenerate. `null` when delivery was in-app. */
+/**
+ * The one-time link shown after invite or regenerate. Always present for both, including when the
+ * invitee already has a Docket account: `kind` chooses the wording, not whether there is a link
+ * (docs/decisions.md 057). Shown once and never retrievable afterwards — only the hash is stored.
+ */
 export type DeliveryDto = {
   invitationId: string;
-  link: { url: string; expiresAt: string } | null;
+  link: { url: string; expiresAt: string };
+  kind: invitations.InvitationDeliveryKind;
   email: invitations.InvitationEmail;
 };
 
 function toDto(result: invitations.CreateResult): DeliveryDto {
   return {
     invitationId: result.invitationId,
-    link:
-      result.delivery.kind === "manual_link"
-        ? { url: result.delivery.url, expiresAt: result.delivery.expiresAt.toISOString() }
-        : null,
+    link: { url: result.delivery.url, expiresAt: result.delivery.expiresAt.toISOString() },
+    kind: result.delivery.kind,
     email: result.delivery.email,
   };
 }
@@ -70,16 +73,18 @@ export async function regenerateInvitation(
   }
 }
 
+// Revoking produces no link, so it returns no `DeliveryDto` — previously it returned one with a null
+// `link`, which is what made `link` nullable in a type whose whole purpose is to carry a link.
 export async function revokeInvitation(
-  _prev: ActionResult<DeliveryDto> | null,
+  _prev: ActionResult<null> | null,
   formData: FormData,
-): Promise<ActionResult<DeliveryDto>> {
+): Promise<ActionResult<null>> {
   const slug = slugOf(formData);
   try {
     const scope = await scopeFor(slug);
     await invitations.revoke(scope, { invitationId: String(formData.get("invitationId") ?? "") });
     refresh(slug);
-    return ok({ invitationId: String(formData.get("invitationId") ?? ""), link: null, email: "unavailable" });
+    return ok(null);
   } catch (error) {
     return failFromError(error);
   }

@@ -39,6 +39,14 @@ posts. [Platform limits](limits.md) lists which kinds and sizes each platform ta
 
 Go to **Settings**, then **Members**, to invite people.
 
+Each invitation gives you a single-use link, whether or not the person already has a Docket account. If a mail
+server is configured the invitation is emailed as well, and the panel tells you whether that send worked. The link
+is shown only once, so copy it before you hide the panel.
+
+If a link goes astray or expires, **Copy new link** on the invitation's row issues a fresh one and copies it
+straight to your clipboard. It also stops the previous link working, so send the new one. **Regenerate** beside it
+does the same thing but shows the link instead of copying it.
+
 ## Roles
 
 - **Owner**: full control, including inviting owners, changing roles and transferring ownership.

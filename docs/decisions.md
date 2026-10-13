@@ -2456,3 +2456,57 @@ admin that the project uses the install default (K4).
   than leaving part of a failed add on screen.
 - **`onAddWeek` is optional.** A caller that passes no handler gets the one-at-a-time grid exactly as before
   and no week form renders, so `WeekSlotGrid` stays usable by anything without a bulk endpoint.
+
+## 057 — An invitation link you can always copy (2026-10-13)
+
+- **The delivery result always carries the URL — a deliberate amendment to research D6/D7.** D7 had
+  `deliver()` return `{ kind: "in_app" }` with no URL when the invitee already had a Docket account, on
+  the reasoning that they do not need a link: they see the invitation under Invitations. The consequence
+  was that Regenerate produced nothing copyable for exactly the common case — a second invitation to
+  someone who has signed up since — because `toDto` mapped the missing URL to `link: null` and the panel
+  rendered nothing at all. `InvitationDeliveryResult` is now one shape (`kind`, `url`, `expiresAt`,
+  `email`) and `kind` chooses only the wording. **D6 is untouched**: the token is still 32 random bytes
+  whose `sha256` alone is stored, still single-use, still revoked on regenerate. The URL's lifetime is
+  unchanged too — one server action's response, rendered once, never retrievable afterwards. What changed
+  is only which of the two kinds gets handed that one-time value, and
+  `tests/integration/invitation-accept.test.ts` asserts the hash-at-rest property for the in-app path
+  that now returns a URL. Reverse by restoring the discriminated union; the panel would go back to
+  rendering nothing for an invitee with an account.
+- **`revokeInvitation` returns `ActionResult<null>`, not a link DTO.** It used to return a `DeliveryDto`
+  with `link: null`, which is the only reason `link` was nullable in a type whose purpose is to carry a
+  link. Revoking produces no link, so it now says so in its type and `DeliveryDto.link` is required.
+- **Focus moves to the link panel when it appears.** The panel renders above the table, so a Regenerate
+  from a row far down a long members page scrolled nothing and said nothing: the link could land
+  off-screen. The region is `tabIndex={-1}` and focused on each new link, which scrolls it into view,
+  makes it the next thing a screen reader reads and the next thing `Tab` continues from. `focus:` rather
+  than `focus-visible:` for the ring, because a programmatic focus on a non-input element does not
+  satisfy `:focus-visible` in most browsers, and a region that has silently taken focus needs to show it.
+- **"Copy new link" awaits the action directly instead of dispatching it.** The button needs the URL in
+  the same activation to hand it to `navigator.clipboard`, and `useActionState`'s dispatch only lands a
+  result in state a render later — which is a second user gesture away, and by then the clipboard write
+  is no longer inside the user activation that permitted it. So the row calls
+  `regenerateInvitation(null, formData)` and awaits it, keeping its own `copying` flag for the pending
+  label.
+- **Regenerate stays beside it.** Three controls in one row cell is more than the design system likes,
+  but Regenerate is the only path that works with client JavaScript unavailable, and it is the one that
+  *shows* the link rather than putting it straight on the clipboard (for pasting into a password manager,
+  or reading it out). "Copy new link" is the one-gesture shortcut on top, not a replacement. Reverse by
+  dropping Regenerate — at the cost of the no-JavaScript path.
+- **The clipboard write is attempted after the await, and that is what the fallback is for.** A
+  `navigator.clipboard.writeText` needs transient user activation, and awaiting the server action first
+  can spend it — Safari is the strict case. Deferring instead (`clipboard.write` with a `ClipboardItem`
+  holding a promise) would keep the activation but is supported unevenly and costs a second code path
+  for a case the fallback already handles well: the link appears in the panel, focused, ready to copy.
+  Revisit if the fallback turns out to be the common path rather than the exception.
+- **A clipboard failure is not a regenerate failure.** By the time `writeText` throws (an insecure
+  origin, a denied permission, a browser without the API) the old link is already dead and a new one
+  exists. Reporting an error would be wrong and would hide a working link, so the row falls back to the
+  panel's existing `CopyField` — which now also takes focus — and says the link is ready to copy above.
+- **The row's note is not a live region.** `say()` announces through the panel's single `LiveRegion`;
+  an `aria-live` node in the cell as well would say everything twice. Same split as the week-slot grid
+  in 048: visible text in the row, announcement through `say()`, which launders text through
+  `announcedText` so copying twice in a row is announced twice.
+- **The announcement names the consequence, not just the success.** "New invitation link for
+  robin@example.test copied to the clipboard. The previous link has stopped working." Regenerating
+  silently revokes whatever link was already sent, and someone who cannot see the row's note has no
+  other way to learn that.
