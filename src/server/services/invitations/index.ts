@@ -26,7 +26,13 @@ import { getEnv } from "@/server/env";
 import { defaultInvitationDelivery, type InvitationDelivery, type InvitationDeliveryResult } from "./delivery";
 
 export { defaultInvitationDelivery } from "./delivery";
-export type { InvitationDelivery, InvitationDeliveryInput, InvitationDeliveryResult, InvitationEmail } from "./delivery";
+export type {
+  InvitationDelivery,
+  InvitationDeliveryInput,
+  InvitationDeliveryKind,
+  InvitationDeliveryResult,
+  InvitationEmail,
+} from "./delivery";
 
 /** What the invitee-side services need from a session. */
 export interface InviteeSession {

@@ -35,7 +35,10 @@ describe("invitations arrive by email, and still work when they cannot", () => {
     const { scope } = await asOwner();
     const invitee = await createUser();
     const result = await invitations.create(scope, { email: invitee.email, role: "editor" });
-    expect(result.delivery).toEqual({ kind: "in_app", email: "unavailable" });
+    // `in_app` is the wording; the link comes back for an existing account too (decisions 057).
+    expect(result.delivery).toMatchObject({ kind: "in_app", email: "unavailable" });
+    expect(result.delivery.url).toContain("/signup?token=");
+    expect(result.delivery.expiresAt).toBeInstanceOf(Date);
     expect(await attemptsFor(invitee.id)).toHaveLength(0);
   });
 
@@ -61,7 +64,8 @@ describe("invitations arrive by email, and still work when they cannot", () => {
     const { scope, project, owner } = await asOwner();
     const invitee = await createUser();
     const result = await invitations.create(scope, { email: invitee.email, role: "admin" });
-    expect(result.delivery).toEqual({ kind: "in_app", email: "sent" });
+    expect(result.delivery).toMatchObject({ kind: "in_app", email: "sent" });
+    expect(result.delivery.url).toContain("/signup?token=");
 
     expect(mailer.sent).toHaveLength(1);
     const message = mailer.sent[0]!;
@@ -105,7 +109,9 @@ describe("invitations arrive by email, and still work when they cannot", () => {
     const { scope } = await asOwner();
     const invitee = await createUser();
     const result = await invitations.create(scope, { email: invitee.email, role: "editor" });
-    expect(result.delivery).toEqual({ kind: "in_app", email: "failed" });
+    // A failed email is exactly when the copyable link matters most.
+    expect(result.delivery).toMatchObject({ kind: "in_app", email: "failed" });
+    expect(result.delivery.url).toContain("/signup?token=");
 
     const attempts = await attemptsFor(invitee.id);
     expect(attempts).toHaveLength(1);
