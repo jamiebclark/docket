@@ -7,7 +7,22 @@ import { getProjectLlm } from "@/server/services/generation/credential";
 import { toModelDto } from "./dto";
 import { ModelPanel } from "./ModelPanel";
 
-export const metadata: Metadata = { title: "Model & API key" };
+/**
+ * Resolved per request, not static: a static `metadata` renders even when the page itself calls
+ * `notFound()`, so an editor who may not manage credentials still received a document titled
+ * "Model & API key · Docket" — naming a page they are not allowed to know about. Asking the same
+ * permission the page asks keeps the title in step with what the body actually shows.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ projectSlug: string }>;
+}): Promise<Metadata> {
+  const { projectSlug } = await params;
+  const scope = await forProject(await getSession(), projectSlug).catch(() => null);
+  const mayManage = scope?.can({ llm_credential: ["manage"] }) ?? false;
+  return { title: mayManage ? "Model & API key" : "Not found" };
+}
 export const dynamic = "force-dynamic";
 
 export default async function ModelPage({ params }: { params: Promise<{ projectSlug: string }> }) {

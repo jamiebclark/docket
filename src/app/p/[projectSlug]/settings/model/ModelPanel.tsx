@@ -4,7 +4,6 @@ import { useActionState, useState } from "react";
 import { alertStyles } from "@/components/ui/Alert";
 import { Button, buttonStyles } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Dialog } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -61,7 +60,6 @@ export function ModelPanel({ slug, timeZone, view }: { slug: string; timeZone: s
     checkProjectModel,
     null,
   );
-  const [removeOpen, setRemoveOpen] = useState(false);
   const [removeState, removeAction, removing] = useActionState<Awaited<ReturnType<typeof removeProjectModel>> | null, FormData>(
     removeProjectModel,
     null,
@@ -143,17 +141,19 @@ export function ModelPanel({ slug, timeZone, view }: { slug: string; timeZone: s
         </form>
       </Card>
 
+      {/*
+       * A disclosure rather than a modal: the confirmation has to work with client JavaScript off
+       * (quickstart.md §4 part 4). A `<dialog>` is `display: none` until `showModal()` runs, so a remove
+       * form inside one sits in the markup unreachable — which made remove the one action of the three a
+       * no-JavaScript visitor could not perform. `<details>` opens natively, with or without JavaScript.
+       * Same pattern as NotificationRowActions' snooze disclosure.
+       */}
       {current.hasKey ? (
-        <>
-          <Button variant="danger" onClick={() => setRemoveOpen(true)} className="self-start">
+        <details className="self-start">
+          <summary className={buttonStyles({ variant: "danger" }) + " cursor-pointer list-none"}>
             Remove this project&apos;s credential
-          </Button>
-          <Dialog
-            open={removeOpen}
-            onClose={() => setRemoveOpen(false)}
-            title="Remove this project's credential?"
-            dismissOnBackdrop={false}
-          >
+          </summary>
+          <div className="mt-2 max-w-md rounded-2xl border border-border bg-surface p-4 shadow-overlay">
             <p className="mb-4 text-sm">
               Generation in this project will go back to the model and API key configured for this Docket, and this
               project&apos;s stored key will be deleted. This cannot be undone.
@@ -168,12 +168,9 @@ export function ModelPanel({ slug, timeZone, view }: { slug: string; timeZone: s
               <button type="submit" disabled={removing} className={buttonStyles({ variant: "danger" })}>
                 {removing ? "Removing…" : "Remove credential"}
               </button>
-              <Button variant="secondary" onClick={() => setRemoveOpen(false)}>
-                Cancel
-              </Button>
             </form>
-          </Dialog>
-        </>
+          </div>
+        </details>
       ) : null}
     </div>
   );
