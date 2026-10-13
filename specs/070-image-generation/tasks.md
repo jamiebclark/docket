@@ -109,7 +109,7 @@ description: "Task list for implementing image generation into the media library
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Integration tests proving fit parity (`fitOf` deeply equal to an uploaded image of identical dimensions/format/byte size), variant derivation via `ensureVariant`, the "Unused" filter, filename search, post attachment, and `deleteMedia` removing provenance with the row, in `tests/integration/media/generated-is-ordinary.test.ts` (depends on T025) (quickstart.md §2)
+- [X] T032 [US2] Integration tests proving fit parity (`fitOf` deeply equal to an uploaded image of identical dimensions/format/byte size), variant derivation via `ensureVariant`, the "Unused" filter, filename search, post attachment, and `deleteMedia` removing provenance with the row, in `tests/integration/media/generated-is-ordinary.test.ts` (depends on T025) (quickstart.md §2)
 
 **Checkpoint**: User Stories 1 and 2 together prove SC-001 and SC-002 — the generation flow works and a generated asset is ordinary everywhere downstream.
 
