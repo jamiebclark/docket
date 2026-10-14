@@ -190,7 +190,7 @@ while its queued target holds a slot occurrence on or after the target date.
 **Independent Test**: Drive two concurrent ticks against one due dated series and assert one run and one
 post per row; kill a run between positions, tick again, and assert no row produces twice.
 
-- [ ] T059 [US5] Create `tests/integration/dated-series/idempotency.test.ts`: two concurrent `runTick`s against three due rows yielding one run and three posts/occurrences; a run interrupted mid-positions resumed with no second post; a lease forced to expire recovered and finished by a later tick; a credit hold on the due day leaving no occurrence written and firing normally once cleared; a concurrent re-import mid-run keeping occurrences and firing nothing twice; two concurrent imports resolving to one winner and one `ConflictError` — repeat the concurrency case 20 times (US5 AS1–AS4, SC-007) (depends on T036, T043)
+- [X] T059 [US5] Create `tests/integration/dated-series/idempotency.test.ts`: two concurrent `runTick`s against three due rows yielding one run and three posts/occurrences; a run interrupted mid-positions resumed with no second post; a lease forced to expire recovered and finished by a later tick; a credit hold on the due day leaving no occurrence written and firing normally once cleared; a concurrent re-import mid-run keeping occurrences and firing nothing twice; two concurrent imports resolving to one winner and one `ConflictError` — repeat the concurrency case 20 times (US5 AS1–AS4, SC-007) (depends on T036, T043)
 
 **Checkpoint**: US5 complete — SC-007 is covered.
 

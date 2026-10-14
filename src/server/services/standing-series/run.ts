@@ -212,9 +212,13 @@ async function openOrResumeDatedRun(
 ): Promise<OpenOrResumeResult | null> {
   const zone = scope.project.timezone;
   const evaluation = await evaluateDatedSeries(scope, series, now);
+  const today = localToday(now, zone);
 
+  // Resuming must key off today's local date, not `evaluation.dueDate`: a resumed run's own rows
+  // were already advanced past their target when the run opened, so a later tick sees nothing due
+  // and would otherwise mistake its own still-open run for a prior period's stale one.
   let open = await scope.standingSeriesRuns.openFor(series.id);
-  if (open && open.periodStart === evaluation.dueDate) {
+  if (open && open.periodStart === today.toString()) {
     return { run: open, opened: false };
   }
   if (open) {
@@ -254,7 +258,6 @@ async function openOrResumeDatedRun(
     blockedReason,
   };
 
-  const today = localToday(now, zone);
   let run: StandingSeriesRunRecord;
   try {
     run = await scope.transaction(async (tx) => {
