@@ -411,7 +411,18 @@ export type PostingFieldView = {
   help?: string;
   disabled?: { reason: string };
 } & (
-  | { kind: "choice"; value: string | null; options: PostingOptionView[]; required: boolean; placeholder: string }
+  | {
+      kind: "choice";
+      value: string | null;
+      options: PostingOptionView[];
+      required: boolean;
+      placeholder: string;
+      /**
+       * When set, choosing an option also stores that option's label under this key, so a view with no
+       * live account details can name the choice. Clearing the choice stores "".
+       */
+      labelKey?: string;
+    }
   | { kind: "toggle"; value: boolean }
   | { kind: "text"; value: string; maxLength: number; countingRule: TextCountingRule; optional: true }
   | { kind: "fixed"; value: string; display: string; explanation: string; doc?: string }
@@ -426,7 +437,7 @@ export interface PostingDeclaration<Values = unknown, Details = unknown> {
   /** Pure. A heading line for the panel, e.g. "Posting to Ada". */
   heading?(details: Details | null): string | null;
   /** Pure. An optional notice above the fields. */
-  notice?(): { text: string; doc?: string } | null;
+  notice?(): { text: string; doc?: string; docLabel?: string } | null;
   /** Pure. Short label shown beside the target's status everywhere. */
   targetNote?(values: Values | null): string | null;
   /** Pure. Extra lines for the requirements summary. */

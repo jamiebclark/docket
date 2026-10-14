@@ -3,13 +3,14 @@ import { blueskyProvider } from "./bluesky";
 import { facebookProvider } from "./facebook";
 import { instagramProvider } from "./instagram";
 import { mockProvider } from "./mock";
+import { pinterestProvider } from "./pinterest";
 import { threadsProvider } from "./threads";
 import { tiktokProvider } from "./tiktok";
 import { xProvider } from "./x";
 import type { OAuthConnectGroup, SocialProvider } from "./types";
 
 // Adding a provider = one line here (plus its folder under src/providers/<key>/).
-export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider, instagramProvider as SocialProvider, threadsProvider as SocialProvider, xProvider as SocialProvider, tiktokProvider as SocialProvider];
+export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider, instagramProvider as SocialProvider, threadsProvider as SocialProvider, xProvider as SocialProvider, tiktokProvider as SocialProvider, pinterestProvider as SocialProvider];
 
 /** Throws on a malformed `creationAllowance`, so a bad provider fails at registry load. */
 export function assertCreationAllowance(provider: Pick<SocialProvider, "key" | "creationAllowance">): void {

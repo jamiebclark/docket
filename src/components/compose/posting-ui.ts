@@ -1,4 +1,5 @@
-import type { PostingFieldView } from "@/providers/types";
+import { countText } from "@/providers/text";
+import type { PostingFieldView, TextCountingRule } from "@/providers/types";
 
 type Values = Record<string, unknown>;
 
@@ -26,6 +27,12 @@ export function withFixedValues(values: Values | undefined, fields: readonly Pos
   if (keys.length === 0) return values;
   if (values && keys.every((k) => values[k] === fixed[k])) return values;
   return { ...(values ?? {}), ...fixed };
+}
+
+/** The count the provider's own rule gives, with `length` as the fallback for a rule that lost its function to JSON. */
+export function countPostingText(value: string, rule: TextCountingRule): number {
+  if (typeof rule === "object" && typeof rule.count !== "function") return value.length;
+  return countText(value, rule);
 }
 
 /** The id of the element that explains a field's disabled state or help text, for `aria-describedby`; undefined when neither. */

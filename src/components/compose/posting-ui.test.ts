@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PostingFieldView } from "@/providers/types";
-import { defaultValues, fieldDescribedBy, isAgreed, withFixedValues, withValue } from "./posting-ui";
+import { countPostingText, defaultValues, fieldDescribedBy, isAgreed, withFixedValues, withValue } from "./posting-ui";
 
 const fixed: PostingFieldView = { key: "privacy", label: "Who", kind: "fixed", value: "SELF_ONLY", display: "Only me", explanation: "x" };
 const toggle: PostingFieldView = { key: "allowComments", label: "Allow comments", kind: "toggle", value: false };
@@ -40,6 +40,24 @@ describe("defaultValues and withFixedValues", () => {
     const v = { privacy: "SELF_ONLY" };
     expect(withFixedValues(v, [fixed])).toBe(v);
     expect(withFixedValues(undefined, [toggle])).toBeUndefined();
+  });
+});
+
+describe("countPostingText", () => {
+  it("uses the built-in rules", () => {
+    expect(countPostingText("hello", "code_points")).toBe(5);
+    expect(countPostingText("👍🏽", "graphemes")).toBe(1);
+    expect(countPostingText("é", "utf8_bytes")).toBe(2);
+  });
+
+  it("uses a custom rule's function when it arrives intact", () => {
+    const rule = { kind: "custom" as const, name: "utf16", unit: "units", count: (v: string) => v.length * 2 };
+    expect(countPostingText("ab", rule)).toBe(4);
+  });
+
+  it("falls back to value.length for a custom rule that lost its function over JSON", () => {
+    const rule = JSON.parse(JSON.stringify({ kind: "custom", name: "utf16", unit: "units", count: (v: string) => v.length }));
+    expect(countPostingText("abc", rule)).toBe(3);
   });
 });
 

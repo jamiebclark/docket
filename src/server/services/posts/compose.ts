@@ -31,7 +31,7 @@ const checkSchema = postInputSchema.extend({ postId: z.uuid().optional(), refres
 /** The posting panel of one target (G25–G27). */
 export interface PostingPanelView {
   heading: string | null;
-  notice: { text: string; doc?: string } | null;
+  notice: { text: string; doc?: string; docLabel?: string } | null;
   details: "ready" | "error";
   detailsError: string | null;
   fields: PostingFieldView[];

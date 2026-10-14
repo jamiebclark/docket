@@ -2964,3 +2964,81 @@ allocator and worker-tick machinery. Full text in `specs/071-evergreen-series/sp
   does not compare produced copy.
 - **No video**: a pooled asset is an image, and no video is generated or attached.
 - **No per-series provider, model, credential, rate limit or spend cap.**
+
+## 072 — Pinterest provider (2026-10-14)
+
+Judgement calls from `specs/072-pinterest-provider/spec.md` and its plan (`research.md`, K1–K38). External facts come
+from `docs/research/pinterest.md` only (checked 2026-10-14, nothing run live). All Pinterest behaviour is verified
+with mocks only; the live checks are owed once the deployer's Pinterest app has Trial access
+(`docs/pinterest-setup.md`).
+
+### Spec decisions
+
+- **The three-slot text mapping.** Pinterest has no single post-text field: the post's shared text becomes the pin's
+  `description` (800 code points, K5); `title` (100) and `link` (2048) are per-target posting fields, not shared post
+  text, because they only make sense per pin (K6). Each over-length value is kept in the values schema and refused by
+  name rather than silently dropped, so a person's typing is never lost (K7).
+- **The board is a per-post choice, not an account setting.** An account's boards are read live
+  (`GET /v5/boards`, paged up to 10 × 250) and a board is required on every target; a board no longer on the account
+  is kept selected but disabled and labelled "no longer on Pinterest" rather than silently falling back to a
+  placeholder. *Rejected:* one Docket account per Pinterest board (would turn one grant into dozens of accounts);
+  a board as an account setting (one board for every post, and a deleted board would break the whole account instead
+  of one post).
+- **No hard aspect range.** Pinterest's 2:3 recommendation is documented as a feed-cropping concern, not a creation
+  refusal, so Docket declares no `minAspectRatio`/`maxAspectRatio` (the media planner would otherwise refuse an image
+  Pinterest would merely crop) and instead warns, as a non-blocking issue, outside a `[0.5, 1.0]` band (K12).
+- **The ambiguous-on-create rule (K29).** A 5xx on the single `create_pin` step is `ambiguous`, not retryable: with
+  one step there is no "before the creating request is sent" to be safely before, and a 502/504 can follow a request
+  Pinterest's backend already processed. Only a pre-send network failure (connection refused, DNS) is retryable.
+  *Judgement call against a loose reading of FR-025, recorded; X's provider decides the same way.*
+- **Scopes not requested.** Only `user_accounts:read`, `boards:read` and `pins:write` are asked for — no
+  `boards:write` (posting into an existing board needs no board creation) and no `pins:read` (nothing calls
+  `GET /v5/pins`; an ambiguous create has no provider check to resolve it against, K18). A narrower grant than the
+  account could be given.
+- **`video_not_accepted` keeps the generic wording, correcting the contract's K11 list.** The contract originally
+  called for Pinterest to reword this code too, but facebook/instagram/threads all deliberately exclude it from
+  their own rewording so the cross-provider media-fit badge test sees one sentence for every provider without
+  video support; Pinterest now follows the same convention (found during Phase 7's full-repo pass). The aspect-ratio
+  and HTTPS checks were also narrowed to real image items (`mimeType` starting `image/`) so that same badge preview,
+  which calls `validatePinterest` with a video-shaped item, does not also trip Pinterest's image-only checks.
+- **The Trial-cap gap.** Pinterest's Trial access caps the whole app at 300 pin creations a day, shared across every
+  connected account. That cap cannot be expressed per account without mis-counting (a cap shared across several
+  accounts would make each account's own limit fictional), so it is **not** modelled as an enforced
+  `defaultPublishLimit` row; it is stated in prose on the account card, in the requirements summary, above the
+  posting fields and in `docs/pinterest-setup.md`, and a 429 from it defers the post rather than failing it.
+
+### Generic changes
+
+- **G29 — A `choice` posting field view may declare `labelKey`.** The panel then also stores the chosen option's
+  label under that key, so `targetNote` (which receives values only, no live details) can show "Board: <name>" on
+  the posts list, post detail and calendar, none of which have a live board list to resolve an id against.
+  *Reverse:* delete the member and the panel's second `onChange` call; stored labels become unread values the
+  provider's schema strips.
+- **G25's `notice` gains `docLabel`, correcting the hard-coded TikTok link text.** The panel's notice link rendered
+  the literal string "Read how TikTok's audit works" for every provider that declared `notice.doc`; it now renders
+  the provider's own `docLabel`, and TikTok supplies its existing label so nothing it shows changes. *Reverse:* drop
+  the member; the panel falls back to one neutral label for every provider.
+- **G25's panel counter now uses the field's declared counting rule, correcting a UTF-16-only count.** The `text`
+  field counter always measured `value.length` regardless of `field.countingRule`; a new pure `countPostingText`
+  reads the rule (falling back to `value.length` when a custom rule's function did not survive the server→client
+  JSON boundary) so Pinterest's title and link count code points, the units their own refusals name, while TikTok's
+  UTF-16 display is unchanged. *Reverse:* revert the counter to `value.length`; a provider whose refusals count
+  differently would show a count that disagrees with its own validation.
+
+### Hook reversal notes
+
+Each addition is optional and inert for a provider that does not use it: dropping `labelKey` (G29) leaves the panel
+making one `onChange` call, as before; dropping `docLabel` falls back to one neutral label; reverting the counter to
+`value.length` changes only what a provider whose `countingRule` is not UTF-16 shows in the panel, not what it
+refuses. No schema, scheduler, gate or engine change rides with any of the three, so reverting all of it is a code
+change with nothing to migrate.
+
+### Implementation outcome
+
+Pinterest connect, token refresh, the live board picker, posting fields (title, link, board with `labelKey`),
+publish-in-one-request, every outcome in the FR-024–FR-026 table (including the ambiguous paths), the Trial-access
+notes and the operator docs are built and tested with mocked HTTP only. Nothing was run against Pinterest's live
+service; the live checks are listed in `docs/pinterest-setup.md` (FR-037) and are owed once the deployer's app has
+Trial access. Not built, and owned by no spec: the items in `docs/feature-map.md` — video pins, carousel pins, board
+management, secret/protected boards, analytics, product/rich pins, catalogs, ads, Business Access, AI-disclosure
+labels, `api-sandbox`, automatic tier detection, and the shared Trial cap as an enforced limit.

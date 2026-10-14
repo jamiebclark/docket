@@ -217,7 +217,8 @@ describe("publish limits defer without a platform request or a counted attempt (
         const { limit, all } = row;
         // Start times sit inside this window but outside every shorter one, so only this limit is full.
         const shorter = all.filter((l) => l.windowSeconds < limit.windowSeconds).map((l) => l.windowSeconds);
-        const ageSeconds = Math.max(0, ...shorter) + 600;
+        const floor = Math.max(0, ...shorter);
+        const ageSeconds = floor + Math.max(1, Math.min(600, limit.windowSeconds - floor - 1));
         const startedAt = new Date(T0.getTime() - ageSeconds * 1000);
         const db = testDb();
         for (let from = 0; from < limit.count; from += 1000) {
