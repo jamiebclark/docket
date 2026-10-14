@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { OPERATIONS, type AnyApiOperation } from "../../../src/server/api/operations";
+import { updateProject } from "../../../src/server/dal/projects";
 import { setStorageForTests } from "../../../src/server/storage";
 import { setLlmForTests } from "../../../src/server/llm";
 import { ALL_PERMISSIONS, api, createKey, world } from "../../helpers/api";
@@ -100,6 +101,13 @@ describe("docket_* tools, authentication and permission (FR-012, FR-013, SC-003,
       expect(allowed.body, id).toEqual(expected.json);
     }
   });
+
+  it("accepts the key presented as X-API-Key, the same as Authorization: Bearer (FR-008, FR-009)", async () => {
+    const key = w.a.keys.all.secret;
+    const op = opFor("listAccounts");
+    const result = await mcpCall(op, w.a, key, { keyHeader: "x-api-key" });
+    expect(result.status).toBe(200);
+  });
 });
 
 describe("docket_* tools, project isolation (FR-017, FR-018)", () => {
@@ -111,12 +119,14 @@ describe("docket_* tools, project isolation (FR-017, FR-018)", () => {
       targetId: w.b.targets[0]!.id,
       mediaId: w.b.media.id,
       accountId: w.b.account.id,
+      profileId: w.b.voiceProfile.id,
+      slotId: w.b.slot!.id,
     };
     let checked = 0;
     for (const id of TOOL_IDS) {
       const op = opFor(id);
       for (const name of op.resourceParams ?? []) {
-        if (!(name in foreign)) continue;
+        if (!(name in foreign)) throw new Error(`no foreign fixture for resourceParam ${name} on ${id}`);
         const confirmOpts = op.mcp.expose && op.mcp.confirm ? { confirm: true as const } : {};
         const other = await mcpCall(op, w.a, key, { ...confirmOpts, overrides: { [name]: foreign[name]! } });
         const unknown = await mcpCall(op, w.a, key, { ...confirmOpts, overrides: { [name]: random } });
@@ -178,18 +188,19 @@ describe("docket_queue_post / docket_schedule_post confirmation (FR-020, FR-021,
 });
 
 describe("docket_generate_post conditional confirmation (research D9, data-model.md §2 C*)", () => {
-  it("demands no confirmation without schedulingPolicy or with leave_as_draft, but does for another policy, accepted with confirm: true", async () => {
+  it("demands no confirmation only for an explicit leave_as_draft, but does for an absent policy or any other policy, accepted with confirm: true", async () => {
     const op = opFor("generatePost");
     const key = w.a.keys.generate.secret;
     const good: FakeStep = { ok: { variants: { mock: { text: "A generated post" } } } };
 
     setLlmForTests(createFakeLlm([good]));
-    const plain = await mcpCall(op, w.a, key);
-    expect(plain.isError, JSON.stringify(plain.body)).toBe(false);
-
-    setLlmForTests(createFakeLlm([good]));
     const draftPolicy = await mcpCall(op, w.a, key, { overrides: { schedulingPolicy: "leave_as_draft" } });
     expect(draftPolicy.isError, JSON.stringify(draftPolicy.body)).toBe(false);
+
+    setLlmForTests(createFakeLlm([good]));
+    const plain = await mcpCall(op, w.a, key);
+    expect(plain.status).toBe(400);
+    expect((plain.body as { error: { code: string } }).error.code).toBe("confirmation_required");
 
     setLlmForTests(createFakeLlm([good]));
     const refused = await mcpCall(op, w.a, key, { overrides: { schedulingPolicy: "add_to_queue" } });
@@ -199,6 +210,38 @@ describe("docket_generate_post conditional confirmation (research D9, data-model
     setLlmForTests(createFakeLlm([good]));
     const confirmed = await mcpCall(op, w.a, key, { confirm: true, overrides: { schedulingPolicy: "add_to_queue" } });
     expect(confirmed.isError, JSON.stringify(confirmed.body)).toBe(false);
+  });
+
+  it("demands confirmation for an absent schedulingPolicy when the project's default would queue unreviewed (review F2)", async () => {
+    const op = opFor("generatePost");
+    const key = w.a.keys.generate.secret;
+    const good: FakeStep = { ok: { variants: { mock: { text: "A generated post" } } } };
+
+    await updateProject(w.a.project.id, {
+      name: w.a.project.name,
+      slug: w.a.project.slug,
+      timezone: w.a.project.timezone,
+      defaultApprovalPolicy: "auto_approve",
+      defaultSchedulingPolicy: "add_to_queue",
+    });
+    try {
+      setLlmForTests(createFakeLlm([good]));
+      const plain = await mcpCall(op, w.a, key);
+      expect(plain.status).toBe(400);
+      expect((plain.body as { error: { code: string } }).error.code).toBe("confirmation_required");
+
+      setLlmForTests(createFakeLlm([good]));
+      const confirmed = await mcpCall(op, w.a, key, { confirm: true, overrides: { confirmUnreviewedQueue: true } });
+      expect(confirmed.isError, JSON.stringify(confirmed.body)).toBe(false);
+    } finally {
+      await updateProject(w.a.project.id, {
+        name: w.a.project.name,
+        slug: w.a.project.slug,
+        timezone: w.a.project.timezone,
+        defaultApprovalPolicy: "review_required",
+        defaultSchedulingPolicy: "leave_as_draft",
+      });
+    }
   });
 });
 

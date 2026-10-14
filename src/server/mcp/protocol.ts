@@ -4,7 +4,7 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { readKey } from "@/server/api/auth";
 import { InvalidApiKeyError } from "@/server/dal/errors";
 import { forApiKey } from "@/server/dal/scope";
-import { callTool, UnknownToolError } from "./bridge";
+import { callTool, UnknownToolError, type McpToolOutcome } from "./bridge";
 import { toolsFor } from "./describe";
 import type { McpTool } from "./types";
 
@@ -43,6 +43,24 @@ async function authenticate(headers: Headers) {
   }
 }
 
+/**
+ * `McpToolOutcome.headers` carries `Retry-After`/`Idempotent-Replayed` lifted from the pipeline's
+ * response; a `CallToolResult` has no header channel, so both are folded into the serialised body
+ * (research D14, D6) rather than dropped on the floor.
+ */
+function bodyWithHeaders(outcome: McpToolOutcome): unknown {
+  let body = outcome.body;
+  const retryAfter = outcome.headers["Retry-After"];
+  if (retryAfter !== undefined && body && typeof body === "object" && "error" in body) {
+    const error = (body as { error: Record<string, unknown> }).error;
+    body = { ...body, error: { ...error, retryAfterSeconds: Number(retryAfter) } };
+  }
+  if (outcome.headers["Idempotent-Replayed"] !== undefined && body && typeof body === "object") {
+    body = { ...body, alreadyReplayed: true };
+  }
+  return body;
+}
+
 function toToolDefinition(tool: McpTool): Record<string, unknown> {
   return { name: tool.name, title: tool.title, description: tool.description, inputSchema: tool.inputSchema };
 }
@@ -60,7 +78,7 @@ function newServer(): Server {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     try {
       const outcome = await callTool(request.params.name, args, mcpRequest);
-      return { content: [{ type: "text", text: JSON.stringify(outcome.body) }], isError: outcome.isError };
+      return { content: [{ type: "text", text: JSON.stringify(bodyWithHeaders(outcome)) }], isError: outcome.isError };
     } catch (e) {
       if (e instanceof UnknownToolError) throw new McpError(ErrorCode.MethodNotFound, e.message);
       throw e;

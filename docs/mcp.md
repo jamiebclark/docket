@@ -26,7 +26,7 @@ Four tools demand an explicit `confirm: true` argument because their effect cann
 | `docket_get_media` | `read` | | Reads one media item. |
 | `docket_list_upcoming_slots` | `read` | | Lists upcoming posting slots. |
 | `docket_create_post` | `write_posts` | | Creates a draft post. |
-| `docket_generate_post` | `generate` | conditional | Generates a post, spending the project's LLM budget. If a key holding `auto_approve` is used, the result skips review — unless generation fails validation, which still forces review. Requires `confirm: true` only when the call also asks to queue the result (`schedulingPolicy` present and not `leave_as_draft`); a plain generate-to-draft needs no confirmation. |
+| `docket_generate_post` | `generate` | conditional | Generates a post, spending the project's LLM budget. If a key holding `auto_approve` is used, the result skips review — unless generation fails validation, which still forces review. Requires `confirm: true` unless `schedulingPolicy` is explicitly `leave_as_draft` — an absent policy falls back to the project's default, which may queue, so only an explicit `leave_as_draft` call skips confirmation. |
 | `docket_queue_post` | `write_posts` | **yes** | Adds a post to the account's queue — it goes out at the next free slot. |
 | `docket_schedule_post` | `write_posts` | **yes** | Schedules a post at a specific time. |
 | `docket_create_project` | `manage_setup` | **yes** | Creates a project. The slug is permanent and the project cannot be removed over the API. |

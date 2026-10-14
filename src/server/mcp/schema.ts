@@ -33,7 +33,7 @@ export function argumentSchemaFor(op: AnyApiOperation, confirm?: McpConfirm): z.
     ...shapeOf(op.query),
     ...(op.body?.kind === "json" ? shapeOf(op.body.schema) : {}),
   };
-  if (confirm) shape.confirm = z.literal(true);
+  if (confirm) shape.confirm = confirm.when ? z.literal(true).optional() : z.literal(true);
   if (op.idempotent) shape.idempotencyKey = z.string().min(1).max(255).optional();
   return z.object(shape);
 }

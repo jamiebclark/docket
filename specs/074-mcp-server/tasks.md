@@ -157,7 +157,6 @@ Single Next.js project. Source under `src/`, tests under `tests/`, docs under `d
 - [X] T053 Append the 074 entry to `docs/decisions.md`: the hosting choice (route in the Next app, not a separate process) and the per-session project rule, with their reasoning and accepted costs, per plan.md D2/D5 (FR-030)
 - [X] T054 Record the D9 judgement (conditional confirmation on `docket_generate_post`) in `docs/decisions.md` as the one open call for a reviewer to accept or reverse, per research.md "Open risks" item 5
 - [X] T055 Run the full quality gate: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, and `pnpm db:check` (expected unaffected — no migration), per quickstart.md §5 "what done looks like"
-- [ ] T056 [Human-owned, needs a signed-in browser session and a real MCP client — BLOCKED on a human operator, not on Phase 6 (Phase 6 is complete)] Manual end-to-end pass per quickstart.md §4: create a key, configure a client, ask what's scheduled/failed, generate a post, queue it (confirm once refused, once accepted), then point a second client at a different project's key and confirm isolation.
 
 ---
 
@@ -241,3 +240,32 @@ ones that can stall."
 - Commit after each completed task or small group of tightly related tasks, per the constitution's commit discipline (explicit paths, Conventional Commits, no `git add -A`).
 - Every operation-file disposition task (T003–T013) and the two drift-adjacent test tasks (T014, T022) should be committed together with the type change (T002) once `pnpm typecheck` passes (T015), so no commit in between has a half-declared operation.
 - T042/T056 name exactly what they are blocked on (`@modelcontextprotocol/sdk`) per this pipeline's rule that a human-owned or dependency-blocked task must say what it is waiting for.
+
+---
+
+## Phase 8: Review remediation
+
+**Purpose**: Close the blocking findings from `review.md` (6 MAJOR, 0 BLOCKER). Each task names
+its finding id and the location, because the pass that picks it up has no access to the
+review's reasoning — read the matching `## Findings` entry in `review.md` first. The MINOR
+findings F7-F12 and the notes F13-F15 are recorded there and do not block the merge.
+
+- [X] T057 Carry `McpToolOutcome.headers` into the `CallToolResult` so a rate-limited tool call reports the wait and a replay carries its marker, and assert both at the protocol level (not only through the bridge) — review F1 (MAJOR), src/server/mcp/protocol.ts:63
+- [X] T058 Make `docket_generate_post`'s `confirm.when` demand confirmation whenever the call could queue, including when `schedulingPolicy` is absent and the project's `defaultSchedulingPolicy` is `add_to_queue`; update `whenDescription` and `docs/mcp.md`'s generate row to match, and test it against a project whose defaults are `auto_approve` + `add_to_queue` — review F2 (MAJOR), src/server/api/operations/generate.ts:70
+- [X] T059 Make `confirm` optional in the derived input schema when the disposition carries a `when` (keeping `z.literal(true)` so a non-affirmative value is still refused), and assert the JSON Schema's `required` array for one conditional and one unconditional confirmation tool — review F3 (MAJOR), src/server/mcp/schema.ts:36. Land with T058: on its own it makes F2 easier to reach
+- [X] T060 Forward the `x-api-key` credential header alongside `authorization` when the bridge builds the inner `Request`, and cover an `X-API-Key` tool call in `tests/integration/api/mcp-tools.test.ts` — review F4 (MAJOR), src/server/mcp/bridge.ts:81
+- [X] T061 Add `profileId: w.b.voiceProfile.id` and `slotId: w.b.slot!.id` to the MCP isolation test's `foreign` map and replace the silent `continue` with a failure (or an exact expected-count assertion) when a resourceParam has no foreign fixture, so FR-018 covers every exposed id-taking tool — review F5 (MAJOR), tests/integration/api/mcp-tools.test.ts:109
+- [X] T062 Include each operation's own `>= 400` documented responses in the description's failure list (union with `errorStatuses(op)`), and assert in `tests/unit/mcp/describe.test.ts` that `conflict` appears for `createProject` and `not_found` for `getPost` — review F6 (MAJOR), src/server/mcp/describe.ts:16
+
+---
+
+## Phase 10: Human-owned verification (last on purpose)
+
+**Purpose**: This task cannot be run by the implement loop. It was originally T056, placed
+last so it could not starve the loop; the review phase then appended its remediation tasks
+(T057-T062) *after* it, which put a blocked task back in front of real work and stopped the
+loop dead (observed 2026-10-14: a pass ticked nothing and the runner halted). Moved back to
+the end for that reason. Leave it unchecked -- it is genuinely not done, and it is the only
+verification of this entry that no automated test covers.
+
+- [ ] T056 [Human-owned, needs a signed-in browser session and a real MCP client — BLOCKED on a human operator, not on Phase 6 (Phase 6 is complete)] Manual end-to-end pass per quickstart.md §4: create a key, configure a client, ask what's scheduled/failed, generate a post, queue it (confirm once refused, once accepted), then point a second client at a different project's key and confirm isolation.

@@ -20,6 +20,25 @@ describe("inputSchemaFor", () => {
   });
 });
 
+describe("inputSchemaFor's required array", () => {
+  it("omits confirm from required for a conditional confirmation tool, and includes it for an unconditional one", () => {
+    const conditional = EXPOSED.find((op) => op.mcp.expose && op.mcp.confirm?.when)!;
+    const unconditional = EXPOSED.find((op) => op.mcp.expose && op.mcp.confirm && !op.mcp.confirm.when)!;
+    expect(conditional).toBeDefined();
+    expect(unconditional).toBeDefined();
+
+    const conditionalSchema = inputSchemaFor(conditional, conditional.mcp.expose ? conditional.mcp.confirm : undefined) as {
+      required?: string[];
+    };
+    const unconditionalSchema = inputSchemaFor(unconditional, unconditional.mcp.expose ? unconditional.mcp.confirm : undefined) as {
+      required?: string[];
+    };
+
+    expect(conditionalSchema.required ?? []).not.toContain("confirm");
+    expect(unconditionalSchema.required ?? []).toContain("confirm");
+  });
+});
+
 describe("argumentSchemaFor / argumentNamesFor", () => {
   it("property names equal exactly the operation's params+query+body fields plus confirm/idempotencyKey where applicable", () => {
     for (const op of EXPOSED) {

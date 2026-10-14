@@ -67,11 +67,9 @@ export const generateOperations = [
       expose: true,
       confirm: {
         effect: "Generate a post from the brief, then queue it to publish on each target account's next free slot.",
-        when: (args) => {
-          const policy = args.schedulingPolicy;
-          return typeof policy === "string" && policy !== "leave_as_draft";
-        },
-        whenDescription: "Only required when `schedulingPolicy` is present and is not `leave_as_draft` — that combination queues the generated post.",
+        when: (args) => args.schedulingPolicy !== "leave_as_draft",
+        whenDescription:
+          "Required unless `schedulingPolicy` is explicitly `leave_as_draft` — an absent policy falls back to the project's default, which may queue.",
       },
     },
     async run(scope, { body: b, idempotencyRecordId }) {

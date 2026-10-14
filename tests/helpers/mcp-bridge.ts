@@ -11,6 +11,8 @@ export interface McpCallOptions {
   idempotencyKey?: string;
   /** Applied after the fixture's own params/query/body, e.g. to swap in a foreign resource id. */
   overrides?: Record<string, unknown>;
+  /** Which credential header carries the key — defaults to `authorization`'s `Bearer` form. */
+  keyHeader?: "authorization" | "x-api-key";
 }
 
 /** Flattens a fixture's params/query/body into the one argument object a tool call takes, and drives `callTool` directly (no protocol layer). */
@@ -30,7 +32,10 @@ export async function mcpCall(
   if (opts.idempotencyKey !== undefined) args.idempotencyKey = opts.idempotencyKey;
 
   const headers = new Headers();
-  if (key) headers.set("authorization", `Bearer ${key}`);
+  if (key) {
+    if (opts.keyHeader === "x-api-key") headers.set("x-api-key", key);
+    else headers.set("authorization", `Bearer ${key}`);
+  }
   const request = new Request("http://localhost/mcp", { method: "POST", headers });
   return callTool(toolNameFor(op.id), args, request);
 }

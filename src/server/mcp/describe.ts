@@ -13,7 +13,10 @@ export function describeTool(op: AnyApiOperation, project: { name: string }, con
   parts.push(`Acts only on the "${project.name}" project — the one this key belongs to — and cannot act on any other project.`);
   parts.push(`Requires the \`${op.permission}\` permission.`);
 
-  const statuses = errorStatuses(op);
+  const documented = Object.keys(op.responses)
+    .map(Number)
+    .filter((s) => s >= 400);
+  const statuses = [...new Set([...errorStatuses(op), ...documented])].sort((a, b) => a - b);
   const codes = statuses.map((s) => codesForStatus(s)).filter(Boolean);
   if (codes.length) parts.push(`Can fail with: ${codes.join(", ")}.`);
 

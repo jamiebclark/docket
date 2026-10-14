@@ -27,6 +27,14 @@ describe("describeTool", () => {
     }
   });
 
+  it("names each operation's own documented failures, not only its residual statuses", () => {
+    const createProject = EXPOSED.find((o) => o.id === "createProject")!;
+    expect(describeTool(createProject, project, undefined)).toContain("`conflict`");
+
+    const getPost = EXPOSED.find((o) => o.id === "getPost")!;
+    expect(describeTool(getPost, project, undefined)).toContain("`not_found`");
+  });
+
   it("states the generate budget, auto-approve and validation-forces-review facts for docket_generate_post", () => {
     const op = EXPOSED.find((o) => o.id === "generatePost")!;
     const confirm = op.mcp.expose ? op.mcp.confirm : undefined;

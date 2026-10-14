@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OPERATIONS, type AnyApiOperation } from "../../../src/server/api/operations";
 import { PUBLISHED_TOOL_NAMES } from "../../../src/server/mcp/naming";
 import { setStorageForTests } from "../../../src/server/storage";
-import { world } from "../../helpers/api";
+import { createKey, world } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
 import { mcpCall } from "../../helpers/mcp-bridge";
 import { mcpToolsCall, mcpToolsList } from "../../helpers/mcp";
@@ -78,5 +78,27 @@ describe("a real tools/call through the MCP route, round-tripping the bridge (sp
     expect(protocol.isError).toBe(false);
     expect(protocol.body.slug).toBe(body.slug);
     expect(protocol.body.timezone).toBe(body.timezone);
+  });
+});
+
+describe("a real tools/call reports the pipeline's Retry-After and Idempotent-Replayed headers (F1, FR-015, FR-025, FR-028)", () => {
+  it("folds the rate-limit wait into the error body, since a CallToolResult has no header channel", async () => {
+    const key = (await createKey(w.a.scope, ["read"], { rateLimitPerMinute: 1 })).secret;
+    await mcpToolsCall("docket_list_accounts", {}, key);
+    const second = await mcpToolsCall("docket_list_accounts", {}, key);
+    expect(second.isError).toBe(true);
+    expect(second.body.error.code).toBe("rate_limited");
+    expect(second.body.error.retryAfterSeconds).toBeGreaterThanOrEqual(1);
+  });
+
+  it("marks a replayed idempotent write as already replayed", async () => {
+    const key = w.a.keys.write.secret;
+    const idem = `proto-replay-${Math.random().toString(36).slice(2, 8)}`;
+    const args = { text: "hi", accountIds: [w.a.account.id], idempotencyKey: idem };
+    const idemFirst = await mcpToolsCall("docket_create_post", args, key);
+    expect(idemFirst.isError, JSON.stringify(idemFirst.body)).toBe(false);
+    const replay = await mcpToolsCall("docket_create_post", args, key);
+    expect(replay.body).toMatchObject(idemFirst.body);
+    expect(replay.body.alreadyReplayed).toBe(true);
   });
 });

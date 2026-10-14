@@ -80,6 +80,8 @@ export async function callTool(name: string, args: Record<string, unknown>, requ
   const headers = new Headers();
   const auth = request.headers.get("authorization");
   if (auth) headers.set("authorization", auth);
+  const apiKeyHeader = request.headers.get("x-api-key");
+  if (apiKeyHeader) headers.set("x-api-key", apiKeyHeader);
   if (hasBody) headers.set("content-type", "application/json");
   if (typeof args.idempotencyKey === "string") headers.set("idempotency-key", args.idempotencyKey);
 
