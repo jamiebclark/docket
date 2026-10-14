@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
-import type { Database } from "../db/client";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { getDb, type Database } from "../db/client";
 import {
   standingSeries,
   standingSeriesPositions,
@@ -338,4 +338,24 @@ export function createStandingSeriesPositionsRepo(db: Database, projectId: strin
       return rows.length > 0;
     },
   };
+}
+
+/**
+ * Housekeeping: deletes at most `limit` closed runs older than `before`; positions and their
+ * `generation_failures` cascade. An open run (`closedAt IS NULL`) is never matched. Callers wrap
+ * this in `crossProject` (contracts/worker.md §6).
+ */
+export async function pruneClosedStandingSeriesRunsBefore(before: Date, limit: number): Promise<number> {
+  const db = getDb();
+  const ids = await db
+    .select({ id: standingSeriesRuns.id })
+    .from(standingSeriesRuns)
+    .where(and(isNotNull(standingSeriesRuns.closedAt), lt(standingSeriesRuns.closedAt, before)))
+    .limit(limit);
+  if (ids.length === 0) return 0;
+  const gone = await db
+    .delete(standingSeriesRuns)
+    .where(inArray(standingSeriesRuns.id, ids.map((r) => r.id)))
+    .returning({ id: standingSeriesRuns.id });
+  return gone.length;
 }
