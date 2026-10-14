@@ -5,7 +5,7 @@ import { setLlmForTests } from "../../../src/server/llm";
 import { ALL_PERMISSIONS, api, createKey, world } from "../../helpers/api";
 import { fill, FIXTURES } from "../../helpers/api-fixtures";
 import { closeDb } from "../../helpers/db";
-import { createDraftPost } from "../../helpers/scheduling";
+import { createDraftPost, createSlots } from "../../helpers/scheduling";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
 import { mcpCall } from "../../helpers/mcp-bridge";
 import { createMemoryStorage } from "../../helpers/storage";
@@ -14,17 +14,31 @@ type Project = Awaited<ReturnType<typeof world>>["a"];
 
 const READ_IDS = ["listAccounts", "listActivity", "getPost", "getPostTarget", "listMedia", "getMedia", "listUpcomingSlots"];
 const WRITE_IDS = ["createPost", "generatePost", "queuePost", "schedulePost"];
-const TOOL_IDS = [...READ_IDS, ...WRITE_IDS];
+const SETUP_IDS = [
+  "createProject",
+  "createVoiceProfile",
+  "updateVoiceProfile",
+  "setAccountPostingInstructions",
+  "addSlot",
+  "addWeekSlots",
+  "updateSlot",
+  "deleteSlot",
+];
+const TOOL_IDS = [...READ_IDS, ...WRITE_IDS, ...SETUP_IDS];
 
 function opFor(id: string): AnyApiOperation {
   return OPERATIONS.find((o) => o.id === id)!;
 }
 
-/** The same fixture, over HTTP, with an optional Idempotency-Key — used to build the expectation mcpCall's replay must match. */
-async function httpCall(op: AnyApiOperation, p: Project, key: string, idem?: string) {
+/**
+ * The same fixture, over HTTP, with an optional Idempotency-Key — used to build the expectation mcpCall's replay
+ * must match. `bodyOverride` lets a caller pin a fixture body computed once (e.g. one with random fields) so an
+ * idempotency-key replay sees the same request on both channels.
+ */
+async function httpCall(op: AnyApiOperation, p: Project, key: string, idem?: string, bodyOverride?: unknown) {
   const fx = FIXTURES[op.id]!;
   const params = fx.params?.(p) ?? {};
-  const body = fx.body ? await fx.body(p) : undefined;
+  const body = bodyOverride !== undefined ? bodyOverride : fx.body ? await fx.body(p) : undefined;
   return api(op.method, `${fill(op, params)}${fx.query ? `?${fx.query}` : ""}`, {
     key,
     ...(body !== undefined ? { body } : {}),
@@ -71,8 +85,16 @@ describe("docket_* tools, authentication and permission (FR-012, FR-013, SC-003,
       if (id === "generatePost") setLlmForTests(createFakeLlm([{ ok: { variants: { mock: { text: "A generated post" } } } }]));
       const idem = op.idempotent ? `equiv-${id}-${Math.random().toString(36).slice(2, 8)}` : undefined;
       const confirmOpts = op.mcp.expose && op.mcp.confirm ? { confirm: true as const } : {};
-      const expected = await httpCall(op, w.a, holder, idem);
-      const allowed = await mcpCall(op, w.a, holder, { ...confirmOpts, ...(idem ? { idempotencyKey: idem } : {}) });
+      const fx = FIXTURES[op.id]!;
+      const bodyOnce = fx.body ? await fx.body(w.a) : undefined;
+      const bodyOverrides =
+        bodyOnce !== undefined && !(bodyOnce instanceof FormData) ? (bodyOnce as Record<string, unknown>) : {};
+      const expected = await httpCall(op, w.a, holder, idem, bodyOnce);
+      const allowed = await mcpCall(op, w.a, holder, {
+        ...confirmOpts,
+        ...(idem ? { idempotencyKey: idem } : {}),
+        overrides: bodyOverrides,
+      });
       expect([401, 403], `${id} with ${op.permission}`).not.toContain(allowed.status);
       expect(allowed.status, id).toBe(expected.status);
       expect(allowed.body, id).toEqual(expected.json);
@@ -177,6 +199,87 @@ describe("docket_generate_post conditional confirmation (research D9, data-model
     setLlmForTests(createFakeLlm([good]));
     const confirmed = await mcpCall(op, w.a, key, { confirm: true, overrides: { schedulingPolicy: "add_to_queue" } });
     expect(confirmed.isError, JSON.stringify(confirmed.body)).toBe(false);
+  });
+});
+
+describe("docket_create_project confirmation and slug conflict (FR-020, FR-021, spec US2 acceptance 1-3)", () => {
+  it("refuses without confirm: true, naming the slug's permanence, and creates nothing", async () => {
+    const op = opFor("createProject");
+    const key = w.a.keys.manageSetup.secret;
+    const body = { name: "Nope", slug: `p-${Math.random().toString(36).slice(2, 8)}`, timezone: "America/New_York" };
+
+    const refused = await mcpCall(op, w.a, key, { overrides: body });
+    expect(refused.status).toBe(400);
+    const refusedBody = refused.body as { error: { code: string; message: string; details: unknown } };
+    expect(refusedBody.error.code).toBe("confirmation_required");
+    expect(refusedBody.error.message.toLowerCase()).toContain("slug");
+    expect(refusedBody.error.message.toLowerCase()).toContain("permanent");
+    expect(refusedBody.error.message.toLowerCase()).toContain("cannot be removed");
+  });
+
+  it("creates the project with confirm: true and an unused slug, matching the HTTP response body", async () => {
+    const op = opFor("createProject");
+    const key = w.a.keys.manageSetup.secret;
+    const body = { name: "Yep", slug: `p-${Math.random().toString(36).slice(2, 8)}`, timezone: "America/New_York" };
+
+    const created = await mcpCall(op, w.a, key, { confirm: true, overrides: body });
+    expect(created.isError, JSON.stringify(created.body)).toBe(false);
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ name: body.name, slug: body.slug, timezone: body.timezone });
+  });
+
+  it("answers the same 409 slug_taken conflict for a slug held by a project the calling key cannot see", async () => {
+    const op = opFor("createProject");
+    const slug = `p-${Math.random().toString(36).slice(2, 8)}`;
+    const body = { name: "Dup", slug, timezone: "America/New_York" };
+    await mcpCall(op, w.a, w.a.keys.manageSetup.secret, { confirm: true, overrides: body });
+
+    const visible = await mcpCall(op, w.a, w.a.keys.manageSetup.secret, { confirm: true, overrides: body });
+    const invisible = await mcpCall(op, w.b, w.b.keys.manageSetup.secret, { confirm: true, overrides: body });
+    expect(visible.status).toBe(409);
+    expect(invisible.status).toBe(409);
+    const strip = (b: unknown) => {
+      const e = (b as { error: { code: string; message: string; details?: unknown } }).error;
+      return { code: e.code, message: e.message, details: e.details };
+    };
+    expect(strip(visible.body)).toEqual(strip(invisible.body));
+    expect((visible.body as { error: { details: unknown } }).error.details).toEqual({ reason: "slug_taken" });
+  });
+});
+
+describe("docket_delete_slot confirmation (spec US2 acceptance 5)", () => {
+  it("refuses without confirm: true, leaving the slot in place; deletes it with confirm: true", async () => {
+    const op = opFor("deleteSlot");
+    const key = w.a.keys.manageSetup.secret;
+    const [slot] = await createSlots(w.a.project.id, w.a.account.id, [{ weekday: 2, localTime: "07:00" }]);
+
+    const refused = await mcpCall(op, w.a, key, { overrides: { slotId: slot!.id } });
+    expect(refused.status).toBe(400);
+    expect((refused.body as { error: { code: string } }).error.code).toBe("confirmation_required");
+    const stillThere = await api("GET", `/slots/upcoming`, { key });
+    expect(stillThere.status).toBe(200);
+
+    const accepted = await mcpCall(op, w.a, key, { confirm: true, overrides: { slotId: slot!.id } });
+    expect(accepted.isError, JSON.stringify(accepted.body)).toBe(false);
+    expect(accepted.body).toEqual({ id: slot!.id, deleted: true });
+  });
+});
+
+describe("docket_add_week_slots idempotency replay (FR-025, spec US2 acceptance 4)", () => {
+  it("books a full week once and replays the same result for the same idempotencyKey", async () => {
+    const op = opFor("addWeekSlots");
+    const key = w.a.keys.manageSetup.secret;
+    const idem = `mcp-week-${Math.random().toString(36).slice(2, 8)}`;
+    const overrides = { accountId: w.a.account.id, localTime: "05:30" };
+
+    const first = await mcpCall(op, w.a, key, { idempotencyKey: idem, overrides });
+    expect(first.isError, JSON.stringify(first.body)).toBe(false);
+    const firstAdded = (first.body as { added: unknown[] }).added;
+    expect(firstAdded.length).toBe(7);
+
+    const replay = await mcpCall(op, w.a, key, { idempotencyKey: idem, overrides });
+    expect(replay.body).toEqual(first.body);
+    expect(replay.headers["Idempotent-Replayed"]).toBe("true");
   });
 });
 
