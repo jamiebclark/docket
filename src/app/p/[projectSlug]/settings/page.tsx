@@ -49,12 +49,18 @@ export default async function ProjectSettingsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Project settings" description="The project's name, time zone, and how new posts are approved and scheduled." />
+      <PageHeader
+        title="Project settings"
+        description="The project's name, what the brand is, its time zone, and how new posts are approved and scheduled."
+      />
       <SettingsForm
         canEdit={scope.can({ project: ["update"] })}
         values={{
           name: p.name,
           slug: p.slug,
+          tagline: p.tagline,
+          description: p.description,
+          websiteUrl: p.websiteUrl,
           timezone: p.timezone,
           defaultApprovalPolicy: p.defaultApprovalPolicy,
           defaultSchedulingPolicy: p.defaultSchedulingPolicy,

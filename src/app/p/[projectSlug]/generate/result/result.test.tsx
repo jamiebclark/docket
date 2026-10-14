@@ -69,7 +69,21 @@ describe("result page", () => {
     expect(html).toContain("Hello from the generator");
     expect(html).toContain("Main Bluesky");
     expect(html).toContain("Regenerate…");
-    expect(html).toMatch(/<details[\s\S]*Generation details[\s\S]*fake-model[\s\S]*version 1[\s\S]*Retried[\s\S]*No/);
+    expect(html).toMatch(/<details[\s\S]*Generation details[\s\S]*fake-model[\s\S]*version 1[\s\S]*Tokens[\s\S]*100 in \/ 50 out[\s\S]*Retried[\s\S]*No/);
+  });
+
+  it("renders 'no counts reported' for an attempt with null token counts (US4 scenario 2)", async () => {
+    const { env, postId } = await setup();
+    const post = (await env.scope.posts.get(postId))!;
+    const meta = post.generationMetadata as { v: number; records: Record<string, unknown>[] };
+    const records = meta.records.map((r) => ({
+      ...r,
+      attempts: (r.attempts as { usage: unknown }[]).map((a) => ({ ...a, usage: { inputTokens: null, outputTokens: null } })),
+    }));
+    await env.scope.posts.update(postId, { generationMetadata: { ...meta, records } });
+    const html = await render(env, postId);
+    expect(html).toContain("no counts reported");
+    expect(html).not.toMatch(/Tokens[\s\S]{0,5}0 in/);
   });
 
   it("states a forced review and the remaining problem as text", async () => {

@@ -22,6 +22,13 @@ export const membershipAction = pgEnum("membership_action", [
   "webhook_enable",
   "webhook_disable",
   "account_posting_instructions_update",
+  "llm_credential_update",
+  "project_brand_update",
+  "standing_series_create",
+  "standing_series_update",
+  "standing_series_pause",
+  "standing_series_resume",
+  "standing_series_delete",
 ]);
 
 /** Append-only: the DAL exposes insert and list only (FR-033). */

@@ -1,4 +1,4 @@
-import { getLlmStatus } from "../llm";
+import { resolveLlmForProject } from "../llm/resolve";
 import * as clock from "../dal/clock";
 import { ForbiddenError } from "../dal/errors";
 import type { ProjectScope } from "../dal/scope";
@@ -36,8 +36,7 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
   if (!scope.can({ project: ["view"] })) throw new ForbiddenError();
 
   const canInvite = scope.can({ invitation: ["create"] });
-  const llm = getLlmStatus();
-  const media = await mediaStatus(scope);
+  const [llm, media] = await Promise.all([resolveLlmForProject(scope.project.id), mediaStatus(scope)]);
 
   const [accounts, scheduled, reviewCount, needsDecisionCount, memberRows, health, now, invites, voices, library] =
     await Promise.all([
@@ -49,7 +48,7 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
       getSchedulerHealth(scope),
       clock.now(),
       canInvite ? invitations.listForProject(scope) : Promise.resolve(null),
-      llm.configured ? listVoiceProfiles(scope) : Promise.resolve(null),
+      llm.ok ? listVoiceProfiles(scope) : Promise.resolve(null),
       media.enabled ? listMedia(scope, { limit: 1 }) : Promise.resolve(null),
     ]);
 
@@ -105,7 +104,7 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
     upcoming,
     reviewCount,
     needsDecisionCount,
-    ai: { configured: llm.configured, voiceProfiles: voices ? voices.length : null },
+    ai: { configured: llm.ok, voiceProfiles: voices ? voices.length : null },
     storage: { configured: media.enabled, libraryItems: library ? library.total : null },
     scheduler: health.state,
     unconfiguredPlatforms,

@@ -15,11 +15,13 @@ import * as uploadActions from "../../src/app/p/[projectSlug]/media/upload-actio
 import * as voiceActions from "../../src/app/p/[projectSlug]/voice/actions";
 import * as postActions from "../../src/app/p/[projectSlug]/posts/actions";
 import * as jobActions from "../../src/app/p/[projectSlug]/jobs/actions";
+import * as standingSeriesActions from "../../src/app/p/[projectSlug]/jobs/series/actions";
 import * as apiKeyActions from "../../src/app/p/[projectSlug]/settings/api-keys/actions";
 import { createApiKey } from "../../src/server/services/api-keys";
 import { setLlmForTests } from "../../src/server/llm";
 import { runTick } from "../../src/server/scheduler";
 import { createJob } from "../../src/server/services/jobs";
+import { createStandingSeries } from "../../src/server/services/standing-series/manage";
 import { startSeries } from "../../src/server/services/generation/series";
 import { generateSingle } from "../../src/server/services/generation/single";
 import * as posts from "../../src/server/services/posts";
@@ -114,6 +116,20 @@ async function fixtures(env: Env) {
       })
     ).seriesId,
     voiceVersionId: (await env.scope.voiceVersions.getByNumber(voice.id, 1))!.id,
+    standingSeriesId: (
+      await createStandingSeries(env.scope, {
+        name: `Authz series ${randomUUID()}`,
+        brief: "Brief.",
+        template: "Write a short post.",
+        voiceProfileId: voice.id,
+        targetAccountIds: [account.id],
+        cadence: { count: 1, period: "day" },
+        media: { source: "none" },
+        approval: null,
+        scheduling: null,
+        confirmUnreviewedQueue: false,
+      })
+    ).seriesId,
     generatedPostId: generated.postId,
     reviewPostId: reviewPosts[0]!.post.id,
     reviewPostIds: [reviewPosts[1]!.post.id, reviewPosts[2]!.post.id],
@@ -260,9 +276,59 @@ const CASES: Case[] = [
   { name: "removeAccountAction", manage: true, run: (s, f) => accountActions.removeAccountAction(s, { id: f.accountId }) },
   { name: "accountRemovalImpactAction", run: (s, f) => accountActions.accountRemovalImpactAction(s, { id: f.accountId }) },
   { name: "addSlotAction", manage: true, run: (s, f) => accountActions.addSlotAction(s, { accountId: f.accountId, weekday: 3, localTime: "11:00" }) },
+  { name: "addWeekSlotsAction", manage: true, run: (s, f) => accountActions.addWeekSlotsAction(s, { accountId: f.accountId, localTime: "11:30" }) },
   { name: "moveSlotAction", manage: true, run: (s, f) => accountActions.moveSlotAction(s, { id: f.slotId, weekday: 4, localTime: "12:30" }) },
   { name: "setSlotPausedAction", manage: true, run: (s, f) => accountActions.setSlotPausedAction(s, { id: f.slotId, paused: true }) },
   { name: "deleteSlotAction", manage: true, run: (s, f) => accountActions.deleteSlotAction(s, { id: f.slotId }) },
+  {
+    name: "createStandingSeriesAction",
+    manage: true,
+    run: (s, f) => {
+      const body = new FormData();
+      body.set(
+        "payload",
+        JSON.stringify({
+          name: `Authz new series ${randomUUID()}`,
+          brief: "Brief.",
+          template: "Write a short post.",
+          voiceProfileId: f.voiceProfileId,
+          targetAccountIds: [f.accountId],
+          cadence: { count: 1, period: "day" },
+          media: { source: "none" },
+          approval: null,
+          scheduling: null,
+          confirmUnreviewedQueue: false,
+        }),
+      );
+      return standingSeriesActions.createStandingSeriesAction(s, body);
+    },
+  },
+  {
+    name: "updateStandingSeriesAction",
+    manage: true,
+    run: (s, f) => {
+      const body = new FormData();
+      body.set(
+        "payload",
+        JSON.stringify({
+          name: `Authz renamed series ${randomUUID()}`,
+          brief: "Brief.",
+          template: "Write a short post.",
+          voiceProfileId: f.voiceProfileId,
+          targetAccountIds: [f.accountId],
+          cadence: { count: 1, period: "day" },
+          media: { source: "none" },
+          approval: null,
+          scheduling: null,
+          confirmUnreviewedQueue: false,
+        }),
+      );
+      return standingSeriesActions.updateStandingSeriesAction(s, f.standingSeriesId, body);
+    },
+  },
+  { name: "pauseStandingSeriesAction", manage: true, run: (s, f) => standingSeriesActions.pauseStandingSeriesAction(s, f.standingSeriesId) },
+  { name: "resumeStandingSeriesAction", manage: true, run: (s, f) => standingSeriesActions.resumeStandingSeriesAction(s, f.standingSeriesId) },
+  { name: "deleteStandingSeriesAction", manage: true, run: (s, f) => standingSeriesActions.deleteStandingSeriesAction(s, f.standingSeriesId) },
 ];
 
 const SECRET = /credentialsEncrypted|accessToken|refreshToken|secretAccessKey|S3_SECRET|"token"/i;

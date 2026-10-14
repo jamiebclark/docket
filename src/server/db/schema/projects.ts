@@ -27,6 +27,9 @@ export const projects = pgTable(
     .$onUpdate(() => new Date())
     .notNull(),
   defaultVoiceProfileId: uuid("default_voice_profile_id"),
+  tagline: text("tagline"),
+  description: text("description"),
+  websiteUrl: text("website_url"),
   },
   (t) => [
     // Profiles are archived, never deleted, so NO ACTION; the project cascade removes both sides together.

@@ -2266,6 +2266,705 @@ index that makes the probe O(1) is also attractive to the panel, and worse for i
 Measured on the same machine, same seeded test: the 20-project panel went from 125–168 ms with the index
 to **79.5 ms** with the marker, with `count` and `refresh` unchanged at about 72 ms.
 
+## 047 — Per-project LLM (2026-10-12)
+
+Spec: `specs/065-per-project-llm`. Roadmap entry 2 of 3 (`.specify/roadmaps/llm-credentials.md`, slug
+`per-project-llm`): a project may store its own LLM provider, model and API key, so its generation spends
+its own credential instead of the install's, widening the credential-owner seam (H2) entry 1 left for
+exactly this. Full text in `specs/065-per-project-llm/spec.md` (K1–K16) and
+`specs/065-per-project-llm/research.md` (L1–L33).
+
+**An install that only ever used environment variables needs to do nothing.** With no project credential
+stored, every project keeps using the install default exactly as before — same prompts, calls, logging,
+timings and existing test expectations; the only visible addition is a settings section telling an owner or
+admin that the project uses the install default (K4).
+
+### Spec decisions (K1–K16)
+
+- **K1 — The override is one atomic credential: provider, model and key together, or nothing.** No
+  field-by-field fallback; resolution is a choice between two complete configurations.
+- **K2 — Timeout and output-token limits stay install-wide.** They are operational safety limits tied to
+  the tick budget, not spend choices; both apply unchanged to a project credential.
+- **K3 — A project credential makes generation available for that project even when the install has
+  none.** `LLM_PROVIDER` unset now means "off for projects without their own credential", not "off
+  everywhere".
+- **K4 — Nothing changes for an env-only install**, beyond one settings sentence saying the project uses
+  the install default.
+- **K5 — One project-owned row per project, with the key in a single encrypted column**, through the
+  scoped DAL like every other project-owned table, keyed as associated data to the project.
+- **K6 — Nothing but the ciphertext is kept.** No plaintext, hash, prefix, last-four, length or
+  fingerprint — nothing here ever needs to recognise the key, only use it.
+- **K7 — The key is write-only in every direction.** Read only to make a provider call; never in an
+  action result, page, log line, error message, audit row, API payload or test snapshot.
+- **K8 — Leaving the key field blank keeps the stored key**; switching provider requires a key, because a
+  key belongs to one provider.
+- **K9 — A key that cannot be decrypted makes generation unavailable for that project; it never falls
+  back to the install default.** The project is told, in a fixed sentence, that an owner or admin must
+  re-enter the key; the stored row is left alone.
+- **K10 — Provider error text is still never surfaced.** The fixed per-kind sentences remain the only
+  user-facing failure text, for the check too; no new failure kind and no new API error code.
+- **K11 — A new permission statement for the credential, granted to owner and admin only.** Editors do
+  not see the section at all (absent, not disabled), and the server refuses their actions whatever the UI
+  shows.
+- **K12 — Every set, change and removal is audited** — actor, provider and model before and after, and
+  whether the key changed; never the key.
+- **K13 — Removing the override is one explicit, confirmed action**, because it silently moves spend back
+  onto the install's account.
+- **K14 — One check service, two callers.** A single function performs the per-project check; both the
+  settings surface and the command line call it, reporting source, provider, model, outcome and latency,
+  and never a key.
+- **K15 — The check is serialised per project with a short cooldown**, and runs through
+  `withCreditHold`, so a billing refusal during a check sets that project's hold and any other outcome
+  clears it (C11).
+- **K16 — The credential owner becomes the credential, and a credential change clears that owner's hold
+  at once.** A project with its own credential is its own owner; everything else about the hold — the
+  5-minute probe, single-flight probing, nothing failed or unreserved while held, no give-up timeout, no
+  operator control to lift it — is unchanged, simply now per owner.
+
+### Plan decisions (L1–L33)
+
+- **L1 — One new project-owned table, `project_llm_settings`**, primary key `project_id`, carrying the
+  optional credential, who last changed it and when, and the check lease bookkeeping.
+- **L2 — The row may exist with no credential; the credential is `provider IS NOT NULL`.** A CHECK makes
+  K1's atomicity a database fact; removal nulls all three credential columns and keeps the row.
+- **L3 — `provider` is `text` with a CHECK naming the two providers**, not a new pgEnum, matching the
+  email tables' shape.
+- **L4 — The associated data is `project_llm_credential:<projectId>`**, the shape
+  `webhook_endpoint:<id>` already uses.
+- **L5 — Nothing but the ciphertext.** No hash, prefix, last-four, length or fingerprint column exists to
+  populate; status is computed from `api_key_encrypted IS NOT NULL`.
+- **L6 — The one named place is `src/server/llm/resolve.ts`, `resolveLlmForProject(projectId)`**, the
+  only code that reads the credential table or calls `getLlm()` on a project's behalf.
+- **L7 — No provider-instance cache for a project credential.** The install branch keeps its existing
+  memoisation; a project credential constructs its SDK client per resolution.
+- **L8 — Install-wide limits are parsed on their own** via a new `parseLlmLimits(source)`, fixing in
+  passing a hard-coded 90 000 ms fallback that was wrong the moment a project could generate on an
+  install with no `LLM_PROVIDER`.
+- **L9 — `credentialOwnerFor` becomes a read of the table**; owner values are `"install"` and
+  `project:<uuid>`, so every existing hold row keeps its meaning.
+- **L10 — A batch sibling, `credentialOwnersFor(projectIds)`**, one statement for many projects, used by
+  `resolveBlockedProjectIds` inside the claim transaction.
+- **L11 — The resolved credential carries its owner**, so `runGenerationStep` and `planSeries` stop
+  asking twice.
+- **L12 — Readiness, overview, job creation, the Batch jobs screens and the job page take their answer
+  from `resolveLlmForProject`.** `getLlmStatus()` survives for startup-adjacent code and as resolution's
+  install branch.
+- **L13 — Test seams: `setLlmForTests` is untouched and still wins everywhere.** A new
+  `setLlmFactoryForTests((config) => provider)` is consulted only when that override is unset.
+- **L14 — A new permission statement, `llm_credential: ["manage"]`**, granted to `owner` and `admin`,
+  absent from `editor`.
+- **L15 — A settings sub-page, `/p/[projectSlug]/settings/model`**, beside API keys and Webhooks. An
+  editor reaching the URL directly gets `notFound()`.
+- **L16 — The key input is a `type="password"` field with `autoComplete="off"` and no value, ever.**
+- **L17 — One shared Zod schema for provider and model**, `projectLlmCredentialSchema`, bounding the key
+  at 500 characters after trimming.
+- **L18 — One audit action, `llm_credential_update`**, covering set, change and removal, with details
+  `{ fromProvider, fromModel, toProvider, toModel, keyChanged }` — never the key.
+- **L19 — Removal is a confirmed `Dialog` submit** naming the project and saying plainly that generation
+  moves back onto the install's account.
+- **L20 — The surface reports, and never renders a fragment of the key**: provider and model in force,
+  whether that is this project or the install default, whether a key is stored, and who last changed it.
+- **L21 — One check implementation, two callers**, in `src/server/services/generation/check.ts`:
+  `runLlmCheck(projectId, repo)` is resolve, gate, one call through `withCreditHold`, release, map; and
+  `checkProjectLlm(scope)` is `need(scope)` plus that call.
+- **L22 — The gate is a lease plus a cooldown on the settings row**, claimed and released in two short
+  transactions with the live call in between, the shape webhook delivery and email already use.
+- **L23 — Documented constants, not environment variables**: `LLM_CHECK_COOLDOWN_MS = 30_000`,
+  `LLM_CHECK_LEASE_MS = 60_000`, call timeout `min(installTimeoutMs, 30_000)`.
+- **L24 — The CLI grows one optional argument.** `pnpm llm:check` with no argument is byte-identical to
+  today; `pnpm llm:check --project <slug>` resolves and checks that project with no session.
+- **L25 — Saving, changing and removing clear the project's hold inside the same transaction as the
+  write**, so "its items resume on the next tick" is a committed fact.
+- **L26 — The notice gains one sentence naming whose account needs credit.** `CreditHoldNotice` takes a
+  `scope: "project" | "install"` prop.
+- **L27 — The runner's global gate becomes "the install is configured, or some project has a
+  credential".** Per item, `not_configured` or `key_unreadable` releases the item — no attempt counted,
+  no failure.
+- **L28 — Orphan hold rows are swept by housekeeping**: `pruneOrphanCreditHolds()` deletes
+  `project:<uuid>` rows with no matching project.
+- **L29 — The undecryptable-key sentence is a resolution state, not a failure kind.** No `LlmFailureKind`
+  is added; the public API maps it onto the existing `generation_not_configured`.
+- **L30 — The runner's `logLine` redacts the *resolved* key, not just the environment's.**
+- **L31 — A new guard test extends the existing one.** `key-reads.test.ts` gains a sibling asserting
+  `api_key_encrypted` / `apiKeyEncrypted` is read and decrypted only in `project-llm.ts` and `resolve.ts`,
+  and that `runLlmCheck` is imported only by its siblings and the CLI script.
+- **L32 — The secret-scan extension is one more section of the existing scanned run**: a project key
+  saved, changed and removed through the real server actions; the settings page rendered for owner, admin
+  and editor; a check; a tick that generates on that credential; and a billing refusal whose provider
+  error body embeds that key. `no-plaintext.test.ts` gains the stored key and its SHA-256 hex and dumps
+  the new table before its all-tables scan.
+- **L33 — Docs.** `docs/generator.md`'s env-only sentence is replaced in place, with a new "Per-project
+  provider, model and key" subsection and a widened "Jobs" hold paragraph; `docs/decisions.md` gains this
+  entry; `docs/security.md`'s four secret rows are updated and one row added, each naming tests that
+  exist; `.env.example`'s generator block notes a project may store its own, adding no variable.
+
+### What this entry does not do
+
+- **Reporting spend, cost or token usage, per project or at all** — roadmap entry 3,
+  `llm-cost-visibility`. This entry stores a key and resolves it; it persists nothing about what a call
+  consumed.
+- **Any provider beyond `openai` and `anthropic`** — closed by the roadmap; nothing here opens it.
+- **Letting a non-admin see, change or check a key** — editors see no credential section at all.
+- **Budgets, caps or throttling on spend** — outside the roadmap entirely.
+- **Per-project timeouts or output-token limits** (K2), and **per-user credentials** — no roadmap entry
+  owns either.
+- **Changing entry 1's hold mechanics** — the probe interval, single-flight probing, "nothing failed
+  while held", the absence of a give-up timeout and the absence of an operator control to lift a hold all
+  stay exactly as entry 1 specified them; only the owner's identity widens.
+- **Notifying anyone that a project's credential failed** — the notifications roadmap owns attention
+  events.
+- **Image generation credentials** — image generation is an extension point only on `main`.
+- **Validating model ids against a provider catalogue**, and **retro-fitting anything onto generations
+  already made** — neither is owned by any roadmap entry.
+
+## 048 — A time booked across the whole week (2026-10-12)
+
+- **`ON CONFLICT DO NOTHING`, not read-then-write.** `SlotsRepo.insertWeek` inserts the candidate weekdays in
+  one statement and returns only the rows actually created. The service still reads the account's slots first
+  to decide which days to attempt, but that read is an optimisation, not the correctness argument: two people
+  booking the same time at once each get the days they won, and neither sees the `ConflictError` that
+  `addSlot` raises. A read-then-write would have had to either hold a lock across the whole week or surface a
+  conflict for a request whose entire point is "make sure this time is set".
+- **`alreadySet` is derived from the rows that came back, not from the pre-read.** A day lost to a concurrent
+  insert was absent from the pre-read's `taken` set but is set all the same, so the result reads the created
+  weekdays and reports every other day as already set. Reporting from `taken` would have claimed a day was
+  created when another caller created it.
+- **Days that already have the time are reported, never refused.** A partly-booked time is the common case,
+  and the user's intent is the end state. This is why the operation is also idempotent: a second call adds
+  nothing and raises nothing.
+- **A paused slot counts as present.** The time is taken either way, and resuming is a separate decision — so
+  a week add never un-pauses or replaces an existing slot, and the existing row keeps its id.
+- **No gutter of half-hour buttons.** The original request was a button per 30-minute window down the left of
+  the grid. At the grid's `min-h-[30rem]` column height that is 48 rows of about 10px — below any usable hit
+  size — so the feature ships as a time field plus a submit button above the columns instead. The requirement
+  was one action for "09:30, every day", and this satisfies it without a second layout. A clickable row gutter
+  remains possible later as a shortcut on top.
+- **Only a bad value is a field error; a valid no-op is not.** `Field` sets `aria-invalid` from its `error`,
+  so putting "every day already has that time" there would tell assistive technology that a perfectly good
+  time is invalid. Worse, `Field`'s `aria-live` node does not re-announce an unchanged string, so pressing
+  the button twice would say nothing the second time — which is exactly why `say()` launders messages
+  through `announcedText`. So the split is: an empty time is the field's error ("Pick a time"), while a
+  valid-but-no-op time and any server refusal go to the grid's own (non-live) error line *and* through
+  `say()`. One announcement, re-announced on a repeat press, and `aria-invalid` only ever on a bad value.
+  Announcements name the days rather than a count (`announceWeekAdded`).
+- **`step` is an affordance, not validation.** `step={STEP_MINUTES * 60}` makes the time picker's arrows
+  move in half hours, matching what a click on a column snaps to. The form is `noValidate` so a browser
+  cannot refuse a typed off-grid time with a native bubble that bypasses the design system's error slot
+  entirely — an exact typed time is allowed here exactly as the Move dialog allows one.
+- **One `seq` for all seven optimistic additions.** `clearResolved` filters additions by sequence number, so
+  sharing one across the week makes them clear together and makes a refusal roll the whole week back, rather
+  than leaving part of a failed add on screen.
+- **`onAddWeek` is optional.** A caller that passes no handler gets the one-at-a-time grid exactly as before
+  and no week form renders, so `WeekSlotGrid` stays usable by anything without a bulk endpoint.
+
+## 057 — An invitation link you can always copy (2026-10-13)
+
+- **The delivery result always carries the URL — a deliberate amendment to research D6/D7.** D7 had
+  `deliver()` return `{ kind: "in_app" }` with no URL when the invitee already had a Docket account, on
+  the reasoning that they do not need a link: they see the invitation under Invitations. The consequence
+  was that Regenerate produced nothing copyable for exactly the common case — a second invitation to
+  someone who has signed up since — because `toDto` mapped the missing URL to `link: null` and the panel
+  rendered nothing at all. `InvitationDeliveryResult` is now one shape (`kind`, `url`, `expiresAt`,
+  `email`) and `kind` chooses only the wording. **D6 is untouched**: the token is still 32 random bytes
+  whose `sha256` alone is stored, still single-use, still revoked on regenerate. The URL's lifetime is
+  unchanged too — one server action's response, rendered once, never retrievable afterwards. What changed
+  is only which of the two kinds gets handed that one-time value, and
+  `tests/integration/invitation-accept.test.ts` asserts the hash-at-rest property for the in-app path
+  that now returns a URL. Reverse by restoring the discriminated union; the panel would go back to
+  rendering nothing for an invitee with an account.
+- **`revokeInvitation` returns `ActionResult<null>`, not a link DTO.** It used to return a `DeliveryDto`
+  with `link: null`, which is the only reason `link` was nullable in a type whose purpose is to carry a
+  link. Revoking produces no link, so it now says so in its type and `DeliveryDto.link` is required.
+- **Focus moves to the link panel when it appears.** The panel renders above the table, so a Regenerate
+  from a row far down a long members page scrolled nothing and said nothing: the link could land
+  off-screen. The region is `tabIndex={-1}` and focused on each new link, which scrolls it into view,
+  makes it the next thing a screen reader reads and the next thing `Tab` continues from. `focus:` rather
+  than `focus-visible:` for the ring, because a programmatic focus on a non-input element does not
+  satisfy `:focus-visible` in most browsers, and a region that has silently taken focus needs to show it.
+- **"Copy new link" awaits the action directly instead of dispatching it.** The button needs the URL in
+  the same activation to hand it to `navigator.clipboard`, and `useActionState`'s dispatch only lands a
+  result in state a render later — which is a second user gesture away, and by then the clipboard write
+  is no longer inside the user activation that permitted it. So the row calls
+  `regenerateInvitation(null, formData)` and awaits it, keeping its own `copying` flag for the pending
+  label.
+- **Regenerate stays beside it.** Three controls in one row cell is more than the design system likes,
+  but Regenerate is the only path that works with client JavaScript unavailable, and it is the one that
+  *shows* the link rather than putting it straight on the clipboard (for pasting into a password manager,
+  or reading it out). "Copy new link" is the one-gesture shortcut on top, not a replacement. Reverse by
+  dropping Regenerate — at the cost of the no-JavaScript path.
+- **The clipboard write is attempted after the await, and that is what the fallback is for.** A
+  `navigator.clipboard.writeText` needs transient user activation, and awaiting the server action first
+  can spend it — Safari is the strict case. Deferring instead (`clipboard.write` with a `ClipboardItem`
+  holding a promise) would keep the activation but is supported unevenly and costs a second code path
+  for a case the fallback already handles well: the link appears in the panel, focused, ready to copy.
+  Revisit if the fallback turns out to be the common path rather than the exception.
+- **A clipboard failure is not a regenerate failure.** By the time `writeText` throws (an insecure
+  origin, a denied permission, a browser without the API) the old link is already dead and a new one
+  exists. Reporting an error would be wrong and would hide a working link, so the row falls back to the
+  panel's existing `CopyField` — which now also takes focus — and says the link is ready to copy above.
+- **The row's note is not a live region.** `say()` announces through the panel's single `LiveRegion`;
+  an `aria-live` node in the cell as well would say everything twice. Same split as the week-slot grid
+  in 048: visible text in the row, announcement through `say()`, which launders text through
+  `announcedText` so copying twice in a row is announced twice.
+- **The announcement names the consequence, not just the success.** "New invitation link for
+  robin@example.test copied to the clipboard. The previous link has stopped working." Regenerating
+  silently revokes whatever link was already sent, and someone who cannot see the row's note has no
+  other way to learn that.
+
+## 058 — LLM cost visibility (2026-10-13)
+
+### Spec decisions (M1–M19 — this entry's; the M1–M18 under 056 are a different set)
+
+- **M1 — One row per model call, not per generation.** A project-owned, call-level ledger, each row
+  naming the generation it belongs to — post, series, job item — where one exists, and naming its
+  purpose where one does not.
+- **M2 — Every call that reached the provider is recorded, whatever its outcome.** The outcome (`ok`
+  or the failure kind) is stored beside the counts, so the report can say how much went on calls that
+  produced nothing.
+- **M3 — Unknown counts stay unknown; null is never 0.** A call with no counts to report is counted
+  as a call, excluded from token sums, and the exclusion is stated on the screen.
+- **M4 — Each row records which credential it spent, and the provider and model as used at the
+  time.** Model is stored as the literal string used, not a reference.
+- **M5 — A call that was never made is not a row.** The ledger records calls to a provider, not
+  intentions.
+- **M6 — Bookkeeping never fails a generation.** A failure to write is logged and swallowed; the
+  ledger can under-count but never over-counts, so the report is a floor on calls and tokens and the
+  money figure (M12) is an upper bound.
+- **M7 — No prompt, output, error text or credential ever enters the ledger.** A row holds ids,
+  provider, model, source, purpose, outcome, two token counts, latency and a timestamp.
+- **M8 — Rates are operator-supplied install configuration with no built-in defaults, and Docket
+  never fetches them.** The install's own environment configuration, validated at startup and
+  documented in `.env.example`.
+- **M9 — A rate is keyed by provider and model, with separate input and output prices, expressed per
+  million tokens, in one install-wide currency code.** Not per project; the trade-off is accepted and
+  stated on the screen.
+- **M10 — The estimate is computed when the screen is rendered, from the rates configured now.**
+  Rates are not snapshotted per call; correcting a rate corrects every past estimate.
+- **M11 — Zero is a legal rate and means zero**, distinct from "no rate configured" (M13).
+- **M12 — The surface is called Usage, tokens are the headline, and the money figure is never called
+  "spend", "cost", "charged" or "billed".** It is an estimated upper bound, carried by one fixed
+  sentence wherever it appears.
+- **M13 — An unpriced model shows no money at all — never zero, never a guess.** Its row shows calls
+  and tokens with an explicit "no rate configured" marker; totals cover only priced models and say so.
+- **M14 — With no rates configured at all, the money column is absent, not empty.**
+- **M15 — Owner and admin only, gated on the existing `llm_credential: ["manage"]`; an editor sees no
+  sub-nav item and the URL 404s** — absent, not disabled, following entry 2's precedent exactly.
+- **M16 — It is a screen, and only a screen.** Nothing is added to the public API, no webhook event,
+  no notification, no email, no activity-log entry, no export.
+- **M17 — The screen answers for a period in the project's own time zone**, defaulting to the last 30
+  days, with this month, last month and all time available, grouped by model with a breakdown by
+  purpose.
+- **M18 — A total you cannot trace is not trustworthy.** A generated post's generation detail gains
+  its calls' token counts next to the latencies it already shows, and a batch job's page gains its
+  own totals.
+- **M19 — Rows live as long as their project and are never pruned by this entry.** They cascade with
+  the project like every other project-owned table; no entry owns pruning or rollups.
+
+### Plan decisions (P1–P19)
+
+- **P1 — The ledger is written by a provider decorator, not derived from the `attempts` blob** —
+  `attempts` has no per-call timestamp and carries a resumed step's earlier attempts forward.
+- **P2 — `UsageRecorder.wrap(llm)` mirrors `withCreditHold(llm, owner)`**: wrap, observe, swallow,
+  return unchanged. One reviewed idiom, not a second one.
+- **P3 — The series plan call carries no series link**: `planSeries` runs before `startSeries` writes
+  the row, and the person may never start it. **FR-003** allows it.
+- **P4 — Rows are buffered and flushed once, when the link is known.** A dedup collision flushes with
+  no post link.
+- **P5 — `purpose` is an explicit argument, never parsed from `label`**, plus a source-scanning guard
+  test.
+- **P6 — Outcome is `ok boolean` + nullable `failure_kind llm_failure_kind` with `CHECK (ok =
+  (failure_kind IS NULL))`.**
+- **P7 — The ledger records the provider's outcome, not Docket's acceptance of it.** Stated in
+  `docs/generator.md` so nobody reads `ok` as "this output was used".
+- **P8 — Rate problems are non-fatal**: `ConfigValidation` gains `warnings`, logged by name and reason
+  and never exiting.
+- **P9 — The rate variables sit in a new `LLM_RATE_VARIABLES`, outside `LLM_VARIABLES`**, because
+  `llmEnvIssues` would otherwise demand `LLM_PROVIDER`.
+- **P10 — Format: `<provider>:<model>=<input>/<output>`, whitespace- or comma-separated.**
+- **P11 — The currency is validated by shape (three ASCII letters), never against a remembered code
+  list**, and `Intl.NumberFormat`'s `style: "currency"` is not used.
+- **P12 — Money arithmetic is exact integer `BigInt` micro-units.** A non-zero amount rounding to
+  `0.00` renders "under 0.01", so a configured zero stays distinct.
+- **P13 — A dedicated `usagePeriodWindow` with explicit `disambiguation: "compatible"`**, not
+  Activity's `windowFor`.
+- **P14 — Two accessors, like `project_llm_settings`**: `scope.llmUsage` and `llmUsageRepoFor(projectId)`
+  for `runLlmCheck`, which has a project id and no scope.
+- **P15 — `(project_id, called_at DESC)` plus a partial `(project_id, generation_job_id)`. No rollup
+  table and no unique index** — a duplicate-suppressing key would turn a swallowed retry into an
+  over-count.
+- **P16 — `generation_job_id` is stored beside `generation_job_item_id`**, so **FR-028** is one
+  indexed aggregate instead of a join.
+- **P17 — The secret scan extends the existing scanned run** — it does not add a second one.
+- **P18 — FR-029 reads the existing `attempts` blob, not the ledger.** It already carries `usage` per
+  attempt, it is already loaded with the post, and it covers posts generated before this entry
+  shipped — so the post generation detail needs no query, no migration and no backfill.
+- **P19 — Money appears only on the Usage surface.** The job page and the post generation detail show
+  calls and tokens alone, keeping money behind the owner/admin gate so **SC-003** holds by
+  construction on both pages.
+
+## 059 — A project's tagline, description and website (2026-10-13)
+
+Spec B1-B14, plan P1-P28 (`specs/069-brand-profile-fields/{spec,research}.md`).
+
+- **Three nullable `text` columns on `projects`, not a side table, and no length CHECK.** There is
+  exactly one brand per project and the fields are not versioned — a tagline is a current fact about the
+  product, not an authored instrument like the voice whose version a post needs to remember. Length and
+  shape are Zod rules at the boundary, exactly as `name` (80) and `slug` (48) already are on this table,
+  so an over-length save is a field error, not a database error. Reverse either decision by moving the
+  three columns into a project-owned, versioned table, at the cost of a join, a second history UI and a
+  second thing for `setup-write-api` to publish.
+- **Empty is `NULL`, never `''`, and a missing key means "no change" where a present-but-empty key means
+  "clear".** One empty state, not two, for the prompt, the form and the audit log to agree on. The
+  settings form always submits all three fields, so an emptied input clears; a caller that omits a brand
+  key — an older client, or a future API operation — leaves the stored value alone instead of silently
+  wiping a description.
+- **The website shares `preferredLinks`' URL rule, verbatim, via a new `src/lib/validation/link.ts`.**
+  The roadmap asked for `websiteUrl` "validated like `preferredLinks`"; sharing one implementation is the
+  only way that claim stays true as both evolve. The value is stored as typed beyond trimming — no host
+  lower-casing, no scheme coercion, no `www` stripping — because it is shown back to the person who typed
+  it and handed to a model to put in a post. The tagline collapses any CR/LF to a single space before its
+  200-character limit is counted, so the labelled prompt line and the settings input cannot disagree
+  about what "one line" means; the description keeps its paragraph breaks, because they reach the prompt.
+- **The project's column list is unified before this entry uses it.** `projectColumns` existed twice —
+  `scope.ts` and a duplicate inline copy inside `api-keys.ts`'s `findActiveKeyByHash` — and a field added
+  to only one is invisible on API-key-authenticated generation while invisible in tests that use member
+  scopes. Both readers now import `src/server/dal/project-columns.ts`, fixed in passing because the
+  alternative was testing around a bug rather than removing it.
+- **One audit row per field that actually changed, action `project_brand_update`, `details: { field,
+  previous, next }`.** Three edited fields in one save write three rows; an unchanged field writes none.
+  One new enum value rather than three, because three per-field actions would mean an enum migration and
+  a near-identical activity-list sentence every time a brand field is added. `previous` is read inside
+  the same locked transaction as the write (`scope.transaction(…, { lockProject: true })`, then
+  `tx.projects.get()`), the same shape `setPostingInstructions` already uses, so two concurrent saves
+  record a truthful chain rather than both claiming the same stale `previous`.
+- **`BRAND` precedes `VOICE` in the composed prompt, and is omitted whole when every field is empty.**
+  What the product *is* is a fact the voice then describes, so the model reads it first; a prompt with no
+  brand fields set stays byte-identical to what it was before this entry, which is exactly what
+  `prompt.golden.test.ts` asserts. `brandOf(project)` is the one derivation, called from the two places a
+  real `PromptInput` is built (`core.ts`'s `base`, `series.ts`'s `base`), so every entry point — single,
+  series, regenerate, "Try it", the job runner, the public API's generate operation — inherits it and
+  none can forget to pass it. The brand is read live at generation time, not snapshotted like posting
+  instructions or pinned like a voice version: a tagline is a current fact, so a long-running job picking
+  up a corrected one mid-run is the right answer, and there is no column to hold a snapshot in.
+- **Brand context is stated as fact, not wrapped as source material.** Only an owner or admin can write
+  it — the same trust level as posting instructions — so it is not neutralised and not put inside
+  `<source_material>`; like posting instructions, it is told it never overrides the output rules or the
+  platform rules (a bullet between the alt-text rule and the posting-instructions rule says so, present
+  only when the section is). The brand's website is offered as the link to use when a post needs one;
+  `preferredLinks` stays in `VOICE`, unchanged — a campaign link is this month's thing to promote, the
+  brand's website is what the project *is*.
+
+## 060 — Generated images in the media library (2026-10-13)
+
+Spec: `specs/070-image-generation`. Roadmap entry 2 of 6
+(`.specify/roadmaps/content-engine-roadmap.json`, slug `image-generation`): implements the
+`ImageGenerator` extension point `src/server/llm/image-generation.ts` has declared since the
+generation entries landed. Full text in `specs/070-image-generation/spec.md` (G1–G26) and
+`specs/070-image-generation/plan.md`/`research.md` (P1–P24).
+
+### Spec decisions (G1–G26)
+
+- **G1 — The image provider is configured separately from the text provider**, `LLM_IMAGE_PROVIDER`
+  and `LLM_IMAGE_MODEL`, so an install writing posts with Anthropic (no image API) can still generate
+  images, and the two choices stay independent as the roadmap wants.
+- **G2 — `LLM_IMAGE_MODEL` is required once `LLM_IMAGE_PROVIDER` is set, with no default and no model
+  id literal anywhere** — `LLM_MODEL`'s existing rule, extended.
+- **G3 — The image call spends the provider's existing key variable (`OPENAI_API_KEY`)**, read only
+  in `config.ts`; no second key variable to rotate or to teach the key-read guard.
+- **G4 — Image generation keeps its own `ImageGenerator` interface** rather than widening
+  `LlmProvider`, because the two share nothing but the failure vocabulary.
+- **G5 — The adapter alone owns the provider vocabulary**; pixel sizes, output formats and error
+  codes never appear above it. A second adapter is a new file plus one `LLM_IMAGE_PROVIDER` value.
+- **G6 — The OpenAI adapter targets the GPT image model family only**: explicit `output_format`,
+  reads `b64_json`. A configured `dall-e-*` model surfaces as `bad_request`.
+- **G7 — PNG, one image, provider-default moderation, no streaming.** PNG survives the library's own
+  re-encode and metadata strip; `n = 1` matches the contract's single `mediaAssetId`.
+- **G8 — The prompt is 1 to 1000 characters after trimming**, the lowest ceiling the installed SDK
+  documents, refused locally before any call is made.
+- **G9 — An image call spends the project's own credential only when that credential's provider *is*
+  the configured image provider**, the install's otherwise; the credit-hold owner matches whichever
+  credential actually ran, so one refusal pauses both paths for that account.
+- **G10 — The billing-refusal rule lives in one function, shared with `withCreditHold`**, not copied,
+  so the probe interval, swallow rule and `heldSince` semantics cannot drift between text and images.
+- **G11 — The image path does not check for an existing hold before calling** — every in-request path
+  on `main` behaves this way; only the batch-job claim consults `gateCreditHolds`.
+- **G12 — Image calls are recorded in the usage ledger under a new purpose, `image.generate`**, with
+  token counts written when the provider reports them and null otherwise, never coerced to zero.
+- **G13 — The failure *kinds* are reused verbatim; only the user-facing sentences differ**, via a
+  parallel fixed-sentence map, because the text sentences describe the wrong thing for an image call.
+- **G14 — No images of real people, enforced by one fixed, appended instruction**, never by name
+  detection or heuristic refusal — a filter that is sometimes wrong is worse than an instruction the
+  provider is good at following.
+- **G15 — The prompt is the person's words plus the guardrail, and nothing else** — no brand context,
+  voice profile or post text folded in; an image prompt is not a post prompt.
+- **G16 — The generated bytes go through the existing `prepareUpload`/`commitUpload` path**, not a
+  new writer, so every existing library constraint (type, size, megapixels, metadata, thumbnail)
+  applies unchanged.
+- **G17 — Provenance is four named, nullable columns on `media_assets`, all-or-nothing** —
+  `generated_at`, `generation_prompt`, `generation_provider`, `generation_model` — never a `jsonb`
+  blob and never a side table.
+- **G18 — `original_filename` gets a fixed, human-readable name**, not the prompt and not null, so
+  every screen that labels an asset by filename still has one to show.
+- **G19 — Alt text starts empty and is never derived from the prompt** — a prompt is an instruction
+  to a model, not a description a screen reader should hear.
+- **G20 — No automatic tag.** Tags are the person's own filing system; provenance already has its own
+  columns and its own card marker.
+- **G21 — A generated asset is otherwise completely ordinary** — listed, searched, filtered,
+  selected, edited, attached, reserved, variant-derived, fit-checked and deleted by exactly the code
+  that handles an uploaded one.
+- **G22 — A new owner/admin statement, `media: ["generate"]`.** Neither existing candidate fits:
+  editors already hold `media: ["edit"]` and `generation: ["run"]`, and reusing either would hand them
+  the project's image budget.
+- **G23 — Absent, not disabled, for anyone who may not use it** — 065's precedent for the Model page,
+  applied here; the server refuses regardless of what the UI showed.
+- **G24 — In-request, single attempt, no job and no automatic retry** — a retry on a paid,
+  non-idempotent call risks buying the same graphic three times.
+- **G25 — No cooldown, no quota and no per-project lease** beyond disabling the button mid-flight;
+  every attempt is visible in the Usage figures (G12).
+- **G26 — The storage-not-configured sentence comes from one shared constant**, exported once and
+  used by both the upload and the generate paths.
+
+### Plan decisions (P1–P24)
+
+- **P1 — A third environment group, `LLM_IMAGE_VARIABLES`, outside `LLM_VARIABLES`**, with its own
+  `llmImageEnvIssues` (068 P9's precedent), so an image-only install is not told to set `LLM_PROVIDER`.
+- **P2 — A partially configured image group is a startup issue, not a warning** — a half-set provider
+  is a typo, not a guess (G1).
+- **P3 — Image resolution lives inside `resolve.ts`**, so `key-reads.test.ts`'s existing three-file
+  guard stays green unchanged.
+- **P4 — A project's own credential supplies the key only; the model is always `LLM_IMAGE_MODEL`** —
+  a project's stored *text* model sent to an images endpoint is a guaranteed `bad_request`.
+- **P5 — The image client runs with `maxRetries: 0`**, because a paid, non-idempotent call must not
+  be retried by the SDK (G24).
+- **P6 — The adapter reuses the exported `kindOfError`**, adding empty `OPENAI_IMAGE_REFUSAL_TYPES` /
+  `_CODES` sets as parameters, because the installed SDK names no refusal marker for this endpoint.
+- **P7 — `ImageProviderRequest` carries a `label` and the adapter calls `logLlmCall`**, so the
+  usage-purpose guard can see `image.generate` like every other provider call.
+- **P8 — The hold decision is extracted once as `applyCreditOutcome(owner, kind)`**; `withCreditHold`
+  and `withImageCreditHold` are thin wrappers, and `UsageRecorder` gains `wrapImage` sharing one
+  buffer and one flush.
+- **P9 — The adapter's aspect table is the only place pixels exist**; an explicit `size` passes
+  through after a positive-integer check only, leaving the provider as the arbiter (G2/G6).
+- **P10 — `n: 1`, `output_format: "png"`, and nothing else** — no `moderation`, `quality`,
+  `background`, `stream`, `response_format`, `user` or token cap.
+- **P11 — The bytes go through `uploadMedia`**, extended with an optional `generation` meta, because
+  it already gets discard-on-failure right.
+- **P12 — `generation_provider` gets a length CHECK, never a value list** — a value list would force
+  a migration on every new adapter, which SC-007 forbids.
+- **P13 — `MEDIA_STORAGE_NOT_SET_UP` moves to `src/server/storage/index.ts`**; `images.ts` imports it,
+  with a test that the two callers are identical (G26).
+- **P14 — One migration file for both changes**, the enum value added but not used in the same
+  transaction, as earlier migrations already do.
+- **P15 — `createImageGenerator(scope)` binds the declared contract to a scope** and refuses a
+  request naming another project, keeping the declared signature intact (constitution III).
+- **P16 — `image-generation.ts` gains only the contract's vocabulary** (`IMAGE_ASPECTS`,
+  `IMAGE_PROMPT_MAX`, `NO_REAL_PEOPLE`), never the implementation.
+- **P17 — Authorization throws `ForbiddenError`; every other refusal is returned** — the contract's
+  `message` is for refusals a person can act on.
+- **P18 — No `AbortSignal` is passed from the action**, and a caller-supplied signal reaches the
+  provider call only, never storage or the database, so "both or neither" holds by construction.
+- **P19 — `media: ["generate"]` on `statements`, owner and admin only**, with an exhaustive access
+  matrix test (G22).
+- **P20 — The page's gate is a new `imageGenerationEnabled(scope)` read**, not a widened
+  `MediaStatus`, because the Jobs page and the Overview service read `mediaStatus` with no interest
+  in image configuration.
+- **P21 — The trigger renders in both storage-on branches of the Media page**, including the
+  empty-library branch, which is exactly the state a first generated image should be able to leave.
+- **P22 — Provenance renders as a `Badge` plus a native `<details>` disclosure** — keyboard-operable
+  with no JavaScript, and a 1000-character prompt need not fit a tile.
+- **P23 — The aspect control is a three-option `ChoiceField`**, rendering a `SegmentedControl`, per
+  the `docket-ui` rule against a native `<select>` for one-of-many.
+- **P24 — The secret scan and the env-coverage probe are extended, never exempted** (068 P17's
+  precedent); `docs/security.md` gains two rows, naming the tests that exist.
+
+### What this entry does not do
+
+- **A person choosing among several generated images.** `n = 1`; a chooser is a different, bigger
+  feature (G7).
+- **Image-to-image, inpainting or editing an existing asset.** The contract takes a prompt only.
+- **Any provider beyond `openai`.** G6 leaves a second adapter as a new file plus one configuration
+  value, not something this entry builds.
+- **Composing a prompt from brand context, voice or post text.** G15 keeps the prompt to the person's
+  words plus the guardrail; `evergreen-series` composing its own prompt through this same contract is
+  a later roadmap entry.
+- **A job, a batch mode or any automatic retry on a failed call.** G24; this is explicitly an
+  in-request, single-attempt action.
+- **A cooldown, quota or per-project generation limit.** G25; visibility in the Usage figures is the
+  chosen control.
+
+## 061 — Standing content series (2026-10-14)
+
+Spec: `specs/071-evergreen-series`. Roadmap entry 3 of 6
+(`.specify/roadmaps/content-engine-roadmap.json`, slug `evergreen-series`): a recurring series that
+keeps producing posts on a cadence until someone stops it, built on the existing generation, policy,
+allocator and worker-tick machinery. Full text in `specs/071-evergreen-series/spec.md` (W1–W34) and
+`specs/071-evergreen-series/plan.md`/`research.md` (S1–S40).
+
+### Spec decisions (W1–W34)
+
+- **W1 — "Standing series", a new word.** The in-request, 2–10-angle generation path keeps the bare
+  word *Series*; the new recurring object is a **standing series** everywhere, and the new Batch jobs
+  section is titled **Standing series**.
+- **W2 — A standing series is configuration, not a work list.** It holds what to generate and how
+  often; each firing opens a **run**, which carries positions, counts, outcomes and failures — so
+  `dated-series` can add a second way to decide when a run opens without touching anything else.
+- **W3 — The stored shape deliberately mirrors a batch job**: project, name, voice profile, the
+  `template`/`templateFields` pair, target account ids, resolved approval/scheduling policy, an
+  enabled flag, `lastRunAt`/`nextRunAt`.
+- **W4 — No per-run data fields in this entry.** `templateFields` is always empty, so the template may
+  carry no placeholders; `dated-series` can feed per-occurrence fields in later with no second
+  migration.
+- **W5 — A series also stores a brief**, bounded like the existing one, because the planning call
+  needs to know what the series is about, not just how to write it.
+- **W6 — A name is required and unique within a project**, 1–100 characters, trimmed,
+  case-insensitively unique.
+- **W7 — A cadence is a count and a period: N posts per day, week or month.** Nothing finer than a day
+  (a rate-limit problem) and nothing coarser than a month (better expressed as a dated series).
+- **W8 — N is 1 to 10 per period**, matching the existing in-request series maximum.
+- **W9 — Period boundaries are the project's local day, week (Monday) or month (the 1st)**, resolved
+  through Temporal with explicit disambiguation; a series created mid-period is first due at the next
+  boundary.
+- **W10 — At most one run per period, and no backfill.** A worker outage across several boundaries is
+  recorded as missed periods and the series jumps to the current one, rather than dumping a backlog.
+- **W11 — A new period closes a still-open run**, with its counts recorded as incomplete, so a slow or
+  unsatisfiable series cannot accumulate open runs forever.
+- **W12 — Pausing stops new runs and stops the open run producing more; resuming sets `nextRunAt` to
+  the next boundary**, never a missed one.
+- **W13 — Deleting a series keeps its posts.** Deletion removes the series and its run history only,
+  is immediate and final, and needs the same permission as creating one.
+- **W14 — A run of two or more posts plans its angles first, through the existing planning call; a
+  run of exactly one post skips planning**, because the planner refuses a count below two.
+- **W15 — The plan is stored on the run before any post is written**, so a restart finishes the plan
+  it already committed to rather than re-planning.
+- **W16 — The plan is told which angles the series has already used**, via the existing avoid-titles
+  prompt mechanism, so a weekly series does not repeat itself; golden prompt tests are updated.
+- **W17 — Each post of a run goes through the existing generation path unchanged** — same prompt
+  composition, brand context, voice ordering, schema, correction retry, failure vocabulary, usage
+  ledger and credit-hold wrapper.
+- **W18 — The voice profile's current version is taken at run time**, recorded on the post, as every
+  generated post already does.
+- **W19 — A position is produced at most once**, enforced by a uniqueness constraint; a writer that
+  loses the race re-reads and reports the winner.
+- **W20 — A temporary failure retries on a later tick; a lasting one is recorded as a failure for that
+  position and the run moves on.** The run closes when every position has a post, a failure or a skip.
+- **W21 — Policies are authorised once, at creation or edit, and stored on the series** — the only
+  honest option, since the authorising member may not be a member by the time the series fires.
+- **W22 — The one policy function decides every post, with no bypass.** A validation failure forces
+  review even under auto-approve — intended behaviour, not a defect.
+- **W23 — Queued posts take real slots through the existing allocator, inside the policy transaction**,
+  so two series or two workers cannot land on one occurrence; a post with no free occurrence stays a
+  draft with that reason recorded.
+- **W24 — A series never schedules at an explicit time.** It leaves posts as drafts or queues them;
+  picking times is what slots are for.
+- **W25 — A series declares one media source: none, a pool, or generate.**
+- **W26 — A pooled image is reserved like a batch job's image** — one unused image per post, reserved
+  inside the write, videos never eligible.
+- **W27 — A generated image uses a prompt stored on the series**, sent with the fixed real-people
+  instruction and nothing else — no post text, no brand fields, no voice profile.
+- **W28 — A post whose media requirement cannot be satisfied is skipped whole, with the reason
+  recorded**, naming the account whose requirement failed, rather than dropping one target.
+- **W29 — A skip is not a failure.** It is a neutral, recorded outcome and does not count an attempt or
+  mark a run "completed with failures".
+- **W30 — A new bounded section of the existing tick, not a new process** — claimed, leased,
+  skip-locked, kill-safe and deadline-aware exactly like the batch section.
+- **W31 — Its per-tick budget is its own and additive**, documented so an install knows enabling
+  standing series raises its total concurrent model calls.
+- **W32 — Claims rotate, oldest-due first**, so one busy series or project cannot starve another.
+- **W33 — A credit hold pauses a series cleanly, with no state to clear.** A held owner's series is not
+  claimed at all; a mid-run billing refusal requeues the position with no attempt counted.
+- **W34 — A series that produces nothing three runs in a row pauses itself, with the reason**, undone
+  by the same Resume control a person's pause is.
+
+### Plan decisions (S1–S40)
+
+- **S1 — Three tables**: `standing_series`, `standing_series_runs`, `standing_series_positions` — a
+  position is a row because every idempotency guarantee is a per-slot statement.
+- **S2 — The run carries a configuration snapshot (`config jsonb`) written at open**; the producer
+  reads the run, never the series, which is the whole of FR-056.
+- **S3 — Run counts are derived from positions; only `outcome` is stored, once, at close** — the
+  `refreshJobStatus` rule, which keeps counters from double-counting under retries.
+- **S4 — A period is `(period, local date)` with `unique(series_id, period, period_start)`.**
+- **S5 — The cadence engine is a pure module**, `src/lib/series/cadence.ts`, following
+  `src/lib/email/schedule.ts`.
+- **S6 — The claim unit is the series, leased on the series row.** One holder makes "one open run"
+  true by construction.
+- **S7 — Claim predicate**: `enabled AND lease free AND (next_run_at <= now OR EXISTS (an open run
+  with work due))` — `next_run_at` advances when a run opens.
+- **S8 — Positions are created when the run opens; the plan is written with `UPDATE … WHERE plan IS
+  NULL`**, so "a restart must not re-plan" is a database fact.
+- **S9 — Plan retry bookkeeping is two run columns**, `plan_attempt_count` and
+  `plan_next_attempt_at`; the kind and message live in `generation_failures`.
+- **S10 — `posts` gains one nullable column, `standing_series_position_id`**, FK `ON DELETE SET NULL`,
+  with a partial unique index.
+- **S11 — `GeneratedPostLink` gains `{ standingSeriesPositionId }`; `GenerationRecord.mode` gains
+  `standing_series_post`.**
+- **S12 — `generation_failures` gains `standing_series_run_id` + `standing_series_position`** (nullable,
+  so a plan failure belongs to the run); `generation_mode` gains two values.
+- **S13 — Two new `llm_usage_purpose` values and no new column on `llm_call_usage`.**
+- **S14 — Media is resolved per position, before the model call, and written onto the position**, so a
+  restart reuses the image instead of generating a second one.
+- **S15 — The pool reservation is a partial unique index on positions; `src/server/dal/media.ts`'s
+  reservation predicate is widened to count both tables.**
+- **S16 — The pool claim is `SELECT … FOR UPDATE SKIP LOCKED LIMIT 1`** over unused, unreserved,
+  tag-matching live images, oldest first.
+- **S17 — The `generate` source calls `createImageGenerator(scope)` with the series' stored prompt and
+  nothing else.**
+- **S18 — A position's `last_error_kind` reuses the existing `generation_job_item_error` enum.**
+- **S19 — A new `standing_series_skip_reason` enum of six values plus `skip_account_id`.**
+- **S20 — The run carries `outcome` (four values) and `blocked_reason` (two).** Voice profiles are
+  archived, never deleted, so the spec's "deleted voice profile" edge case is the archived case.
+- **S21 — The run records `dropped_account_ids uuid[]`.**
+- **S22 — A seventh section, `src/server/scheduler/standing-series.ts`, inside the existing `runTick()`**
+  — the existing `section()` wrapper gives FR-047's isolation for free.
+- **S23 — Two environment variables for the section's own claim limits**; the physical per-call
+  constants are shared.
+- **S24 — Series are processed concurrently, positions within a run sequentially.**
+- **S25 — One new statement, `standing_series: ["manage"]`, for owner and admin, with no `KEY_GRANTS`
+  entry** — no public API surface is structural.
+- **S26 — Viewing the list and run history is gated by `post: ["view"]`**, as the Jobs page already is.
+- **S27 — FR-008's log is the audit log**: five new `membership_action` values; `activity_events` is
+  publish-and-connect outcomes only.
+- **S28 — No posting-instructions snapshot**: a manual Generate reads them live, so FR-019 requires
+  the prompt to compose exactly as a manual Generate's does.
+- **S29 — `template_fields` emptiness is enforced in Zod, not by a CHECK.**
+- **S30 — Avoid-titles: the 3 most recent closed runs, capped at 20 titles, both named constants.**
+- **S31 — `buildSeriesPlanPrompt` gains `avoidTitles` and emits nothing when empty**, so today's
+  committed golden snapshots stay byte-identical.
+- **S32 — The producer re-reads `enabled` before each position** — the only safe point FR-054's "next
+  safe point" can mean.
+- **S33 — A position left `running` is reset by the next claim**, counting an attempt unless the claim
+  is a credit probe; at the cap it fails as `interrupted`.
+- **S34 — A position that already has a post but no applied policy is a finish position**: variants
+  and policy, no model call — the batch runner's already-reviewed recovery, reused.
+- **S35 — Self-pause reads the three most recent closed runs' stored `outcome`, at close, in one
+  indexed query.**
+- **S36 — `withinBudget`/`Overran`/the redacted log line move to `src/server/scheduler/budget.ts`**;
+  `jobs/runner.ts` imports them — a pure move, proved by its existing tests staying green.
+- **S37 — `resolveBlockedProjectIds` is generalised to take candidate project ids.**
+- **S38 — A Standing series section on `/jobs`, plus `/jobs/series/new`, `/jobs/series/[seriesId]` and
+  `…/edit`.**
+- **S39 — Housekeeping prunes closed runs older than 90 days, 200 per tick; positions and failures
+  cascade; an open run is never pruned.**
+- **S40 — No webhook, no notification, no email, no API, no real-time push.**
+
+### What this entry does not do
+
+- **No date-pegged occurrences.** Anniversaries, a spreadsheet occurrence, lead time, leap days and
+  missed-window handling belong to `dated-series`, which adds a second way to decide when a run opens
+  on this engine.
+- **No change to one-off Generate, the in-request series, or finite batch jobs**, beyond refactoring
+  shared code with no behaviour change.
+- **No public API, MCP or webhook surface** for standing series.
+- **No notifications or email** about a series' runs, skips or failures beyond what a post already
+  produces and what the Batch jobs screens show.
+- **No explicit-time scheduling**, no per-post overrides, no editing a run's plan, and no re-running a
+  closed run.
+- **No backfill** of periods missed while the worker was down.
+- **No cross-period deduplication of post text**; angle titles of recent runs are avoided, but Docket
+  does not compare produced copy.
+- **No video**: a pooled asset is an image, and no video is generated or attached.
+- **No per-series provider, model, credential, rate limit or spend cap.**
+
 ## 072 — Pinterest provider (2026-10-14)
 
 Judgement calls from `specs/072-pinterest-provider/spec.md` and its plan (`research.md`, K1–K38). External facts come

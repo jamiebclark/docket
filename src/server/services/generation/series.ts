@@ -3,20 +3,23 @@
 import { z } from "zod";
 import { approvalPolicySchema, schedulingPolicySchema, type GenerationRecord } from "@/lib/validation/generation";
 import * as clock from "../../dal/clock";
+import { LLM_KEY_UNREADABLE } from "@/lib/generation/llm-source";
 import { credentialOwnerFor } from "../../dal/credential-owners";
 import { NotFoundError } from "../../dal/errors";
 import type { GenerationFailureRecord } from "../../dal/generation-failures";
 import type { PostRecord } from "../../dal/posts";
 import { actorColumns, type ProjectScope } from "../../dal/scope";
 import type { SeriesRecord } from "../../dal/series";
-import { getLlm } from "../../llm";
+import { LlmNotConfiguredError, missingLlmSettings } from "../../llm";
+import { resolveLlmForProject } from "../../llm/resolve";
 import type { LlmFailureKind, LlmProvider, LlmResult } from "../../llm/types";
 import { withCreditHold } from "./credit";
+import { createUsageRecorder, type UsagePurpose } from "../../llm/usage";
 import { recordFailure } from "./failures";
 import { saveGeneratedPost } from "./save";
 import { runGeneration } from "./core";
 import { applyApprovalPolicy, resolvePolicies } from "./policy";
-import { buildSeriesPlanPrompt, platformRulesFor, promptGroupsFor } from "./prompt";
+import { brandOf, buildSeriesPlanPrompt, platformRulesFor, promptGroupsFor } from "./prompt";
 import { assertGroupLimit, groupsForAccounts } from "./groups";
 import { checkSeriesPlan, problemLine, seriesPlanSchema, ANGLE_DESCRIPTION_MAX, ANGLE_TITLE_MAX } from "./schema";
 import {
@@ -82,8 +85,29 @@ type Attempts = GenerationRecord["attempts"];
 
 const RETRYABLE = new Set<LlmFailureKind>(["invalid_output", "refused", "incomplete", "timeout"]);
 
-export async function planSeries(scope: ProjectScope, input: unknown, llm: LlmProvider = getLlm()): Promise<PlanSeriesResult> {
-  llm = withCreditHold(llm, await credentialOwnerFor(scope.project.id));
+export async function planSeries(
+  scope: ProjectScope,
+  input: unknown,
+  llm?: LlmProvider,
+  opts: { avoidTitles?: readonly string[]; purpose?: UsagePurpose } = {},
+): Promise<PlanSeriesResult> {
+  const avoidTitles = opts.avoidTitles ?? [];
+  const purpose = opts.purpose ?? "generate.series_plan";
+  let owner: string | undefined;
+  let source: "project" | "install" = "install";
+  if (!llm) {
+    const resolved = await resolveLlmForProject(scope.project.id);
+    if (!resolved.ok) {
+      throw new LlmNotConfiguredError(
+        resolved.reason === "key_unreadable" ? LLM_KEY_UNREADABLE : missingLlmSettings(resolved.problems),
+      );
+    }
+    llm = resolved.llm;
+    owner = resolved.owner;
+    source = resolved.source;
+  }
+  const recorder = createUsageRecorder({ projectId: scope.project.id, purpose, source });
+  llm = recorder.wrap(withCreditHold(llm, owner ?? (await credentialOwnerFor(scope.project.id))));
   const parsed = planSeriesSchema.parse(input);
   need(scope, { generation: ["run"], post: ["edit"] });
   const voice = await takeVoice(scope, parsed.voiceProfileId);
@@ -99,16 +123,26 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm: LlmPr
     brief: parsed.brief,
     sourceText: parsed.sourceText?.trim() ? parsed.sourceText : null,
     count: parsed.count,
+    brand: brandOf(scope.project),
+    avoidTitles,
   };
   const attempts: Attempts = [];
   const call = async (retry: { previousOutput: string; problems: string[] } | null) =>
-    llm.generate({
-      label: "generate.series_plan",
-      ...buildSeriesPlanPrompt({ ...base, retry }),
-      images: [],
-      schemaName: "series_plan",
-      schema: seriesPlanSchema,
-    });
+    purpose === "generate.standing_series_plan"
+      ? llm.generate({
+          label: "generate.standing_series_plan",
+          ...buildSeriesPlanPrompt({ ...base, retry }),
+          images: [],
+          schemaName: "series_plan",
+          schema: seriesPlanSchema,
+        })
+      : llm.generate({
+          label: "generate.series_plan",
+          ...buildSeriesPlanPrompt({ ...base, retry }),
+          images: [],
+          schemaName: "series_plan",
+          schema: seriesPlanSchema,
+        });
   const attemptOf = (r: LlmResult<unknown>, kind: Attempts[number]["kind"]) =>
     attempts.push({ kind, latencyMs: r.latencyMs, usage: r.usage });
   const identity = (r: LlmResult<unknown>) => ({ provider: r.provider, model: r.model });
@@ -128,6 +162,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm: LlmPr
       attempts,
       ...identity(r),
     });
+    await recorder.flush({});
     return { ok: false, failureId: failure.id, kind, message: failure.message };
   };
   const accept = (r: Extract<LlmResult<z.infer<typeof seriesPlanSchema>>, { ok: true }>) => {
@@ -142,6 +177,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm: LlmPr
     const checked = accept(first);
     if (checked.problems.length === 0) {
       attemptOf(first, "ok");
+      await recorder.flush({});
       return { ok: true, angles: checked.angles, latencyMs: first.latencyMs };
     }
     attemptOf(first, "invalid_output");
@@ -164,6 +200,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm: LlmPr
     return failed("invalid_output", second);
   }
   attemptOf(second, "ok");
+  await recorder.flush({});
   return { ok: true, angles: checked.angles, latencyMs: first.latencyMs + second.latencyMs };
 }
 
@@ -233,7 +270,11 @@ export async function writeSeriesPost(
 
   const series = { id: seriesId, position, angle, otherAngles: angles.filter((_, i) => i !== position).map((a) => a.title) };
   const coreInputs = { brief: row.brief, sourceText: request.sourceText, instructions: request.instructions, series };
-  const outcome = await runGeneration(scope, { label: "generate.series_post", voice, groups, assets, inputs: coreInputs }, llm);
+  const outcome = await runGeneration(
+    scope,
+    { label: "generate.series_post", purpose: "generate.series_post", voice, groups, assets, inputs: coreInputs },
+    llm,
+  );
   const inputs: GenerationRecord["inputs"] = {
     ...coreInputs,
     mediaAssetIds: assets.map((a) => a.id),
@@ -250,6 +291,7 @@ export async function writeSeriesPost(
       provider: outcome.provider,
       model: outcome.model,
     });
+    await outcome.usage.flush({ seriesId, seriesPosition: position });
     return { ok: false, failureId: failure.id, kind: outcome.kind, message: failure.message, position };
   }
 
@@ -282,10 +324,12 @@ export async function writeSeriesPost(
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
+    await outcome.usage.flush({ seriesId, seriesPosition: position });
     const winner = await scope.posts.findBySeriesPosition(seriesId, position);
     if (!winner) throw error;
     return { ...existingResult(winner), position };
   }
+  await outcome.usage.flush({ seriesId, seriesPosition: position, postId });
 
   const applied = await applyApprovalPolicy(scope, postId, request.resolved);
   return {

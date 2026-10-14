@@ -32,7 +32,11 @@ afterAll(async () => {
     );
   }
   await closeDb();
-}, 60_000);
+  // Teardown, not measurement: this deletes every event the file seeded, and how long the delete takes says
+  // nothing about the query budgets SC-003 asserts. Sixty seconds is comfortable on an idle machine — the
+  // file runs ~67s end to end locally — and runs out on a loaded CI shard, where this timed out while every
+  // assertion in the file had already passed.
+}, 240_000);
 
 /** ~15% problems (failed, ambiguous), the rest published. */
 async function seed(projectId: string, count: number) {

@@ -35,6 +35,7 @@ export async function runStartup(overrides: Partial<StartupDeps> = {}): Promise<
     return deps.exit(1);
   }
   const env = validation.env;
+  for (const warning of validation.warnings) deps.log(`Docket: ${warning.name}: ${warning.reason}`);
   for (const line of validation.disabled) deps.log(`Docket: ${line}`);
 
   const llm = parseLlmConfig(deps.env);

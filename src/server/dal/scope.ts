@@ -22,15 +22,26 @@ import { createWebhooksRepo, type WebhooksRepo } from "./webhooks";
 import { ForbiddenError, InvalidApiKeyError, NotFoundError } from "./errors";
 import { createInvitationsRepo, type InvitationsRepo } from "./invitations";
 import { createJobItemsRepo, createJobsRepo, type JobItemsRepo, type JobsRepo } from "./jobs";
+import { createLlmUsageRepo, type LlmUsageRepo } from "./llm-usage";
 import { createMediaRepo, type MediaRepo } from "./media";
 import { createVideoVersionsRepo, type VideoVersionsRepo } from "./video-versions";
 import { createUploadsRepo, type UploadsRepo } from "./uploads";
 import { createPostsRepo, type PostsRepo } from "./posts";
+import { createProjectLlmRepo, type ProjectLlmRepo } from "./project-llm";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
+import {
+  createStandingSeriesPositionsRepo,
+  createStandingSeriesRepo,
+  createStandingSeriesRunsRepo,
+  type StandingSeriesPositionsRepo,
+  type StandingSeriesRepo,
+  type StandingSeriesRunsRepo,
+} from "./standing-series";
 import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
 import { createMembersRepo, type MembersRepo } from "./members";
 import { createNotificationsRepo, type NotificationsRepo } from "./notifications";
+import { projectColumns } from "./project-columns";
 import { createGenerationFailuresRepo, type GenerationFailuresRepo } from "./generation-failures";
 import { createSeriesRepo, type SeriesRepo } from "./series";
 import { createVoiceProfilesRepo, createVoiceVersionsRepo, type VoiceProfilesRepo, type VoiceVersionsRepo } from "./voice";
@@ -92,8 +103,17 @@ function keyCan(permissions: readonly ApiKeyPermission[], request: PermissionReq
   );
 }
 
+/** The one permission the fixed-editor job runner needs beyond its role (see `buildScope`). */
+function jobRunnerGrants(request: PermissionRequest): boolean {
+  const entries = Object.entries(request) as [string, readonly string[]][];
+  return entries.every(([resource, actions]) => resource === "media" && actions.every((a) => a === "generate"));
+}
+
 export interface ProjectScope {
   readonly actor: ScopeActor;
+  /** The database or transaction this scope is pinned to. For a write that spans a DAL this scope has no repo for
+   * (e.g. clearing a credit hold inside the same transaction as a credential save). */
+  readonly exec: Database;
   readonly project: {
     id: string;
     slug: string;
@@ -102,6 +122,9 @@ export interface ProjectScope {
     defaultApprovalPolicy: ApprovalPolicy;
     defaultSchedulingPolicy: SchedulingPolicy;
     defaultVoiceProfileId: string | null;
+    tagline: string | null;
+    description: string | null;
+    websiteUrl: string | null;
   };
   readonly membership: { memberId: string; userId: string; role: Role };
   can(request: PermissionRequest): boolean;
@@ -124,12 +147,17 @@ export interface ProjectScope {
   readonly voiceVersions: VoiceVersionsRepo;
   readonly series: SeriesRepo;
   readonly generationFailures: GenerationFailuresRepo;
+  readonly standingSeries: StandingSeriesRepo;
+  readonly standingSeriesRuns: StandingSeriesRunsRepo;
+  readonly standingSeriesPositions: StandingSeriesPositionsRepo;
   readonly jobs: JobsRepo;
   readonly jobItems: JobItemsRepo;
   readonly apiKeys: ApiKeysRepo;
   readonly idempotency: IdempotencyRepo;
   readonly webhooks: WebhooksRepo;
   readonly externalClaims: ExternalClaimsRepo;
+  readonly projectLlm: ProjectLlmRepo;
+  readonly llmUsage: LlmUsageRepo;
   /** The caller's own reading position and mute setting; job-runner and API-key scopes throw `ForbiddenError`. */
   readonly notifications: NotificationsRepo;
   readonly projects: {
@@ -146,16 +174,6 @@ export function crossProject<T>(reason: string, fn: () => Promise<T>): Promise<T
 }
 
 type ScopeData = Pick<ProjectScope, "project" | "membership">;
-
-const projectColumns = {
-  id: projects.id,
-  slug: projects.slug,
-  name: projects.name,
-  timezone: projects.timezone,
-  defaultApprovalPolicy: projects.defaultApprovalPolicy,
-  defaultSchedulingPolicy: projects.defaultSchedulingPolicy,
-  defaultVoiceProfileId: projects.defaultVoiceProfileId,
-};
 
 /** Resolves the caller's membership of a project. `exec` is the database or a transaction. */
 async function resolve(
@@ -214,10 +232,16 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
   const scope: ProjectScope = {
     ...data,
     actor,
+    exec,
     can:
       actor.kind === "api_key"
         ? (request) => keyCan(actor.permissions, request)
-        : (request) => roles[data.membership.role].authorize(request as never).success,
+        : // The job runner acts on a series an owner/admin already configured to generate images
+          // (standing_series:manage is owner/admin-only); it needs media:generate for that, regardless
+          // of the fixed editor role it otherwise runs as.
+          (request) =>
+            roles[data.membership.role].authorize(request as never).success ||
+            (actor.kind === "job_runner" && jobRunnerGrants(request)),
     audit: createAuditRepo(exec, data.project.id),
     members: createMembersRepo(exec, data.project.id),
     uploads: createUploadsRepo(exec, data.project.id),
@@ -228,10 +252,15 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     voiceVersions: createVoiceVersionsRepo(exec, data.project.id),
     series: createSeriesRepo(exec, data.project.id),
     generationFailures: createGenerationFailuresRepo(exec, data.project.id),
+    standingSeries: createStandingSeriesRepo(exec, data.project.id),
+    standingSeriesRuns: createStandingSeriesRunsRepo(exec, data.project.id),
+    standingSeriesPositions: createStandingSeriesPositionsRepo(exec, data.project.id),
     jobs: createJobsRepo(exec, data.project.id),
     jobItems: createJobItemsRepo(exec, data.project.id),
     apiKeys: createApiKeysRepo(exec, data.project.id),
     idempotency: createIdempotencyRepo(exec, data.project.id),
+    projectLlm: createProjectLlmRepo(exec, data.project.id),
+    llmUsage: createLlmUsageRepo(exec, data.project.id),
     notifications:
       actor.kind === "member"
         ? createNotificationsRepo(exec, data.project.id, data.membership.userId)

@@ -85,4 +85,24 @@ usage and estimated spend. Per-token prices differ by provider and model and cha
 decide where rates live and how an unpriced model is displayed — an estimate labelled as one beats a confident wrong
 number.
 
-Does not: enforce budgets, cap or throttle generation on spend, or bill anyone. Reporting only.
+**Tokens are not money, and this entry must not pretend otherwise.** Verified against the live provider on
+2026-10-12: on OpenAI's data-sharing offer every one of Docket's calls was free. 360 tokens across 8 requests,
+all of them attributed to the "data sharing incentive tier" on the usage dashboard, total spend `$0.00`. At the
+Build tier that offer covers 2.5M tokens a day on the mini group — roughly a thousand Docket generations — so for
+an install like this one the free share is not an edge case, it is the normal case. Tokens × list price would
+therefore have overstated spend by about 100%.
+
+Two consequences the spec has to face rather than discover:
+
+- **The API will not tell you what was free.** A response's `service_tier` reports processing priority
+  (`default`/`flex`/`priority`), not billing attribution; the free share appears only on the provider's usage
+  dashboard, grouped by processing tier. Nothing Docket can read at call time distinguishes a free call from a
+  billed one.
+- **So a number computed from tokens and list prices is an upper bound, not spend**, and must be labelled as
+  one wherever it appears. Reporting usage — tokens, calls, per model — is honest and useful on its own; a
+  money figure presented as "spend" is not, and a tenant who reads it as a bill will be wrong by roughly the
+  whole amount. The spec should decide deliberately whether to show money at all, and if it does, what it is
+  called.
+
+Does not: enforce budgets, cap or throttle generation on spend, or bill anyone. Reporting only. It also does not
+try to reconcile against the provider's own billing, which is the only place the free share is visible.

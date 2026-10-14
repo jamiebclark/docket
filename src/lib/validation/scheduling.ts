@@ -100,6 +100,12 @@ export const moveSlotSchema = z.object({
   localTime: localTimeSchema,
 });
 
+/** One time, every weekday that does not already have it. No weekday list: the whole week is the point. */
+export const addWeekSlotsSchema = z.object({
+  accountId: z.uuid(),
+  localTime: localTimeSchema,
+});
+
 export const registerAssetSchema = z.object({
   storageKey: z.string().min(1).max(500),
   publicUrl: z

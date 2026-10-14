@@ -82,6 +82,8 @@ export interface MediaView {
   };
   /** Set by `listMedia` when asked for a `fit`: one entry per platform of the result's `platforms`. */
   fit?: PlatformFit[];
+  /** Set when this asset was generated, not uploaded (FR-035). */
+  generated: { prompt: string; provider: string; model: string; at: Date } | null;
 }
 export interface PostRef {
   postId: string;
@@ -147,6 +149,9 @@ export async function toView(
     processingStep: row.processingStep as MediaView["processingStep"],
     processingError: row.processingError,
     video: ready ? videoFacts(row) : null,
+    generated: row.generatedAt
+      ? { prompt: row.generationPrompt!, provider: row.generationProvider!, model: row.generationModel!, at: row.generatedAt }
+      : null,
   };
 }
 
@@ -174,6 +179,14 @@ function videoFacts(row: MediaRow): NonNullable<MediaView["video"]> {
       container: container === "mov" ? "MOV" : "MP4",
     },
   };
+}
+
+/** The provenance of a generated asset (data-model.md §1, contracts/services.md §8). */
+export interface GenerationProvenance {
+  prompt: string;
+  provider: string;
+  model: string;
+  at: Date;
 }
 
 export type UploadResult = { ok: true; asset: MediaView } | ({ ok: false } & UploadRejection);
@@ -237,7 +250,7 @@ export async function discardPreparedUpload(prepared: PreparedUpload): Promise<v
 export async function commitUpload(
   tx: ProjectScope,
   prepared: PreparedUpload,
-  meta: { altText?: string; tags?: string[] } = {},
+  meta: { altText?: string; tags?: string[]; generation?: GenerationProvenance } = {},
 ): Promise<MediaView> {
   need(tx, "edit");
   const storage = requireStorage();
@@ -254,6 +267,14 @@ export async function commitUpload(
     originalFilename: prepared.filename,
     ...(meta.altText !== undefined ? { altText: meta.altText } : {}),
     ...(meta.tags !== undefined ? { tags: meta.tags } : {}),
+    ...(meta.generation
+      ? {
+          generatedAt: meta.generation.at,
+          generationPrompt: meta.generation.prompt,
+          generationProvider: meta.generation.provider,
+          generationModel: meta.generation.model,
+        }
+      : {}),
     ...actorColumns(tx),
   });
   return toView(row);
@@ -262,12 +283,15 @@ export async function commitUpload(
 /** Rejections are returned, not thrown, so a batch can report per file. */
 export async function uploadMedia(
   scope: ProjectScope,
-  input: { file: { name: string; bytes: Buffer } },
+  input: { file: { name: string; bytes: Buffer }; generation?: GenerationProvenance },
 ): Promise<UploadResult> {
   const prepared = await prepareUpload(scope, input.file);
   if (!("id" in prepared)) return prepared;
   try {
-    return { ok: true, asset: await scope.transaction((tx) => commitUpload(tx, prepared)) };
+    return {
+      ok: true,
+      asset: await scope.transaction((tx) => commitUpload(tx, prepared, input.generation ? { generation: input.generation } : {})),
+    };
   } catch (err) {
     await discardPreparedUpload(prepared);
     throw err;

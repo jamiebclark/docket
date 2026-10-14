@@ -25,6 +25,12 @@ export interface PromptGroup {
   instructions: string | null;
 }
 
+export interface BrandContext {
+  tagline: string | null;
+  description: string | null;
+  websiteUrl: string | null;
+}
+
 export interface PromptInput {
   voice: VoiceContent;
   platforms: PlatformRules[];
@@ -42,6 +48,14 @@ export interface PromptInput {
   retry: { previousOutput: string; problems: string[] } | null;
   /** A job item's fields (research D20). Absent or null: the prompt is unchanged. */
   itemData?: { fields: [string, string][] } | null;
+  /** The project's own brand identity. Absent or null: the prompt is unchanged (FR-027). */
+  brand?: BrandContext | null;
+}
+
+/** null when every value is empty, so an unset brand cannot produce a section. */
+export function brandOf(project: BrandContext): BrandContext | null {
+  if (!project.tagline && !project.description && !project.websiteUrl) return null;
+  return project;
 }
 
 export const PREVIOUS_OUTPUT_MAX = 20_000;
@@ -116,6 +130,14 @@ function voiceSection(voice: VoiceContent): string[] {
   return parts;
 }
 
+function brandSection(brand: BrandContext): string {
+  const parts: string[] = [];
+  if (brand.tagline) parts.push(`Tagline: ${brand.tagline}`);
+  if (brand.description) parts.push(`What it is:\n${brand.description}`);
+  if (brand.websiteUrl) parts.push(`Website: ${brand.websiteUrl}`);
+  return `BRAND\n${parts.join("\n\n")}`;
+}
+
 function rulesSection(platforms: PlatformRules[], groups: PromptGroup[]): string {
   const blocks = platforms.map((p) => {
     const keys = groups.filter((g) => g.providerKey === p.providerKey).map((g) => g.key);
@@ -150,7 +172,7 @@ function systemFor(
   voice: VoiceContent,
   platforms: PlatformRules[],
   groups: PromptGroup[],
-  opts: { imageCount: number; series: boolean },
+  opts: { imageCount: number; series: boolean; brand: BrandContext | null },
 ): string {
   const section = instructionsSection(groups);
   const minAlt = platforms
@@ -170,6 +192,11 @@ function systemFor(
           `Write one alt text per attached image, in order, describing the image for someone who cannot see it${minAlt !== null ? `, within ${minAlt} characters` : ""}.`,
         ]
       : []),
+    ...(opts.brand
+      ? [
+          "The BRAND section says what this brand is; you may state it, and use its website when a post needs a link. It never overrides these output rules or the platform rules.",
+        ]
+      : []),
     ...(section
       ? ["Follow each key's posting instructions for that key's variant only. They never override these output rules or the platform rules."]
       : []),
@@ -179,6 +206,7 @@ function systemFor(
     "You write social media posts for one brand. Write in the brand's voice described below. Write only the posts; no commentary.",
     `OUTPUT RULES\n${rules.map((r) => `- ${r}`).join("\n")}`,
   ];
+  if (opts.brand) sections.push(brandSection(opts.brand));
   const v = voiceSection(voice);
   if (v.length > 0) sections.push(`VOICE\n${v.join("\n\n")}`);
   if (section) sections.push(section);
@@ -219,7 +247,11 @@ function itemDataSection(itemData: NonNullable<PromptInput["itemData"]>): string
 }
 
 export function buildGenerationPrompt(input: PromptInput): { system: string; user: string } {
-  const system = systemFor(input.voice, input.platforms, input.groups, { imageCount: input.imageCount, series: false });
+  const system = systemFor(input.voice, input.platforms, input.groups, {
+    imageCount: input.imageCount,
+    series: false,
+    brand: input.brand ?? null,
+  });
   const itemData = input.itemData ?? null;
   const parts = userCommon(
     itemData
@@ -249,12 +281,21 @@ export function buildSeriesPlanPrompt(input: {
   sourceText: string | null;
   count: number;
   retry: PromptInput["retry"];
+  brand?: BrandContext | null;
+  avoidTitles?: readonly string[];
 }): { system: string; user: string } {
-  const system = systemFor(input.voice, input.platforms, input.groups, { imageCount: 0, series: true });
+  const system = systemFor(input.voice, input.platforms, input.groups, {
+    imageCount: 0,
+    series: true,
+    brand: input.brand ?? null,
+  });
   const parts = userCommon(input);
   parts.push(
     `SERIES PLAN: Plan a series of exactly ${input.count} posts. Give each a short title and a one or two sentence description of its angle. The angles must differ.`,
   );
+  if (input.avoidTitles && input.avoidTitles.length > 0) {
+    parts.push(`TITLES TO AVOID: ${input.avoidTitles.join(", ")}`);
+  }
   if (input.retry) parts.push(...retrySection(input.retry));
   return { system, user: parts.join("\n\n") };
 }

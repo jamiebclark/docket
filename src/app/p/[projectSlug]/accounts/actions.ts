@@ -95,6 +95,13 @@ export async function addSlotAction(
   return mutate(slug, (scope) => slots.addSlot(scope, input));
 }
 
+export async function addWeekSlotsAction(
+  slug: string,
+  input: { accountId: string; localTime: string },
+): Promise<ActionResult<slots.WeekSlotsResult>> {
+  return mutate(slug, (scope) => slots.addSlotsForWeek(scope, input));
+}
+
 export async function moveSlotAction(
   slug: string,
   input: { id: string; weekday: number; localTime: string },

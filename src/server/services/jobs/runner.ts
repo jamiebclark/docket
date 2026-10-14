@@ -11,16 +11,17 @@ import { rewindCreditProbe } from "../../dal/credit-holds";
 import type { ClaimedJobItem } from "../../dal/job-claims";
 import { forJobRunner, type ProjectScope } from "../../dal/scope";
 import type { JobItemPatch } from "../../dal/jobs";
-import { getLlm } from "../../llm";
+import { resolveLlmForProject } from "../../llm/resolve";
 import { imagesForModel } from "../../llm/images";
-import { parseLlmConfig } from "../../llm/config";
+import { parseLlmLimits } from "../../llm/config";
 import { llmFailureMessage } from "../../llm/messages";
 import type { LlmFailureKind, LlmProvider } from "../../llm/types";
 import { jobConfig, type SchedulerConfig } from "../../scheduler/config";
 import { nextRetryAt } from "../../scheduler/backoff";
-import { redact } from "../../scheduler/redact";
+import { Overran, withinBudget, logLine } from "../../scheduler/budget";
 import type { GenerationCounts } from "../../scheduler/generation";
 import { runGenerationStep, type PendingRetry } from "../generation/core";
+import { createUsageRecorder } from "../../llm/usage";
 import { applyApprovalPolicy } from "../generation/policy";
 import { saveGeneratedPost } from "../generation/save";
 import { GROUP_LIMIT, groupLimitMessage } from "../../../lib/generation/groups";
@@ -49,7 +50,6 @@ export const INTERNAL_MESSAGE = "Something went wrong while generating this post
 const TEMPORARY = new Set<ErrorKind>(["timeout", "rate_limited", "unavailable", "internal", "interrupted"]);
 const UNLEASED = { leaseOwner: null, leaseUntil: null } as const;
 
-class Overran extends Error {}
 /** The guard inside the policy transaction found the job cancelled or the lease lost. */
 class GuardLost extends Error {
   constructor(readonly why: "cancelled" | "stale") {
@@ -57,23 +57,8 @@ class GuardLost extends Error {
   }
 }
 
-function withinBudget<T>(work: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Overran()), Math.max(ms, 0));
-  });
-  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
-}
-
 function llmTimeoutMs(): number {
-  const parsed = parseLlmConfig(process.env);
-  return parsed.ok ? parsed.config.timeoutMs : 90_000;
-}
-
-function logLine(parts: string): void {
-  const parsed = parseLlmConfig(process.env);
-  const keys = parsed.ok ? [parsed.config.apiKey] : [];
-  console.log(redact(parts, keys));
+  return parseLlmLimits(process.env).timeoutMs;
 }
 
 export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerContext): Promise<void> {
@@ -84,8 +69,12 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
   let outcome = "stale";
   let scope: ProjectScope | null = null;
   let calledModel = false;
-  const sourceKey = item.externalId ? apiSourceMetaSchema.parse(job.sourceMeta).sourceKey : null;
-  const external = item.externalId && sourceKey ? { sourceKey, externalId: item.externalId } : undefined;
+  let resolvedKey: string | null = null;
+  // Derived inside the try below, not here: `apiSourceMetaSchema.parse` throws on a job whose sourceMeta
+  // is malformed, and a throw before the try skips the finally that gives a granted probe its interval
+  // back (FR-016, review F3). Nothing between here and there depends on them.
+  let sourceKey: string | null = null;
+  let external: { sourceKey: string; externalId: string } | undefined;
 
   const remaining = async () => ctx.deadline - (await clock.now()).getTime();
 
@@ -231,6 +220,8 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
   }
 
   try {
+    sourceKey = item.externalId ? apiSourceMetaSchema.parse(job.sourceMeta).sourceKey : null;
+    external = item.externalId && sourceKey ? { sourceKey, externalId: item.externalId } : undefined;
     scope = await forJobRunner(job.projectId, job.createdByUserId);
     const s = scope;
     if (claimed.kind === "finish") {
@@ -287,11 +278,28 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     const window = Math.min(llmTimeoutMs(), (await remaining()) - cfg.persistReserveMs);
     if (window < cfg.minCallMs) return await release();
 
+    let llm: LlmProvider;
+    let owner: string | undefined;
+    let source: "project" | "install" = "install";
+    if (ctx.llm) {
+      llm = ctx.llm;
+    } else {
+      const resolved = await resolveLlmForProject(job.projectId);
+      if (!resolved.ok) {
+        counts.notConfigured++;
+        return await release();
+      }
+      llm = resolved.llm;
+      owner = resolved.owner;
+      resolvedKey = resolved.apiKey;
+      source = resolved.source;
+    }
+    const recorder = createUsageRecorder({ projectId: job.projectId, purpose: "generate.job_item", source });
+
     const payload = itemPayloadSchema.safeParse(item.payload);
     const fields = payload.success ? payload.data.fields : {};
     const instructions = renderTemplate(job.template, fields, { mark: true });
     const brief = sourceFor(job.sourceKind).brief;
-    const llm = ctx.llm ?? getLlm();
     const pending = (item.pendingRetry as PendingRetry | null) ?? null;
 
     const parsedSnapshot = jobInstructionsSnapshotSchema.nullable().safeParse(job.postingInstructionsSnapshot ?? null);
@@ -305,6 +313,7 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       s,
       {
         label: "generate.job_item",
+        purpose: "generate.job_item",
         voice,
         groups,
         assets,
@@ -315,6 +324,8 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       llm,
       {
         pending,
+        owner,
+        recorder,
         retryWindowMs: async () => {
           const w = Math.min(llmTimeoutMs(), (await remaining()) - cfg.persistReserveMs);
           return w >= cfg.minCallMs ? w : null;
@@ -322,6 +333,10 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
       },
     );
     calledModel = true;
+    await recorder.flush({ generationJobId: job.id, generationJobItemId: item.id });
+    // A granted probe only becomes a probe when the model is actually called; the tick summary and the
+    // heartbeat say "probed", so they must mean that (FR-021, review F2).
+    if (claimed.probe) counts.probed = 1;
 
     if (step.ok === "retry") {
       const ok = await commit(
@@ -414,6 +429,6 @@ export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerCon
     }
   } finally {
     if (claimed.probe && !calledModel) await rewindCreditProbe(claimed.owner, await clock.now());
-    logLine(`generation_job_item job=${job.id} item=${item.id} outcome=${outcome} latency_ms=${Date.now() - t0}`);
+    logLine(`generation_job_item job=${job.id} item=${item.id} outcome=${outcome} latency_ms=${Date.now() - t0}`, resolvedKey);
   }
 }

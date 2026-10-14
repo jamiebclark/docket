@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -16,10 +17,19 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+import { generationJobItems, generationJobs } from "./jobs";
 import { posts } from "./posts";
 import { projects } from "./projects";
+import { standingSeriesRuns } from "./standing-series";
 
-export const generationMode = pgEnum("generation_mode", ["single", "series_plan", "series_post", "regenerate"]);
+export const generationMode = pgEnum("generation_mode", [
+  "single",
+  "series_plan",
+  "series_post",
+  "regenerate",
+  "standing_series_plan",
+  "standing_series_post",
+]);
 export const llmFailureKind = pgEnum("llm_failure_kind", [
   "invalid_output",
   "refused",
@@ -51,6 +61,53 @@ export const llmCreditHolds = pgTable(
   },
   (t) => [check("llm_credit_holds_owner_nonempty", sql`length(${t.owner}) > 0`)],
 );
+
+/**
+ * Project-owned, at most one row per project: an optional per-project LLM credential plus the check's
+ * lease and cooldown bookkeeping. A row may exist with all three credential columns null (FR-021).
+ * The only module that selects api_key_encrypted is src/server/dal/project-llm.ts (FR-009, FR-010).
+ */
+export const projectLlmSettings = pgTable(
+  "project_llm_settings",
+  {
+    projectId: uuid("project_id")
+      .primaryKey()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    provider: text("provider"),
+    model: text("model"),
+    apiKeyEncrypted: text("api_key_encrypted"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedByUserId: uuid("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    lastCheckAt: timestamp("last_check_at", { withTimezone: true }),
+    checkLeaseUntil: timestamp("check_lease_until", { withTimezone: true }),
+  },
+  (t) => [
+    check("project_llm_settings_provider", sql`${t.provider} IS NULL OR ${t.provider} IN ('openai','anthropic')`),
+    check(
+      "project_llm_settings_credential",
+      sql`(${t.provider} IS NULL AND ${t.model} IS NULL AND ${t.apiKeyEncrypted} IS NULL)
+        OR (${t.provider} IS NOT NULL AND ${t.model} IS NOT NULL AND ${t.apiKeyEncrypted} IS NOT NULL)`,
+    ),
+    check(
+      "project_llm_settings_model_shape",
+      sql`${t.model} IS NULL OR (length(${t.model}) BETWEEN 1 AND 200 AND ${t.model} !~ '\\s')`,
+    ),
+    check("project_llm_settings_key_nonempty", sql`${t.apiKeyEncrypted} IS NULL OR length(${t.apiKeyEncrypted}) > 0`),
+  ],
+);
+
+export const llmUsagePurpose = pgEnum("llm_usage_purpose", [
+  "generate.single",
+  "generate.series_plan",
+  "generate.series_post",
+  "generate.regenerate",
+  "generate.job_item",
+  "generate.standing_series_plan",
+  "generate.standing_series_post",
+  "voice.try",
+  "llm.check",
+  "image.generate",
+]);
 
 export const voiceProfiles = pgTable(
   "voice_profiles",
@@ -134,6 +191,8 @@ export const generationFailures = pgTable(
     mode: generationMode("mode").notNull(),
     seriesId: uuid("series_id"),
     seriesPosition: smallint("series_position"),
+    standingSeriesRunId: uuid("standing_series_run_id"),
+    standingSeriesPosition: smallint("standing_series_position"),
     postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }),
     inputs: jsonb("inputs").notNull(),
     kind: llmFailureKind("kind").notNull(),
@@ -150,8 +209,93 @@ export const generationFailures = pgTable(
       columns: [t.projectId, t.seriesId],
       foreignColumns: [generationSeries.projectId, generationSeries.id],
     }).onDelete("cascade"),
+    foreignKey({
+      name: "generation_failures_standing_series_run_fk",
+      columns: [t.projectId, t.standingSeriesRunId],
+      foreignColumns: [standingSeriesRuns.projectId, standingSeriesRuns.id],
+    }).onDelete("cascade"),
     index("generation_failures_project_created_idx").on(t.projectId, t.createdAt.desc()),
+    index("generation_failures_project_run_idx")
+      .on(t.projectId, t.standingSeriesRunId)
+      .where(sql`${t.standingSeriesRunId} IS NOT NULL`),
     check("generation_failures_series_pair", sql`(${t.seriesId} IS NULL) = (${t.seriesPosition} IS NULL)`),
+    // Phrased as the complement of the pre-standing-series modes, not as the two new values
+    // themselves: a value just added by `ALTER TYPE ... ADD VALUE` cannot be used until that
+    // transaction commits, and a from-scratch migration run applies this constraint in the same
+    // transaction that adds the value.
+    check(
+      "generation_failures_standing_mode_pair",
+      sql`(${t.mode} NOT IN ('single','series_plan','series_post','regenerate')) = (${t.standingSeriesRunId} IS NOT NULL)`,
+    ),
+    check(
+      "generation_failures_standing_position_needs_run",
+      sql`${t.standingSeriesPosition} IS NULL OR ${t.standingSeriesRunId} IS NOT NULL`,
+    ),
+  ],
+);
+
+/**
+ * Project-owned, insert-only ledger: one row per model call that reached the provider and returned.
+ * No prompt, output, provider error text or key fragment ever lands here (FR-004). Written only
+ * through src/server/dal/llm-usage.ts, which exposes no update and no delete.
+ */
+export const llmCallUsage = pgTable(
+  "llm_call_usage",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    purpose: llmUsagePurpose("purpose").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    credentialSource: text("credential_source").notNull(),
+    ok: boolean("ok").notNull(),
+    failureKind: llmFailureKind("failure_kind"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    latencyMs: integer("latency_ms").notNull(),
+    calledAt: timestamp("called_at", { withTimezone: true }).notNull(),
+    postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }),
+    seriesId: uuid("series_id"),
+    seriesPosition: smallint("series_position"),
+    generationJobId: uuid("generation_job_id"),
+    generationJobItemId: uuid("generation_job_item_id"),
+  },
+  (t) => [
+    foreignKey({
+      name: "llm_call_usage_series_fk",
+      columns: [t.projectId, t.seriesId],
+      foreignColumns: [generationSeries.projectId, generationSeries.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "llm_call_usage_job_fk",
+      columns: [t.projectId, t.generationJobId],
+      foreignColumns: [generationJobs.projectId, generationJobs.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "llm_call_usage_job_item_fk",
+      columns: [t.projectId, t.generationJobItemId],
+      foreignColumns: [generationJobItems.projectId, generationJobItems.id],
+    }).onDelete("cascade"),
+    index("llm_call_usage_project_called_idx").on(t.projectId, t.calledAt.desc()),
+    index("llm_call_usage_project_job_idx")
+      .on(t.projectId, t.generationJobId)
+      .where(sql`${t.generationJobId} IS NOT NULL`),
+    check("llm_call_usage_outcome", sql`${t.ok} = (${t.failureKind} IS NULL)`),
+    check("llm_call_usage_series_pair", sql`(${t.seriesId} IS NULL) = (${t.seriesPosition} IS NULL)`),
+    check(
+      "llm_call_usage_tokens_nonneg",
+      sql`(${t.inputTokens} IS NULL OR ${t.inputTokens} >= 0) AND (${t.outputTokens} IS NULL OR ${t.outputTokens} >= 0)`,
+    ),
+    check("llm_call_usage_latency_nonneg", sql`${t.latencyMs} >= 0`),
+    check("llm_call_usage_provider", sql`${t.provider} IN ('openai','anthropic')`),
+    check("llm_call_usage_source", sql`${t.credentialSource} IN ('project','install')`),
+    check("llm_call_usage_model_shape", sql`length(${t.model}) BETWEEN 1 AND 200 AND ${t.model} !~ '\\s'`),
+    check(
+      "llm_call_usage_job_pair",
+      sql`${t.generationJobItemId} IS NULL OR ${t.generationJobId} IS NOT NULL`,
+    ),
   ],
 );
 
@@ -159,3 +303,5 @@ export type VoiceProfileRow = typeof voiceProfiles.$inferSelect;
 export type VoiceProfileVersionRow = typeof voiceProfileVersions.$inferSelect;
 export type GenerationSeriesRow = typeof generationSeries.$inferSelect;
 export type GenerationFailureRow = typeof generationFailures.$inferSelect;
+export type ProjectLlmSettingsRow = typeof projectLlmSettings.$inferSelect;
+export type LlmCallUsageRow = typeof llmCallUsage.$inferSelect;

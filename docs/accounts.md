@@ -74,6 +74,10 @@ admins can:
 
 - **Click or tap an empty spot** in a column to add a slot there, or use that column's **Add slot** button
   to add one at the next free half-hour from 09:00.
+- **Add a time to every day** with the control above the grid: pick a time and it is added to all seven
+  weekdays at once. Days that already have that time are left exactly as they are — including paused ones,
+  which stay paused — and the grid says which days it added and which already had it. Doing it twice
+  changes nothing the second time.
 - **Drag a slot** to a new day or time, or open its **Move** control for a day-and-time dialog.
 - **Click a slot** to pause or resume it; a paused slot is skipped by "Add to queue".
 - **Delete a slot** with its Delete control — one click, no confirmation, since a slot holds no content and is one

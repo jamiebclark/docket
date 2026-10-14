@@ -53,14 +53,25 @@ import { GET as health } from "../../../src/app/api/health/route";
 import { POST as tickPost } from "../../../src/app/api/internal/tick/route";
 import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
 import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
-import { connectAttempts, installState, membershipAuditLog, session as sessionTable, user } from "../../../src/server/db/schema";
+import { connectAttempts, installState, llmCallUsage, membershipAuditLog, projectLlmSettings, session as sessionTable, user } from "../../../src/server/db/schema";
 import { publishAttempts } from "../../../src/server/db/schema/attempts";
 import { postTargets } from "../../../src/server/db/schema/posts";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
 import { createAnthropicProvider } from "../../../src/server/llm/anthropic";
 import { createOpenAiProvider } from "../../../src/server/llm/openai";
 import type { LlmConfig } from "../../../src/server/llm/config";
-import { setLlmForTests } from "../../../src/server/llm";
+import { setLlmForTests, setLlmFactoryForTests } from "../../../src/server/llm";
+import { createStandingSeries } from "../../../src/server/services/standing-series/manage";
+import StandingSeriesDetailPage from "../../../src/app/p/[projectSlug]/jobs/series/[seriesId]/page";
+import ModelPage from "../../../src/app/p/[projectSlug]/settings/model/page";
+import UsagePage from "../../../src/app/p/[projectSlug]/settings/usage/page";
+import MediaPage from "../../../src/app/p/[projectSlug]/media/page";
+import { saveProjectModel, removeProjectModel, checkProjectModel } from "../../../src/app/p/[projectSlug]/settings/model/actions";
+import { generateImage } from "../../../src/server/services/media-generate";
+import { setImageProviderForTests } from "../../../src/server/llm/image-provider";
+import { createFakeImageProvider } from "../../helpers/fake-image";
+import { png } from "../../helpers/images";
+import { NotFoundSignal } from "../../helpers/actions";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
 import * as connect from "../../../src/server/services/connect";
@@ -78,9 +89,10 @@ import { closeDb, testDb } from "../../helpers/db";
 import { addMember } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { createFakeLlmFetch } from "../../helpers/fake-llm-http";
+import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
-import { clearHolds, jobsEnv } from "../../helpers/jobs-env";
+import { clearHolds, clearProjectCredentials, jobsEnv, modelOk } from "../../helpers/jobs-env";
+import { atTime } from "../../helpers/clock";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { eventsFor } from "../../helpers/activity";
@@ -96,10 +108,15 @@ import { getMailer, setMailerForTests } from "../../../src/server/mail";
 import { recordingMailer } from "../../helpers/mailer";
 
 afterAll(async () => {
+  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
+  await clearProjectCredentials();
   setStorageForTests(undefined);
   await closeDb();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  setImageProviderForTests(null);
+});
 beforeAll(() => setStorageForTests(createMemoryStorage()));
 
 // ---- the scanner ---------------------------------------------------------------------------------------------
@@ -434,6 +451,112 @@ describe("secret scan (FR-020, SC-005)", () => {
       text: JSON.stringify(await generateSingle(genEnv.scope, genSingleInput(), openAiLlm)),
     });
 
+    // Per-project LLM credential (L32): set, changed and removed through the real server actions; the
+    // settings page rendered for owner, admin and editor; a check; and a tick that generates on it, with
+    // the provider's billing refusal embedding the then-current key.
+    const PROJECT_LLM_KEY = "sk-scan-project-llm-initial-7c9e2b4d6f810395a7c1";
+    const PROJECT_LLM_KEY_2 = "sk-scan-project-llm-changed-3b5d7f901a2c4e6809d3";
+    const sessionBeforeLlm = session.current;
+    const asUser = (u: { id: string }) => {
+      session.current = { user: { id: u.id }, session: { id: `scan-llm-session-${u.id}` } };
+    };
+    const modelForm = (fields: Record<string, string> = {}) => {
+      const fd = new FormData();
+      fd.set("slug", genEnv.project.slug);
+      for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+      return fd;
+    };
+
+    asUser(genEnv.owner);
+    pieces.push({ place: "action result: save project llm", text: JSON.stringify(await saveProjectModel(null, modelForm({ provider: "openai", model: "scan-model", apiKey: PROJECT_LLM_KEY }))) });
+    pieces.push({ place: "action result: change project llm", text: JSON.stringify(await saveProjectModel(null, modelForm({ provider: "openai", model: "scan-model-2", apiKey: PROJECT_LLM_KEY_2 }))) });
+
+    const openAiCheckOk: FakeLlmResponse = {
+      status: 200,
+      json: {
+        id: "r",
+        object: "response",
+        created_at: 1,
+        model: "m",
+        status: "completed",
+        error: null,
+        incomplete_details: null,
+        output: [{ type: "message", id: "m", role: "assistant", status: "completed", content: [{ type: "output_text", text: JSON.stringify({ text: "Welcome to the bakery's spring opening!" }), annotations: [] }] }],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      },
+    };
+    const projectLlmFetch = createFakeLlmFetch([
+      openAiCheckOk,
+      { status: 429, json: { error: { message: `You exceeded your current quota, please check your plan and billing details. (${PROJECT_LLM_KEY_2})`, type: "insufficient_quota", code: "insufficient_quota", param: null } } },
+    ]);
+    setLlmFactoryForTests((config) => createOpenAiProvider(config, { fetch: projectLlmFetch, maxRetries: 0 }));
+
+    const renderModelPage = async (u: { id: string }) => {
+      asUser(u);
+      return renderToStaticMarkup((await ModelPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }) })) as never);
+    };
+    pieces.push({ place: "page: model (owner)", text: await renderModelPage(genEnv.owner) });
+    pieces.push({ place: "page: model (admin)", text: await renderModelPage(genEnv.admin) });
+    try {
+      await renderModelPage(genEnv.editor);
+      throw new Error("expected the editor's model page to 404");
+    } catch (error) {
+      if (!(error instanceof NotFoundSignal)) throw error;
+    }
+
+    asUser(genEnv.owner);
+    pieces.push({ place: "action result: check project llm", text: JSON.stringify(await checkProjectModel(null, modelForm())) });
+
+    await genEnv.asset();
+    const { jobId: projectLlmJobId } = await createJob(genEnv.scope, genEnv.input());
+    await runTick({ config: { jobMaxItems: 5 } });
+    pieces.push({
+      place: "page: job detail (project llm refusal)",
+      text: renderToStaticMarkup((await JobPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, jobId: projectLlmJobId }), searchParams: Promise.resolve({}) })) as never),
+    });
+
+    setLlmFactoryForTests(null);
+    await clearHolds();
+    asUser(genEnv.owner);
+    pieces.push({ place: "action result: remove project llm", text: JSON.stringify(await removeProjectModel(null, modelForm())) });
+    session.current = sessionBeforeLlm;
+
+    const projectLlmSecrets: Secret[] = [
+      { name: "project llm key (initial)", value: PROJECT_LLM_KEY },
+      { name: "project llm key (changed)", value: PROJECT_LLM_KEY_2 },
+    ];
+
+    // A completed job on the install's own credential, so the job page carries real token totals (FR-028)
+    // and the Usage page below has a non-empty report to render.
+    await genEnv.asset();
+    setLlmForTests(createFakeLlm([modelOk("Scan success post.")]));
+    const { jobId: usageJobId } = await createJob(genEnv.scope, genEnv.input());
+    await runTick({ config: { jobMaxItems: 5 } });
+    setLlmForTests(null);
+    const sessionBeforeUsage = session.current;
+    session.current = { user: { id: genEnv.owner.id }, session: { id: "scan-usage-job-session" } };
+    pieces.push({
+      place: "page: job detail (real usage)",
+      text: renderToStaticMarkup((await JobPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, jobId: usageJobId }), searchParams: Promise.resolve({}) })) as never),
+    });
+    session.current = sessionBeforeUsage;
+
+    // The Usage page (FR-026, SC-010): owner and admin see it; the editor gets the same not-found as
+    // any page they may not manage.
+    const renderUsagePage = async (u: { id: string }) => {
+      session.current = { user: { id: u.id }, session: { id: `scan-usage-session-${u.id}` } };
+      return UsagePage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) });
+    };
+    pieces.push({ place: "page: usage (owner)", text: renderToStaticMarkup((await renderUsagePage(genEnv.owner)) as never) });
+    pieces.push({ place: "page: usage (admin)", text: renderToStaticMarkup((await renderUsagePage(genEnv.admin)) as never) });
+    try {
+      await renderUsagePage(genEnv.editor);
+      throw new Error("expected the editor's usage page to 404");
+    } catch (error) {
+      if (!(error instanceof NotFoundSignal)) throw error;
+    }
+    session.current = sessionBeforeUsage;
+
     await genEnv.asset();
     setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
     const { jobId: heldJobId } = await createJob(genEnv.scope, genEnv.input());
@@ -446,10 +569,98 @@ describe("secret scan (FR-020, SC-005)", () => {
     session.current = sessionBefore;
     await clearHolds();
 
+    // Image generation (T038, quickstart.md §8): one image through a fake provider, then the Media
+    // page rendered for owner, admin and editor — no fake key, SDK error text or raw provider
+    // payload may appear anywhere.
+    setImageProviderForTests(createFakeImageProvider([{ bytes: await png(256, 256) }]));
+    asUser(genEnv.owner);
+    const imageResult = await generateImage(genEnv.scope, { prompt: "a cat on a roof", aspect: "square" });
+    expect(imageResult.ok).toBe(true);
+    pieces.push({ place: "service result: generate image", text: JSON.stringify(imageResult) });
+    setImageProviderForTests(null);
+
+    const renderMediaPage = async (u: { id: string }) => {
+      asUser(u);
+      return renderToStaticMarkup(
+        (await MediaPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) })) as never,
+      );
+    };
+    pieces.push({ place: "page: media (owner)", text: await renderMediaPage(genEnv.owner) });
+    pieces.push({ place: "page: media (admin)", text: await renderMediaPage(genEnv.admin) });
+    pieces.push({ place: "page: media (editor)", text: await renderMediaPage(genEnv.editor) });
+    session.current = sessionBeforeLlm;
+
+    // Standing series (T070): a pool series and a generate series, ticked through the worker (whose own
+    // log lines are already in `pieces` via the console spy), then /jobs and the series detail page
+    // rendered for all three roles.
+    const seriesCreatedAt = new Date("2026-01-10T00:00:00.000Z");
+    const seriesFiringAt = new Date("2026-01-11T00:00:01.000Z");
+    const seriesInput = (over: Record<string, unknown> = {}) => ({
+      name: `Scan series ${randomUUID().slice(0, 8)}`,
+      brief: "Brief.",
+      template: "Write a short post.",
+      voiceProfileId: genEnv.profile.id,
+      targetAccountIds: [genEnv.account.id],
+      cadence: { count: 1, period: "day" as const },
+      approval: null,
+      scheduling: null,
+      confirmUnreviewedQueue: false,
+      ...over,
+    });
+    const { seriesId: poolSeriesId } = await atTime(seriesCreatedAt, () =>
+      createStandingSeries(genEnv.scope, seriesInput({ media: { source: "pool" } })),
+    );
+    const poolAssetKey = `projects/${genEnv.project.id}/media/${randomUUID()}/original.png`;
+    const poolAssetBytes = await png(64, 64);
+    await genEnv.storage.put(poolAssetKey, poolAssetBytes, "image/png");
+    await genEnv.scope.media.insert({
+      storageKey: poolAssetKey,
+      publicUrl: genEnv.storage.publicUrl(poolAssetKey),
+      mimeType: "image/png",
+      byteSize: poolAssetBytes.length,
+      width: 64,
+      height: 64,
+      altText: "Pool photo",
+      tags: [],
+    });
+
+    setImageProviderForTests(createFakeImageProvider([{ bytes: await png(64, 64) }]));
+    const { seriesId: generateSeriesId } = await atTime(seriesCreatedAt, () =>
+      createStandingSeries(genEnv.scope, seriesInput({ media: { source: "generate", prompt: "A cool picture" } })),
+    );
+
+    setLlmForTests(createFakeLlm([modelOk("Scan pool post.", 1), modelOk("Scan generate post.", 1)]));
+    await atTime(seriesFiringAt, () => runTick({ config: {} }));
+    setLlmForTests(null);
+    setImageProviderForTests(null);
+
+    const renderSeriesDetail = async (u: { id: string }, seriesId: string) => {
+      asUser(u);
+      return renderToStaticMarkup(
+        (await StandingSeriesDetailPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, seriesId }) })) as never,
+      );
+    };
+    const renderJobsPage = async (u: { id: string }) => {
+      asUser(u);
+      return renderToStaticMarkup(await JobsPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) }));
+    };
+    for (const seriesId of [poolSeriesId, generateSeriesId]) {
+      for (const [role, u] of [["owner", genEnv.owner], ["admin", genEnv.admin], ["editor", genEnv.editor]] as const) {
+        pieces.push({ place: `page: standing series detail (${seriesId === poolSeriesId ? "pool" : "generate"}, ${role})`, text: await renderSeriesDetail(u, seriesId) });
+      }
+    }
+    for (const [role, u] of [["owner", genEnv.owner], ["admin", genEnv.admin], ["editor", genEnv.editor]] as const) {
+      pieces.push({ place: `page: jobs with standing series (${role})`, text: await renderJobsPage(u) });
+    }
+    session.current = sessionBeforeLlm;
+
     // Stored rows.
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });
     pieces.push({ place: "post_targets", text: JSON.stringify(await db.select().from(postTargets).where(eq(postTargets.projectId, env.project.id))) });
     pieces.push({ place: "membership_audit_log", text: JSON.stringify(await db.select().from(membershipAuditLog).where(eq(membershipAuditLog.projectId, env.project.id))) });
+    pieces.push({ place: "membership_audit_log (project llm)", text: JSON.stringify(await db.select().from(membershipAuditLog).where(eq(membershipAuditLog.projectId, genEnv.project.id))) });
+    pieces.push({ place: "project_llm_settings", text: JSON.stringify(await db.select().from(projectLlmSettings).where(eq(projectLlmSettings.projectId, genEnv.project.id))) });
+    pieces.push({ place: "llm_call_usage", text: JSON.stringify(await db.select().from(llmCallUsage).where(eq(llmCallUsage.projectId, genEnv.project.id))) });
     pieces.push({ place: "connect_attempts", text: JSON.stringify(await db.select().from(connectAttempts).where(eq(connectAttempts.projectId, env.project.id))) });
     const accountRows = await db.select().from(socialAccounts).where(eq(socialAccounts.projectId, env.project.id));
     pieces.push({ place: "social_accounts", text: JSON.stringify(accountRows.map((r) => ({ ...r, credentialsEncrypted: undefined }))) });
@@ -463,6 +674,7 @@ describe("secret scan (FR-020, SC-005)", () => {
       ...[ACCESS, REFRESH, NEW_ACCESS, NEW_REFRESH].map((value, i) => ({ name: `bluesky token ${i + 1}`, value })),
       { name: "setup password", value: SETUP_PASSWORD },
       { name: "session token", value: sessionToken },
+      ...projectLlmSecrets,
     ];
     // Something was captured from every kind of place, so an empty corpus cannot pass.
     expect(new Set(pieces.map((p) => p.place.split(":")[0])).size).toBeGreaterThan(6);

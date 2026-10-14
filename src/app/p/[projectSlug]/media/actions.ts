@@ -2,7 +2,9 @@
 
 import { refresh } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
+import type { ImageAspect, ImageGenerationResult } from "@/server/llm/image-generation";
 import * as media from "@/server/services/media";
+import { generateImage } from "@/server/services/media-generate";
 import { runAction } from "../run-action";
 
 export async function updateMediaAction(
@@ -27,6 +29,15 @@ export async function deleteMediaImpactAction(
 export async function deleteMediaAction(slug: string, input: { id: string }): Promise<ActionResult<{ affected: media.PostRef[] }>> {
   const result = await runAction(slug, (scope) => media.deleteMedia(scope, input?.id));
   if (result.ok) refresh();
+  return result;
+}
+
+export async function generateImageAction(
+  slug: string,
+  input: { prompt: string; aspect?: ImageAspect },
+): Promise<ActionResult<ImageGenerationResult>> {
+  const result = await runAction(slug, (scope) => generateImage(scope, input));
+  if (result.ok && result.data.ok) refresh();
   return result;
 }
 

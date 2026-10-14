@@ -17,6 +17,9 @@ export function getStorage(): Storage | null {
   return cached;
 }
 
+/** The one sentence for "there is nowhere to put this" (G26, FR-029). */
+export const MEDIA_STORAGE_NOT_SET_UP = "Media storage is not set up.";
+
 export function requireStorage(): Storage {
   const storage = getStorage();
   if (!storage) throw new StorageUnavailableError();

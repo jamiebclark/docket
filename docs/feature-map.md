@@ -56,6 +56,34 @@ spec is written.
   explanations. Verified with mocks only until the live checks in `docs/meta-setup.md` are done. Not yet owned by any spec:
   resumable or byte upload for Threads, a cover or thumbnail for Threads video, posts of more than 10 items, API video upload
   and generator video.
+- **A time booked across the whole week.** An "Add a time to every day" form above each account's slot grid books one
+  posting time on all seven weekdays in one action, skipping days that already have it (paused ones included, which stay
+  paused) and reporting which days it added. Idempotent, and safe when two people do it at once — the insert is
+  `ON CONFLICT DO NOTHING`, so each caller gets the days it won and neither sees a conflict error. Not yet owned by any
+  spec: clearing a time from the whole week, copying one day's slots to the others, a gutter of clickable half-hour rows
+  down the left of the grid, and the same bulk add through the public API.
+
+## Scheduling and composing (not built)
+
+### One idea, one image, several projects
+
+Generation is scoped to a single project and a single voice profile. `generateSingle`
+(`src/server/services/generation/single.ts`) takes one `voiceProfileId` and a list of `targetAccountIds`; the system
+prompt opens "You write social media posts for one brand" (`src/server/services/generation/prompt.ts`); accounts,
+media, posts and API keys all carry a `projectId` that the scope harness enforces
+(`src/server/db/project-owned.ts`). Within one project this already does the full job: a brief plus images plus a set
+of accounts produces one variant per platform, split further per group of accounts that share posting instructions,
+in that project's voice, and `auto_approve` + `add_to_queue` sends it without a review stop.
+
+What is missing is the step above: writing one idea once and having every project say it in its own voice. It would
+need a composer outside `/p/[projectSlug]`, a picker over the accounts of every project the user is a member of, the
+image uploaded into each project's media library (or media made shareable across projects), one generation call per
+project (each with that project's default voice profile), and a result screen that reports per-project outcomes
+independently — one project's model failure or unconnected account must not sink the others. Per-project policy still
+decides whether each result queues or waits for review.
+
+Until then the same effect is available from outside: `POST /v1/media/from-url` then `POST /v1/generate` per project,
+with one API key per project, which is what an n8n or script fan-out would do (`docs/n8n.md`).
 
 ## Video (other platforms not built)
 

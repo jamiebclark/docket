@@ -17,7 +17,9 @@ describe("runLoop", () => {
       log: (l) => lines.push(l),
     });
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^Docket scheduler: tick \d+ms published=2 failed=1 ambiguous=0 deferred=3 generated=0 gen_failed=0$/);
+    expect(lines[0]).toMatch(
+      /^Docket scheduler: tick \d+ms published=2 failed=1 ambiguous=0 deferred=3 generated=0 gen_failed=0 series_produced=0 series_skipped=0 series_failed=0$/,
+    );
   });
 
   it("lets a tick finish when aborted during it", async () => {

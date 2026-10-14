@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { generationJobItems, generationJobs, posts } from "../db/schema";
-import { credentialOwnerFor, jobsExcludingProjects } from "./credential-owners";
+import { credentialOwnerFor, jobsExcludingProjects, resolveBlockedProjectIds } from "./credential-owners";
 import { gateCreditHolds, rewindCreditProbe } from "./credit-holds";
 import { createWebhooksRepo } from "./webhooks";
 import { refreshJobStatus } from "../services/jobs/status";
@@ -39,26 +39,6 @@ export interface ClaimResult {
 export const INTERRUPTED_MESSAGE = "Generation was interrupted too many times.";
 
 /**
- * Resolves `owners` to the project ids of their currently active (`queued`/`running`) jobs, by asking
- * `credentialOwnerFor` about each candidate project — a genuine per-owner lookup rather than an
- * all-or-nothing guess (SC-010). Entry 2 still only has to change `credentialOwnerFor`'s body: this keeps
- * working against whatever it answers.
- */
-async function resolveBlockedProjectIds(exec: Database, owners: readonly string[]): Promise<string[]> {
-  if (owners.length === 0) return [];
-  const blocked = new Set(owners);
-  const rows = await exec
-    .selectDistinct({ projectId: generationJobs.projectId })
-    .from(generationJobs)
-    .where(inArray(generationJobs.status, ["queued", "running"]));
-  const ids: string[] = [];
-  for (const { projectId } of rows) {
-    if (blocked.has(await credentialOwnerFor(projectId))) ids.push(projectId);
-  }
-  return ids;
-}
-
-/**
  * Claims due job items (research D4): lock up to `limit` jobs that have a due item (`SKIP LOCKED`, least recently
  * served first), lock their due items in position order, interleave the jobs round-robin, keep `limit`, and apply
  * the claim decision to each. One transaction; never waits.
@@ -77,7 +57,13 @@ export function claimDueJobItems(opts: {
       const { held, probing } = await gateCreditHolds(exec, now);
       const probingSet = new Set(probing);
       const blocked = held.filter((o) => !probingSet.has(o));
-      const blockedProjects = await resolveBlockedProjectIds(exec, blocked);
+      const candidateProjectIds = (
+        await exec
+          .selectDistinct({ projectId: generationJobs.projectId })
+          .from(generationJobs)
+          .where(inArray(generationJobs.status, ["queued", "running"]))
+      ).map((r) => r.projectId);
+      const blockedProjects = await resolveBlockedProjectIds(exec, blocked, candidateProjectIds);
 
       const queuedDue = and(eq(generationJobItems.status, "queued"), lte(generationJobItems.nextAttemptAt, now));
       const itemDue = or(queuedDue, and(eq(generationJobItems.status, "running"), lte(generationJobItems.leaseUntil, now)));
@@ -88,7 +74,7 @@ export function claimDueJobItems(opts: {
           and(
             inArray(generationJobs.status, ["queued", "running"]),
             sql`EXISTS (SELECT 1 FROM "generation_job_items" "i" WHERE "i"."project_id" = ${generationJobs.projectId} AND "i"."job_id" = ${generationJobs.id} AND (("i"."status" = 'queued' AND "i"."next_attempt_at" <= ${now}) OR ("i"."status" = 'running' AND "i"."lease_until" <= ${now})))`,
-            jobsExcludingProjects(blockedProjects),
+            jobsExcludingProjects(blockedProjects.ids, blockedProjects.allBlocked),
           ),
         )
         .orderBy(sql`${generationJobs.lastClaimedAt} ASC NULLS FIRST`, asc(generationJobs.createdAt), asc(generationJobs.id))

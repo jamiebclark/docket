@@ -1,15 +1,19 @@
 import { z } from "zod";
 import {
   approvalPolicySchema,
+  brandDescriptionSchema,
+  brandWebsiteSchema,
   CONFIRM_UNREVIEWED_QUEUE_MESSAGE,
   projectNameSchema,
   schedulingPolicySchema,
   slugSchema,
+  taglineSchema,
   timeZoneSchema,
 } from "@/lib/validation";
 import { createProject, getProject, listMyProjects } from "../dal/projects";
 import type { ProjectScope, SessionLike } from "../dal/scope";
 import { ForbiddenError, NotFoundError } from "../dal/errors";
+import { recordAudit } from "./audit";
 
 export const createProjectSchema = z.object({
   name: projectNameSchema,
@@ -38,21 +42,43 @@ export const updateSettingsSchema = createProjectSchema.extend({
   defaultApprovalPolicy: approvalPolicySchema,
   defaultSchedulingPolicy: schedulingPolicySchema,
   confirmUnreviewedQueue: z.boolean().default(false),
+  tagline: taglineSchema.optional(),
+  description: brandDescriptionSchema.optional(),
+  websiteUrl: brandWebsiteSchema.optional(),
 });
+
+const BRAND_FIELDS = ["tagline", "description", "websiteUrl"] as const;
 
 /** Owner/admin only. Throws ZodError, ForbiddenError, or ConflictError (field `slug`). */
 export async function updateSettings(scope: ProjectScope, input: unknown): Promise<{ slug: string }> {
   if (!scope.can({ project: ["update"] })) throw new ForbiddenError();
-  const { confirmUnreviewedQueue, ...patch } = updateSettingsSchema.parse(input);
-  if (patch.defaultApprovalPolicy === "auto_approve" && patch.defaultSchedulingPolicy === "add_to_queue" && !confirmUnreviewedQueue) {
+  const { confirmUnreviewedQueue, ...parsed } = updateSettingsSchema.parse(input);
+  if (parsed.defaultApprovalPolicy === "auto_approve" && parsed.defaultSchedulingPolicy === "add_to_queue" && !confirmUnreviewedQueue) {
     throw new z.ZodError([
       { code: "custom", path: ["confirmUnreviewedQueue"], message: CONFIRM_UNREVIEWED_QUEUE_MESSAGE, input: undefined },
     ]);
   }
+  // A key submitted as an explicit `undefined` still survives `.optional()`'s parse, so `in` is not a
+  // safe test for "the caller meant to change this" — only a defined value belongs in the patch.
+  const patch = { ...parsed };
+  for (const field of BRAND_FIELDS) {
+    if (patch[field] === undefined) delete patch[field];
+  }
   const project = await scope.transaction(
-    (tx) => {
+    async (tx) => {
       if (!tx.can({ project: ["update"] })) throw new ForbiddenError();
-      return tx.projects.update(patch);
+      const before = await tx.projects.get();
+      const updated = await tx.projects.update(patch);
+      for (const field of BRAND_FIELDS) {
+        if (field in patch && before && patch[field] !== before[field]) {
+          await recordAudit(tx, {
+            action: "project_brand_update",
+            actorUserId: tx.membership.userId || null,
+            details: { field, previous: before[field], next: patch[field] },
+          });
+        }
+      }
+      return updated;
     },
     { lockProject: true },
   );

@@ -13,7 +13,8 @@ describe("validateConfiguration", () => {
     const r = validateConfiguration(GOOD);
     expect(r.ok).toBe(true);
     expect(r.disabled.some((l) => /media storage/.test(l))).toBe(true);
-    expect(r.disabled.some((l) => /generation/.test(l))).toBe(true);
+    expect(r.disabled.some((l) => /^generation is off/.test(l))).toBe(true);
+    expect(r.disabled.some((l) => /^image generation is off/.test(l))).toBe(true);
     expect(r.disabled.some((l) => /TICK_SECRET/.test(l))).toBe(true);
   });
 
@@ -43,12 +44,39 @@ describe("validateConfiguration", () => {
   it("treats a wholly absent optional group as disabled, not an error", () => {
     const r = validateConfiguration({ ...GOOD, LLM_PROVIDER: "", LLM_MODEL: "" });
     expect(r.ok).toBe(true);
-    expect(r.disabled.filter((l) => /generation/.test(l))).toHaveLength(1);
+    expect(r.disabled.filter((l) => /^generation is off/.test(l))).toHaveLength(1);
   });
 
   it("accepts a complete generator group", () => {
     const r = validateConfiguration({ ...GOOD, LLM_PROVIDER: "openai", LLM_MODEL: "m", OPENAI_API_KEY: "k" });
     expect(r.ok).toBe(true);
-    expect(r.disabled.some((l) => /generation/.test(l))).toBe(false);
+    expect(r.disabled.some((l) => /^generation is off/.test(l))).toBe(false);
+  });
+
+  it("treats a wholly absent image group as disabled, not an error", () => {
+    const r = validateConfiguration({ ...GOOD, LLM_PROVIDER: "openai", LLM_MODEL: "m", OPENAI_API_KEY: "k" });
+    expect(r.ok).toBe(true);
+    expect(r.disabled.filter((l) => /^image generation is off/.test(l))).toHaveLength(1);
+  });
+
+  it("accepts a complete image generator group", () => {
+    const r = validateConfiguration({
+      ...GOOD,
+      LLM_PROVIDER: "openai",
+      LLM_MODEL: "m",
+      LLM_IMAGE_PROVIDER: "openai",
+      LLM_IMAGE_MODEL: "gpt-image-1",
+      OPENAI_API_KEY: "k",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.disabled.some((l) => /^image generation is off/.test(l))).toBe(false);
+  });
+
+  it("flags a half-configured image group as an issue, not a warning", () => {
+    const r = validateConfiguration({ ...GOOD, LLM_IMAGE_PROVIDER: "openai" });
+    expect(r.ok).toBe(false);
+    expect(r.issues.map((i) => i.name)).toEqual(
+      expect.arrayContaining(["LLM_IMAGE_MODEL", "OPENAI_API_KEY"]),
+    );
   });
 });

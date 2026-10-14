@@ -7,12 +7,14 @@ export const statements = {
   audit: ["view"],
   account: ["view", "manage"],
   slot: ["view", "manage"],
-  media: ["view", "edit"],
+  media: ["view", "edit", "generate"],
   post: ["view", "edit", "schedule", "delete"],
   voice: ["view", "manage"],
   generation: ["run", "auto_approve"],
   api_key: ["manage"],
   webhook: ["manage"],
+  llm_credential: ["manage"],
+  standing_series: ["manage"],
 } as const;
 
 export const ac = createAccessControl(statements);
@@ -24,12 +26,14 @@ export const owner = ac.newRole({
   audit: ["view"],
   account: ["view", "manage"],
   slot: ["view", "manage"],
-  media: ["view", "edit"],
+  media: ["view", "edit", "generate"],
   post: ["view", "edit", "schedule", "delete"],
   voice: ["view", "manage"],
   generation: ["run", "auto_approve"],
   api_key: ["manage"],
   webhook: ["manage"],
+  llm_credential: ["manage"],
+  standing_series: ["manage"],
 });
 
 export const admin = ac.newRole({
@@ -39,12 +43,14 @@ export const admin = ac.newRole({
   audit: ["view"],
   account: ["view", "manage"],
   slot: ["view", "manage"],
-  media: ["view", "edit"],
+  media: ["view", "edit", "generate"],
   post: ["view", "edit", "schedule", "delete"],
   voice: ["view", "manage"],
   generation: ["run", "auto_approve"],
   api_key: ["manage"],
   webhook: ["manage"],
+  llm_credential: ["manage"],
+  standing_series: ["manage"],
 });
 
 export const editor = ac.newRole({

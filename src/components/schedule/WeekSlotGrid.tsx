@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { announcedText, useAnnounce } from "@/components/ui/Announce";
 import { Button } from "@/components/ui/Button";
+import { cardStyles } from "@/components/ui/Card";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
@@ -17,6 +18,7 @@ import {
   announceRefused,
   announceResumed,
   announceRetimed,
+  announceWeekAdded,
   applyOverrides,
   clearResolved,
   conflictAt,
@@ -26,9 +28,13 @@ import {
   isNoOpMove,
   nextFreeTime,
   slotsByWeekday,
+  STEP_MINUTES,
   timeAtPosition,
   topPercentOf,
+  WEEK_ALREADY_SET,
   WEEKDAY_NAMES,
+  WEEKDAYS,
+  weekdaysMissingAt,
   type Addition,
   type GridSlot,
   type GridSlotState,
@@ -42,6 +48,15 @@ import {
  * — the created slot's `id`, so focus can land on the real chip rather than the optimistic one.
  */
 export type SlotActionOutcome = { ok: true; id?: string } | { ok: false; message: string };
+
+/**
+ * A week add's outcome. `added` and `alreadySet` come back from the server because it is the only party
+ * that knows how the write actually landed — a day can be taken by a concurrent add between the grid
+ * deciding what is missing and the insert running.
+ */
+export type WeekAddOutcome =
+  | { ok: true; added: Weekday[]; alreadySet: Weekday[] }
+  | { ok: false; message: string };
 
 export interface WeekSlotGridProps {
   /** One account's slots. `localTime` may be `HH:MM` or `HH:MM:SS`; both normalise to `HH:MM`. */
@@ -59,6 +74,11 @@ export interface WeekSlotGridProps {
 
   /** Resolve with the created slot's `id` so focus can follow it; without one, focus falls to the add button. */
   onAdd(input: { weekday: Weekday; localTime: string }): Promise<SlotActionOutcome>;
+  /**
+   * Puts one time on every weekday that lacks it. Without this the grid renders no week control, so a
+   * caller that has no bulk endpoint keeps the one-at-a-time grid unchanged.
+   */
+  onAddWeek?(input: { localTime: string }): Promise<WeekAddOutcome>;
   onMove(input: MoveIntent): Promise<SlotActionOutcome>;
   onToggle(input: { id: string; paused: boolean }): Promise<SlotActionOutcome>;
   onDelete(input: { id: string }): Promise<SlotActionOutcome>;
@@ -103,11 +123,14 @@ export function WeekSlotGrid({
   emptyMessage,
   addButtonId,
   onAdd,
+  onAddWeek,
   onMove,
   onToggle,
   onDelete,
 }: WeekSlotGridProps) {
   const announceCtx = useAnnounce();
+  const uid = useId();
+  const weekFieldId = `${uid}-week-time`;
   const [localMessage, setLocalMessage] = useState("");
   const localCount = useRef(0);
   const [error, setError] = useState("");
@@ -124,6 +147,12 @@ export function WeekSlotGrid({
   const draggingId = useRef<string | null>(null);
   const focusTarget = useRef<string | null>(null);
   const [moveDialog, setMoveDialog] = useState<{ id: string; weekday: Weekday; localTime: string } | null>(null);
+  // `weekError` holds only what is wrong with the field's own value (an empty time), which is what
+  // `Field`'s error slot and its `aria-invalid` are for. A valid time that changes nothing, and a
+  // refusal from the server, go to the grid's `error` line instead — see `handleAddWeek`.
+  const [weekTime, setWeekTime] = useState("09:00");
+  const [weekError, setWeekError] = useState("");
+  const [weekPending, setWeekPending] = useState(false);
   // Where the chip would land if released now: the column shows it will accept the drop, and the time
   // the drop would set. Without this the time a drag will produce is invisible until after it happens,
   // and a column is 30 rem of unlabelled space between hour rules.
@@ -216,6 +245,50 @@ export function WeekSlotGrid({
       setAdditions((prev) => prev.filter((a) => a.seq !== seq));
       setError(outcome.message);
       say(announceRefused(weekday, localTime, outcome.message));
+    }
+  }
+
+  /**
+   * One seq for all seven optimistic additions, so `clearResolved` drops them together and a refusal
+   * rolls the whole week back rather than leaving part of it on screen.
+   */
+  async function handleAddWeek() {
+    if (!onAddWeek || weekPending) return;
+    setError("");
+    // An empty `type="time"` reads back as "", which is the only way the regex fails here — a browser
+    // never hands over a half-typed time. So the message names the real problem.
+    if (!TIME_RE.test(weekTime)) {
+      setWeekError("Pick a time");
+      return;
+    }
+    setWeekError("");
+    const missing = weekdaysMissingAt(view, weekTime);
+    // Not a field error: the time is valid and the action is simply a no-op. Routed through the grid's
+    // own error line and `say`, which re-announces an unchanged message where an `aria-live` node does
+    // not — so pressing the button twice says it twice, and `aria-invalid` never lands on a good value.
+    if (missing.length === 0) {
+      setError(WEEK_ALREADY_SET);
+      say(announceWeekAdded(weekTime, [], WEEKDAYS));
+      return;
+    }
+    const seq = ++seqRef.current;
+    setAdditions((prev) => [
+      ...prev,
+      ...missing.map((weekday) => ({ tempId: `pending-${seq}-${weekday}`, seq, weekday, localTime: weekTime })),
+    ]);
+    setWeekPending(true);
+    try {
+      const outcome = await onAddWeek({ localTime: weekTime });
+      if (outcome.ok) {
+        resolveSeq(seq);
+        say(announceWeekAdded(weekTime, outcome.added, outcome.alreadySet));
+      } else {
+        setAdditions((prev) => prev.filter((a) => a.seq !== seq));
+        setError(outcome.message);
+        say(outcome.message);
+      }
+    } finally {
+      setWeekPending(false);
     }
   }
 
@@ -440,6 +513,41 @@ export function WeekSlotGrid({
           and time included; a `role="alert"` here would interrupt and then repeat it. */}
       {error ? <p className="text-xs text-danger">{error}</p> : null}
       <p className="text-xs text-muted-foreground">Times are shown in {timeZoneLabel}.</p>
+      {canManage && onAddWeek ? (
+        <form
+          className={`${cardStyles} flex w-fit flex-wrap items-end gap-3 p-3`}
+          // The browser must not refuse an off-step time with a native bubble: `step` is here so the
+          // picker's arrows move in half hours, not as validation. An exact typed time is allowed, as
+          // the Move dialog allows one.
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleAddWeek();
+          }}
+          aria-label="Add a time to every day"
+        >
+          <div className="w-48">
+            <Field
+              id={weekFieldId}
+              type="time"
+              step={STEP_MINUTES * 60}
+              required
+              label="Add a time to every day"
+              hint="Days that already have it are left alone."
+              value={weekTime}
+              error={weekError}
+              onChange={(e) => {
+                setWeekTime(e.target.value);
+                setWeekError("");
+              }}
+            />
+          </div>
+          {/* `mb-5` clears `Field`'s always-rendered error paragraph, as ConnectMockForm does. */}
+          <Button type="submit" variant="secondary" className="mb-5" pending={weekPending} pendingLabel="Adding…">
+            Add to every day
+          </Button>
+        </form>
+      ) : null}
       {/* Keyed on the rendered view, not the `slots` prop: an optimistic addition must clear the
           empty line immediately, and deleting the last slot must keep it until the server confirms. */}
       {view.length === 0 ? <p className="text-xs text-muted-foreground">{emptyMessage}</p> : null}
@@ -459,7 +567,7 @@ export function WeekSlotGrid({
               <div className="relative min-h-[30rem] overflow-hidden rounded-lg bg-muted/15">
                 {hourTicks().map(({ hour, topPercent }) => (
                   <div key={hour} aria-hidden className="pointer-events-none absolute inset-x-0 border-t border-border/40" style={{ top: `${topPercent}%` }}>
-                    {hour % 6 === 0 ? <span className="pl-1 text-[0.625rem] leading-none text-muted-foreground/70">{String(hour).padStart(2, "0")}</span> : null}
+                    {hour % 6 === 0 ? <span className="pl-1 text-[0.625rem] leading-none text-muted-foreground">{String(hour).padStart(2, "0")}</span> : null}
                   </div>
                 ))}
                 <div

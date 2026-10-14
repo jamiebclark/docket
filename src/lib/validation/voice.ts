@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { findProvider } from "../../providers/registry";
+import { linkUrlSchema } from "./link";
 
 export const VOICE_NAME_MAX = 80;
 const FIELD_MAX = 2000;
@@ -24,18 +25,7 @@ const examplePosts = z
 const preferredLinks = z
   .array(
     z.object({
-      url: z
-        .string()
-        .trim()
-        .max(500, { error: "Keep links to 500 characters or fewer" })
-        .refine((u) => {
-          try {
-            const p = new URL(u).protocol;
-            return p === "http:" || p === "https:";
-          } catch {
-            return false;
-          }
-        }, { error: "Enter a full http or https link" }),
+      url: linkUrlSchema,
       label: text(80).default(""),
     }),
   )

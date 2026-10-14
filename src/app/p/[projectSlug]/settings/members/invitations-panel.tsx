@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { announcedText } from "@/components/ui/Announce";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CopyField } from "@/components/ui/CopyField";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
+import { LiveRegion } from "@/components/ui/LiveRegion";
 import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import { formatLocal, LocalTime } from "@/components/ui/LocalTime";
 import type { ActionResult } from "@/lib/action-result";
@@ -25,21 +27,37 @@ export interface InvitationView {
   canManage: boolean;
 }
 
-type Link = { url: string; expiresAt: string; email: string; deliveryEmail: DeliveryDto["email"] };
+type Link = {
+  url: string;
+  expiresAt: string;
+  /** The invitee's address, for the wording. */
+  email: string;
+  kind: DeliveryDto["kind"];
+  deliveryEmail: DeliveryDto["email"];
+};
 
 const tone = { pending: "neutral", expired: "warning", accepted: "success", declined: "neutral", revoked: "danger" } as const;
 const label = { pending: "Pending", expired: "Expired", accepted: "Accepted", declined: "Declined", revoked: "Revoked" } as const;
 
-function manualLinkMessage(link: Link, timeZone: string): string {
-  if (link.deliveryEmail === "sent") return "Invitation emailed.";
-  if (link.deliveryEmail === "failed") return "The invitation was created, but the email did not go out.";
-  return `Send this link to ${link.email}. It is shown only once and expires on ${formatLocal(link.expiresAt, timeZone)}.`;
-}
-
-function inAppMessage(email: string, deliveryEmail: DeliveryDto["email"]): string {
-  if (deliveryEmail === "sent") return `Invitation sent. ${email} will see it in Docket and has been emailed.`;
-  if (deliveryEmail === "failed") return "The invitation was created, but the email did not go out.";
-  return "Invitation sent. They will see it under Invitations when they sign in.";
+/**
+ * One sentence per thing the inviter needs to know: whether the email went out, how the invitee is
+ * expected to reach the invitation, and that this is the only time the link is shown. A link now comes
+ * back for an invitee who already has an account too (decisions 057), so the in-app case is a wording
+ * difference here rather than a panel that renders nothing.
+ */
+export function linkMessage(link: Link, timeZone: string): string {
+  const mail =
+    link.deliveryEmail === "sent"
+      ? "Invitation emailed."
+      : link.deliveryEmail === "failed"
+        ? "The invitation was created, but the email did not go out."
+        : null;
+  const reach =
+    link.kind === "in_app"
+      ? `${link.email} already has a Docket account and will see this invitation under Invitations.`
+      : `Send this link to ${link.email}.`;
+  const expiry = `The link is shown only once and expires on ${formatLocal(link.expiresAt, timeZone)}.`;
+  return [mail, reach, expiry].filter(Boolean).join(" ");
 }
 
 export function InvitationsPanel({
@@ -56,16 +74,47 @@ export function InvitationsPanel({
   canInviteOwner: boolean;
 }) {
   const [link, setLink] = useState<Link | null>(null);
+  const [message, setMessage] = useState("");
+  const announceCount = useRef(0);
+  const linkPanel = useRef<HTMLDivElement | null>(null);
+  // Set when a link is about to appear, so the effect below focuses it only then — not on an unrelated
+  // re-render that happens while the panel is already open.
+  const focusWanted = useRef(false);
+
+  /** One live region for the whole panel; identical text is re-announced via `announcedText`. */
+  function say(text: string) {
+    setMessage(announcedText(text, ++announceCount.current));
+  }
+
+  function showLink(next: Link) {
+    focusWanted.current = true;
+    setLink(next);
+  }
+
+  useEffect(() => {
+    if (!link || !focusWanted.current) return;
+    focusWanted.current = false;
+    // The panel renders above the table, so a Regenerate from a row far down a long members page used
+    // to put the thing just asked for off-screen with nothing moved and nothing said. Focusing the
+    // region scrolls it into view and makes it the next thing read and the next thing tabbed from.
+    linkPanel.current?.focus();
+  }, [link]);
 
   return (
     <section aria-labelledby="invitations-heading" className="flex flex-col gap-4">
       <h2 id="invitations-heading" className="text-lg font-semibold">
         Invitations
       </h2>
-      {canInvite ? <InviteForm slug={slug} canInviteOwner={canInviteOwner} onLink={setLink} /> : null}
+      {canInvite ? <InviteForm slug={slug} canInviteOwner={canInviteOwner} onLink={showLink} /> : null}
       {link ? (
-        <div role="region" aria-label="Invitation link" className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card">
-          <p className="text-sm">{manualLinkMessage(link, timeZone)}</p>
+        <div
+          ref={linkPanel}
+          tabIndex={-1}
+          role="region"
+          aria-label="Invitation link"
+          className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5 shadow-card focus:outline-none focus:ring-2 focus:ring-focus"
+        >
+          <p className="text-sm">{linkMessage(link, timeZone)}</p>
           <CopyField id="invitation-link" label="Invitation link" value={link.url} />
           <Button variant="secondary" className="self-start" onClick={() => setLink(null)}>
             Done, hide link
@@ -77,10 +126,11 @@ export function InvitationsPanel({
       ) : (
         <Table caption="Invitations" columns={["Invitation", "Role", "Status", "Actions"]}>
           {invitations.map((inv) => (
-            <InvitationRow key={inv.id} slug={slug} timeZone={timeZone} inv={inv} onLink={setLink} />
+            <InvitationRow key={inv.id} slug={slug} timeZone={timeZone} inv={inv} onLink={showLink} say={say} />
           ))}
         </Table>
       )}
+      <LiveRegion message={message} />
     </section>
   );
 }
@@ -92,7 +142,7 @@ function InviteForm({
 }: {
   slug: string;
   canInviteOwner: boolean;
-  onLink: (l: Link | null) => void;
+  onLink: (l: Link) => void;
 }) {
   const [state, action, pending] = useActionState<ActionResult<DeliveryDto> | null, FormData>(inviteMember, null);
   const [email, setEmail] = useState("");
@@ -100,7 +150,7 @@ function InviteForm({
   const formError = state && !state.ok && Object.keys(errors).length === 0 ? state.message : null;
 
   useEffect(() => {
-    if (state?.ok && state.data.link) onLink({ ...state.data.link, email, deliveryEmail: state.data.email });
+    if (state?.ok) onLink({ ...state.data.link, email, kind: state.data.kind, deliveryEmail: state.data.email });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- react to each new result only
   }, [state]);
 
@@ -128,26 +178,81 @@ function InviteForm({
           {formError}
         </p>
       ) : null}
-      {state?.ok && !state.data.link ? (
-        <p role="status" className="text-sm">
-          {inAppMessage(email, state.data.email)}
-        </p>
-      ) : null}
     </form>
   );
 }
 
-function InvitationRow({ slug, timeZone, inv, onLink }: { slug: string; timeZone: string; inv: InvitationView; onLink: (l: Link | null) => void }) {
+function InvitationRow({
+  slug,
+  timeZone,
+  inv,
+  onLink,
+  say,
+}: {
+  slug: string;
+  timeZone: string;
+  inv: InvitationView;
+  onLink: (l: Link) => void;
+  say: (text: string) => void;
+}) {
   const [regen, regenAction, regenerating] = useActionState<ActionResult<DeliveryDto> | null, FormData>(regenerateInvitation, null);
-  const [revoked, revokeAction, revoking] = useActionState<ActionResult<DeliveryDto> | null, FormData>(revokeInvitation, null);
+  const [revoked, revokeAction, revoking] = useActionState<ActionResult<null> | null, FormData>(revokeInvitation, null);
   const [confirming, setConfirming] = useState(false);
+  const [copying, setCopying] = useState(false);
+  // What Copy new link did, shown in the row. Deliberately not a live region: `say()` does the
+  // announcing, and an `aria-live` node here would say the same thing twice.
+  const [copyNote, setCopyNote] = useState<{ bad: boolean; text: string } | null>(null);
   const open = inv.status === "pending" || inv.status === "expired";
   const error = [regen, revoked].find((s) => s && !s.ok);
 
+  const linkOf = (data: DeliveryDto): Link => ({
+    ...data.link,
+    email: inv.email,
+    kind: data.kind,
+    deliveryEmail: data.email,
+  });
+
   useEffect(() => {
-    if (regen?.ok && regen.data.link) onLink({ ...regen.data.link, email: inv.email, deliveryEmail: regen.data.email });
+    if (regen?.ok) onLink(linkOf(regen.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- react to each new result only
   }, [regen]);
+
+  /**
+   * Regenerate and copy in one activation. The action is awaited directly rather than dispatched
+   * through `useActionState`, because the URL it returns is needed here and now to hand to the
+   * clipboard — a dispatch only lands the result in state a render later.
+   */
+  async function copyNewLink() {
+    setCopying(true);
+    setCopyNote(null);
+    try {
+      const formData = new FormData();
+      formData.set("slug", slug);
+      formData.set("invitationId", inv.id);
+      const result = await regenerateInvitation(null, formData);
+      if (!result.ok) {
+        setCopyNote({ bad: true, text: result.message });
+        say(result.message);
+        return;
+      }
+      const next = linkOf(result.data);
+      try {
+        await navigator.clipboard.writeText(next.url);
+      } catch {
+        // No clipboard write: an insecure origin, a denied permission, or a browser without the API.
+        // The old link is already dead, so this must not read as a failure — fall back to the panel's
+        // CopyField, which the inviter can select and copy by hand.
+        onLink(next);
+        setCopyNote({ bad: false, text: "Could not copy automatically. The new link is ready to copy above." });
+        say(`A new invitation link for ${inv.email} is ready to copy above. The previous link has stopped working.`);
+        return;
+      }
+      setCopyNote({ bad: false, text: "New link copied. The previous link stopped working." });
+      say(`New invitation link for ${inv.email} copied to the clipboard. The previous link has stopped working.`);
+    } finally {
+      setCopying(false);
+    }
+  }
 
   return (
     <Row>
@@ -165,6 +270,17 @@ function InvitationRow({ slug, timeZone, inv, onLink }: { slug: string; timeZone
       <Cell>
         {open && inv.canManage ? (
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              pending={copying}
+              pendingLabel="Copying…"
+              onClick={copyNewLink}
+              aria-label={`Copy a new invitation link for ${inv.email}`}
+            >
+              Copy new link
+            </Button>
+            {/* Kept beside Copy new link as the path that works without client JavaScript, and the one
+                that shows the link rather than putting it straight on the clipboard. */}
             <form action={regenAction}>
               <input type="hidden" name="slug" value={slug} />
               <input type="hidden" name="invitationId" value={inv.id} />
@@ -194,6 +310,9 @@ function InvitationRow({ slug, timeZone, inv, onLink }: { slug: string; timeZone
           <p role="alert" className="mt-1 text-xs text-danger">
             {error.message}
           </p>
+        ) : null}
+        {copyNote ? (
+          <p className={`mt-1 text-xs ${copyNote.bad ? "text-danger" : "text-muted-foreground"}`}>{copyNote.text}</p>
         ) : null}
       </Cell>
     </Row>

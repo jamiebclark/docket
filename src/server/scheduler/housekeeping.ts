@@ -1,8 +1,10 @@
 // scheduler/housekeeping: bounded deletes of expired rows at the end of a tick (research D16).
 import { now } from "../dal/clock";
+import { pruneOrphanCreditHolds } from "../dal/credit-holds";
 import { purgeExpiredIdempotencyKeys } from "../dal/idempotency";
 import { pruneAllowanceUsesBefore } from "../dal/scheduler";
 import { crossProject } from "../dal/scope";
+import { pruneClosedStandingSeriesRunsBefore } from "../dal/standing-series";
 import { listExpiredUploads, markUploadExpired } from "../dal/uploads-housekeeping";
 import { listCollectableVideoVersions, reposForProject } from "../dal/video-housekeeping";
 import { getEnv } from "../env";
@@ -20,15 +22,29 @@ export const COLLECT_VIDEO_BATCH = 20;
 /** A version or preview nobody has asked for in this long is checked against what the posts plan today. */
 const VIDEO_VERSION_GRACE_MS = 24 * 3_600_000;
 
+export const ORPHAN_HOLD_BATCH = 100;
+
+export const STANDING_SERIES_RUN_RETENTION_DAYS = 90;
+export const STANDING_SERIES_RUN_PRUNE_BATCH = 200;
+
 export interface HousekeepingCounts {
   idempotencyPurged: number;
   uploadsExpired: number;
   allowanceUsesPruned: number;
   videoVersionsRemoved: number;
+  orphanHoldsPruned: number;
+  standingSeriesRunsPruned: number;
 }
 
 export function emptyHousekeepingCounts(): HousekeepingCounts {
-  return { idempotencyPurged: 0, uploadsExpired: 0, allowanceUsesPruned: 0, videoVersionsRemoved: 0 };
+  return {
+    idempotencyPurged: 0,
+    uploadsExpired: 0,
+    allowanceUsesPruned: 0,
+    videoVersionsRemoved: 0,
+    orphanHoldsPruned: 0,
+    standingSeriesRunsPruned: 0,
+  };
 }
 
 /**
@@ -102,6 +118,19 @@ export async function pruneAllowanceUses(now = new Date()): Promise<number> {
   }
 }
 
+/** Deletes credit-hold rows for a project credential whose project is gone (AS7), one bounded batch per tick. */
+export async function pruneOrphanHolds(): Promise<number> {
+  return crossProject("housekeeping: prune orphan credit holds", () => pruneOrphanCreditHolds(ORPHAN_HOLD_BATCH));
+}
+
+/** Deletes closed standing-series runs past retention (**S39**), one bounded batch per tick; an open run is never matched. */
+export async function pruneClosedStandingSeriesRuns(at = new Date()): Promise<number> {
+  const before = new Date(at.getTime() - STANDING_SERIES_RUN_RETENTION_DAYS * 86_400_000);
+  return crossProject("housekeeping: prune closed standing series runs", () =>
+    pruneClosedStandingSeriesRunsBefore(before, STANDING_SERIES_RUN_PRUNE_BATCH),
+  );
+}
+
 /** Deletes at most one batch per table, so a tick never stalls on a large backlog. */
 export async function runHousekeeping(): Promise<HousekeepingCounts> {
   const idempotencyPurged = await crossProject("housekeeping: purge expired idempotency keys", () =>
@@ -110,5 +139,14 @@ export async function runHousekeeping(): Promise<HousekeepingCounts> {
   const uploadsExpired = await expireUploads();
   const allowanceUsesPruned = await pruneAllowanceUses(await now());
   const videoVersionsRemoved = await collectVideoVersions(await now());
-  return { idempotencyPurged, uploadsExpired, allowanceUsesPruned, videoVersionsRemoved };
+  const orphanHoldsPruned = await pruneOrphanHolds();
+  const standingSeriesRunsPruned = await pruneClosedStandingSeriesRuns(await now());
+  return {
+    idempotencyPurged,
+    uploadsExpired,
+    allowanceUsesPruned,
+    videoVersionsRemoved,
+    orphanHoldsPruned,
+    standingSeriesRunsPruned,
+  };
 }

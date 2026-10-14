@@ -26,6 +26,7 @@ import { generationSeries } from "./generation";
 import { generationJobItems } from "./jobs";
 import { schedulingPolicy } from "./policy-enums";
 import { projects } from "./projects";
+import { standingSeriesPositions } from "./standing-series";
 
 export const postStatus = pgEnum("post_status", [
   "draft",
@@ -69,6 +70,7 @@ export const posts = pgTable(
     seriesId: uuid("series_id"),
     seriesPosition: smallint("series_position"),
     generationJobItemId: uuid("generation_job_item_id"),
+    standingSeriesPositionId: uuid("standing_series_position_id"),
     reviewedByUserId: uuid("reviewed_by_user_id").references(() => user.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     rejectionReason: text("rejection_reason"),
@@ -111,6 +113,14 @@ export const posts = pgTable(
     uniqueIndex("posts_generation_job_item_uq")
       .on(t.generationJobItemId)
       .where(sql`${t.generationJobItemId} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+    foreignKey({
+      name: "posts_standing_series_position_fk",
+      columns: [t.projectId, t.standingSeriesPositionId],
+      foreignColumns: [standingSeriesPositions.projectId, standingSeriesPositions.id],
+    }).onDelete("set null"),
+    uniqueIndex("posts_standing_series_position_uq")
+      .on(t.standingSeriesPositionId)
+      .where(sql`${t.standingSeriesPositionId} IS NOT NULL AND ${t.deletedAt} IS NULL`),
     index("posts_review_queue_idx")
       .on(t.projectId, t.reviewState, t.createdAt.desc())
       .where(sql`${t.deletedAt} IS NULL`),

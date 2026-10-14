@@ -88,11 +88,11 @@ describe("acceptById / declineById", () => {
     const ctx = await createProjectWithMembers();
     const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
     const invitee = await createUser();
-    // Existing accounts get in-app delivery, so regenerate with a recording delivery to see the URL.
+    // An existing account gets `in_app` wording, but the URL comes back all the same (decisions 057),
+    // so no recording delivery is needed to see it.
     const { invitationId } = await invitations.create(scope, { email: invitee.email, role: "editor" });
-    let url = "";
-    await invitations.regenerate(scope, { invitationId }, { deliver: async (d) => { url = d.acceptUrl; return { kind: "in_app", email: "unavailable" }; } });
-    const token = new URL(url).searchParams.get("token")!;
+    const { delivery } = await invitations.regenerate(scope, { invitationId });
+    const token = new URL(delivery.url).searchParams.get("token")!;
     expect((await invitations.resolveToken(token, sessionOf(invitee))).state).toBe("accept");
     const other = await createUser();
     expect((await invitations.resolveToken(token, sessionOf(other))).state).toBe("email_mismatch");
@@ -136,6 +136,51 @@ describe("revoke / regenerate", () => {
       expect(tokens.filter((t) => !t.usedAt && !t.revokedAt)).toHaveLength(1);
     });
     expect(await auditActions(i.project.id)).toContain("invite_regenerate");
+  });
+
+  it("regenerate gives an invitee who already has an account a copyable link, and the new link works", async () => {
+    const i = await inviteExisting();
+    const { delivery } = await invitations.regenerate(i.scope, { invitationId: i.invitationId });
+
+    // The bug this covers: `in_app` used to come back with no URL at all, so the members panel had
+    // nothing to render and Regenerate silently produced no copyable link (decisions 057).
+    expect(delivery.kind).toBe("in_app");
+    expect(delivery.url).toContain("/signup?token=");
+    expect(delivery.expiresAt).toBeInstanceOf(Date);
+    expect(delivery.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+    const token = new URL(delivery.url).searchParams.get("token")!;
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect((await invitations.resolveToken(token, sessionOf(i.invitee))).state).toBe("accept");
+    await expect(invitations.acceptByToken(sessionOf(i.invitee), { token })).resolves.toMatchObject({ slug: i.project.slug });
+    expect(await statusOf(i.invitationId)).toBe("accepted");
+  });
+
+  it("regenerate for an existing account stores only the hash, and retires the previous link", async () => {
+    const i = await inviteExisting();
+    const first = await invitations.regenerate(i.scope, { invitationId: i.invitationId });
+    const second = await invitations.regenerate(i.scope, { invitationId: i.invitationId });
+    const firstToken = new URL(first.delivery.url).searchParams.get("token")!;
+    const secondToken = new URL(second.delivery.url).searchParams.get("token")!;
+    expect(secondToken).not.toBe(firstToken);
+
+    // "Copy new link" tells the user the previous link stopped working; this is that claim.
+    expect((await invitations.resolveToken(firstToken, sessionOf(i.invitee))).state).toBe("invalid");
+    expect((await invitations.resolveToken(secondToken, sessionOf(i.invitee))).state).toBe("accept");
+
+    // Research D6 is unchanged by returning the URL: only sha256(token) is ever written.
+    await rows(async () => {
+      const tokens = await testDb().select().from(invitationTokens).where(eq(invitationTokens.invitationId, i.invitationId));
+      expect(tokens.length).toBeGreaterThanOrEqual(3);
+      for (const t of tokens) expect(t.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+      const dumped = JSON.stringify(tokens);
+      expect(dumped).not.toContain(firstToken);
+      expect(dumped).not.toContain(secondToken);
+    });
+    // Nor does any invitation list carry a token.
+    const listed = JSON.stringify(await invitations.listForProject(i.scope));
+    expect(listed).not.toContain(firstToken);
+    expect(listed).not.toContain(secondToken);
   });
 
   it("regenerate refuses non-pending and unknown invitations", async () => {
@@ -198,9 +243,8 @@ describe("resolveToken, listMine and countMine", () => {
     const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
     const invitee = await createUser();
     const { invitationId } = await invitations.create(scope, { email: invitee.email, role: "editor" });
-    let url = "";
-    await invitations.regenerate(scope, { invitationId }, { deliver: async (d) => { url = d.acceptUrl; return { kind: "in_app", email: "unavailable" }; } });
-    const res = await invitations.resolveToken(new URL(url).searchParams.get("token"));
+    const { delivery } = await invitations.regenerate(scope, { invitationId });
+    const res = await invitations.resolveToken(new URL(delivery.url).searchParams.get("token"));
     expect(res.state).toBe("login_required");
   });
 });

@@ -92,6 +92,15 @@ export function MediaCard({
       {fit && item.status !== "ready" ? (
         <p className="text-xs text-muted-foreground">Badges appear when processing finishes</p>
       ) : null}
+      {item.generated ? (
+        <div className="flex flex-wrap gap-1">
+          <Badge>Generated</Badge>
+          <details className="text-xs text-muted-foreground">
+            <summary>Prompt</summary>
+            <p className="mt-1 whitespace-pre-wrap">{item.generated.prompt}</p>
+          </details>
+        </div>
+      ) : null}
       {item.tags.length > 0 ? (
         <ul aria-label="Tags" className="flex flex-wrap gap-1 text-xs">
           {item.tags.map((t) => (

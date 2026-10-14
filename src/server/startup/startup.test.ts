@@ -141,7 +141,8 @@ describe("runStartup", () => {
   it("logs one generation-off line when the group is wholly unset and carries on", async () => {
     const unset = deps();
     await expect(runStartup(unset.d)).resolves.toBeUndefined();
-    expect(unset.logs.filter((l) => l.includes("generation is off"))).toHaveLength(1);
+    expect(unset.logs.filter((l) => l.includes("generation is off (LLM_PROVIDER not set)"))).toHaveLength(1);
+    expect(unset.logs.filter((l) => l.includes("image generation is off"))).toHaveLength(1);
   });
 
   it("exits 1, naming the variable and no value, for an incomplete or malformed generator setup", async () => {
@@ -165,7 +166,16 @@ describe("runStartup", () => {
   });
 
   it("logs nothing about generation when it is configured", async () => {
-    const ok = deps({ env: { ...GOOD_ENV, LLM_PROVIDER: "openai", LLM_MODEL: "m", OPENAI_API_KEY: "sk-x" } });
+    const ok = deps({
+      env: {
+        ...GOOD_ENV,
+        LLM_PROVIDER: "openai",
+        LLM_MODEL: "m",
+        OPENAI_API_KEY: "sk-x",
+        LLM_IMAGE_PROVIDER: "openai",
+        LLM_IMAGE_MODEL: "gpt-image-1",
+      },
+    });
     await runStartup(ok.d);
     expect(ok.logs.join("\n")).not.toContain("generation is off");
   });
