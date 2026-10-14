@@ -7,6 +7,7 @@ import { createStandingSeries, resumeStandingSeries } from "../../../src/server/
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
 import { standingSeries } from "../../../src/server/db/schema";
+import { createVoiceProfilesRepo } from "../../../src/server/dal/voice";
 import { closeDb } from "../../helpers/db";
 import { atTime } from "../../helpers/clock";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
@@ -64,8 +65,10 @@ describe("standing-series self-pause (US6 AS4-AS5, FR-053)", () => {
 
     for (let day = 1; day <= 3; day++) {
       // A non-temporary plan failure fails every queued position and closes the run in the same
-      // tick, reaching the self-pause check (closeRun) — unlike a blocked-reason or per-position
-      // immediate failure, neither of which route through it.
+      // tick, reaching the self-pause check via `closeRun` directly. The two tests below exercise
+      // the other two close sites — a blocked-reason close inside `openOrResumeRun`, and a
+      // per-position immediate failure closed a period later by `closeStale` — which must reach the
+      // same check (review F6).
       setLlmForTests(createFakeLlm([{ fail: "bad_request" }]));
       const t = new Date(`2026-01-${String(10 + day).padStart(2, "0")}T00:00:01.000Z`);
       const counts = await tick(t);
@@ -90,5 +93,54 @@ describe("standing-series self-pause (US6 AS4-AS5, FR-053)", () => {
     const after = new Date(nextRunAt.getTime() + 1_000);
     const counts = await tick(after);
     expect(counts.produced).toBe(2);
+  }, 60_000);
+
+  it("pauses a series blocked every period by a missing voice profile, which closes inside openOrResumeRun, not the producer (review F6)", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-02-10T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ cadence: { count: 1, period: "day" } })),
+    );
+    await createVoiceProfilesRepo(getDb(), e.project.id).setArchived(e.profile.id, created);
+
+    setLlmForTests(createFakeLlm([]));
+    for (let day = 1; day <= 3; day++) {
+      const t = new Date(`2026-02-${String(10 + day).padStart(2, "0")}T00:00:01.000Z`);
+      const counts = await tick(t);
+      expect(counts.blocked).toBe(1);
+    }
+
+    const row = await e.scope.standingSeries.get(seriesId);
+    expect(row).toMatchObject({ enabled: false, autoPausedReason: "no_output" });
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    expect(runs).toHaveLength(3);
+    for (const run of runs) expect(run).toMatchObject({ blockedReason: "voice_profile_missing", outcome: "produced_none" });
+  }, 60_000);
+
+  it("pauses a series whose every position fails outright, closed a period later by closeStale, not the producer (review F6)", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-03-10T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ cadence: { count: 1, period: "day" } })),
+    );
+
+    // Each tick fails its one position outright and returns without closing its own run (runner.ts
+    // returns right after recording the failure); the run is only closed on the *next* tick, by
+    // `closeStale` inside `openOrResumeRun`, which must still reach the self-pause check. The 4th
+    // tick is the one that closes the 3rd run and crosses the self-pause threshold — by then the
+    // series is paused before its own (4th) run's position is ever touched.
+    for (let day = 1; day <= 4; day++) {
+      setLlmForTests(createFakeLlm([{ fail: "bad_request" }]));
+      const t = new Date(`2026-03-${String(10 + day).padStart(2, "0")}T00:00:01.000Z`);
+      const counts = await tick(t);
+      expect(counts.failed).toBe(day <= 3 ? 1 : 0);
+    }
+
+    const row = await e.scope.standingSeries.get(seriesId);
+    expect(row).toMatchObject({ enabled: false, autoPausedReason: "no_output" });
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    const closed = runs.filter((r) => r.closedAt !== null);
+    expect(closed.length).toBeGreaterThanOrEqual(3);
+    for (const run of closed.slice(0, 3)) expect(run.outcome).toBe("produced_none");
   }, 60_000);
 });

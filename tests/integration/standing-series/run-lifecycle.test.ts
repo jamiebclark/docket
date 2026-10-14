@@ -66,15 +66,20 @@ describe("deriveRunOutcome", () => {
 });
 
 describe("shouldSelfPause", () => {
+  const r = (outcome: ReturnType<typeof deriveRunOutcome>, produced: number) => ({ outcome, produced });
+
   it("is false with fewer than three closed runs", () => {
-    expect(shouldSelfPause(["produced_none", "incomplete"])).toBe(false);
+    expect(shouldSelfPause([r("produced_none", 0), r("incomplete", 0)])).toBe(false);
   });
-  it("is true when the three most recent are all produced_none or incomplete", () => {
-    expect(shouldSelfPause(["produced_none", "incomplete", "produced_none"])).toBe(true);
-    expect(shouldSelfPause(["incomplete", "incomplete", "incomplete", "produced_all"])).toBe(true);
+  it("is true when the three most recent each produced zero posts", () => {
+    expect(shouldSelfPause([r("produced_none", 0), r("incomplete", 0), r("produced_none", 0)])).toBe(true);
+    expect(shouldSelfPause([r("incomplete", 0), r("incomplete", 0), r("incomplete", 0), r("produced_all", 3)])).toBe(true);
   });
-  it("is false once a produced_all or produced_some breaks the streak within the lookback", () => {
-    expect(shouldSelfPause(["produced_none", "produced_some", "produced_none"])).toBe(false);
+  it("is false once a run with any produced posts breaks the streak within the lookback", () => {
+    expect(shouldSelfPause([r("produced_none", 0), r("produced_some", 1), r("produced_none", 0)])).toBe(false);
+  });
+  it("is false for an incomplete run that produced posts, even though it 'produced nothing' by outcome alone (review F7)", () => {
+    expect(shouldSelfPause([r("incomplete", 2), r("incomplete", 0), r("incomplete", 0)])).toBe(false);
   });
 });
 

@@ -24,8 +24,8 @@ import { isUniqueViolation, loadAccounts, takeVoice, type VoiceSnapshot } from "
 import { planSeries } from "../generation/series";
 import { recordFailure } from "../generation/failures";
 import { prepareVariants } from "../media-variants";
-import { openOrResumeRun, shouldSelfPause, deriveRunOutcome, SELF_PAUSE_RUNS } from "./run";
-import { resolvePositionMedia } from "./media";
+import { openOrResumeRun, closeRun } from "./run";
+import { resolvePositionMedia, type MediaOutcome } from "./media";
 
 export interface StandingSeriesCounts {
   claimed: number;
@@ -93,20 +93,17 @@ function llmTimeoutMs(): number {
   return parseLlmLimits(process.env).timeoutMs;
 }
 
-async function closeRun(scope: ProjectScope, run: StandingSeriesRunRecord, counts: StandingSeriesCounts, now: Date): Promise<void> {
-  const byStatus = await scope.standingSeriesPositions.countByStatus(run.id);
-  const outcome = deriveRunOutcome({ produced: byStatus.produced, requested: run.requestedCount, open: byStatus.queued + byStatus.running });
-  const closed = await scope.standingSeriesRuns.close(run.id, outcome, now);
+/** Closes `run` via the shared `closeRun` and tallies the result into the tick's counts. */
+async function closeRunCounted(scope: ProjectScope, run: StandingSeriesRunRecord, counts: StandingSeriesCounts, now: Date): Promise<void> {
+  const { closed, autoPaused } = await closeRun(scope, run, now);
   if (!closed) return;
   counts.runsClosed++;
-  const noOutput = (o: typeof outcome) => o === "produced_none" || o === "incomplete";
-  if (noOutput(outcome)) {
-    const recent = await scope.standingSeriesRuns.recentClosedOutcomes(run.seriesId, SELF_PAUSE_RUNS);
-    if (shouldSelfPause(recent)) {
-      await scope.standingSeries.update(run.seriesId, { enabled: false, autoPausedReason: "no_output" });
-      counts.autoPaused++;
-    }
-  }
+  if (autoPaused) counts.autoPaused++;
+}
+
+/** Whether any position is still `queued` or `running` — the only question that decides if a run may close (review F1/F2). */
+function hasOpenWork(byStatus: Record<StandingSeriesPositionRecord["status"], number>): boolean {
+  return byStatus.queued + byStatus.running > 0;
 }
 
 export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: StandingSeriesContext): Promise<void> {
@@ -181,7 +178,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
         });
         counts.failed++;
       }
-      await closeRun(scope, run, counts, now);
+      await closeRunCounted(scope, run, counts, now);
       return;
     }
   }
@@ -197,7 +194,12 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
 
     const position = await scope.standingSeriesPositions.nextDue(run.id, iterNow);
     if (!position) {
-      await closeRun(scope, run, counts, iterNow);
+      // `null` means nothing is due *right now* — not that nothing is left. A position in retry
+      // backoff is `queued` with a future `next_attempt_at`, so it is neither `nextDue` nor safe to
+      // treat as finished (review F1); only close when no position is `queued`/`running` at all.
+      const byStatus = await scope.standingSeriesPositions.countByStatus(run.id);
+      if (hasOpenWork(byStatus)) return;
+      await closeRunCounted(scope, run, counts, iterNow);
       return;
     }
 
@@ -211,8 +213,27 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
 
     const liveAccountIds = config.targetAccountIds.filter((id) => !run.droppedAccountIds.includes(id));
     const accounts = await loadAccounts(scope, liveAccountIds);
-    const media = await resolvePositionMedia(scope, position, config.media, accounts);
+    let media: MediaOutcome;
+    try {
+      media = await withinBudget(
+        resolvePositionMedia(scope, position, config.media, accounts),
+        ctx.deadline - (await clock.now()).getTime() - cfg.minCallMs - cfg.persistReserveMs,
+      );
+    } catch (error) {
+      if (error instanceof Overran) {
+        counts.released++;
+        return;
+      }
+      throw error;
+    }
     if (!media.ok) {
+      if (media.requeue) {
+        // An image-generation billing refusal, not a terminal media failure: requeue with no
+        // attempt counted, exactly as the text model call does below (review F5).
+        await scope.standingSeriesPositions.update(position.id, { status: "queued", nextAttemptAt: iterNow, pendingRetry: null });
+        counts.requeued++;
+        return;
+      }
       await scope.standingSeriesPositions.update(position.id, {
         status: "skipped",
         skipReason: media.skip.reason,
@@ -259,6 +280,14 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
         : null;
 
     const window = Math.min(llmTimeoutMs(), ctx.deadline - (await clock.now()).getTime() - cfg.persistReserveMs);
+    if (window < cfg.minCallMs) {
+      // Media resolution (now budget-wrapped above) can still eat most of the tick budget; re-check
+      // right before the call, matching jobs/runner.ts:279, and release untouched rather than start
+      // a call with a sub-minimum or negative timeout (review F4).
+      await scope.standingSeriesPositions.update(position.id, { status: "queued" });
+      counts.released++;
+      return;
+    }
     const step = await runGenerationStep(
       scope,
       {
@@ -283,9 +312,13 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
     );
     if (claimed.probe) counts.probed = 1;
 
+    // Every exit from here flushes the recorder immediately, as jobs/runner.ts:336 does, so a
+    // failed, deferred or credit-refused call still reaches the usage ledger; only the success
+    // path (below) has a post id to link it to (review F3).
     if (step.ok === "retry") {
       await scope.standingSeriesPositions.update(position.id, { status: "queued", pendingRetry: step.pending, nextAttemptAt: await clock.now() });
       counts.deferred++;
+      await recorder.flush();
       return;
     }
     if (step.ok === false) {
@@ -293,6 +326,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
       if (kind === "credit_exhausted") {
         await scope.standingSeriesPositions.update(position.id, { status: "queued", nextAttemptAt: await clock.now(), pendingRetry: null });
         counts.requeued++;
+        await recorder.flush();
         return;
       }
       await recordFailure(scope, {
@@ -329,6 +363,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
         await scope.standingSeriesPositions.update(position.id, { status: "failed", lastErrorKind: kind as ErrorKind, lastError: llmFailureMessage(kind), finishedAt: await clock.now() });
         counts.failed++;
       }
+      await recorder.flush();
       return;
     }
 
@@ -381,6 +416,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
     }
     if (postId === "stale") {
       counts.staleResults++;
+      await recorder.flush();
       return;
     }
     await recorder.flush({ postId });
@@ -388,6 +424,13 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
     counts.produced++;
     producedThisTick++;
   }
+
+  // The loop above exits here only on `producedThisTick >= cfg.maxPosts` (every other exit already
+  // returned). That counter hitting its cap says nothing about whether work remains, so a run whose
+  // last tick lands exactly on it must still be closed here rather than waiting for the next tick to
+  // find nothing due (review F2).
+  const byStatus = await scope.standingSeriesPositions.countByStatus(run.id);
+  if (!hasOpenWork(byStatus)) await closeRunCounted(scope, run, counts, await clock.now());
 
   logLine(`standing_series series=${series.id} run=${run.id} produced=${producedThisTick}`, resolvedKey);
 }

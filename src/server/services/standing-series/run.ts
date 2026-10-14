@@ -21,10 +21,39 @@ export function deriveRunOutcome(counts: { produced: number; requested: number; 
   return "produced_some";
 }
 
-/** Three most recent closed runs all `produced_none` or `incomplete` (S35, FR-053). */
-export function shouldSelfPause(recentOutcomes: readonly StandingSeriesOutcome[]): boolean {
-  if (recentOutcomes.length < SELF_PAUSE_RUNS) return false;
-  return recentOutcomes.slice(0, SELF_PAUSE_RUNS).every((o) => o === "produced_none" || o === "incomplete");
+/**
+ * Three most recent closed runs each produced zero posts (S35, FR-053). Decided on the produced
+ * count, not the outcome enum: an `incomplete` run that produced some posts is not "produced
+ * nothing" (review F7).
+ */
+export function shouldSelfPause(recent: readonly { outcome: StandingSeriesOutcome; produced: number }[]): boolean {
+  if (recent.length < SELF_PAUSE_RUNS) return false;
+  return recent.slice(0, SELF_PAUSE_RUNS).every((r) => r.produced === 0);
+}
+
+/**
+ * Closes `run` (a no-op if it is already closed) and, when it produced nothing, runs the
+ * self-pause check. The one place every run close goes through, so FR-053 applies regardless of
+ * which of the run's four close sites reaches it (review F6).
+ */
+export async function closeRun(
+  scope: ProjectScope,
+  run: StandingSeriesRunRecord,
+  now: Date,
+): Promise<{ closed: StandingSeriesRunRecord | null; autoPaused: boolean }> {
+  const counts = countsOf(await scope.standingSeriesPositions.countByStatus(run.id), run.requestedCount);
+  const outcome = deriveRunOutcome(counts);
+  const closed = await scope.standingSeriesRuns.close(run.id, outcome, now);
+  if (!closed) return { closed: null, autoPaused: false };
+  let autoPaused = false;
+  if (outcome === "produced_none" || outcome === "incomplete") {
+    const recent = await scope.standingSeriesRuns.recentClosedProduced(run.seriesId, SELF_PAUSE_RUNS);
+    if (shouldSelfPause(recent)) {
+      await scope.standingSeries.update(run.seriesId, { enabled: false, autoPausedReason: "no_output" });
+      autoPaused = true;
+    }
+  }
+  return { closed, autoPaused };
 }
 
 function countsOf(
@@ -62,8 +91,7 @@ export interface OpenOrResumeResult {
 
 /** Closes a stale open run (a prior period's) as its own outcome, never relabelling anything else. */
 async function closeStale(scope: ProjectScope, open: StandingSeriesRunRecord, now: Date): Promise<void> {
-  const counts = countsOf(await scope.standingSeriesPositions.countByStatus(open.id), open.requestedCount);
-  await scope.standingSeriesRuns.close(open.id, deriveRunOutcome(counts), now);
+  await closeRun(scope, open, now);
 }
 
 /**
@@ -146,7 +174,7 @@ export async function openOrResumeRun(
     for (const position of positions) {
       await scope.standingSeriesPositions.update(position.id, { status: "skipped", skipReason: "series_not_runnable" });
     }
-    const closed = await scope.standingSeriesRuns.close(run.id, "produced_none", now);
+    const { closed } = await closeRun(scope, run, now);
     return { run: closed ?? run, opened: true };
   }
 

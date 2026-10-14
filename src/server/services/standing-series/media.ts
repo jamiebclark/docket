@@ -8,7 +8,7 @@ import type { StandingSeriesPositionRecord } from "../../dal/standing-series";
 import { imagesForModel } from "../../llm/images";
 import { getImageStatus } from "../../llm/image-provider";
 import { MEDIA_STORAGE_NOT_SET_UP } from "../../storage";
-import { createImageGenerator } from "../media-generate";
+import { generateImageWithKind } from "../media-generate";
 
 export type StandingSeriesSkipReason =
   | "pool_exhausted"
@@ -19,7 +19,8 @@ export type StandingSeriesSkipReason =
 
 export type MediaOutcome =
   | { ok: true; assets: MediaRow[] }
-  | { ok: false; skip: { reason: StandingSeriesSkipReason; accountId: string | null } };
+  | { ok: false; skip: { reason: StandingSeriesSkipReason; accountId: string | null }; requeue?: false }
+  | { ok: false; requeue: true };
 
 /** The one target that actually needs an image, if any; a missing image only matters for this account (FR-038). */
 function accountNeedingMedia(accounts: readonly AccountRecord[]): AccountRecord | null {
@@ -55,8 +56,11 @@ export async function resolvePositionMedia(
       if (!asset) return fail("pool_exhausted");
     } else {
       // "generate" — outside every transaction, the same shared contract every image generation uses.
-      const result = await createImageGenerator(scope).generate({ projectId: scope.project.id, prompt: media.prompt });
+      const result = await generateImageWithKind(scope, { projectId: scope.project.id, prompt: media.prompt });
       if (!result.ok) {
+        // A billing refusal isn't a terminal media failure: the caller requeues it with no attempt
+        // counted, exactly like the text model call's own `credit_exhausted` path (review F5).
+        if (result.kind === "credit_exhausted") return { ok: false, requeue: true };
         if (!getImageStatus().configured) return fail("image_generation_not_configured");
         if (result.message === MEDIA_STORAGE_NOT_SET_UP) return fail("media_storage_not_configured");
         return fail("image_generation_failed");

@@ -108,8 +108,10 @@ export interface StandingSeriesRunsRepo {
   listForSeries(seriesId: string, opts: { limit: number }): Promise<StandingSeriesRunRecord[]>;
   /** Closed runs' plans, newest first, for `avoidTitles` (S30). */
   recentClosedPlans(seriesId: string, limit: number): Promise<ClosedRunPlan[]>;
-  /** Closed runs' outcomes, newest first, for the self-pause check (S35). */
+  /** Closed runs' outcomes, newest first, for the series-list "last run" badge. */
   recentClosedOutcomes(seriesId: string, limit: number): Promise<StandingSeriesOutcome[]>;
+  /** Closed runs' outcome plus produced-post count, newest first, for the self-pause check (S35, review F7). */
+  recentClosedProduced(seriesId: string, limit: number): Promise<{ outcome: StandingSeriesOutcome; produced: number }[]>;
   update(id: string, patch: StandingSeriesRunPatch): Promise<StandingSeriesRunRecord | null>;
   /** `UPDATE ... WHERE closed_at IS NULL`. */
   close(id: string, outcome: StandingSeriesOutcome, at: Date): Promise<StandingSeriesRunRecord | null>;
@@ -250,6 +252,28 @@ export function createStandingSeriesRunsRepo(db: Database, projectId: string): S
         .orderBy(desc(standingSeriesRuns.openedAt), desc(standingSeriesRuns.id))
         .limit(limit);
       return rows.map((r) => r.outcome as StandingSeriesOutcome);
+    },
+    async recentClosedProduced(seriesId, limit) {
+      const runs = await db
+        .select({ id: standingSeriesRuns.id, outcome: standingSeriesRuns.outcome })
+        .from(standingSeriesRuns)
+        .where(and(forSeries(seriesId), sql`${standingSeriesRuns.closedAt} IS NOT NULL`))
+        .orderBy(desc(standingSeriesRuns.openedAt), desc(standingSeriesRuns.id))
+        .limit(limit);
+      if (runs.length === 0) return [];
+      const producedRows = await db
+        .select({ runId: standingSeriesPositions.runId, n: sql<number>`count(*)::int` })
+        .from(standingSeriesPositions)
+        .where(
+          and(
+            eq(standingSeriesPositions.projectId, projectId),
+            inArray(standingSeriesPositions.runId, runs.map((r) => r.id)),
+            eq(standingSeriesPositions.status, "produced"),
+          ),
+        )
+        .groupBy(standingSeriesPositions.runId);
+      const producedByRun = new Map(producedRows.map((r) => [r.runId, r.n]));
+      return runs.map((r) => ({ outcome: r.outcome as StandingSeriesOutcome, produced: producedByRun.get(r.id) ?? 0 }));
     },
     async update(id, patch) {
       if (Object.keys(patch).length === 0) return this.get(id);

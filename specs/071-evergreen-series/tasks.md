@@ -281,3 +281,23 @@ Task: "Prompt/record parity tests in tests/integration/standing-series/parity.te
 - `pnpm db:check` must be green before any task depending on the schema (T014 onward) is considered complete.
 - No test makes a live provider call (constitution II): text through a stub `LlmProvider`/`createFakeLlmFetch`, images through `setImageProviderForTests`, time through `clock.runAtTime`. No task in this list makes a live provider call except T075, which is explicitly human-owned and out of every pipeline phase's reach.
 - SC-012 (a second occurrence rule costs nothing here) is a structural property of T041/T043 reading only the run's own `config`/`plan`/positions — no dedicated task writes new code for it; its check belongs with `dated-series`.
+
+---
+
+## Phase 9: Review remediation
+
+**Purpose**: Close the blocking findings in [review.md](./review.md). Each task carries its finding id
+and the location the review cited; the reasoning is in review.md, not here.
+
+- [X] T076 Close a run only when no position is left `queued` or `running` (count the statuses; do not infer it from `nextDue` returning null), and return from the tick instead when the only remaining work has a future `next_attempt_at`, so a position in retry backoff is never orphaned in a closed run — review F1 (BLOCKER), src/server/services/standing-series/runner.ts:198
+- [X] T077 Close the run before leaving the producer loop when it exits on the `producedThisTick < cfg.maxPosts` counter, so a run whose last tick produces exactly `STANDING_SERIES_TICK_MAX_POSTS` posts does not stay open until the next period boundary — review F2 (MAJOR), src/server/services/standing-series/runner.ts:191
+- [X] T078 Flush the usage recorder immediately after `runGenerationStep` returns, as `jobs/runner.ts:336` does, so a failed, deferred, credit-refused or stale model call still reaches the usage ledger; link the post id on the success path — review F3 (MAJOR), src/server/services/standing-series/runner.ts:386
+- [X] T079 Budget-wrap media resolution and re-check `window >= cfg.minCallMs` immediately before the post's model call, releasing the position to `queued` with no attempt counted when the window is too small, matching `jobs/runner.ts:279` — review F4 (MAJOR), src/server/services/standing-series/runner.ts:261
+- [X] T080 Carry the image provider's failure kind out of the image path and treat `credit_exhausted` as a requeue at `now` with no attempt counted (as runner.ts:293-297 does for text) rather than a terminal `image_generation_failed` skip — review F5 (MAJOR), src/server/services/standing-series/media.ts:62
+- [X] T081 Run the self-pause check from one place every run close goes through, so a run closed as blocked in `openOrResumeRun` or closed later by `closeStale` is counted toward FR-053 like any other zero-post run; replace the comment in `tests/integration/standing-series/self-pause.test.ts:66` with assertions for both paths — review F6 (MAJOR), src/server/services/standing-series/run.ts:149
+- [X] T082 Make `shouldSelfPause` decide on produced counts rather than the outcome enum alone, so an `incomplete` run that produced posts does not count as "produced nothing" — review F7 (MAJOR), src/server/services/standing-series/run.ts:27
+
+**Regression tests this phase owes** (they are what let F1–F3 pass a green suite): an integration test
+with `standingSeriesMaxPosts` below the cadence so the per-tick bound is actually exercised (FR-044),
+and one that drives a temporary generation failure through its backoff to a later tick (FR-022). See
+review F12.

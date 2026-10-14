@@ -174,4 +174,84 @@ describe("standing-series edge cases (US6, FR-053 and friends)", () => {
     const counts = await tick(t0);
     expect(counts).toMatchObject({ notConfigured: 1, claimed: 0, produced: 0 });
   });
+
+  it("spreads a cadence above the per-tick cap across ticks, closing the run only once nothing is left (FR-044, review F2/F12)", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-01-10T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ cadence: { count: 3, period: "day" } })),
+    );
+
+    const plan: FakeStep = {
+      ok: {
+        angles: [
+          { title: "Angle 1", description: "About thing 1" },
+          { title: "Angle 2", description: "About thing 2" },
+          { title: "Angle 3", description: "About thing 3" },
+        ],
+      },
+    };
+    setLlmForTests(createFakeLlm([plan, post("One."), post("Two."), post("Three.")]));
+    const t0 = new Date("2026-01-11T00:00:01.000Z");
+    const first = await tick(t0, { standingSeriesMaxPosts: 1 });
+    expect(first).toMatchObject({ produced: 1, runsClosed: 0 });
+    let run = (await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 1 }))[0]!;
+    expect(run.closedAt).toBeNull();
+
+    // Each tick must outlast the series lease (default 300s) for the worker to re-claim the same
+    // still-open run rather than finding it already leased to "itself".
+    const t1 = new Date("2026-01-11T00:06:02.000Z");
+    const second = await tick(t1, { standingSeriesMaxPosts: 1 });
+    expect(second).toMatchObject({ produced: 1, runsClosed: 0 });
+    run = (await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 1 }))[0]!;
+    expect(run.closedAt).toBeNull();
+
+    // The third and last post lands exactly on the per-tick cap — the run must still close in this
+    // same tick rather than waiting for a boundary that never comes due again (review F2).
+    const t2 = new Date("2026-01-11T00:12:03.000Z");
+    const third = await tick(t2, { standingSeriesMaxPosts: 1 });
+    expect(third).toMatchObject({ produced: 1, runsClosed: 1 });
+    run = (await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 1 }))[0]!;
+    expect(run).toMatchObject({ outcome: "produced_all" });
+  });
+
+  it("doesn't close a run in the same tick a position enters retry backoff while another finishes (FR-022, review F1/F12)", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-01-10T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ cadence: { count: 2, period: "day" } })),
+    );
+
+    const plan: FakeStep = {
+      ok: { angles: [{ title: "Angle 1", description: "About thing 1" }, { title: "Angle 2", description: "About thing 2" }] },
+    };
+    // Tick 1: position 0's call fails "rate_limited" (not schema-correction-retryable, so it
+    // surfaces straight to the runner's own TEMPORARY/backoff handling) and enters backoff; the
+    // tick returns without touching position 1.
+    setLlmForTests(createFakeLlm([plan, { fail: "rate_limited" }]));
+    const t0 = new Date("2026-01-11T00:00:01.000Z");
+    const first = await tick(t0, { leaseMs: 5_000 });
+    expect(first).toMatchObject({ produced: 0, retried: 1, failed: 0, runsClosed: 0 });
+    let run = (await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 1 }))[0]!;
+    expect(run.closedAt).toBeNull();
+
+    // Tick 2: past the lease but still inside position 0's 60s backoff. Position 1 produces, the
+    // loop continues, and `nextDue` now returns `null` — exactly the shape review F1 found. That
+    // must not be read as "nothing left": position 0 is still queued, so the run stays open.
+    setLlmForTests(createFakeLlm([post("Position one.")]));
+    const t1 = new Date("2026-01-11T00:00:07.000Z");
+    const second = await tick(t1, { leaseMs: 5_000 });
+    expect(second).toMatchObject({ produced: 1, runsClosed: 0 });
+    run = (await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 1 }))[0]!;
+    expect(run.closedAt).toBeNull();
+
+    // Tick 3: past the backoff too. Position 0 is due again, and finishing it must close the run
+    // as `produced_all` rather than having lost it (review F1).
+    setLlmForTests(createFakeLlm([post("Position zero, recovered.")]));
+    const t2 = new Date("2026-01-11T00:01:10.000Z");
+    const third = await tick(t2, { leaseMs: 5_000 });
+    expect(third).toMatchObject({ produced: 1, runsClosed: 1 });
+    run = (await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 1 }))[0]!;
+    expect(run).toMatchObject({ outcome: "produced_all" });
+  });
 });
