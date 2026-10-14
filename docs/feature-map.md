@@ -137,3 +137,29 @@ follows subjects would be a later, optional step.
 4. Video formatter (crop and fit for each target).
 5. Bluesky video.
 6. TikTok (built in 026, verified with mocks only): start the developer app and audit early, because the audit takes weeks.
+
+## Calendar density (not built)
+
+### Status badges overflow the calendar cell
+
+**The requirement:** a calendar cell should show a post's status without the label dictating the cell's width. At
+narrower viewports the text badge is wider than the cell it sits in.
+
+Today `CalendarBoard.tsx:182` renders `<StatusBadge status={item.status} />` in each cell, and `StatusBadge`
+(`src/components/ui/StatusBadge.tsx`) renders the full human label. "Scheduled" and "Published" are the common
+cases; the vocabulary also holds "Needs your decision", "Completed with failures" and "Needs reconnecting".
+
+**Suggested mechanism:** an icon-only variant of `StatusBadge`, used by the calendar alone, keeping the tone colour
+and adding a per-status icon.
+
+**The constraint that decides the shape.** `StatusBadge`'s own contract is "text plus colour (never colour alone)",
+and that rule carries the whole meaning for anyone who cannot separate the tones. A literal "icon with hover text"
+would break it: `title` is not announced by screen readers and does not exist on touch. So the variant needs an
+`aria-hidden` icon, a visually-hidden label still carrying `statusLabel(status)` so the accessible name is
+unchanged, and `title` only as a convenience for sighted mouse users on top of that.
+
+Every other surface — Posts, Failures, Review, Accounts — keeps the text badge. This is a calendar-density problem,
+not a vocabulary one, so the shared component gains a variant rather than changing its default.
+
+Worth checking in the same pass whether the account name in the cell needs truncating; it is under the same width
+pressure.
