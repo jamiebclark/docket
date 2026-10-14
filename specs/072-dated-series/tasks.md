@@ -160,10 +160,10 @@ decided, not by accident.
 **Independent Test**: Drive the resolver with fixed clocks across zones, DST transitions, leap years,
 closed windows and shared dates, and assert what fires, what is missed and when.
 
-- [ ] T054 [US3] Integration tests for time zones and DST in `due.test.ts` (extended): two projects in different zones each firing on their own local date and never the other's; a DST gap/overlap resolving to exactly one instant and one firing; a project whose zone is changed mid-window recomputing correctly without disturbing already-fired or already-missed occurrences (US3 AS1, AS2, AS7; FR-033, FR-041) (depends on T041)
-- [ ] T055 [P] [US3] Integration test for the leap-day row in `due.test.ts` (extended): fires on 28 February in non-leap years, on 29 February in 2028, never 1 March (US3 AS3, SC-004) (depends on T041)
-- [ ] T056 [US3] Create `tests/integration/dated-series/missed.test.ts`: a paused series' window closing while paused is recorded missed on Resume with no backfill; a worker down across the date with `leadDays: 0` records missed, versus `leadDays: 3` already having produced the post three days early (US3 AS4–AS5, FR-034–FR-036); the bounded sweep (≤50 misses, 30-day window) while every stale `next_target_date` is still advanced, including one 40 days old (FR-036, B25) (depends on T033, T035)
-- [ ] T057 [P] [US3] Integration test for two same-date rows in `due.test.ts` or `missed.test.ts`: two rows on one date each producing its own post (US3 AS6) (depends on T041)
+- [X] T054 [US3] Integration tests for time zones and DST in `due.test.ts` (extended): two projects in different zones each firing on their own local date and never the other's; a DST gap/overlap resolving to exactly one instant and one firing; a project whose zone is changed mid-window recomputing correctly without disturbing already-fired or already-missed occurrences (US3 AS1, AS2, AS7; FR-033, FR-041) (depends on T041)
+- [X] T055 [P] [US3] Integration test for the leap-day row in `due.test.ts` (extended): fires on 28 February in non-leap years, on 29 February in 2028, never 1 March (US3 AS3, SC-004) (depends on T041)
+- [X] T056 [US3] Create `tests/integration/dated-series/missed.test.ts`: a paused series' window closing while paused is recorded missed on Resume with no backfill; a worker down across the date with `leadDays: 0` records missed, versus `leadDays: 3` already having produced the post three days early (US3 AS4–AS5, FR-034–FR-036); the bounded sweep (≤50 misses, 30-day window) while every stale `next_target_date` is still advanced, including one 40 days old (FR-036, B25) (depends on T033, T035)
+- [X] T057 [P] [US3] Integration test for two same-date rows in `due.test.ts` or `missed.test.ts`: two rows on one date each producing its own post (US3 AS6) (depends on T041)
 
 **Checkpoint**: US3 complete — SC-004, SC-006 and SC-008 are covered.
 

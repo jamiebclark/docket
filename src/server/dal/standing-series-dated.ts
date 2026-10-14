@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import {
   standingSeriesDatedRows,
@@ -128,11 +128,16 @@ export function createDatedRowsRepo(db: Database, projectId: string): DatedRowsR
         .returning({ id: standingSeriesDatedRows.id });
       return rows.length;
     },
-    async dueOrPast(seriesId, today, _leadDays, limit) {
+    async dueOrPast(seriesId, today, leadDays, limit) {
       return db
         .select()
         .from(standingSeriesDatedRows)
-        .where(and(inSeries(seriesId), lte(standingSeriesDatedRows.nextTargetDate, today)))
+        .where(
+          and(
+            inSeries(seriesId),
+            sql`(${standingSeriesDatedRows.nextTargetDate}::date - ${leadDays}::int) <= ${today}::date`,
+          ),
+        )
         .orderBy(asc(standingSeriesDatedRows.nextTargetDate), asc(standingSeriesDatedRows.ordinal))
         .limit(limit);
     },

@@ -7,7 +7,7 @@ import { createStandingSeries } from "../../../src/server/services/standing-seri
 import { getStandingSeries } from "../../../src/server/services/standing-series/read";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
-import { standingSeries } from "../../../src/server/db/schema";
+import { projects, standingSeries } from "../../../src/server/db/schema";
 import type { NewDatedRow } from "../../../src/server/dal/standing-series-dated";
 import { closeDb } from "../../helpers/db";
 import { atTime } from "../../helpers/clock";
@@ -35,6 +35,14 @@ const CONFIG: SchedulerConfig = {
 async function parkOtherSeries(): Promise<void> {
   await runCrossProject("test: park standing series", async () => {
     await getDb().update(standingSeries).set({ enabled: false }).where(eq(standingSeries.enabled, true));
+  });
+}
+
+/** Writes straight to the project row: changes `scope.project.timezone` for the next fresh scope
+ *  (every tick builds its own via `forJobRunner`), without disturbing an already-built scope. */
+async function setProjectTimezone(projectId: string, timezone: string): Promise<void> {
+  await runCrossProject("test: set project timezone", async () => {
+    await getDb().update(projects).set({ timezone }).where(eq(projects.id, projectId));
   });
 }
 
@@ -234,5 +242,208 @@ describe("dated series due resolution and firing (US1 AS1-AS6, FR-030-FR-033, FR
       const positions = await e.scope.standingSeriesPositions.listForRun(run.id);
       expect(positions.filter((p) => p.status === "produced")).toHaveLength(1);
     }
+  });
+});
+
+describe("dated series at the edges (US3 AS1, AS2, AS6, AS7, FR-033, FR-041, SC-004, SC-006, SC-008)", () => {
+  it("AS1/SC-006: two projects in different time zones each fire on their own local date, never the other's", async () => {
+    const eastern = await standingSeriesEnv();
+    await setProjectTimezone(eastern.project.id, "America/New_York");
+    const auckland = await standingSeriesEnv();
+    await setProjectTimezone(auckland.project.id, "Pacific/Auckland");
+
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId: easternId } = await atTime(created, () =>
+      createStandingSeries(eastern.scope, eastern.create({ occurrenceRule: "dated_list", cadence: null })),
+    );
+    const { seriesId: aucklandId } = await atTime(created, () =>
+      createStandingSeries(auckland.scope, auckland.create({ occurrenceRule: "dated_list", cadence: null })),
+    );
+    await eastern.scope.datedRows.insert(easternId, rowInput({ ordinal: 0, nextTargetDate: "2026-03-14" }));
+    await auckland.scope.datedRows.insert(aucklandId, rowInput({ ordinal: 0, nextTargetDate: "2026-03-14" }));
+
+    // Auckland's local midnight for 14 March is 2026-03-13T11:00:00Z (NZDT, UTC+13); New York's is
+    // 2026-03-14T04:00:00Z (EDT, UTC-4, in effect since 2026-03-08).
+    setLlmForTests(createFakeLlm(Array.from({ length: 4 }, () => post("A fixture post."))));
+    const mid = await tick(new Date("2026-03-13T12:00:00.000Z"));
+    expect(mid.produced).toBe(1);
+    expect(await auckland.scope.standingSeriesRuns.listForSeries(aucklandId, { limit: 5 })).toHaveLength(1);
+    expect(await eastern.scope.standingSeriesRuns.listForSeries(easternId, { limit: 5 })).toHaveLength(0);
+
+    setLlmForTests(createFakeLlm(Array.from({ length: 4 }, () => post("A fixture post."))));
+    const later = await tick(new Date("2026-03-14T05:00:00.000Z"));
+    expect(later.produced).toBe(1);
+    expect(await eastern.scope.standingSeriesRuns.listForSeries(easternId, { limit: 5 })).toHaveLength(1);
+    expect(await auckland.scope.standingSeriesRuns.listForSeries(aucklandId, { limit: 5 })).toHaveLength(1);
+  });
+
+  it("AS2: a missing local midnight (America/Santiago, 6 September 2026) resolves forward and fires exactly once", async () => {
+    const e = await standingSeriesEnv();
+    await setProjectTimezone(e.project.id, "America/Santiago");
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null })),
+    );
+    await e.scope.datedRows.insert(seriesId, rowInput({ ordinal: 0, month: 9, day: 6, year: null, nextTargetDate: "2026-09-06" }));
+
+    // Local midnight on 6 September never exists there (00:00-00:59 is skipped); the resolved due
+    // instant is 2026-09-06T04:00:00Z, local 01:00.
+    setLlmForTests(createFakeLlm([post("Should not run.")]));
+    expect((await tick(new Date("2026-09-06T03:00:00.000Z"))).produced).toBe(0);
+
+    setLlmForTests(createFakeLlm([post("Fired once.")]));
+    expect((await tick(new Date("2026-09-06T04:00:01.000Z"))).produced).toBe(1);
+
+    setLlmForTests(createFakeLlm([post("Should not run again.")]));
+    expect((await tick(new Date("2026-09-06T06:00:00.000Z"))).produced).toBe(0);
+    expect((await tick(new Date("2026-09-07T13:00:00.000Z"))).produced).toBe(0);
+
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    expect(runs).toHaveLength(1);
+  });
+
+  it("AS2: a doubled local midnight (America/Havana, 1 November 2026) resolves to the earlier instant and fires exactly once", async () => {
+    const e = await standingSeriesEnv();
+    await setProjectTimezone(e.project.id, "America/Havana");
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null })),
+    );
+    await e.scope.datedRows.insert(seriesId, rowInput({ ordinal: 0, month: 11, day: 1, year: null, nextTargetDate: "2026-11-01" }));
+
+    // Local midnight on 1 November happens twice there (once at -04:00, again an hour later at
+    // -05:00); the resolved due instant takes the earlier offset, 2026-11-01T04:00:00Z.
+    setLlmForTests(createFakeLlm([post("Should not run.")]));
+    expect((await tick(new Date("2026-11-01T03:00:00.000Z"))).produced).toBe(0);
+
+    setLlmForTests(createFakeLlm([post("Fired once.")]));
+    expect((await tick(new Date("2026-11-01T04:00:01.000Z"))).produced).toBe(1);
+
+    setLlmForTests(createFakeLlm([post("Should not run again.")]));
+    expect((await tick(new Date("2026-11-01T05:30:00.000Z"))).produced).toBe(0);
+    expect((await tick(new Date("2026-11-02T13:00:00.000Z"))).produced).toBe(0);
+
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    expect(runs).toHaveLength(1);
+  });
+
+  it("AS7: changing the project's time zone resolves the next due date in the new zone, leaving fired occurrences unchanged", async () => {
+    const e = await standingSeriesEnv();
+    await setProjectTimezone(e.project.id, "America/Los_Angeles");
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null })),
+    );
+    const firedRow = await e.scope.datedRows.insert(
+      seriesId,
+      rowInput({
+        ordinal: 0,
+        month: 1,
+        day: 10,
+        year: 2026,
+        keyValue: "Fired already",
+        fields: { name: "Fired already" },
+        nextTargetDate: "2026-01-10",
+      }),
+    );
+    const pendingRow = await e.scope.datedRows.insert(
+      seriesId,
+      rowInput({ ordinal: 1, month: 3, day: 14, year: null, keyValue: "Pending", fields: { name: "Pending" }, nextTargetDate: "2026-03-14" }),
+    );
+
+    // Local midnight 10 January in Los Angeles (PST, UTC-8) is 2026-01-10T08:00:00Z.
+    setLlmForTests(createFakeLlm([post("Already fired.")]));
+    expect((await tick(new Date("2026-01-10T09:00:00.000Z"))).produced).toBe(1);
+    const beforeSwitch = await getStandingSeries(e.scope, seriesId);
+    const firedBefore = beforeSwitch.rows.items.find((r) => r.id === firedRow.id)!;
+    expect(firedBefore.nextTargetDate).toBeNull();
+    expect(firedBefore.lastOutcome).toBe("produced");
+
+    await setProjectTimezone(e.project.id, "Pacific/Auckland");
+
+    // 14 March local midnight in Los Angeles (PDT, UTC-7) would be 2026-03-14T07:00:00Z; in
+    // Auckland (NZDT, UTC+13) it is a full day earlier, 2026-03-13T11:00:00Z.
+    setLlmForTests(createFakeLlm([post("Fired in the new zone.")]));
+    expect((await tick(new Date("2026-03-13T12:00:00.000Z"))).produced).toBe(1);
+
+    setLlmForTests(createFakeLlm([post("Should not run again.")]));
+    expect((await tick(new Date("2026-03-14T07:30:00.000Z"))).produced).toBe(0);
+
+    const after = await getStandingSeries(e.scope, seriesId);
+    const firedAfter = after.rows.items.find((r) => r.id === firedRow.id)!;
+    expect(firedAfter.nextTargetDate).toBeNull();
+    expect(firedAfter.lastOutcome).toBe("produced");
+    const pendingAfter = after.rows.items.find((r) => r.id === pendingRow.id)!;
+    expect(pendingAfter.lastOutcome).toBe("produced");
+  });
+
+  it("AS3/SC-004: a 29 February row fires on 28 February in a non-leap year, on 29 February in 2028, never 1 March", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null })),
+    );
+    await e.scope.datedRows.insert(
+      seriesId,
+      rowInput({ ordinal: 0, month: 2, day: 29, year: null, keyValue: "Leap day", fields: { name: "Leap day" }, nextTargetDate: "2027-02-28" }),
+    );
+
+    setLlmForTests(createFakeLlm([post("Should not run.")]));
+    expect((await tick(new Date("2027-02-27T00:00:01.000Z"))).produced).toBe(0);
+
+    setLlmForTests(createFakeLlm([post("Fired on 28 February, non-leap year.")]));
+    expect((await tick(new Date("2027-02-28T00:00:01.000Z"))).produced).toBe(1);
+
+    setLlmForTests(createFakeLlm([post("Should not run again.")]));
+    expect((await tick(new Date("2027-03-01T00:00:01.000Z"))).produced).toBe(0);
+
+    const detail = await getStandingSeries(e.scope, seriesId);
+    const view = detail.rows.items.find((r) => r.fields.name === "Leap day")!;
+    expect(view.nextTargetDate).toBe("2028-02-29");
+
+    setLlmForTests(createFakeLlm([post("Should not run yet.")]));
+    expect((await tick(new Date("2028-02-28T00:00:01.000Z"))).produced).toBe(0);
+
+    setLlmForTests(createFakeLlm([post("Fired on the actual leap day.")]));
+    expect((await tick(new Date("2028-02-29T00:00:01.000Z"))).produced).toBe(1);
+
+    setLlmForTests(createFakeLlm([post("Should never run on 1 March.")]));
+    expect((await tick(new Date("2028-03-01T00:00:01.000Z"))).produced).toBe(0);
+
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    expect(runs.map((r) => r.periodStart).sort()).toEqual(["2027-02-28", "2028-02-29"]);
+  });
+
+  it("AS6: two rows sharing a date each produce their own post", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null })),
+    );
+    await e.scope.datedRows.insert(
+      seriesId,
+      rowInput({ ordinal: 0, keyValue: "Ada Lovelace", fields: { name: "Ada Lovelace" }, nextTargetDate: "2026-03-14" }),
+    );
+    await e.scope.datedRows.insert(
+      seriesId,
+      rowInput({ ordinal: 1, keyValue: "Albert Einstein", fields: { name: "Albert Einstein" }, nextTargetDate: "2026-03-14" }),
+    );
+
+    setLlmForTests(createFakeLlm([post("Post for Ada."), post("Post for Albert.")]));
+    const fired = await tick(new Date("2026-03-14T00:00:01.000Z"));
+    expect(fired.produced).toBe(2);
+
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    expect(runs).toHaveLength(1);
+    const positions = await e.scope.standingSeriesPositions.listForRun(runs[0]!.id);
+    expect(positions.filter((p) => p.status === "produced")).toHaveLength(2);
+    const names = new Set<string>();
+    for (const position of positions) {
+      const p = await e.scope.posts.findByStandingSeriesPosition(position.id);
+      expect(p).not.toBeNull();
+      const dated = position.dated as { keyValue: string } | null;
+      names.add(dated!.keyValue);
+    }
+    expect(names).toEqual(new Set(["Ada Lovelace", "Albert Einstein"]));
   });
 });
