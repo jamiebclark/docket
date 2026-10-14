@@ -5,7 +5,7 @@ import type { PostingPanelView } from "@/server/services/posts/compose";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { checkStyles, controlStyles, hintStyles, labelStyles } from "@/components/ui/controls";
-import { fieldDescribedBy } from "./posting-ui";
+import { countPostingText, fieldDescribedBy } from "./posting-ui";
 
 export interface PostingImage {
   id: string;
@@ -45,7 +45,7 @@ export function PostingFieldsPanel({
             <>
               {" "}
               <a href={panel.notice.doc} className="font-medium underline" target="_blank" rel="noreferrer">
-                Read how TikTok&apos;s audit works
+                {panel.notice.docLabel ?? "Read more"}
               </a>
             </>
           ) : null}
@@ -138,7 +138,14 @@ function PostingField({
             value={field.value ?? ""}
             disabled={!!field.disabled}
             aria-describedby={describedBy}
-            onChange={(e) => onChange(field.key, e.target.value === "" ? null : e.target.value)}
+            onChange={(e) => {
+              const id = e.target.value;
+              onChange(field.key, id === "" ? null : id);
+              if (field.labelKey) {
+                const label = field.options.find((o) => o.value === id)?.label ?? "";
+                onChange(field.labelKey, id === "" ? "" : label);
+              }
+            }}
           >
             <option value="">{field.placeholder}</option>
             {field.options.map((o) => (
@@ -183,12 +190,12 @@ function PostingField({
             value={field.value}
             disabled={!!field.disabled}
             aria-describedby={`${id}-count${describedBy ? ` ${describedBy}` : ""}`}
-            aria-invalid={field.value.length > field.maxLength || undefined}
+            aria-invalid={countPostingText(field.value, field.countingRule) > field.maxLength || undefined}
             onChange={(e) => onChange(field.key, e.target.value)}
           />
-          {/* The unit is the provider's own (UTF-16 for TikTok); `length` is that count, and the check re-validates it. */}
+          {/* The unit is the provider's own (UTF-16 for TikTok); the check re-validates this same count. */}
           <p id={`${id}-count`} className={hintStyles}>
-            {field.value.length} / {field.maxLength}
+            {countPostingText(field.value, field.countingRule)} / {field.maxLength}
           </p>
           {reason}
           {help}
