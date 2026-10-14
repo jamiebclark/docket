@@ -8,6 +8,7 @@ import { emptyHousekeepingCounts, runHousekeeping, type HousekeepingCounts } fro
 import { emptyWebhookCounts, runWebhookDeliveries, type WebhookCounts } from "./webhooks";
 import { emptyPublishingCounts, runPublishing, type PublishingCounts } from "./publishing";
 import { emptyEmailCounts, runEmailDeliveries, type EmailCounts } from "./email";
+import { emptyStandingSeriesCounts, runStandingSeries, type StandingSeriesCounts } from "./standing-series";
 
 export type { SchedulerConfig } from "./config";
 
@@ -23,6 +24,7 @@ export interface TickSummary {
   housekeeping: SectionResult<HousekeepingCounts>;
   webhooks: SectionResult<WebhookCounts>;
   email: SectionResult<EmailCounts>;
+  standingSeries: SectionResult<StandingSeriesCounts>;
 }
 
 /**
@@ -44,14 +46,26 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     }
   };
   // The sections run concurrently under the same deadline (D7); each handles its own failure.
-  const [publishing, tokenRefresh, generation, housekeeping, webhooks, email] = await Promise.all([
+  const [publishing, tokenRefresh, generation, housekeeping, webhooks, email, standingSeries] = await Promise.all([
     section("publishing", () => runPublishing({ config, tickId, startedAt }), emptyPublishingCounts()),
     section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0 }),
     section("generation jobs", () => runGenerationJobs({ config, tickId, startedAt }), emptyGenerationCounts()),
     section("housekeeping", () => runHousekeeping(), emptyHousekeepingCounts()),
     section("webhooks", () => runWebhookDeliveries({ config, tickId, startedAt }), emptyWebhookCounts()),
     section("email", () => runEmailDeliveries({ config, tickId, startedAt }), emptyEmailCounts()),
+    section("standing series", () => runStandingSeries({ config, tickId, startedAt }), emptyStandingSeriesCounts()),
   ]);
 
-  return { tickId, startedAt: startedAt.toISOString(), durationMs: Date.now() - t0, publishing, tokenRefresh, generation, housekeeping, webhooks, email };
+  return {
+    tickId,
+    startedAt: startedAt.toISOString(),
+    durationMs: Date.now() - t0,
+    publishing,
+    tokenRefresh,
+    generation,
+    housekeeping,
+    webhooks,
+    email,
+    standingSeries,
+  };
 }

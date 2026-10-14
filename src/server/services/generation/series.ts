@@ -128,13 +128,21 @@ export async function planSeries(
   };
   const attempts: Attempts = [];
   const call = async (retry: { previousOutput: string; problems: string[] } | null) =>
-    llm.generate({
-      label: "generate.series_plan",
-      ...buildSeriesPlanPrompt({ ...base, retry }),
-      images: [],
-      schemaName: "series_plan",
-      schema: seriesPlanSchema,
-    });
+    purpose === "generate.standing_series_plan"
+      ? llm.generate({
+          label: "generate.standing_series_plan",
+          ...buildSeriesPlanPrompt({ ...base, retry }),
+          images: [],
+          schemaName: "series_plan",
+          schema: seriesPlanSchema,
+        })
+      : llm.generate({
+          label: "generate.series_plan",
+          ...buildSeriesPlanPrompt({ ...base, retry }),
+          images: [],
+          schemaName: "series_plan",
+          schema: seriesPlanSchema,
+        });
   const attemptOf = (r: LlmResult<unknown>, kind: Attempts[number]["kind"]) =>
     attempts.push({ kind, latencyMs: r.latencyMs, usage: r.usage });
   const identity = (r: LlmResult<unknown>) => ({ provider: r.provider, model: r.model });

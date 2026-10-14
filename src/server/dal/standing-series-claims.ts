@@ -44,6 +44,10 @@ export function claimDueStandingSeries(opts: {
   return crossProject("scheduler: claim due standing series", async () => {
     if (opts.limit <= 0) return { series: [], held: [], probing: [] };
     const { now } = opts;
+    // Skipped before touching the shared credit-hold row at all: an install with no enabled series
+    // must never contend with the batch job claim for that tick's one probe (S23).
+    const [anyEnabled] = await getDb().select({ id: standingSeries.id }).from(standingSeries).where(eq(standingSeries.enabled, true)).limit(1);
+    if (!anyEnabled) return { series: [], held: [], probing: [] };
     return getDb().transaction(async (tx) => {
       const exec = tx as unknown as Database;
       const { held, probing } = await gateCreditHolds(exec, now);
