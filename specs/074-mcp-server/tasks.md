@@ -27,7 +27,7 @@ Single Next.js project. Source under `src/`, tests under `tests/`, docs under `d
 
 **Purpose**: Confirm the dependency's actual state so later phases know what they can and cannot run. **Update since planning**: `@modelcontextprotocol/sdk@1.32.1` was installed by an operator commit (`b11b4b1`, 2026-10-14) after the plan was written, and `docs/research/mcp.md` was updated with facts read from its installed types — Phase 6 is therefore no longer blocked on an install, only on the one remaining `[confirm]` item below.
 
-- [ ] T001 Confirm `@modelcontextprotocol/sdk` is present in `package.json`/`node_modules/` at the version `docs/research/mcp.md` §1 records, and that the file's **[confirm]** list in §2 is only the `McpServer`/`Server` tool-registration API and the Zod-vs-JSON-Schema question (`zod-compat.js`/`zod-json-schema-compat.js`) — if more has drifted, update research.md before building on it
+- [X] T001 Confirm `@modelcontextprotocol/sdk` is present in `package.json`/`node_modules/` at the version `docs/research/mcp.md` §1 records, and that the file's **[confirm]** list in §2 is only the `McpServer`/`Server` tool-registration API and the Zod-vs-JSON-Schema question (`zod-compat.js`/`zod-json-schema-compat.js`) — if more has drifted, update research.md before building on it
 
 ---
 
