@@ -103,6 +103,12 @@ function keyCan(permissions: readonly ApiKeyPermission[], request: PermissionReq
   );
 }
 
+/** The one permission the fixed-editor job runner needs beyond its role (see `buildScope`). */
+function jobRunnerGrants(request: PermissionRequest): boolean {
+  const entries = Object.entries(request) as [string, readonly string[]][];
+  return entries.every(([resource, actions]) => resource === "media" && actions.every((a) => a === "generate"));
+}
+
 export interface ProjectScope {
   readonly actor: ScopeActor;
   /** The database or transaction this scope is pinned to. For a write that spans a DAL this scope has no repo for
@@ -230,7 +236,12 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     can:
       actor.kind === "api_key"
         ? (request) => keyCan(actor.permissions, request)
-        : (request) => roles[data.membership.role].authorize(request as never).success,
+        : // The job runner acts on a series an owner/admin already configured to generate images
+          // (standing_series:manage is owner/admin-only); it needs media:generate for that, regardless
+          // of the fixed editor role it otherwise runs as.
+          (request) =>
+            roles[data.membership.role].authorize(request as never).success ||
+            (actor.kind === "job_runner" && jobRunnerGrants(request)),
     audit: createAuditRepo(exec, data.project.id),
     members: createMembersRepo(exec, data.project.id),
     uploads: createUploadsRepo(exec, data.project.id),
