@@ -67,11 +67,12 @@ rejected the refresh token.
 
 ## Trial rate limits
 
-While the app has Trial access, Pinterest limits writes to **100 a minute** (`org_write`, reviewed), shared across
-every connected account, and the whole app is capped at **300 a day**, also shared across every connected account.
-Docket does not model the daily cap (it is per app, not per account) — a post that would exceed it is deferred, not
-failed, when Pinterest reports a 429. Both numbers, and the Trial visibility rule, are shown on the account card, in
-the composer's requirements summary and above the posting fields.
+While the app has Trial access, Pinterest caps the whole app at **300 a day** for pin creations (`org_write`,
+reviewed), shared across every connected account. Docket does not model that daily cap (it is per app, not per account) — a post
+that would exceed it is deferred, not failed, when Pinterest reports a 429. Once the app is upgraded to **Standard**
+access, the limit becomes **100 a minute** per user per app, which is what Docket's publish limit models. Both
+numbers, and the Trial visibility rule, are shown on the account card, in the composer's requirements summary and
+above the posting fields.
 
 ## `api-sandbox` is a different thing
 

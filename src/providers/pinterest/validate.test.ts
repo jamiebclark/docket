@@ -85,6 +85,14 @@ describe("posting rules", () => {
     expect(codes(at)).not.toContain("title_too_long");
   });
 
+  it("counts the title in code points, not UTF-16 units", () => {
+    const emoji = "😀";
+    const publishes = content({ posting: { values: { v: 1, boardId: "b1", boardName: "Recipes", title: emoji.repeat(51), link: "" }, details: { v: 1, boards: [{ id: "b1", name: "Recipes" }], truncated: false } } });
+    expect(codes(publishes)).not.toContain("title_too_long");
+    const refused = content({ posting: { values: { v: 1, boardId: "b1", boardName: "Recipes", title: emoji.repeat(101), link: "" }, details: { v: 1, boards: [{ id: "b1", name: "Recipes" }], truncated: false } } });
+    expect(issueFor(refused, "title_too_long")).toMatchObject({ count: 101, limit: PINTEREST_TITLE_MAX });
+  });
+
   it("link_too_long at 2049, publishes at 2048", () => {
     const base = "https://example.com/";
     const over = content({ posting: { values: { v: 1, boardId: "b1", boardName: "Recipes", title: "", link: base + "x".repeat(2049 - base.length) }, details: { v: 1, boards: [{ id: "b1", name: "Recipes" }], truncated: false } } });

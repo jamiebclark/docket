@@ -1,3 +1,4 @@
+import { countCodePoints } from "../text";
 import type { PostContent, ProviderCapabilities, ValidationIssue } from "../types";
 import { validateAgainstCapabilities } from "../validation";
 import type { PinterestDetails } from "./boards";
@@ -60,14 +61,16 @@ export function validatePinterest(content: PostContent, caps: ProviderCapabiliti
       );
     }
 
-    if (values.title.length > PINTEREST_TITLE_MAX) {
+    const titleLength = countCodePoints(values.title);
+    if (titleLength > PINTEREST_TITLE_MAX) {
       issues.push(
-        error("title_too_long", "posting.title", `The pin title is ${values.title.length} characters; Pinterest allows ${PINTEREST_TITLE_MAX}.`, values.title.length, PINTEREST_TITLE_MAX),
+        error("title_too_long", "posting.title", `The pin title is ${titleLength} characters; Pinterest allows ${PINTEREST_TITLE_MAX}.`, titleLength, PINTEREST_TITLE_MAX),
       );
     }
-    if (values.link.length > PINTEREST_LINK_MAX) {
+    const linkLength = countCodePoints(values.link);
+    if (linkLength > PINTEREST_LINK_MAX) {
       issues.push(
-        error("link_too_long", "posting.link", `The pin link is ${values.link.length} characters; Pinterest allows ${PINTEREST_LINK_MAX}.`, values.link.length, PINTEREST_LINK_MAX),
+        error("link_too_long", "posting.link", `The pin link is ${linkLength} characters; Pinterest allows ${PINTEREST_LINK_MAX}.`, linkLength, PINTEREST_LINK_MAX),
       );
     } else if (values.link && !ABSOLUTE_HTTP.test(values.link)) {
       issues.push(error("link_invalid", "posting.link", "The pin link must be a full web address starting with https://."));
