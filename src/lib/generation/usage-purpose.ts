@@ -7,6 +7,8 @@ export const USAGE_PURPOSE_LABELS: Record<UsagePurpose, string> = {
   "generate.series_post": "Series post",
   "generate.regenerate": "Regenerate",
   "generate.job_item": "Batch job item",
+  "generate.standing_series_plan": "Standing series plan",
+  "generate.standing_series_post": "Standing series post",
   "voice.try": "Voice try it",
   "llm.check": "Credential check",
   "image.generate": "Generated image",

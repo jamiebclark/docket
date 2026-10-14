@@ -11,6 +11,8 @@ export interface GenerationFailuresRepo {
   listRecent(limit: number): Promise<GenerationFailureRecord[]>;
   /** Newest first. */
   listForSeries(seriesId: string): Promise<GenerationFailureRecord[]>;
+  /** Newest first. */
+  listForRun(runId: string): Promise<GenerationFailureRecord[]>;
 }
 
 export function createGenerationFailuresRepo(db: Database, projectId: string): GenerationFailuresRepo {
@@ -35,6 +37,13 @@ export function createGenerationFailuresRepo(db: Database, projectId: string): G
         .select()
         .from(generationFailures)
         .where(and(eq(generationFailures.projectId, projectId), eq(generationFailures.seriesId, seriesId)))
+        .orderBy(desc(generationFailures.createdAt), desc(generationFailures.id));
+    },
+    async listForRun(runId) {
+      return db
+        .select()
+        .from(generationFailures)
+        .where(and(eq(generationFailures.projectId, projectId), eq(generationFailures.standingSeriesRunId, runId)))
         .orderBy(desc(generationFailures.createdAt), desc(generationFailures.id));
     },
   };

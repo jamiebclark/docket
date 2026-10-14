@@ -29,6 +29,14 @@ import { createUploadsRepo, type UploadsRepo } from "./uploads";
 import { createPostsRepo, type PostsRepo } from "./posts";
 import { createProjectLlmRepo, type ProjectLlmRepo } from "./project-llm";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
+import {
+  createStandingSeriesPositionsRepo,
+  createStandingSeriesRepo,
+  createStandingSeriesRunsRepo,
+  type StandingSeriesPositionsRepo,
+  type StandingSeriesRepo,
+  type StandingSeriesRunsRepo,
+} from "./standing-series";
 import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
 import { createMembersRepo, type MembersRepo } from "./members";
@@ -133,6 +141,9 @@ export interface ProjectScope {
   readonly voiceVersions: VoiceVersionsRepo;
   readonly series: SeriesRepo;
   readonly generationFailures: GenerationFailuresRepo;
+  readonly standingSeries: StandingSeriesRepo;
+  readonly standingSeriesRuns: StandingSeriesRunsRepo;
+  readonly standingSeriesPositions: StandingSeriesPositionsRepo;
   readonly jobs: JobsRepo;
   readonly jobItems: JobItemsRepo;
   readonly apiKeys: ApiKeysRepo;
@@ -230,6 +241,9 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     voiceVersions: createVoiceVersionsRepo(exec, data.project.id),
     series: createSeriesRepo(exec, data.project.id),
     generationFailures: createGenerationFailuresRepo(exec, data.project.id),
+    standingSeries: createStandingSeriesRepo(exec, data.project.id),
+    standingSeriesRuns: createStandingSeriesRunsRepo(exec, data.project.id),
+    standingSeriesPositions: createStandingSeriesPositionsRepo(exec, data.project.id),
     jobs: createJobsRepo(exec, data.project.id),
     jobItems: createJobItemsRepo(exec, data.project.id),
     apiKeys: createApiKeysRepo(exec, data.project.id),

@@ -19,6 +19,7 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     api_key: ["manage"],
     webhook: ["manage"],
     llm_credential: ["manage"],
+    standing_series: ["manage"],
   },
   admin: {
     project: ["view", "update"],
@@ -34,6 +35,7 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     api_key: ["manage"],
     webhook: ["manage"],
     llm_credential: ["manage"],
+    standing_series: ["manage"],
   },
   editor: {
     project: ["view"],

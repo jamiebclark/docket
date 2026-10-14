@@ -339,6 +339,8 @@ const base = z.object({
     EXPLICIT_TIME_WARNING_MINUTES: int(0, 1440, 30),
     QUEUE_HORIZON_DAYS: int(7, 730, 366),
     GENERATION_TICK_MAX_ITEMS: int(1, 10, 2),
+    STANDING_SERIES_TICK_MAX_SERIES: int(1, 10, 2),
+    STANDING_SERIES_TICK_MAX_POSTS: int(1, 10, 2),
     S3_BUCKET: z.string().optional(),
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),

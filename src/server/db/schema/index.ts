@@ -11,6 +11,7 @@ export * from "./scheduler";
 export * from "./connect";
 export * from "./generation";
 export * from "./jobs";
+export * from "./standing-series";
 export * from "./external-claims";
 export * from "./api";
 export * from "./webhooks";

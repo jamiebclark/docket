@@ -20,8 +20,16 @@ import { user } from "./auth";
 import { generationJobItems, generationJobs } from "./jobs";
 import { posts } from "./posts";
 import { projects } from "./projects";
+import { standingSeriesRuns } from "./standing-series";
 
-export const generationMode = pgEnum("generation_mode", ["single", "series_plan", "series_post", "regenerate"]);
+export const generationMode = pgEnum("generation_mode", [
+  "single",
+  "series_plan",
+  "series_post",
+  "regenerate",
+  "standing_series_plan",
+  "standing_series_post",
+]);
 export const llmFailureKind = pgEnum("llm_failure_kind", [
   "invalid_output",
   "refused",
@@ -94,6 +102,8 @@ export const llmUsagePurpose = pgEnum("llm_usage_purpose", [
   "generate.series_post",
   "generate.regenerate",
   "generate.job_item",
+  "generate.standing_series_plan",
+  "generate.standing_series_post",
   "voice.try",
   "llm.check",
   "image.generate",
@@ -181,6 +191,8 @@ export const generationFailures = pgTable(
     mode: generationMode("mode").notNull(),
     seriesId: uuid("series_id"),
     seriesPosition: smallint("series_position"),
+    standingSeriesRunId: uuid("standing_series_run_id"),
+    standingSeriesPosition: smallint("standing_series_position"),
     postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }),
     inputs: jsonb("inputs").notNull(),
     kind: llmFailureKind("kind").notNull(),
@@ -197,8 +209,24 @@ export const generationFailures = pgTable(
       columns: [t.projectId, t.seriesId],
       foreignColumns: [generationSeries.projectId, generationSeries.id],
     }).onDelete("cascade"),
+    foreignKey({
+      name: "generation_failures_standing_series_run_fk",
+      columns: [t.projectId, t.standingSeriesRunId],
+      foreignColumns: [standingSeriesRuns.projectId, standingSeriesRuns.id],
+    }).onDelete("cascade"),
     index("generation_failures_project_created_idx").on(t.projectId, t.createdAt.desc()),
+    index("generation_failures_project_run_idx")
+      .on(t.projectId, t.standingSeriesRunId)
+      .where(sql`${t.standingSeriesRunId} IS NOT NULL`),
     check("generation_failures_series_pair", sql`(${t.seriesId} IS NULL) = (${t.seriesPosition} IS NULL)`),
+    check(
+      "generation_failures_standing_mode_pair",
+      sql`(${t.mode} IN ('standing_series_plan','standing_series_post')) = (${t.standingSeriesRunId} IS NOT NULL)`,
+    ),
+    check(
+      "generation_failures_standing_position_needs_run",
+      sql`${t.standingSeriesPosition} IS NULL OR ${t.standingSeriesRunId} IS NOT NULL`,
+    ),
   ],
 );
 
