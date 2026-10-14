@@ -43,6 +43,19 @@ Every new app starts with **Trial access**:
   connecting the account, composing and publishing a pin, and the published pin visible on Pinterest. Pinterest
   asks for the video even when you are the only intended user of its API.
 
+### Claim the website first
+
+Pinterest also checks that the website is **registered with an entity in your company**. That is met by claiming
+the website on the business account that owns the app, before you submit the Trial request. **Unverified**: these
+steps have not been run end to end against a Docket deployment.
+
+1. In Pinterest, open **Settings → Claimed accounts → Websites → Claim**, enter `<BETTER_AUTH_URL>` and choose
+   **Add HTML tag**.
+2. Pinterest shows a tag like `<meta name="p:domain_verify" content="0123abcd…"/>`. Copy only the `content` value
+   into `PINTEREST_DOMAIN_VERIFY` (letters and digits; anything else is ignored with a start-up warning).
+3. Restart Docket. Every page's `<head>` now carries that tag; check with "View source" on `<BETTER_AUTH_URL>/`.
+4. Back in Pinterest, click **Verify**.
+
 The request form asks a few things worth answering deliberately (observed on the live form, 2026-10-14):
 
 | Field | Answer for Docket | Why |
@@ -50,7 +63,20 @@ The request form asks a few things worth answering deliberately (observed on the
 | Developer purpose | **Personal API access (single, personal use)** | One operator publishing their own brands, not a product sold to other people |
 | Use cases | **Pin creation & scheduling** | The only thing it does. Leave reporting, ads, ecommerce and the rest unticked |
 | Reads Pins and/or Boards Data | **Yes, mine** | Docket lists the *connected* account's own boards so a post can pick one. The third option, "Yes, for general users", is reading other Pinners' data and says on the form that it **requires separate approval** — that is the `PINNER_DATA_ACCESS_DENIED` gate above, and Docket does not need it |
-| Privacy policy | A page that **resolves right now** | Docket publishes one at [Privacy](privacy.md). An unreachable link is a documented refusal reason, so check it loads before submitting |
+| Website | `<BETTER_AUTH_URL>/` — e.g. `https://docket.example.com/` | Docket's public home page: it says what the app does, names the platforms it posts to and links the privacy policy, with no sign-in. It must be **this deployment's own domain**, not a social profile or the GitHub repository. Pinterest's first check is that the website is online and accessible |
+| App description | Plain words, e.g. "A self-hosted scheduler I use to plan and publish Pins to my own business account's boards. It lists my own boards so each post can choose one, and creates Pins at the time I schedule. It does not read other users' data." | Pinterest refuses an incomplete or unclear description. Say what it does, whose account it posts to, and what it reads (your own boards only) |
+| Privacy policy | `<BETTER_AUTH_URL>/privacy` — e.g. `https://docket.example.com/privacy` | Every installation serves its own policy there, titled "Privacy Policy", without sign-in (source: [privacy.md](privacy.md)). Pinterest checks that it is public, loads completely, is on a domain clearly associated with the app and is clearly labelled — a GitHub link fails the domain test. Set `DOCKET_OPERATOR_NAME` and `DOCKET_OPERATOR_CONTACT` so it names who runs the installation, and open it in a private window before submitting |
+
+The Website and App description rows come from Pinterest's review checklist (a request refused on 2026-10-14
+listed: website online and accessible; privacy policy public, complete, on a domain associated with the app and
+clearly labelled; app description complete), not from the form observation above.
+
+Before you submit, open `<BETTER_AUTH_URL>/` and `<BETTER_AUTH_URL>/privacy` in a private browser window and
+check both load without asking you to log in. If either redirects to a login page, the reviewer sees the same.
+
+**If Trial access is denied**, the app's details are locked ("Trial access denied", observed 2026-10-14) and there is
+no resubmit button on it. Resubmitting means a new request from **My apps → Connect app**, which pre-fills the company
+name and website from your business profile; check both, since the website must be the `https://` address.
 
 A CAPTCHA guards the submit button, and **there is no redirect-URI field on this form** — you register the
 callback on the app's own page after the request is approved (see [Callback address](#callback-address)).
