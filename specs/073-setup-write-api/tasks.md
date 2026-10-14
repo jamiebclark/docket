@@ -159,14 +159,14 @@ Single Next.js app at repository root: `src/`, `tests/`, `drizzle/`, `docs/`.
 
 **Purpose**: Documentation, the OpenAPI surface, and the whole-suite checks that span every story.
 
-- [ ] T039 [P] Extend `tests/integration/api/openapi.test.ts` to assert every new operation documents a summary, a description ending "Requires the `manage_setup` permission.", its tag, `x-required-permission: "manage_setup"`, the `Idempotency-Key` header, a request example where it takes a body, and a response example for each documented status (FR-042, FR-043)
-- [ ] T040 [P] Run `pnpm vitest run tests/lint/api-imports.test.ts` and confirm the new operation files reach no DAL and no database client directly (FR-003) — fix any violation found
-- [ ] T041 [P] Run `pnpm vitest run tests/integration/security/secret-scan.test.ts` and confirm it stays green with the new operations and schemas in place (FR-051, SC-009)
-- [ ] T042 Add the "Provision a brand" worked example to `docs/n8n.md`, placed after section 7 (`## 7. Recover failed posts`) per the documentation-placement decision: project, voice profile, posting instructions and a week of slots, with an `Idempotency-Key` on every write, stating plainly that creating an API key in the new project is the one step that stays in the browser (FR-044)
-- [ ] T043 [P] Rewrite the "What cannot be scripted today" section of `docs/brand-onboarding.md` to name exactly the endpoints this entry adds and which runbook steps can now be driven over HTTP versus which stay in the browser (FR-047)
-- [ ] T044 [P] Add a section to `docs/decisions.md` recording: the `manage_setup` permission choice, the project-creation ownership/scope decision, the whole-week slot shape (`POST /slots/week` as its own operation), the slug-conflict behaviour and reason (`slug_taken`), and the global slug uniqueness constraint (FR-045)
-- [ ] T045 Create `tests/integration/docs/n8n-provision.test.ts` that replays the `docs/n8n.md` provisioning example end to end: asserts at most five HTTP calls (SC-002), asserts a re-run creates nothing a second time (SC-003), and asserts no response in the flow is `internal_error` (SC-004)
-- [ ] T046 Run the full validation pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`, per quickstart.md §3
+- [X] T039 [P] Extend `tests/integration/api/openapi.test.ts` to assert every new operation documents a summary, a description ending "Requires the `manage_setup` permission.", its tag, `x-required-permission: "manage_setup"`, the `Idempotency-Key` header, a request example where it takes a body, and a response example for each documented status (FR-042, FR-043)
+- [X] T040 [P] Run `pnpm vitest run tests/lint/api-imports.test.ts` and confirm the new operation files reach no DAL and no database client directly (FR-003) — fix any violation found
+- [X] T041 [P] Run `pnpm vitest run tests/integration/security/secret-scan.test.ts` and confirm it stays green with the new operations and schemas in place (FR-051, SC-009)
+- [X] T042 Add the "Provision a brand" worked example to `docs/n8n.md`, placed after section 7 (`## 7. Recover failed posts`) per the documentation-placement decision: project, voice profile, posting instructions and a week of slots, with an `Idempotency-Key` on every write, stating plainly that creating an API key in the new project is the one step that stays in the browser (FR-044)
+- [X] T043 [P] Rewrite the "What cannot be scripted today" section of `docs/brand-onboarding.md` to name exactly the endpoints this entry adds and which runbook steps can now be driven over HTTP versus which stay in the browser (FR-047)
+- [X] T044 [P] Add a section to `docs/decisions.md` recording: the `manage_setup` permission choice, the project-creation ownership/scope decision, the whole-week slot shape (`POST /slots/week` as its own operation), the slug-conflict behaviour and reason (`slug_taken`), and the global slug uniqueness constraint (FR-045)
+- [X] T045 Create `tests/integration/docs/n8n-provision.test.ts` that replays the `docs/n8n.md` provisioning example end to end: asserts at most five HTTP calls (SC-002), asserts a re-run creates nothing a second time (SC-003), and asserts no response in the flow is `internal_error` (SC-004)
+- [X] T046 Run the full validation pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build`, per quickstart.md §3
 
 ---
 

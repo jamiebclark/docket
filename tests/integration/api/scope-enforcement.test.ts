@@ -55,8 +55,8 @@ const FIXTURES: Record<string, Fixture> = {
   updateVoiceProfile: { params: (p) => ({ profileId: p.voiceProfile.id }), body: () => ({ name: "Scope test", content: { voiceAndTone: "x" }, baseVersion: 1 }) },
   addSlot: { body: (p) => ({ accountId: p.account.id, weekday: 6, localTime: "06:00" }) },
   addWeekSlots: { body: (p) => ({ accountId: p.account.id, localTime: "05:00" }) },
-  updateSlot: { params: (p) => ({ slotId: p.slot.id }), body: () => ({ paused: true }) },
-  deleteSlot: { params: (p) => ({ slotId: p.slot.id }) },
+  updateSlot: { params: (p) => ({ slotId: p.slot!.id }), body: () => ({ paused: true }) },
+  deleteSlot: { params: (p) => ({ slotId: p.slot!.id }) },
   setAccountPostingInstructions: { params: (p) => ({ accountId: p.account.id }), body: () => ({ instructions: "Scope test" }) },
 };
 
@@ -156,7 +156,7 @@ describe("project isolation, per resource parameter", () => {
           itemId: w.b.items[0]!.id,
           accountId: w.b.account.id,
           profileId: w.b.voiceProfile.id,
-          slotId: w.b.slot.id,
+          slotId: w.b.slot!.id,
         };
         const other = await call(op, w.a, key, { [name]: foreign[name]! });
         const unknown = await call(op, w.a, key, { [name]: random });
