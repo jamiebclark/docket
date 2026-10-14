@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { runCrossProject } from "../../../../src/server/db/cross-project";
 import { membershipAuditLog } from "../../../../src/server/db/schema";
+import * as accountsService from "../../../../src/server/services/accounts";
 import { api, world } from "../../../helpers/api";
 import { closeDb, testDb } from "../../../helpers/db";
 
@@ -75,14 +76,19 @@ describe("PATCH /accounts/{accountId}", () => {
     expect(r.status).toBe(400);
   });
 
-  it("answers byte-identical 404s for another project's account id and a random UUID", async () => {
+  it("answers byte-identical 404s for another project's account id, a removed account and a random UUID", async () => {
     const w = await world();
     const random = "00000000-0000-4000-8000-0000000000ab";
+    const removed = await accountsService.connectMock(w.a.scope, { displayName: `A ${Math.random().toString(36).slice(2, 7)}` });
+    await accountsService.removeAccount(w.a.scope, removed.id);
     const other = await api("PATCH", `/accounts/${w.b.account.id}`, { key: w.a.keys.manageSetup.secret, body: { instructions: "ok" } });
     const unknown = await api("PATCH", `/accounts/${random}`, { key: w.a.keys.manageSetup.secret, body: { instructions: "ok" } });
+    const removedResult = await api("PATCH", `/accounts/${removed.id}`, { key: w.a.keys.manageSetup.secret, body: { instructions: "ok" } });
     expect(other.status).toBe(404);
+    expect(removedResult.status).toBe(404);
     const strip = (r: typeof other) => ({ code: r.json.error.code, message: r.json.error.message, details: r.json.error.details });
     expect(strip(other)).toEqual(strip(unknown));
+    expect(strip(removedResult)).toEqual(strip(unknown));
   });
 
   it("answers 403 for a key lacking manage_setup", async () => {

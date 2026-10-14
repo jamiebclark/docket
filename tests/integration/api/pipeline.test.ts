@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { defineOperation, OPERATIONS } from "../../../src/server/api/operations";
+import * as slotsService from "../../../src/server/services/slots";
 import { api, createKey } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
@@ -91,6 +92,22 @@ describe("routing", () => {
     expect(r.status).toBe(405);
     expect(r.json.error.code).toBe("method_not_allowed");
     expect(r.headers.get("allow")).toContain("GET");
+  });
+
+  it("lists PATCH in Allow for /accounts/{accountId} and DELETE in Allow for /slots/{slotId}", async () => {
+    const { env, key } = await setup();
+    const account = await env.account();
+    const slotsForAccount = await slotsService.listSlots(env.scope, account.id);
+    const slot = slotsForAccount[0]!;
+
+    const accountResult = await api("GET", `/accounts/${account.id}`, { key: key.secret });
+    expect(accountResult.status).toBe(405);
+    expect(accountResult.headers.get("allow")).toContain("PATCH");
+
+    const slotResult = await api("POST", `/slots/${slot.id}`, { key: key.secret, body: {} });
+    expect(slotResult.status).toBe(405);
+    expect(slotResult.headers.get("allow")).toContain("PATCH");
+    expect(slotResult.headers.get("allow")).toContain("DELETE");
   });
 
   it("answers OPTIONS with 204 and Allow, and HEAD without a body", async () => {

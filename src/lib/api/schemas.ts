@@ -402,9 +402,9 @@ export const CreateProjectRequestSchema = z
     defaultApprovalPolicy: approvalPolicySchema.optional(),
     defaultSchedulingPolicy: schedulingPolicySchema.optional(),
     confirmUnreviewedQueue: z.boolean().optional(),
-    tagline: taglineSchema.optional(),
-    description: brandDescriptionSchema.optional(),
-    websiteUrl: brandWebsiteSchema.optional(),
+    tagline: taglineSchema.nullable().optional(),
+    description: brandDescriptionSchema.nullable().optional(),
+    websiteUrl: brandWebsiteSchema.nullable().optional(),
   })
   .meta({ id: "CreateProjectRequest" });
 

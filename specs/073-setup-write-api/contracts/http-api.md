@@ -95,7 +95,7 @@ Request — `UpdateVoiceProfileRequest`: `{ "name": …, "content": {…}, "base
 
 | Status | Body | When |
 |---|---|---|
-| 200 | `VoiceProfileRef` without `isDefault` — `{id, version}` | A version was appended (`version` = `baseVersion` + 1), **or** the submitted name and content were identical to the current version, in which case `version` is unchanged and nothing was appended (FR-024). |
+| 200 | `VoiceProfileRef` — `{id, version, isDefault}` | A version was appended (`version` = `baseVersion` + 1), **or** the submitted name and content were identical to the current version, in which case `version` is unchanged and nothing was appended (FR-024). |
 | 409 `conflict` | error, message "This profile changed since you opened it" | `baseVersion` is not the current version (FR-023). |
 | 409 `conflict` | error, message "Restore this profile before editing it" | The profile is archived (FR-025). |
 | 404 | error | Unknown profile, another project's profile, or a non-UUID path segment. |

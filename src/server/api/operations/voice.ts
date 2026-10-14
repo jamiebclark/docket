@@ -37,8 +37,7 @@ export const voiceOperations = [
     },
     idempotent: true,
     async run(scope, { body }) {
-      const isDefault = scope.project.defaultVoiceProfileId === null;
-      const { profileId, version } = await createVoiceProfile(scope, body);
+      const { profileId, version, isDefault } = await createVoiceProfile(scope, body);
       return { status: 201, body: { id: profileId, version, isDefault } };
     },
   }),
@@ -73,8 +72,7 @@ export const voiceOperations = [
     },
     idempotent: true,
     async run(scope, { params, body }) {
-      const isDefault = scope.project.defaultVoiceProfileId === params.profileId;
-      const { version } = await saveVoiceProfile(scope, params.profileId, body);
+      const { version, isDefault } = await saveVoiceProfile(scope, params.profileId, body);
       return { status: 200, body: { id: params.profileId, version, isDefault } };
     },
   }),

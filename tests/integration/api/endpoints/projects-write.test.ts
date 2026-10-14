@@ -85,6 +85,25 @@ describe("POST /projects", () => {
     }
   });
 
+  it("accepts an empty, whitespace-only or null brand field as 'not set'", async () => {
+    const w = await world();
+    const key = w.a.keys.manageSetup.secret;
+    const base = fullBody();
+    const cases: { field: "tagline" | "description" | "websiteUrl"; value: string | null }[] = [
+      { field: "tagline", value: "" },
+      { field: "description", value: "" },
+      { field: "websiteUrl", value: "" },
+      { field: "tagline", value: "   " },
+      { field: "tagline", value: null },
+    ];
+    for (const { field, value } of cases) {
+      const body = { ...base, slug: `p-${uniq()}`, [field]: value };
+      const r = await api("POST", "/projects", { key, body });
+      expect(r.status, JSON.stringify(body)).toBe(201);
+      expect(r.json[field]).toBeNull();
+    }
+  });
+
   it("refuses auto_approve + add_to_queue without confirmUnreviewedQueue", async () => {
     const w = await world();
     const body = { ...fullBody(), confirmUnreviewedQueue: false, defaultApprovalPolicy: "auto_approve", defaultSchedulingPolicy: "add_to_queue" };

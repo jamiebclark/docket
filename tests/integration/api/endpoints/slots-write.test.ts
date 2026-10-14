@@ -160,6 +160,29 @@ describe("PATCH /slots/{slotId}", () => {
     expect(r.status).toBe(403);
     expect(r.json.error.code).toBe("missing_permission");
   });
+
+  it("replays the stored response for a repeated Idempotency-Key, for both the move and pause branches", async () => {
+    const w = await world();
+    const account = await accountsService.connectMock(w.a.scope, { displayName: `A ${Math.random().toString(36).slice(2, 7)}` });
+
+    const moveSlot = await slotsService.addSlot(w.a.scope, { accountId: account.id, weekday: 1, localTime: "09:00" });
+    const moveBody = { weekday: 4, localTime: "15:00" };
+    const firstMove = await api("PATCH", `/slots/${moveSlot.id}`, { key: w.a.keys.manageSetup.secret, idem: "slot-move-1", body: moveBody });
+    expect(firstMove.status).toBe(200);
+    const replayedMove = await api("PATCH", `/slots/${moveSlot.id}`, { key: w.a.keys.manageSetup.secret, idem: "slot-move-1", body: moveBody });
+    expect(replayedMove.status).toBe(200);
+    expect(replayedMove.headers.get("idempotent-replayed")).toBe("true");
+    expect(replayedMove.json).toEqual(firstMove.json);
+
+    const pauseSlot = await slotsService.addSlot(w.a.scope, { accountId: account.id, weekday: 2, localTime: "09:00" });
+    const pauseBody = { paused: true };
+    const firstPause = await api("PATCH", `/slots/${pauseSlot.id}`, { key: w.a.keys.manageSetup.secret, idem: "slot-pause-1", body: pauseBody });
+    expect(firstPause.status).toBe(200);
+    const replayedPause = await api("PATCH", `/slots/${pauseSlot.id}`, { key: w.a.keys.manageSetup.secret, idem: "slot-pause-1", body: pauseBody });
+    expect(replayedPause.status).toBe(200);
+    expect(replayedPause.headers.get("idempotent-replayed")).toBe("true");
+    expect(replayedPause.json).toEqual(firstPause.json);
+  });
 });
 
 describe("DELETE /slots/{slotId}", () => {
@@ -188,5 +211,20 @@ describe("DELETE /slots/{slotId}", () => {
     const r = await api("DELETE", `/slots/${slot.id}`, { key: w.a.keys.read.secret });
     expect(r.status).toBe(403);
     expect(r.json.error.code).toBe("missing_permission");
+  });
+
+  it("leaves an already-queued target at its scheduled time after its slot is deleted", async () => {
+    const w = await world();
+    const account = await accountsService.connectMock(w.a.scope, { displayName: `A ${Math.random().toString(36).slice(2, 7)}` });
+    const slot = await slotsService.addSlot(w.a.scope, { accountId: account.id, weekday: 1, localTime: "09:00" });
+    const draft = await postsService.createDraft(w.a.scope, { baseText: "hi", targets: [{ accountId: account.id }] });
+    await atTime(new Date("2026-10-05T00:00:00Z"), () => postsService.addToQueue(w.a.scope, draft.post.id));
+    const before = await w.a.scope.targets.get(draft.targets[0]!.id);
+
+    const r = await api("DELETE", `/slots/${slot.id}`, { key: w.a.keys.manageSetup.secret });
+    expect(r.status).toBe(200);
+
+    const after = await w.a.scope.targets.get(draft.targets[0]!.id);
+    expect(after!.scheduledAt?.getTime()).toBe(before!.scheduledAt?.getTime());
   });
 });

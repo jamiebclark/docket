@@ -22,9 +22,9 @@ export const createProjectSchema = z.object({
   defaultApprovalPolicy: approvalPolicySchema.optional(),
   defaultSchedulingPolicy: schedulingPolicySchema.optional(),
   confirmUnreviewedQueue: z.boolean().default(false),
-  tagline: taglineSchema.optional(),
-  description: brandDescriptionSchema.optional(),
-  websiteUrl: brandWebsiteSchema.optional(),
+  tagline: taglineSchema.nullable().optional(),
+  description: brandDescriptionSchema.nullable().optional(),
+  websiteUrl: brandWebsiteSchema.nullable().optional(),
 });
 
 /**
@@ -65,9 +65,9 @@ export const updateSettingsSchema = createProjectSchema.extend({
   defaultApprovalPolicy: approvalPolicySchema,
   defaultSchedulingPolicy: schedulingPolicySchema,
   confirmUnreviewedQueue: z.boolean().default(false),
-  tagline: taglineSchema.optional(),
-  description: brandDescriptionSchema.optional(),
-  websiteUrl: brandWebsiteSchema.optional(),
+  tagline: taglineSchema.nullable().optional(),
+  description: brandDescriptionSchema.nullable().optional(),
+  websiteUrl: brandWebsiteSchema.nullable().optional(),
 });
 
 const BRAND_FIELDS = ["tagline", "description", "websiteUrl"] as const;
