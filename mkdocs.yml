@@ -38,6 +38,7 @@ nav:
       - Activity: activity.md
   - Reference:
       - Platform limits: limits.md
+      - Privacy: privacy.md
       - Security findings: security.md
       - Adding a provider: adding-a-provider.md
       - Feature map: feature-map.md
