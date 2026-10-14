@@ -59,6 +59,7 @@ export const mediaOperations = [
     query: pageQuerySchema.extend({ unused: flag.optional(), missingAlt: flag.optional(), tag: z.string().max(50).optional() }),
     responses: { 200: { description: "A page of media", schema: z.object({ data: z.array(MediaSchema), nextCursor: z.string().nullable() }) } },
     idempotent: false,
+    mcp: { expose: true },
     async run(scope, { query }) {
       const offset = decodeCursor(query.cursor);
       if (offset === null) throw apiError("validation_failed", "The cursor is not valid.");
@@ -84,6 +85,7 @@ export const mediaOperations = [
     resourceParams: ["mediaId"],
     responses: { 200: { description: "The image", schema: MediaSchema }, 404: { description: "Not found" } },
     idempotent: false,
+    mcp: { expose: true },
     async run(scope, { params }) {
       return { status: 200, body: toApiMedia(await getMedia(scope, params.mediaId)) };
     },
@@ -104,6 +106,7 @@ export const mediaOperations = [
       503: { description: "Media storage is not set up" },
     },
     idempotent: true,
+    mcp: { expose: false, reason: "Multipart upload of raw bytes, which a JSON tool call cannot carry." },
     async prepare(scope, { body }) {
       const bytes = Buffer.from(await body.file.arrayBuffer());
       const prepared = await prepareUpload(scope, { name: body.file.name, bytes });
@@ -135,6 +138,7 @@ export const mediaOperations = [
       503: { description: "Media storage is not set up" },
     },
     idempotent: true,
+    mcp: { expose: false, reason: "Would make the server fetch an arbitrary URL on a model's say-so." },
     prepare: (scope, { body }) => prepareFromUrl(scope, { url: body.url }),
     async run(scope, { body, prepared }) {
       const row = await commit(scope, prepared as PreparedUpload, meta(body));

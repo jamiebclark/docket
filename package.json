@@ -13,6 +13,7 @@
     "@better-auth/api-key": "1.7.7",
     "@better-auth/drizzle-adapter": "1.7.7",
     "@js-temporal/polyfill": "^0.5.1",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "better-auth": "1.7.7",
     "csv-parse": "^7.0.3",
     "drizzle-orm": "0.45.3",

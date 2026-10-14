@@ -239,6 +239,13 @@
       "when": 1791986551435,
       "tag": "0033_lonely_venus",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791995586505,
+      "tag": "0034_fantastic_dazzler",
+      "breakpoints": true
     }
   ]
 }

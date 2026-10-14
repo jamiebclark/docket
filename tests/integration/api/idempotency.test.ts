@@ -23,6 +23,7 @@ const op = defineOperation({
   summary: "Idempotent test write",
   responses: { 201: { description: "created" } },
   idempotent: true,
+  mcp: { expose: false, reason: "test-only operation" },
   body: {
     kind: "json",
     schema: z.object({ text: z.string().min(1), accountId: z.uuid(), mode: z.enum(["ok", "missing"]).default("ok") }),

@@ -140,7 +140,10 @@ export async function getVersion(scope: ProjectScope, profileId: string, version
   return view(row, await authorNames(scope));
 }
 
-export async function createVoiceProfile(scope: ProjectScope, input: unknown): Promise<{ profileId: string; version: 1 }> {
+export async function createVoiceProfile(
+  scope: ProjectScope,
+  input: unknown,
+): Promise<{ profileId: string; version: 1; isDefault: boolean }> {
   need(scope, { voice: ["manage"] });
   const parsed = createSchema.parse(input);
   return scope.transaction(
@@ -153,8 +156,12 @@ export async function createVoiceProfile(scope: ProjectScope, input: unknown): P
         content: parsed.content,
         authorUserId: tx.membership.userId,
       });
-      if (!tx.project.defaultVoiceProfileId) await tx.projects.setDefaultVoiceProfile(profile.id);
-      return { profileId: profile.id, version: 1 as const };
+      // Read under the lock, not `tx.project` (a pre-lock snapshot for an api-key actor), so two
+      // concurrent creates in a default-less project cannot both see `null` and both claim it.
+      const fresh = await tx.projects.get();
+      const isDefault = !fresh?.defaultVoiceProfileId;
+      if (isDefault) await tx.projects.setDefaultVoiceProfile(profile.id);
+      return { profileId: profile.id, version: 1 as const, isDefault };
     },
     { lockProject: true },
   );
@@ -164,33 +171,40 @@ export async function saveVoiceProfile(
   scope: ProjectScope,
   profileId: string,
   input: unknown,
-): Promise<{ version: number }> {
+): Promise<{ version: number; isDefault: boolean }> {
   need(scope, { voice: ["manage"] });
   const parsed = saveSchema.parse(input);
-  return scope.transaction(async (tx) => {
-    need(tx, { voice: ["manage"] });
-    const profile = await loadProfile(tx, profileId, true);
-    if (profile.archivedAt) throw new ConflictError("Restore this profile before editing it");
-    if (profile.currentVersion !== parsed.baseVersion) throw new ConflictError(STALE);
-    const current = await tx.voiceVersions.getByNumber(profile.id, profile.currentVersion);
-    if (!current) throw new NotFoundError();
-    if (
-      profile.name === parsed.name &&
-      JSON.stringify(voiceContentInputSchema.parse(current.content)) === JSON.stringify(parsed.content)
-    ) {
-      return { version: profile.currentVersion };
-    }
-    const next = profile.currentVersion + 1;
-    if (profile.name !== parsed.name) await tx.voiceProfiles.rename(profile.id, parsed.name);
-    await tx.voiceVersions.insert({
-      profileId: profile.id,
-      version: next,
-      content: parsed.content,
-      authorUserId: tx.membership.userId,
-    });
-    await tx.voiceProfiles.setCurrentVersion(profile.id, next);
-    return { version: next };
-  });
+  return scope.transaction(
+    async (tx) => {
+      need(tx, { voice: ["manage"] });
+      const profile = await loadProfile(tx, profileId, true);
+      if (profile.archivedAt) throw new ConflictError("Restore this profile before editing it");
+      if (profile.currentVersion !== parsed.baseVersion) throw new ConflictError(STALE);
+      const current = await tx.voiceVersions.getByNumber(profile.id, profile.currentVersion);
+      if (!current) throw new NotFoundError();
+      // Read under the lock, not `tx.project` (a pre-lock snapshot for an api-key actor), so a
+      // concurrent `setDefaultVoiceProfile` cannot leave this response reporting a stale value.
+      const fresh = await tx.projects.get();
+      const isDefault = fresh?.defaultVoiceProfileId === profile.id;
+      if (
+        profile.name === parsed.name &&
+        JSON.stringify(voiceContentInputSchema.parse(current.content)) === JSON.stringify(parsed.content)
+      ) {
+        return { version: profile.currentVersion, isDefault };
+      }
+      const next = profile.currentVersion + 1;
+      if (profile.name !== parsed.name) await tx.voiceProfiles.rename(profile.id, parsed.name);
+      await tx.voiceVersions.insert({
+        profileId: profile.id,
+        version: next,
+        content: parsed.content,
+        authorUserId: tx.membership.userId,
+      });
+      await tx.voiceProfiles.setCurrentVersion(profile.id, next);
+      return { version: next, isDefault };
+    },
+    { lockProject: true },
+  );
 }
 
 export async function setDefaultVoiceProfile(scope: ProjectScope, profileId: string): Promise<void> {

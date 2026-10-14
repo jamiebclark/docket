@@ -163,3 +163,82 @@ not a vocabulary one, so the shared component gains a variant rather than changi
 
 Worth checking in the same pass whether the account name in the cell needs truncating; it is under the same width
 pressure.
+
+## Public API hardening (not built)
+
+Three gaps the setup write API's second review (`specs/073-setup-write-api/review.md`, round 2) left
+open deliberately. None blocks anything; all are small and belong together in one entry.
+
+### One of FR-048's forty cases has no assertion
+
+`PATCH /voice-profiles/{profileId}` has no validation-failure test — nothing sends `baseVersion` as
+`0`, as a string, or omits it. Both the request schema (`z.number().int().min(1)`) and the service's
+`saveSchema` would reject a bad value, so the behaviour is almost certainly right; it is simply
+unproven. Round 1 of the same review closed the mirror-image gap (a missing idempotent replay on
+`PATCH /slots/{slotId}`) without noticing this one.
+
+### The cross-project isolation test can lose coverage silently
+
+`tests/integration/api/scope-enforcement.test.ts:151` — `foreign[name]!` yields `undefined` for a
+resource parameter missing from the map, and `{ [name]: undefined }` then *overwrites* the fixture's
+own value, so the test compares unknown-against-unknown, both 404, both identical, and passes. The
+`checked.length >= 6` floor cannot catch it either: the real count is 22 `(operation, parameter)`
+pairs. Every parameter is in the map today, so isolation genuinely holds — the defect is that the
+test cannot detect its own future loss of coverage. It is the one table-driven test in that area
+without such a guard; `setup-permission.test.ts:86` and `:94` both fail loudly on a missing fixture.
+Fix: assert `foreign[name]` is defined, or raise the floor to the real pair count.
+
+### `OPTIONS` over-advertises on two literal `/slots/*` paths
+
+`allowedMethods` (`src/server/api/router.ts:37`) unions every operation whose path *template*
+matches the segments, and `/slots/{slotId}` matches `["slots","upcoming"]` with
+`slotId = "upcoming"`. So `Allow` on `/slots/upcoming` lists `DELETE` and `PATCH`, both of which
+answer 404 via the UUID check in `handle.ts`. A client that reads `Allow` and believes it gets a 404
+where the header implied a 405 or a 200. Pre-existing shape — `allowedMethods(["media","from-url"])`
+contains `GET` for the same reason — that 073 made reachable on two more paths. Fix: prefer an exact
+literal match over a parameter match at the same depth, in both `allowedMethods` and
+`matchOperation`, or accept it and document it.
+
+### Also owed: a constitution amendment
+
+The Development Workflow section (`.specify/memory/constitution.md:92`) pins the `Co-Authored-By`
+trailer to a literal `Claude Opus 5.5`, and no model running this pipeline is that one — implement
+commits say `Claude Sonnet 5`, review commits say `Claude Opus 5`. Each names its real author, which
+is the right behaviour; the template is what is wrong. A trailer that misattributes work to a model
+that did not do it is worse than one that does not match a fixed string, so the amendment should
+make the trailer name the acting model rather than a fixed version.
+
+## Verification owed (content-engine roadmap, entries 069–074)
+
+Four checks across the six merged entries were never performed. Each needs something a
+headless pipeline phase cannot have — a signed-in browser, a funded provider key, real time
+passing, or a real MCP client — so each was written as a human-owned task and left for an
+operator.
+
+**Read the task lists with care: three of the four are ticked `[X]` and were still never
+run.** They were checked off to release the implement loop, which otherwise stalls on a task
+it cannot do, not because anyone did them. Only `074`'s is honestly unchecked. That
+inconsistency is recorded here rather than fixed in the task lists, because a task list is a
+record of what the pipeline did and rewriting it afterwards would be its own kind of lie.
+
+| Entry | Task | Marked | What it checks | Needs |
+|---|---|---|---|---|
+| `070-image-generation` | T045 | `[X]` — **not performed** | Generate an image for real: live-region announcements, the new tile with badge and prompt, the cost row | A **funded OpenAI key**, browser, `pnpm dev` |
+| `071-evergreen-series` | T075 | `[X]` — **not performed** | A daily series crossing a real local midnight: the post appears in Review, last/next run update, pause/resume | Browser, `pnpm dev`, **real time passing** (or the system clock moved) |
+| `072-dated-series` | T071 | `[X]` — **not performed** | Every screen state of the CSV import walkthrough | Browser, `pnpm dev`, a **real CSV file** |
+| `074-mcp-server` | T056 | `[ ]` — not performed | A real MCP client end to end: list tools, ask what's scheduled, generate, queue with the confirmation refused once and accepted once, then a second client on another project's key to prove isolation | Browser, **a real MCP client** |
+
+Each entry's `quickstart.md` has the steps. None of these is a known defect — every one of
+them is a path with automated coverage against mocks, and the live check exists to catch what
+a mock cannot: a provider's real response shape, a real clock, a real client's idea of the
+protocol. Two are worth prioritising:
+
+- **`070` T045** is the only one that spends real money, and it is the only exercise of the
+  OpenAI image path against a live API rather than a fixture. Note
+  `docs/decisions.md`'s OpenAI free-tier finding: the model is free only with a positive
+  organisation balance, so an unfunded key fails in a way the mocks do not model.
+- **`074` T056** is the only verification of the MCP server against a real client, and
+  Docket deliberately targets protocol revision `2025-11-25` (the newest the installed SDK
+  implements) while the published current revision is `2026-07-28` — see
+  `docs/research/mcp.md` §1 and §6. A client that speaks only the newer revision is exactly
+  what this check would discover, and nothing in the suite can.

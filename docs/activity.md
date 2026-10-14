@@ -54,7 +54,7 @@ Each row shows the time, outcome, platform and account, the post, what happened,
 
 ## API
 
-`GET /api/v1/activity` returns the same events newest first, with the same filters (`outcome`, `platform`, `account`, `from`, `to`, `range`) and an opaque `cursor`. A key needs the `read` permission. See the OpenAPI document at `/api/v1/openapi.json`, and the [n8n recipe](n8n.md#8-read-activity).
+`GET /api/v1/activity` returns the same events newest first, with the same filters (`outcome`, `platform`, `account`, `from`, `to`, `range`) and an opaque `cursor`. A key needs the `read` permission. See the OpenAPI document at `/api/v1/openapi.json`, and the [n8n recipe](n8n.md#9-read-activity).
 
 ## Notifications
 

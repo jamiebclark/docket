@@ -1,56 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { OPERATIONS, type AnyApiOperation } from "../../../src/server/api/operations";
+import { OPERATIONS } from "../../../src/server/api/operations";
 import { ObservedQuery, queryObservers } from "../../../src/server/db/client";
 import { setStorageForTests } from "../../../src/server/storage";
 import { ALL_PERMISSIONS, api, createKey, world } from "../../helpers/api";
+import { call, FIXTURES } from "../../helpers/api-fixtures";
 import { closeDb } from "../../helpers/db";
-import { jpeg } from "../../helpers/images";
 import { createMemoryStorage } from "../../helpers/storage";
-
-type Project = Awaited<ReturnType<typeof world>>["a"];
-
-interface Fixture {
-  params?: (p: Project) => Record<string, string>;
-  query?: string;
-  body?: (p: Project) => unknown | Promise<unknown>;
-}
-
-const itemBody = { items: [{ fields: { product: "Mug" } }] };
-
-/** One entry per operation id (FR-048). A new operation without an entry fails the "has a fixture" test. */
-const FIXTURES: Record<string, Fixture> = {
-  listAccounts: {},
-  listMedia: {},
-  getMedia: { params: (p) => ({ mediaId: p.media.id }) },
-  uploadMedia: {
-    body: async () => {
-      const f = new FormData();
-      f.set("file", new File([new Uint8Array(await jpeg(50, 50))], "a.jpg", { type: "image/jpeg" }));
-      return f;
-    },
-  },
-  registerMediaFromUrl: { body: () => ({ url: "http://127.0.0.1:9/none.jpg" }) },
-  createPost: { body: (p) => ({ text: "hi", accountIds: [p.account.id] }) },
-  getPost: { params: (p) => ({ postId: p.post.id }) },
-  getPostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }) },
-  queuePost: { params: (p) => ({ postId: p.post.id }), body: () => ({}) },
-  schedulePost: { params: (p) => ({ postId: p.post.id }), body: () => ({ at: "2030-01-01T10:00:00Z" }) },
-  retryPostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }), body: () => ({ mode: "now" }) },
-  resolvePostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }), body: () => ({ outcome: "not_published", requeue: false }) },
-  retryFailedTargets: { body: () => ({ mode: "now" }) },
-  generatePost: { body: (p) => ({ brief: "x", accountIds: [p.account.id] }) },
-  listUpcomingSlots: {},
-  listActivity: {},
-  listJobs: {},
-  createJob: { body: () => ({}) },
-  getJob: { params: (p) => ({ jobId: p.job.id }) },
-  listJobItems: { params: (p) => ({ jobId: p.job.id }) },
-  getJobItem: { params: (p) => ({ jobId: p.job.id, itemId: p.items[0]!.id }) },
-  addJobItems: { params: (p) => ({ jobId: p.job.id }), body: () => itemBody },
-  closeJob: { params: (p) => ({ jobId: p.job.id }), body: () => ({}) },
-  cancelJob: { params: (p) => ({ jobId: p.job.id }), body: () => ({}) },
-  retryFailedJobItems: { params: (p) => ({ jobId: p.job.id }), body: () => ({}) },
-};
 
 const KEYED = () => OPERATIONS.filter((op) => op.permission !== null);
 
@@ -63,17 +18,6 @@ afterAll(async () => {
   setStorageForTests(undefined);
   await closeDb();
 });
-
-function fill(op: AnyApiOperation, params: Record<string, string>): string {
-  return op.path.replace(/\{(\w+)\}/g, (_m, name: string) => params[name] ?? "00000000-0000-4000-8000-000000000000");
-}
-
-async function call(op: AnyApiOperation, p: Project, key: string | undefined, override: Record<string, string> = {}) {
-  const fx = FIXTURES[op.id]!;
-  const params = { ...(fx.params?.(p) ?? {}), ...override };
-  const body = fx.body ? await fx.body(p) : undefined;
-  return api(op.method, `${fill(op, params)}${fx.query ? `?${fx.query}` : ""}`, { ...(key ? { key } : {}), ...(body !== undefined ? { body } : {}) });
-}
 
 it("has a fixture for every operation", () => {
   const missing = KEYED().filter((op) => !FIXTURES[op.id]).map((op) => op.id);
@@ -146,6 +90,9 @@ describe("project isolation, per resource parameter", () => {
           mediaId: w.b.media.id,
           jobId: w.b.job.id,
           itemId: w.b.items[0]!.id,
+          accountId: w.b.account.id,
+          profileId: w.b.voiceProfile.id,
+          slotId: w.b.slot!.id,
         };
         const other = await call(op, w.a, key, { [name]: foreign[name]! });
         const unknown = await call(op, w.a, key, { [name]: random });

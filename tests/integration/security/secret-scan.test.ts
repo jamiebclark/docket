@@ -86,6 +86,7 @@ import { hashApiKey } from "../../../src/server/dal/api-keys";
 import { createApiKey } from "../../../src/server/services/api-keys";
 import { setStorageForTests } from "../../../src/server/storage";
 import { api } from "../../helpers/api";
+import { POST as mcpPost } from "../../../src/app/api/mcp/route";
 import { closeDb, testDb } from "../../helpers/db";
 import { addMember, csvBuilder } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
@@ -179,6 +180,13 @@ function captureOutput(pieces: Piece[]): void {
 
 /** The test helper already consumed the body; rebuild a readable response from what it kept. */
 const rebuilt = (r: { status: number; headers: Headers; text: string }) => new Response(r.text, { status: r.status, headers: r.headers });
+
+/** A JSON-RPC request to `POST /api/mcp`, mirroring `tests/helpers/mcp.ts`'s `rpc`. */
+function mcpRequest(method: string, params: Record<string, unknown>, key?: string): Request {
+  const headers = new Headers({ "content-type": "application/json", accept: "application/json, text/event-stream" });
+  if (key) headers.set("authorization", `Bearer ${key}`);
+  return new Request("http://localhost/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+}
 
 async function responsePiece(place: string, res: Response): Promise<Piece> {
   const headers = [...res.headers.entries()].map(([k, v]) => `${k}: ${v}`).join("\n");
@@ -398,6 +406,10 @@ describe("secret scan (FR-020, SC-005)", () => {
       ["POST retry (API)", async () => rebuilt(await api("POST", `/posts/${failedPostId}/targets/${targetIds[1]}/retry`, { key: writeKey.secret, idem: `${IDEM_PREFIX}-retry`, body: { mode: "now" } }))],
       ["POST resolve (API, refused)", async () => rebuilt(await api("POST", `/posts/${failedPostId}/targets/${targetIds[1]}/resolve`, { key: writeKey.secret, idem: `${IDEM_PREFIX}-resolve`, body: { outcome: "not_published" } }))],
       ["POST retry-failed (API)", async () => rebuilt(await api("POST", "/targets/retry-failed", { key: writeKey.secret, idem: `${IDEM_PREFIX}-bulk`, body: { mode: "now" } }))],
+      ["POST /api/mcp (tools/list)", async () => mcpPost(mcpRequest("tools/list", {}, apiKey.secret))],
+      ["POST /api/mcp (tools/list, tampered key)", async () => mcpPost(mcpRequest("tools/list", {}, `${apiKey.secret}x`))],
+      ["POST /api/mcp (tools/call)", async () => mcpPost(mcpRequest("tools/call", { name: "docket_list_accounts", arguments: {} }, apiKey.secret))],
+      ["POST /api/mcp (tools/call, tampered key)", async () => mcpPost(mcpRequest("tools/call", { name: "docket_list_accounts", arguments: {} }, `${apiKey.secret}x`))],
     ];
     for (const [place, call] of routeCalls) pieces.push(await responsePiece(place, await call()));
     // The signed-in session route returns the caller's own token as `session.token`.

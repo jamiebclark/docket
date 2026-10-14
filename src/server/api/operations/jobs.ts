@@ -60,6 +60,10 @@ export const jobOperations = [
     query: pageQuerySchema,
     responses: { 200: { description: "A page of jobs", schema: z.object({ data: z.array(JobSummarySchema), nextCursor: z.string().nullable() }) } },
     idempotent: false,
+    mcp: {
+      expose: false,
+      reason: "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for.",
+    },
     async run(scope, { query }) {
       const offset = decodeCursor(query.cursor);
       if (offset === null) throw apiError("validation_failed", "The cursor is not valid.");
@@ -85,6 +89,10 @@ export const jobOperations = [
       503: { description: "No model configured" },
     },
     idempotent: true,
+    mcp: {
+      expose: false,
+      reason: "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for.",
+    },
     async run(scope, { body: b }) {
       const source =
         b.source.kind === "media" ? { ...b.source, includeUsed: b.source.includeUsed ?? false } : b.source;
@@ -112,6 +120,10 @@ export const jobOperations = [
     resourceParams: ["jobId"],
     responses: { 200: { description: "The job", schema: JobSchema }, 404: { description: "Not found" } },
     idempotent: false,
+    mcp: {
+      expose: false,
+      reason: "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for.",
+    },
     async run(scope, { params }) {
       return { status: 200, body: await loadApiJob(scope, params.jobId) };
     },
@@ -128,6 +140,10 @@ export const jobOperations = [
     resourceParams: ["jobId"],
     responses: { 200: { description: "A page of items", schema: z.object({ data: z.array(JobItemSchema), nextCursor: z.string().nullable() }) } },
     idempotent: false,
+    mcp: {
+      expose: false,
+      reason: "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for.",
+    },
     async run(scope, { params, query }) {
       const offset = decodeCursor(query.cursor);
       if (offset === null) throw apiError("validation_failed", "The cursor is not valid.");
@@ -151,6 +167,10 @@ export const jobOperations = [
     resourceParams: ["jobId", "itemId"],
     responses: { 200: { description: "The item", schema: JobItemSchema }, 404: { description: "Not found" } },
     idempotent: false,
+    mcp: {
+      expose: false,
+      reason: "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for.",
+    },
     async run(scope, { params }) {
       return { status: 200, body: toApiJobItem(await getJobItem(scope, params.jobId, params.itemId)) };
     },
@@ -181,6 +201,10 @@ export const jobOperations = [
       409: { description: "The job is closed, or an image is reserved" },
     },
     idempotent: true,
+    mcp: {
+      expose: false,
+      reason: "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for.",
+    },
     async run(scope, { params, body }) {
       return { status: 201, body: await appendItems(scope, params.jobId, body) };
     },
@@ -197,6 +221,11 @@ export const jobOperations = [
     resourceParams: ["jobId"],
     responses: { 200: { description: "The job", schema: JobSchema }, 409: { description: "The job has no items" } },
     idempotent: true,
+    mcp: {
+      expose: false,
+      reason:
+        "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for. This action is also one-way.",
+    },
     async run(scope, { params }) {
       await closeJob(scope, params.jobId);
       return { status: 200, body: await loadApiJob(scope, params.jobId) };
@@ -213,6 +242,11 @@ export const jobOperations = [
     resourceParams: ["jobId"],
     responses: { 200: { description: "The job and how many items were cancelled", schema: z.object({ job: JobSchema, cancelled: z.number().int() }) } },
     idempotent: true,
+    mcp: {
+      expose: false,
+      reason:
+        "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for. This action is also one-way.",
+    },
     async run(scope, { params }) {
       const result = await cancelJob(scope, params.jobId);
       return { status: 200, body: { job: await loadApiJob(scope, params.jobId), cancelled: result.count } };
@@ -229,6 +263,10 @@ export const jobOperations = [
     resourceParams: ["jobId"],
     responses: { 200: { description: "The job and how many items were retried", schema: z.object({ job: JobSchema, retried: z.number().int() }) } },
     idempotent: true,
+    mcp: {
+      expose: false,
+      reason: "Batch generation is a bulk workflow; a model driving one conversationally would spend LLM credits in quantities nobody asked for.",
+    },
     async run(scope, { params }) {
       const result = await retryFailedItems(scope, params.jobId);
       return { status: 200, body: { job: await loadApiJob(scope, params.jobId), retried: result.count } };

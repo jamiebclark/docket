@@ -63,6 +63,15 @@ export const generateOperations = [
     },
     idempotent: true,
     idempotencyMode: "generate",
+    mcp: {
+      expose: true,
+      confirm: {
+        effect: "Generate a post from the brief, then queue it to publish on each target account's next free slot.",
+        when: (args) => args.schedulingPolicy !== "leave_as_draft",
+        whenDescription:
+          "Required unless `schedulingPolicy` is explicitly `leave_as_draft` — an absent policy falls back to the project's default, which may queue.",
+      },
+    },
     async run(scope, { body: b, idempotencyRecordId }) {
       const voiceProfileId = b.voiceProfileId ?? (await defaultVoiceProfileId(scope));
       if (!voiceProfileId) {

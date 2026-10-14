@@ -69,6 +69,7 @@ export const postOperations = [
       404: { description: "An account or image does not exist in this project" },
     },
     idempotent: true,
+    mcp: { expose: true },
     async run(scope, { body }) {
       await assertPostTypesForAccounts(scope, body.accountIds, body.postTypes);
       const created = await createDraft(scope, {
@@ -100,6 +101,7 @@ export const postOperations = [
     resourceParams: ["postId"],
     responses: { 200: { description: "The post", schema: PostSchema }, 404: { description: "Not found" } },
     idempotent: false,
+    mcp: { expose: true },
     async run(scope, { params }) {
       return { status: 200, body: await loadApiPost(scope, params.postId) };
     },
@@ -115,6 +117,7 @@ export const postOperations = [
     resourceParams: ["postId", "targetId"],
     responses: { 200: { description: "The target", schema: TargetSchema }, 404: { description: "Not found" } },
     idempotent: false,
+    mcp: { expose: true },
     async run(scope, { params }) {
       const post = await loadApiPost(scope, params.postId);
       const target: ApiTarget | undefined = post.targets.find((t) => t.id === params.targetId);
@@ -135,6 +138,10 @@ export const postOperations = [
     resourceParams: ["postId"],
     responses: { 200: { description: "A result per target", schema: resultsResponse }, 404: { description: "Not found" } },
     idempotent: true,
+    mcp: {
+      expose: true,
+      confirm: { effect: "Queue this post to publish on each target account's next free slot." },
+    },
     prepare: (scope, { params, body }) =>
       prepareForScheduling(scope, params.postId, body.targetIds ? { targetIds: body.targetIds } : undefined),
     async run(scope, { params, body }) {
@@ -155,6 +162,10 @@ export const postOperations = [
     resourceParams: ["postId"],
     responses: { 200: { description: "A result per target", schema: resultsResponse }, 404: { description: "Not found" } },
     idempotent: true,
+    mcp: {
+      expose: true,
+      confirm: { effect: "Schedule this post to publish on each target account at the given time." },
+    },
     prepare: (scope, { params, body }) =>
       prepareForScheduling(scope, params.postId, body.targetIds ? { targetIds: body.targetIds } : undefined),
     async run(scope, { params, body }) {

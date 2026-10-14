@@ -95,6 +95,12 @@ const KEY_GRANTS: Record<ApiKeyPermission, PermissionRequest> = {
   generate: { ...SEES, generation: ["run"], post: ["view", "edit"] },
   manage_jobs: { ...SEES, generation: ["run"], post: ["view", "edit"] },
   auto_approve: { generation: ["auto_approve"] },
+  manage_setup: {
+    project: ["view", "update"],
+    account: ["view", "manage"],
+    slot: ["view", "manage"],
+    voice: ["view", "manage"],
+  },
 };
 
 function keyCan(permissions: readonly ApiKeyPermission[], request: PermissionRequest): boolean {

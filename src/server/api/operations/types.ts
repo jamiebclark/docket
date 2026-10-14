@@ -21,9 +21,21 @@ export interface ApiRunResult {
 /** Named OpenAPI examples. */
 export type ApiExamples = Record<string, { summary: string; value: unknown }>;
 
+/** What a confirmation guards, and when it is demanded. */
+export interface McpConfirm {
+  /** Plain-language effect, e.g. "publish this post to the account's live feeds". */
+  effect: string;
+  /** Omitted: always required. Present: required only when it returns true for the arguments. */
+  when?: (args: Record<string, unknown>) => boolean;
+  /** Why `when` exists, for the documentation. Required when `when` is. */
+  whenDescription?: string;
+}
+
+export type McpDisposition = { expose: true; confirm?: McpConfirm } | { expose: false; reason: string };
+
 export interface ApiOperation<P = unknown, Q = unknown, B = unknown> {
   id: string;
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   /** "/posts/{postId}/queue" */
   path: string;
   /** null only for the public `getOpenApi`. */
@@ -49,7 +61,18 @@ export interface ApiOperation<P = unknown, Q = unknown, B = unknown> {
   /** Calls exactly one service and maps its result. */
   run: (scope: ProjectScope, input: ApiRunInput<P, Q, B>) => Promise<ApiRunResult>;
   /** For the scope test (FR-048): which path params name project resources. */
-  resourceParams?: ("postId" | "targetId" | "mediaId" | "jobId" | "itemId")[];
+  resourceParams?: (
+    | "postId"
+    | "targetId"
+    | "mediaId"
+    | "jobId"
+    | "itemId"
+    | "accountId"
+    | "profileId"
+    | "slotId"
+  )[];
+  /** Required (FR-001): an operation cannot exist without an MCP decision. */
+  mcp: McpDisposition;
 }
 
 // Operations have different parameter types; the table stores them erased and the pipeline parses with each schema.

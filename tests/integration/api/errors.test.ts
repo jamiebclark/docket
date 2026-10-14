@@ -30,6 +30,7 @@ const echo = defineOperation({
   summary: "Echo",
   responses: { 200: { description: "ok" } },
   idempotent: true,
+  mcp: { expose: false, reason: "test-only operation" },
   body: { kind: "json", schema: z.object({ n: z.number() }) },
   async run() {
     throw new Error("select * from api_keys where key_hash = 'deadbeef' at /srv/app/node_modules/pg/lib.js:12");

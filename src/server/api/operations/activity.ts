@@ -98,6 +98,7 @@ export const activityOperations = [
       403: { description: "The key lacks `read`", examples: { missing: { summary: "Key without read", value: errorExample("missing_permission", "This key lacks the read permission.") } } },
     },
     idempotent: false,
+    mcp: { expose: true },
     async run(scope, { query }) {
       return { status: 200, body: await listActivityForApi(scope, query) };
     },

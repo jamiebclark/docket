@@ -22,6 +22,7 @@ export const apiKeyPermission = pgEnum("api_key_permission", [
   "generate",
   "auto_approve",
   "manage_jobs",
+  "manage_setup",
 ]);
 export const apiIdempotencyState = pgEnum("api_idempotency_state", ["in_progress", "completed"]);
 
