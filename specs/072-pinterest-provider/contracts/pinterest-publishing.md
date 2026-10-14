@@ -30,7 +30,10 @@ compresses (over 20 MB), and never refuses a Pinterest image on shape.
 
 ## 2. `validatePinterest(content, caps)`
 
-`validateAgainstCapabilities(content, caps)` first, with five messages re-worded (K11):
+`validateAgainstCapabilities(content, caps)` first, with four messages re-worded (K11); `video_not_accepted`
+keeps the generic "This account does not accept video yet." message, matching facebook/instagram/threads —
+all three deliberately exclude that code from their own rewording so the cross-provider media-fit badge
+test (`src/server/services/media-fit.test.ts`) sees one sentence for every provider without video support:
 
 | Code | Pinterest's wording |
 |---|---|
@@ -39,7 +42,10 @@ compresses (over 20 MB), and never refuses a Pinterest image on shape.
 | `media_required` | same sentence |
 | `too_many_images` | "This post has {count} images; a Pinterest pin takes exactly one." |
 | `unsupported_post_type` | "Pinterest takes one image per pin; carousels are not supported yet." |
-| `video_not_accepted` | "Pinterest video pins are not supported yet." |
+
+The aspect-ratio and HTTPS checks (§2 below) only run on an actual image item (`mimeType` starting
+`image/`); the generic media-fit badge preview can call `validatePinterest` with a video-shaped item to show
+what would happen, and that item must not also trip Pinterest's image-only checks.
 
 Then Pinterest's own issues, in this order:
 

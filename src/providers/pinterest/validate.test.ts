@@ -39,10 +39,15 @@ describe("re-worded capability messages", () => {
     expect(issueFor(c, "too_many_images")?.message).toBe("This post has 2 images; a Pinterest pin takes exactly one.");
   });
 
-  it("unsupported_post_type and video_not_accepted get Pinterest wording", () => {
+  it("unsupported_post_type names carousels as not yet supported", () => {
+    const c = content({ media: [image(), image(), image()] });
+    expect(issueFor(c, "unsupported_post_type")?.message).toBe("Pinterest takes one image per pin; carousels are not supported yet.");
+  });
+
+  it("video_not_accepted keeps the generic cross-provider message (matches facebook/instagram/threads)", () => {
     const videoItem: MediaItem = { ...image(), kind: "video", video: { durationSeconds: 5, container: "mp4", videoCodec: "h264", audioCodec: "aac" } as never };
     const c = content({ media: [videoItem] });
-    expect(issueFor(c, "video_not_accepted")?.message).toBe("Pinterest video pins are not supported yet.");
+    expect(issueFor(c, "video_not_accepted")?.message).toBe("This account does not accept video yet.");
   });
 });
 

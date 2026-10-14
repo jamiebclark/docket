@@ -293,7 +293,7 @@
   <Config
     Name="TikTok App Audited"
     Target="TIKTOK_APP_AUDITED"
-    Default="false"
+    Default=""
     Mode=""
     Description="Optional. Set true only after TikTok has approved your app's audit; until then every TikTok post is private."
     Type="Variable"

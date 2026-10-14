@@ -213,8 +213,8 @@ Pinterest behaviour is added here.
 - [X] T068 [P] In `scripts/generate-icons.mjs`: add `pinterest` to `PROVIDERS` (it already ships `pinterest.svg` via `simple-icons`, research F22), add the missing `tiktok` entry in the same list, and make `pkgDir` resolve packages from a git worktree (not just the main checkout), per plan.md's Complexity Tracking.
 - [X] T069 Run `pnpm install --frozen-lockfile` (if needed) then `pnpm icons`, confirm `git diff --stat src/components/ui/icons.generated.ts` shows both `pinterest` and `tiktok` added, and commit the regenerated file. Depends on T068.
 - [X] T070 [P] Add the two Pinterest variables and TikTok's three missing variables to `unraid/docket.xml`, each optional and empty, per FR-035. Do not touch `docker-compose.yml` or `docker-compose.build.yml` (research F26).
-- [ ] T071 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` once, the whole repository. Do not run `pnpm db:check` (no schema change). Depends on every prior task.
-- [ ] T072 Confirm the completed task list satisfies FR-038: the provider-registry test, the "providers never import server code" lint test, and the secret-scan test are all still green from T071's run.
+- [X] T071 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` once, the whole repository. Do not run `pnpm db:check` (no schema change). Depends on every prior task.
+- [X] T072 Confirm the completed task list satisfies FR-038: the provider-registry test, the "providers never import server code" lint test, and the secret-scan test are all still green from T071's run.
 
 **Checkpoint**: `pnpm lint && pnpm typecheck && pnpm test && pnpm build` all pass once, together.
 

@@ -2296,6 +2296,12 @@ with mocks only; the live checks are owed once the deployer's Pinterest app has 
   `boards:write` (posting into an existing board needs no board creation) and no `pins:read` (nothing calls
   `GET /v5/pins`; an ambiguous create has no provider check to resolve it against, K18). A narrower grant than the
   account could be given.
+- **`video_not_accepted` keeps the generic wording, correcting the contract's K11 list.** The contract originally
+  called for Pinterest to reword this code too, but facebook/instagram/threads all deliberately exclude it from
+  their own rewording so the cross-provider media-fit badge test sees one sentence for every provider without
+  video support; Pinterest now follows the same convention (found during Phase 7's full-repo pass). The aspect-ratio
+  and HTTPS checks were also narrowed to real image items (`mimeType` starting `image/`) so that same badge preview,
+  which calls `validatePinterest` with a video-shaped item, does not also trip Pinterest's image-only checks.
 - **The Trial-cap gap.** Pinterest's Trial access caps the whole app at 300 pin creations a day, shared across every
   connected account. That cap cannot be expressed per account without mis-counting (a cap shared across several
   accounts would make each account's own limit fictional), so it is **not** modelled as an enforced

@@ -15,7 +15,6 @@ const CAPABILITY_MESSAGES: Readonly<Record<string, string>> = {
   text_only_not_allowed: "Pinterest needs one image: there is no text-only pin.",
   media_required: "Pinterest needs one image: there is no text-only pin.",
   unsupported_post_type: "Pinterest takes one image per pin; carousels are not supported yet.",
-  video_not_accepted: "Pinterest video pins are not supported yet.",
 };
 
 /** Whether the media planner converts or compresses this item instead of the provider refusing it (contracts §1). */
@@ -75,7 +74,7 @@ export function validatePinterest(content: PostContent, caps: ProviderCapabiliti
     }
   }
 
-  const image = content.media[0];
+  const image = content.media[0]?.mimeType.startsWith("image/") ? content.media[0] : undefined;
   if (image && image.width !== null && image.height !== null) {
     const ratio = image.width / image.height;
     if (ratio < 0.5 || ratio > 1.0) {

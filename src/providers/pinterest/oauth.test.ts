@@ -30,23 +30,23 @@ describe("exchangeToken / refreshToken request shapes", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("sends the Basic auth header and the authorization_code form body", async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ access_token: "a", refresh_token: "r" }));
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) => jsonResponse({ access_token: "a", refresh_token: "r" }));
     vi.stubGlobal("fetch", fetchMock);
     await exchangeToken(cfg, { code: "the-code", redirectUri: "https://example.com/cb", signal: new AbortController().signal });
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toBe("https://api.pinterest.com/v5/oauth/token");
-    const headers = init.headers as Record<string, string>;
+    const headers = init!.headers as Record<string, string>;
     expect(headers.authorization).toBe(`Basic ${Buffer.from("client-123:secret-456").toString("base64")}`);
     expect(headers["content-type"]).toContain("application/x-www-form-urlencoded");
-    expect(init.body).toBe("grant_type=authorization_code&code=the-code&redirect_uri=https%3A%2F%2Fexample.com%2Fcb");
+    expect(init!.body).toBe("grant_type=authorization_code&code=the-code&redirect_uri=https%3A%2F%2Fexample.com%2Fcb");
   });
 
   it("sends the refresh_token form body without a scope parameter", async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ access_token: "a" }));
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) => jsonResponse({ access_token: "a" }));
     vi.stubGlobal("fetch", fetchMock);
     await refreshToken(cfg, { refreshToken: "the-refresh", signal: new AbortController().signal });
-    const [, init] = fetchMock.mock.calls[0];
-    expect(init.body).toBe("grant_type=refresh_token&refresh_token=the-refresh");
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init!.body).toBe("grant_type=refresh_token&refresh_token=the-refresh");
   });
 
   it("returns ok with the raw token fields on success", async () => {
