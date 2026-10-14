@@ -37,7 +37,7 @@ Single Next.js project. Source under `src/`, tests under `tests/`, docs under `d
 
 **⚠️ CRITICAL**: No user-story work can begin until this phase is complete and `pnpm typecheck` passes.
 
-- [ ] T002 Add `McpConfirm` and `McpDisposition` types and the required `mcp: McpDisposition` field to `ApiOperation` in `src/server/api/operations/types.ts`, per data-model.md §1
+- [X] T002 Add `McpConfirm` and `McpDisposition` types and the required `mcp: McpDisposition` field to `ApiOperation` in `src/server/api/operations/types.ts`, per data-model.md §1
 - [X] T003 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/accounts.ts` per data-model.md §2 (listAccounts: exposed)
 - [X] T004 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/activity.ts` per data-model.md §2 (listActivity: exposed)
 - [X] T005 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/posts.ts` per data-model.md §2 (getPost: exposed; createPost: exposed+idempotent; queuePost: exposed+confirm+idempotent; schedulePost: exposed+confirm+idempotent)
