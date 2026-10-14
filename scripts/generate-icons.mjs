@@ -4,6 +4,7 @@
 //   - Platform marks: Simple Icons (CC0-1.0) — https://simpleicons.org — keyed by provider key.
 // Usage: pnpm icons   (then commit the generated file). Add an icon by adding a line to ICONS.
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 /** Docket name → Lucide icon name. Keep names about meaning ("failures"), not shape ("triangle"). */
 const ICONS = {
@@ -57,10 +58,23 @@ const PROVIDERS = {
   threads: "threads",
   bluesky: "bluesky",
   x: "x",
+  tiktok: "tiktok",
+  pinterest: "pinterest",
 };
 
 // Package "exports" hide package.json from require.resolve, so read the installed directories.
-const pkgDir = (name) => new URL(`../node_modules/${name}/`, import.meta.url).pathname;
+// A git worktree has no node_modules of its own (the install lives at the main checkout root), so
+// walk up from this script's directory until a node_modules/<name> is found.
+const pkgDir = (name) => {
+  let dir = new URL("../", import.meta.url);
+  for (;;) {
+    const candidate = new URL(`node_modules/${name}/`, dir);
+    if (fs.existsSync(candidate)) return fileURLToPath(candidate);
+    const parent = new URL("../", dir);
+    if (parent.href === dir.href) throw new Error(`Cannot resolve node_modules/${name} from ${import.meta.url}`);
+    dir = parent;
+  }
+};
 const version = (name) => JSON.parse(fs.readFileSync(`${pkgDir(name)}package.json`, "utf8")).version;
 const lucideDir = pkgDir("lucide-static");
 const lucideVersion = version("lucide-static");

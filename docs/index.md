@@ -15,6 +15,7 @@ they always match `main`.
 | The one Meta app for Facebook, Instagram and Threads | [Meta app](meta-setup.md) |
 | The X developer app (optional) | [X](x-setup.md) |
 | The TikTok developer app (optional) | [TikTok](tiktok-setup.md) |
+| The Pinterest developer app (optional) | [Pinterest](pinterest-setup.md) |
 
 ## Using Docket
 

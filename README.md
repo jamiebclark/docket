@@ -129,6 +129,7 @@ file names and headings stable or update those links.
 | Facebook, Instagram and Threads apps | [docs/meta-setup.md](docs/meta-setup.md) |
 | The X developer app (optional) | [docs/x-setup.md](docs/x-setup.md) |
 | The TikTok developer app (optional) | [docs/tiktok-setup.md](docs/tiktok-setup.md) |
+| The Pinterest developer app (optional) | [docs/pinterest-setup.md](docs/pinterest-setup.md) |
 | Generator and jobs | [docs/generator.md](docs/generator.md) |
 | n8n and the public API | [docs/n8n.md](docs/n8n.md) |
 | Adding a provider | [docs/adding-a-provider.md](docs/adding-a-provider.md) |

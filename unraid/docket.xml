@@ -268,6 +268,61 @@
     Required="false"
     Mask="true"></Config>
 
+  <Config
+    Name="TikTok Client Key"
+    Target="TIKTOK_CLIENT_KEY"
+    Default=""
+    Mode=""
+    Description="Optional. TikTok. Set with TikTok Client Secret. Needs an https:// callback address that is not localhost."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="TikTok Client Secret"
+    Target="TIKTOK_CLIENT_SECRET"
+    Default=""
+    Mode=""
+    Description="Optional. Set with TikTok Client Key. Never logged."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
+  <Config
+    Name="TikTok App Audited"
+    Target="TIKTOK_APP_AUDITED"
+    Default=""
+    Mode=""
+    Description="Optional. Set true only after TikTok has approved your app's audit; until then every TikTok post is private."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Pinterest Client ID"
+    Target="PINTEREST_CLIENT_ID"
+    Default=""
+    Mode=""
+    Description="Optional. Pinterest. Set with Pinterest Client Secret. Needs an https:// callback address that is not localhost, matched exactly."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Pinterest Client Secret"
+    Target="PINTEREST_CLIENT_SECRET"
+    Default=""
+    Mode=""
+    Description="Optional. Set with Pinterest Client ID. Never logged."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+
   <!-- ── Reverse proxy ──────────────────────────────────────── -->
   <Config
     Name="Trusted IP Headers"

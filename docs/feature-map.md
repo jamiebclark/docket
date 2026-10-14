@@ -26,6 +26,14 @@ spec is written.
   video pulled from a URL, AI-generated-content labels, a cover frame choice, music options, TikTok fields in the public API, generator or bulk
   create, a link built from a username, counting TikTok accounts against the 5-user cap, Terms of Service and Privacy Policy pages served by Docket,
   and a confirm-at-send flow (the fallback if the audit refuses consent at scheduling).
+- **Pinterest (072).** Connect a Pinterest business account with Pinterest's web login, then post one image pin per scheduled post, with a board
+  chosen per post (read live from Pinterest), an optional title and link. Driven by two generic hooks (posting fields, account details); no
+  consent and no state machine beyond a single create step. While the deployer's app has Trial access, pins are visible only to the connected
+  account's owner and the server shares a 300-pin-a-day cap across every connected account (not enforced by Docket; a 429 defers the post).
+  Verified with mocks only until the live checks in `docs/pinterest-setup.md` are done.
+  Not yet owned by any spec: video pins, carousel pins, board management (creating or editing boards), secret or protected boards, analytics,
+  product/rich pins, catalogs, ads, Pinterest Business Access, AI-disclosure labels, the `api-sandbox` host, automatic detection of Trial vs.
+  Standard access, and modelling the shared Trial daily cap as an enforced limit.
 - **Bluesky video (025).** One video per post (MP4, up to 300 MB), uploaded to Bluesky's video service in parts, then checked until
   Bluesky has processed it, with plain error explanations, an upload-limit check and a daily allowance of about 25. Verified with mocks
   only until the live checks in `docs/accounts.md` are done. Not yet owned by any spec: WebVTT captions, a GIF hint, a gallery embed,

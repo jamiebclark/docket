@@ -125,11 +125,12 @@ function heading(details: CreatorDetails | null): string | null {
   return name ? `Posting to ${name}` : null;
 }
 
-function notice(): { text: string; doc?: string } | null {
+function notice(): { text: string; doc?: string; docLabel?: string } | null {
   if (tiktokAudited()) return null;
   return {
     text: "This TikTok app hasn't passed TikTok's audit, so it can only post privately.",
     doc: docsUrl("tiktok-setup", "unaudited-apps"),
+    docLabel: "Read how TikTok's audit works",
   };
 }
 

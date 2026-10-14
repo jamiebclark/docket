@@ -211,6 +211,26 @@ X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce 
 | note: chunk sizing | Contiguous chunks of 5 MB to 64 MB (about 30 per file); the final chunk absorbs the remainder and stays under 128 MB | | docs/research/tiktok.md ("Upload video") | TikTok step machine (`chunkPlan`) | `src/providers/tiktok/state.test.ts` "covers the whole file with contiguous ranges" |
 | note: status ceiling | 60 min | | docs/research/tiktok.md ("Fetch post status"); a post still processing then ends ambiguous | TikTok step machine | `tests/integration/tiktok/failures.test.ts` "ends ambiguous when TikTok is still processing after 60 minutes" |
 
+## Pinterest
+
+| Category | Value | Counting | Source | Enforced in | Test |
+|---|---|---|---|---|---|
+| text length | 800 | code points | docs/research/pinterest.md (`description` maxLength 800); the counting rule is a Docket choice (U4) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "pinterest: text length" |
+| images | 1 |  | docs/research/pinterest.md (one `image_url` per pin; carousels out of scope) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "pinterest: images" |
+| bytes per file | 20000000 |  | docs/research/pinterest.md (Help Center "20 MB on web"; not confirmed as an API-enforced ceiling) | media planner | `tests/integration/limits/enforcement.test.ts` "pinterest: bytes per file" |
+| formats | image/jpeg, image/png, image/webp |  | docs/research/pinterest.md (Pinterest also accepts BMP and TIFF, which Docket's library cannot hold) | media planner | `src/providers/pinterest/capabilities.test.ts` "pinterest: formats accepts every uploadable type without converting it" |
+| alt text length | 500 |  | docs/research/pinterest.md (`alt_text` maxLength 500) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "pinterest: alt text length" |
+| media required | yes |  | docs/research/pinterest.md (Pinterest has no text-only pin) | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "pinterest: media required" |
+| text only | no |  | docs/research/pinterest.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "pinterest: text only" |
+| videos | 0 |  | out of scope; a later `pinterest-video` entry | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "pinterest: videos" |
+| publish limit | 100 / 60 s |  | docs/research/pinterest.md (`org_write`, Standard access) | engine deferral | `tests/integration/limits/enforcement.test.ts` "pinterest: publish limit 100 / 60 s" |
+| note: pin title | 100 code points, per target, optional |  | docs/research/pinterest.md (`title` maxLength 100) | Pinterest validation (`validate.ts`) | `src/providers/pinterest/validate.test.ts` "title_too_long at 101, publishes at 100" |
+| note: pin link | 2048 code points, per target, optional, absolute http(s) |  | docs/research/pinterest.md (`link` maxLength 2048); the URL check is a Docket choice | Pinterest validation (`validate.ts`) | `src/providers/pinterest/validate.test.ts` "link_too_long at 2049, publishes at 2048" |
+| note: board required | Every pin names exactly one board, chosen per target |  | docs/research/pinterest.md ("Identity model") | Pinterest validation (`validate.ts`) | `src/providers/pinterest/validate.test.ts` "board_required when boardId is null and boards exist" |
+| note: aspect ratio | A warning outside 0.5–1.0 (2:3 recommended); never refused |  | docs/research/pinterest.md (feed cropping, not rejection; not independently confirmed) | Pinterest validation (`validate.ts`) | `src/providers/pinterest/validate.test.ts` "aspect_far_from_recommended is a warning and still publishes" |
+
+While the deployer's Pinterest app has Trial access, the whole server shares 300 pin creations per day across every connected Pinterest account. Docket does not enforce that cap (it is per app, not per account), so it has no row; a 429 from it defers the post instead. It is stated on the account card, in the requirements summary and in `docs/pinterest-setup.md`.
+
 ## Mock (offline)
 
 | Category | Value | Counting | Source | Enforced in | Test |
