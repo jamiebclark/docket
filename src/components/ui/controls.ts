@@ -14,5 +14,12 @@ export const hintStyles = "text-xs text-muted-foreground";
 /** Inline field error inside an `aria-live` region. */
 export const errorStyles = "min-h-4 text-xs font-medium text-danger";
 
+/**
+ * An inline text link in prose (policy text, footers): purple, always underlined so it is not told
+ * apart by colour alone, with the shared focus ring. Use `buttonStyles()` for a link that is an action.
+ */
+export const linkStyles =
+  "rounded-sm font-medium text-primary underline underline-offset-2 hover:text-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+
 /** Checkbox / radio inputs: brand accent comes from `accent-color` in globals.css. */
 export const checkStyles = "size-4 rounded border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2";

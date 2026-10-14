@@ -12,8 +12,10 @@ export function decideRootRedirect(lastSlug: string | undefined, projects: RootR
 
 /**
  * Where an anonymous visitor to "/" or "/login" goes: a fresh install with no
- * account yet is sent to the first-account screen, otherwise to sign-in.
+ * account yet is sent to the first-account screen. Otherwise null — they stay
+ * put, and "/" shows the public description of the installation (with its
+ * "Log in" link) rather than redirecting, so platform reviewers can read it.
  */
-export function decideAnonymousRedirect(setupAvailable: boolean): "/setup" | "/login" {
-  return setupAvailable ? "/setup" : "/login";
+export function decideAnonymousRedirect(setupAvailable: boolean): "/setup" | null {
+  return setupAvailable ? "/setup" : null;
 }

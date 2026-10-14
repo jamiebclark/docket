@@ -17,7 +17,8 @@ export default async function LoginPage({
   const { next } = await searchParams;
   const target = safeRedirect(Array.isArray(next) ? next[0] : next, "/");
   if (await getSession()) redirect("/");
-  if (await setup.isAvailable()) redirect(decideAnonymousRedirect(true));
+  const first = decideAnonymousRedirect(await setup.isAvailable());
+  if (first) redirect(first);
 
   return (
     <AuthShell>

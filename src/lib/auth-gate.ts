@@ -8,7 +8,15 @@
 // client itself, with no cookies at all. Redirecting either to /login makes unsubscribing impossible
 // for exactly the people who need it. Their credential is the encrypted, scoped, expiring token in `t`,
 // which `readUnsubscribeToken` verifies — a session would prove nothing extra (045/044, FR-026).
+//
+// "/" and "/privacy" are public because platform reviewers (Pinterest, Meta) check them with no account:
+// the app's website must describe the app, and its privacy policy must load on the app's own domain.
+// Redirecting either to /login shows a reviewer a bare sign-in form, which is a documented refusal reason.
+// "/" still sends a signed-in visitor into their project, and a fresh install to /setup; it only renders
+// the public description for somebody who is neither. Neither page shows any stored data.
 const PUBLIC_EXACT = new Set([
+  "/",
+  "/privacy",
   "/login",
   "/setup",
   "/signup",
@@ -31,8 +39,7 @@ export function loginRedirectFor(
   hasSession: boolean,
 ): string | null {
   if (hasSession || isPublicPath(pathname)) return null;
-  const next = pathname === "/" && !search ? "" : `?next=${encodeURIComponent(pathname + search)}`;
-  return `/login${next}`;
+  return `/login?next=${encodeURIComponent(pathname + search)}`;
 }
 
 /** Slug to remember as the last project for `/p/<slug>` and `/p/<slug>/…`; null for `/p/new` and everything else. */

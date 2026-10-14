@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { connection } from "next/server";
+import { getPublicSite } from "@/server/public-site";
 import "./globals.css";
 
 // Vendored OFL fonts (see src/app/fonts/LICENSE-*.txt): self-hosted, nothing downloaded at build time.
@@ -23,8 +24,13 @@ const poppins = localFont({
 
 const DESCRIPTION = "Plan, write and schedule social posts across every project.";
 
-/** Read per request: share-image URLs must be absolute, and the public address is set at run time. */
+/**
+ * Read per request: share-image URLs must be absolute, and the public address is set at run time.
+ * `other` emits `<meta name="p:domain_verify">` when PINTEREST_DOMAIN_VERIFY is set, so the operator can
+ * claim this website on their Pinterest business account (docs/pinterest-setup.md).
+ */
 export function generateMetadata(): Metadata {
+  const { pinterestDomainVerify } = getPublicSite();
   return {
     metadataBase: new URL(process.env.BETTER_AUTH_URL?.trim() || "http://localhost:3000"),
     title: { default: "Docket", template: "%s · Docket" },
@@ -32,6 +38,7 @@ export function generateMetadata(): Metadata {
     applicationName: "Docket",
     openGraph: { siteName: "Docket", title: "Docket", description: DESCRIPTION, type: "website" },
     twitter: { card: "summary_large_image", title: "Docket", description: DESCRIPTION },
+    ...(pinterestDomainVerify ? { other: { "p:domain_verify": pinterestDomainVerify } } : {}),
   };
 }
 

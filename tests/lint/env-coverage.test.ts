@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COMPOSE_ONLY_VARIABLES, DEV_ONLY_VARIABLES, INTERNAL_VARIABLES } from "../../src/server/config-registry";
 import { ENV_VARIABLES } from "../../src/server/env";
+import { PUBLIC_SITE_VARIABLES } from "../../src/server/public-site";
 import { LLM_IMAGE_VARIABLES, LLM_RATE_VARIABLES, LLM_VARIABLES } from "../../src/server/llm/config";
 import { listConnectGroups } from "../../src/providers/registry";
 import { validateConfiguration } from "../../src/server/startup/validate";
@@ -44,7 +45,7 @@ function variablesRead(): Map<string, string> {
 
 const PROVIDER_VARIABLES = listConnectGroups().flatMap(({ group }) => group.environment.variables.map((v) => v.name));
 const CONFIGURABLE = [
-  ...new Set([...ENV_VARIABLES, ...LLM_VARIABLES, ...LLM_IMAGE_VARIABLES, ...LLM_RATE_VARIABLES, ...PROVIDER_VARIABLES]),
+  ...new Set([...ENV_VARIABLES, ...LLM_VARIABLES, ...LLM_IMAGE_VARIABLES, ...LLM_RATE_VARIABLES, ...PROVIDER_VARIABLES, ...PUBLIC_SITE_VARIABLES]),
 ];
 const KNOWN = new Set([
   ...CONFIGURABLE,
