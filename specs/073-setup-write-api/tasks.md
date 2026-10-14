@@ -63,14 +63,14 @@ Single Next.js app at repository root: `src/`, `tests/`, `drizzle/`, `docs/`.
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] Integration tests for `POST /projects` in `tests/integration/api/endpoints/projects-write.test.ts`: happy path (all nine fields, owner membership, response shape), missing-permission 403, cross-project key (slug visible vs. invisible produce byte-identical 409 `slug_taken` — FR-049), validation failures (bad timezone, over-length name/tagline/description, non-http(s) website, unreviewed-queue `confirmation_required`), idempotent replay, and no-acting-user conflict
-- [ ] T017 [P] [US1] Integration tests for `POST /voice-profiles` in `tests/integration/api/endpoints/voice-write.test.ts` (create portion): happy path (version 1, `isDefault: true` when no default exists), validation failures (over-length name, over-limit content field naming its `details.path`, bad link URL, malformed hashtag), missing-permission 403, cross-project key, idempotent replay
+- [X] T016 [P] [US1] Integration tests for `POST /projects` in `tests/integration/api/endpoints/projects-write.test.ts`: happy path (all nine fields, owner membership, response shape), missing-permission 403, cross-project key (slug visible vs. invisible produce byte-identical 409 `slug_taken` — FR-049), validation failures (bad timezone, over-length name/tagline/description, non-http(s) website, unreviewed-queue `confirmation_required`), idempotent replay, and no-acting-user conflict
+- [X] T017 [P] [US1] Integration tests for `POST /voice-profiles` in `tests/integration/api/endpoints/voice-write.test.ts` (create portion): happy path (version 1, `isDefault: true` when no default exists), validation failures (over-length name, over-limit content field naming its `details.path`, bad link URL, malformed hashtag), missing-permission 403, cross-project key, idempotent replay
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Create `src/server/api/operations/projects.ts` with the `createProject` operation (`POST /projects`, `permission: "manage_setup"`, `idempotent: true`, `idempotencyMode: "self_commit"`, no `resourceParams`) calling `services/projects.create` and mapping the result to `ProjectSchema`'s nine fields
-- [ ] T019 [US1] Create `src/server/api/operations/voice.ts` with the `createVoiceProfile` operation (`POST /voice-profiles`, `permission: "manage_setup"`, `idempotent: true`, no `resourceParams`) calling `services/voice.createVoiceProfile` and mapping `{profileId, version}` to `{id, version, isDefault}`
-- [ ] T020 [US1] Register both new operation arrays in `src/server/api/operations/index.ts`
+- [X] T018 [US1] Create `src/server/api/operations/projects.ts` with the `createProject` operation (`POST /projects`, `permission: "manage_setup"`, `idempotent: true`, `idempotencyMode: "self_commit"`, no `resourceParams`) calling `services/projects.create` and mapping the result to `ProjectSchema`'s nine fields
+- [X] T019 [US1] Create `src/server/api/operations/voice.ts` with the `createVoiceProfile` operation (`POST /voice-profiles`, `permission: "manage_setup"`, `idempotent: true`, no `resourceParams`) calling `services/voice.createVoiceProfile` and mapping `{profileId, version}` to `{id, version, isDefault}`
+- [X] T020 [US1] Register both new operation arrays in `src/server/api/operations/index.ts`
 
 **Checkpoint**: User Story 1 is fully functional and testable independently — a project and its voice profile can be created over HTTP.
 
@@ -84,17 +84,17 @@ Single Next.js app at repository root: `src/`, `tests/`, `drizzle/`, `docs/`.
 
 ### Tests for User Story 2
 
-- [ ] T021 [US2] Integration tests for `POST /slots`, `POST /slots/week`, `PATCH /slots/{slotId}` and `DELETE /slots/{slotId}` in `tests/integration/api/endpoints/slots-write.test.ts`: whole-week add on an empty account (seven created, empty `alreadySet`) and on a partly-booked account including a paused slot (created + named already-set weekdays, paused slot stays paused); single-slot add happy path, 409 conflict on a duplicate with no `Idempotency-Key`, idempotent replay with one; move (same id, new values, scheduled posts keep their time), pause/unpause, a body carrying both or neither intents (400); delete (200 `{id, deleted: true}`, a second delete 404, replayed 200 with the first key); weekday/time validation failures; missing-permission 403
-- [ ] T022 [US2] Add the body-borne-account-id isolation test to `tests/integration/api/endpoints/slots-write.test.ts`: a project-B account id and a random UUID both answer byte-identical 404s for `POST /slots` and `POST /slots/week` (contract note — these two don't walk `resourceParams`)
+- [X] T021 [US2] Integration tests for `POST /slots`, `POST /slots/week`, `PATCH /slots/{slotId}` and `DELETE /slots/{slotId}` in `tests/integration/api/endpoints/slots-write.test.ts`: whole-week add on an empty account (seven created, empty `alreadySet`) and on a partly-booked account including a paused slot (created + named already-set weekdays, paused slot stays paused); single-slot add happy path, 409 conflict on a duplicate with no `Idempotency-Key`, idempotent replay with one; move (same id, new values, scheduled posts keep their time), pause/unpause, a body carrying both or neither intents (400); delete (200 `{id, deleted: true}`, a second delete 404, replayed 200 with the first key); weekday/time validation failures; missing-permission 403
+- [X] T022 [US2] Add the body-borne-account-id isolation test to `tests/integration/api/endpoints/slots-write.test.ts`: a project-B account id and a random UUID both answer byte-identical 404s for `POST /slots` and `POST /slots/week` (contract note — these two don't walk `resourceParams`)
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Add the `SlotView` → `Slot` response mapping as one exported helper in `src/server/api/operations/slots.ts` (reused by `addSlot`, `updateSlot`, `addWeekSlots`)
-- [ ] T024 [US2] Add the `addSlot` operation (`POST /slots`, no `resourceParams`, account id in body) to `src/server/api/operations/slots.ts` calling `services/slots.addSlot`
-- [ ] T025 [US2] Add the `addWeekSlots` operation (`POST /slots/week`, no `resourceParams`, account id in body) to `src/server/api/operations/slots.ts` calling `services/slots.addSlotsForWeek`, mapping `{added, alreadySet}` through the shared slot helper
-- [ ] T026 [US2] Add the `updateSlot` operation (`PATCH /slots/{slotId}`, `resourceParams: ["slotId"]`) to `src/server/api/operations/slots.ts` dispatching the strict-union body to `services/slots.moveSlot` or `services/slots.setSlotPaused`, exactly one per request
-- [ ] T027 [US2] Add the `deleteSlot` operation (`DELETE /slots/{slotId}`, `resourceParams: ["slotId"]`, no body) to `src/server/api/operations/slots.ts` calling `services/slots.deleteSlot` and returning `{id: params.slotId, deleted: true}`
-- [ ] T028 [US2] Register the four new slot operations in `src/server/api/operations/index.ts`
+- [X] T023 [US2] Add the `SlotView` → `Slot` response mapping as one exported helper in `src/server/api/operations/slots.ts` (reused by `addSlot`, `updateSlot`, `addWeekSlots`)
+- [X] T024 [US2] Add the `addSlot` operation (`POST /slots`, no `resourceParams`, account id in body) to `src/server/api/operations/slots.ts` calling `services/slots.addSlot`
+- [X] T025 [US2] Add the `addWeekSlots` operation (`POST /slots/week`, no `resourceParams`, account id in body) to `src/server/api/operations/slots.ts` calling `services/slots.addSlotsForWeek`, mapping `{added, alreadySet}` through the shared slot helper
+- [X] T026 [US2] Add the `updateSlot` operation (`PATCH /slots/{slotId}`, `resourceParams: ["slotId"]`) to `src/server/api/operations/slots.ts` dispatching the strict-union body to `services/slots.moveSlot` or `services/slots.setSlotPaused`, exactly one per request
+- [X] T027 [US2] Add the `deleteSlot` operation (`DELETE /slots/{slotId}`, `resourceParams: ["slotId"]`, no body) to `src/server/api/operations/slots.ts` calling `services/slots.deleteSlot` and returning `{id: params.slotId, deleted: true}`
+- [X] T028 [US2] Register the four new slot operations in `src/server/api/operations/index.ts`
 
 **Checkpoint**: User Stories 1 and 2 both work independently — a brand can be provisioned and scheduled end to end.
 

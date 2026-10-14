@@ -5,8 +5,10 @@ import { jobOperations } from "./jobs";
 import { mediaOperations } from "./media";
 import { openApiOperations } from "./openapi";
 import { postOperations } from "./posts";
+import { projectOperations } from "./projects";
 import { slotOperations } from "./slots";
 import { targetOperations } from "./targets";
+import { voiceOperations } from "./voice";
 
 export * from "./types";
 
@@ -22,4 +24,6 @@ export const OPERATIONS: readonly AnyApiOperation[] = [
   ...jobOperations,
   ...activityOperations,
   ...openApiOperations,
+  ...projectOperations,
+  ...voiceOperations,
 ];
