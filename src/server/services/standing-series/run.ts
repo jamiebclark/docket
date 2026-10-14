@@ -1,7 +1,7 @@
 // standing-series/run: open or resume a series' current-period run (contracts/services.md §7.1).
 import { Temporal } from "@js-temporal/polyfill";
 import { boundariesBetween, nextBoundaryAfter, periodStartDate, periodStartInstant, type CadencePeriod } from "@/lib/series/cadence";
-import { localToday, nextTargetDate } from "@/lib/series/dated";
+import { DATED_ROWS_PER_DATE_MAX, localToday, nextTargetDate } from "@/lib/series/dated";
 import type { DatedPosition, StandingSeriesRunConfig } from "@/lib/validation/standing-series";
 import { isUniqueViolation, takeVoice } from "../generation/single";
 import type { ProjectScope } from "../../dal/scope";
@@ -216,12 +216,19 @@ async function openOrResumeDatedRun(
 
   // Resuming must key off today's local date, not `evaluation.dueDate`: a resumed run's own rows
   // were already advanced past their target when the run opened, so a later tick sees nothing due
-  // and would otherwise mistake its own still-open run for a prior period's stale one.
+  // and would otherwise mistake its own still-open run for a prior period's stale one. With a lead
+  // time, the run opens on `period_start - lead_days`, so comparing `period_start` to today's exact
+  // date would close an unfinished run on every day of its own lead window (review F2); resume it as
+  // long as today is still inside `[period_start - lead_days, period_start]`, and only treat it as
+  // stale once today has passed `period_start`.
   let open = await scope.standingSeriesRuns.openFor(series.id);
-  if (open && open.periodStart === today.toString()) {
-    return { run: open, opened: false };
-  }
   if (open) {
+    const periodStart = Temporal.PlainDate.from(open.periodStart);
+    const windowStart = periodStart.subtract({ days: series.leadDays });
+    const insideWindow = Temporal.PlainDate.compare(today, windowStart) >= 0 && Temporal.PlainDate.compare(today, periodStart) <= 0;
+    if (insideWindow) {
+      return { run: open, opened: false };
+    }
     const autoPaused = await closeStale(scope, open, now);
     if (autoPaused) return null;
     open = null;
@@ -229,7 +236,19 @@ async function openOrResumeDatedRun(
   if (evaluation.dueDate === null) return null;
 
   const dueDate = evaluation.dueDate;
-  const rows = await scope.datedRows.dueOn(series.id, dueDate);
+  const dueYear = Temporal.PlainDate.from(dueDate).year;
+  // Import and the row editor keep every resolved calendar date within `DATED_ROWS_PER_DATE_MAX`
+  // (review F3); this clamp is defense-in-depth so a row that somehow slips past both would merely
+  // miss this date's run rather than make the position insert violate
+  // `standing_series_runs_requested_count_range` and stall the whole date every tick.
+  const dueRows = (await scope.datedRows.dueOn(series.id, dueDate)).slice(0, DATED_ROWS_PER_DATE_MAX);
+  if (dueRows.length === 0) return null;
+  // A row that already has an occurrence recorded for this year (a stale `next_target_date` left by
+  // an edit, or a race with another worker) has nothing left to do for this date; skip it here
+  // rather than let the transaction's `unique(row_id, year)` insert fail and roll back every other
+  // row due the same date (review F4).
+  const firedBefore = await scope.datedRows.firedYears(dueRows.map((r) => r.id));
+  const rows = dueRows.filter((r) => !(firedBefore.get(r.id) ?? []).includes(dueYear));
   if (rows.length === 0) return null;
 
   let blockedReason: "voice_profile_missing" | "no_usable_target" | null = null;

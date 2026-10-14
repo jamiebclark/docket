@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { csvBuilder } from "../../helpers/factories";
+import { atTime } from "../../helpers/clock";
 import { createStandingSeries } from "../../../src/server/services/standing-series/manage";
 import { importDatedList } from "../../../src/server/services/standing-series/dated-import";
 import { getStandingSeries } from "../../../src/server/services/standing-series/read";
@@ -82,6 +83,30 @@ describe("dated series import (US2 AS1-AS2, AS4; FR-021-FR-023)", () => {
     const result = await importDatedList(e.scope, seriesId, file(bytes));
     expect(result.problems).toHaveLength(1);
     expect(result.problems[0]!.message).toBe("Line 12: 03-14 already has 10 rows.");
+    expect(result.rowCount).toBe(10);
+  });
+
+  it("review F3: the per-date cap counts an every-year and a year-specific row together", async () => {
+    const e = await standingSeriesEnv();
+    const seriesId = await datedSeries(e);
+    const rows = Array.from({ length: 10 }, (_, i) => ["03-14", `Person ${i}`]);
+    rows.push(["2027-03-14", "Yearly Visitor"]);
+    const bytes = csvBuilder(["date", "name"], rows);
+    const result = await atTime(new Date("2026-01-01T00:00:00.000Z"), () => importDatedList(e.scope, seriesId, file(bytes)));
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]!.message).toBe("Line 12: 2027-03-14 already has 10 rows.");
+    expect(result.rowCount).toBe(10);
+  });
+
+  it("review F3: the leap-day collapse counts an every-year 02-29 row against 02-28", async () => {
+    const e = await standingSeriesEnv();
+    const seriesId = await datedSeries(e);
+    const rows = Array.from({ length: 10 }, (_, i) => ["02-28", `Person ${i}`]);
+    rows.push(["02-29", "Leap Visitor"]);
+    const bytes = csvBuilder(["date", "name"], rows);
+    const result = await atTime(new Date("2026-01-01T00:00:00.000Z"), () => importDatedList(e.scope, seriesId, file(bytes)));
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]!.message).toBe("Line 12: 02-29 already has 10 rows.");
     expect(result.rowCount).toBe(10);
   });
 

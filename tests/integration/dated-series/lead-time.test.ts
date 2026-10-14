@@ -59,6 +59,10 @@ async function tick(at: Date): Promise<StandingSeriesCounts> {
   return atTime(at, () => runStandingSeries({ config: CONFIG, tickId: "test", startedAt: at }));
 }
 
+async function tickWith(at: Date, config: SchedulerConfig): Promise<StandingSeriesCounts> {
+  return atTime(at, () => runStandingSeries({ config, tickId: "test", startedAt: at }));
+}
+
 /** Project timezone is UTC (factories default), so a row's local date matches its UTC date. */
 function rowInput(over: Partial<NewDatedRow> & { ordinal: number }): NewDatedRow {
   return {
@@ -279,5 +283,56 @@ describe("dated series lead time (US4 AS1-AS5, FR-030, SC-003, B13)", () => {
     expect(saved!.reviewState).toBe("needs_review");
     const targets = await e.scope.targets.listForPost(saved!.id);
     expect(targets.some((t) => t.status === "scheduled")).toBe(false);
+  });
+
+  it("review F2: a run that outlasts one tick is resumed, not closed, on every day inside its lead window", async () => {
+    const e = await standingSeriesEnv();
+    const tickCap: SchedulerConfig = { ...CONFIG, standingSeriesMaxPosts: 2 };
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null, leadDays: 3 })),
+    );
+    for (let i = 0; i < 3; i++) {
+      await e.scope.datedRows.insert(
+        seriesId,
+        rowInput({ ordinal: i, keyValue: `Row ${i}`, fields: { name: `Row ${i}` }, nextTargetDate: "2026-03-14" }),
+      );
+    }
+
+    // The window opens on 2026-03-11 (period_start - lead_days). The per-tick cap of 2 leaves one
+    // position queued; the next day is not `period_start` (2026-03-14), which is exactly the state
+    // the old "resume iff period_start === today" check mistook for stale.
+    setLlmForTests(createFakeLlm([post("One."), post("Two.")]));
+    expect((await tickWith(new Date("2026-03-11T00:00:01.000Z"), tickCap)).produced).toBe(2);
+
+    setLlmForTests(createFakeLlm([post("Three.")]));
+    expect((await tickWith(new Date("2026-03-12T00:00:01.000Z"), tickCap)).produced).toBe(1);
+
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.outcome).toBe("produced_all");
+    const positions = await e.scope.standingSeriesPositions.listForRun(runs[0]!.id);
+    expect(positions.every((p) => p.status === "produced")).toBe(true);
+  });
+
+  it("review F2: a lead-time position that takes a temporary error is retried, not abandoned on a closed run", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-01-01T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null, leadDays: 3 })),
+    );
+    await e.scope.datedRows.insert(seriesId, rowInput({ ordinal: 0, nextTargetDate: "2026-03-14" }));
+
+    // Opens on 2026-03-11 and fails temporarily; the position backs off, queued, on the still-open run.
+    setLlmForTests(createFakeLlm([{ fail: "timeout" }]));
+    expect((await tick(new Date("2026-03-11T00:00:01.000Z"))).produced).toBe(0);
+
+    // A day later — not `period_start` (2026-03-14) — the retry succeeds; the run must still be open.
+    setLlmForTests(createFakeLlm([post("Retried.")]));
+    expect((await tick(new Date("2026-03-12T00:00:01.000Z"))).produced).toBe(1);
+
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.outcome).toBe("produced_all");
   });
 });

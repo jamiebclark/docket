@@ -72,6 +72,16 @@ export function targetDateFor(spec: DatedSpec, year: number): Temporal.PlainDate
   return Temporal.PlainDate.from({ year, month: spec.month, day });
 }
 
+/** The calendar dates (`YYYY-MM-DD`, leap-day collapsed) a row counts against for the per-date cap
+ *  (FR-013, A11, research § 3): a year-specific row counts only against its own year; an every-year
+ *  row counts against each of the next two years from `today`, so `03-14` and `2027-03-14` are seen
+ *  to collide in 2027, and an every-year `02-29` collides with an every-year `02-28` in the three
+ *  years out of four that collapse onto the same day. */
+export function resolvedCapDates(spec: DatedSpec, today: Temporal.PlainDate): string[] {
+  if (spec.year !== null) return [targetDateFor(spec, spec.year).toString()];
+  return [targetDateFor(spec, today.year).toString(), targetDateFor(spec, today.year + 1).toString()];
+}
+
 /** The local date of the next occurrence not in `firedYears` whose target date is not behind
  *  `today`. `null` when the row has no occurrence left (a year-specific row already recorded, or
  *  one whose year is behind `today`). Forward-only and deterministic (B26). */

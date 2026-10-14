@@ -1,5 +1,5 @@
 // standing-series/dated-rows: add, edit and delete one row of a dated series' list (contracts/services.md §7).
-import { DATED_ROWS_MAX, DATED_ROWS_PER_DATE_MAX, localToday, nextTargetDate } from "@/lib/series/dated";
+import { DATED_ROWS_MAX, DATED_ROWS_PER_DATE_MAX, localToday, nextTargetDate, resolvedCapDates } from "@/lib/series/dated";
 import { datedRowInputSchema } from "@/lib/validation/dated-rows";
 import * as clock from "../../dal/clock";
 import { ConflictError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
@@ -45,8 +45,11 @@ export async function addDatedRow(scope: ProjectScope, seriesId: string, input: 
     if (stored.some((r) => identityKey(r.month, r.day, r.year, r.keyValue) === identity)) {
       throw issue("date", `${formatSpecDate(value.spec)} and "${value.keyValue}" is already on the list.`);
     }
-    const sameDate = stored.filter((r) => r.month === value.spec.month && r.day === value.spec.day && (r.year ?? null) === value.spec.year);
-    if (sameDate.length >= DATED_ROWS_PER_DATE_MAX) {
+    const candidateDates = resolvedCapDates(value.spec, today);
+    const overCap = candidateDates.some(
+      (d) => stored.filter((r) => resolvedCapDates({ month: r.month, day: r.day, year: r.year }, today).includes(d)).length >= DATED_ROWS_PER_DATE_MAX,
+    );
+    if (overCap) {
       throw issue("date", `${formatSpecDate(value.spec)} already has ${DATED_ROWS_PER_DATE_MAX} rows.`);
     }
 
@@ -93,14 +96,22 @@ export async function updateDatedRow(scope: ProjectScope, seriesId: string, rowI
     if (stored.some((r) => r.id !== rowId && identityKey(r.month, r.day, r.year, r.keyValue) === identity)) {
       throw issue("date", `${formatSpecDate(value.spec)} and "${value.keyValue}" is already on the list.`);
     }
-    const sameDate = stored.filter(
-      (r) => r.id !== rowId && r.month === value.spec.month && r.day === value.spec.day && (r.year ?? null) === value.spec.year,
+    const candidateDates = resolvedCapDates(value.spec, today);
+    const overCap = candidateDates.some(
+      (d) =>
+        stored.filter((r) => r.id !== rowId && resolvedCapDates({ month: r.month, day: r.day, year: r.year }, today).includes(d)).length >=
+        DATED_ROWS_PER_DATE_MAX,
     );
-    if (sameDate.length >= DATED_ROWS_PER_DATE_MAX) {
+    if (overCap) {
       throw issue("date", `${formatSpecDate(value.spec)} already has ${DATED_ROWS_PER_DATE_MAX} rows.`);
     }
 
     const dateChanged = existingRow.month !== value.spec.month || existingRow.day !== value.spec.day || (existingRow.year ?? null) !== value.spec.year;
+    let refresh: { nextTargetDate: string | null } | Record<string, never> = {};
+    if (dateChanged) {
+      const fired = (await tx.datedRows.firedYears([rowId])).get(rowId) ?? [];
+      refresh = { nextTargetDate: nextTargetDate(value.spec, today, fired)?.toString() ?? null };
+    }
     await tx.datedRows.update(rowId, {
       month: value.spec.month,
       day: value.spec.day,
@@ -109,7 +120,7 @@ export async function updateDatedRow(scope: ProjectScope, seriesId: string, rowI
       fields: value.fields,
       mediaFilename: value.mediaFilename,
       mediaAssetId: value.mediaAssetId,
-      ...(dateChanged ? { nextTargetDate: nextTargetDate(value.spec, today, [])?.toString() ?? null } : {}),
+      ...refresh,
     });
     await tx.audit.insert({
       action: "standing_series_dated_row_update",

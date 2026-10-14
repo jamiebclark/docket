@@ -120,6 +120,16 @@ describe("Dated series detail page (SC-011, US2 AS3, US6 AS1)", () => {
     expect(html).toContain('scope="col"');
   });
 
+  it("renders a year-specific row's date as a full calendar date (review F1)", async () => {
+    const e = await ready();
+    const { seriesId } = await createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null }));
+    await e.scope.standingSeries.update(seriesId, { templateFields: ["name"] });
+    await addDatedRow(e.scope, seriesId, { date: "2027-03-14", media: null, fields: { name: "Ada Lovelace" } });
+    const html = await detailHtml(e, seriesId);
+    expect(html).toContain("Mar 14, 2027");
+    expect(html).toContain("once, in 2027");
+  });
+
   it("names what to upload in the empty rows state", async () => {
     const e = await ready();
     const { seriesId } = await createStandingSeries(e.scope, e.create({ occurrenceRule: "dated_list", cadence: null }));

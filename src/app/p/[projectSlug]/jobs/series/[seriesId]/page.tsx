@@ -187,7 +187,7 @@ export default async function StandingSeriesDetailPage({ params, searchParams }:
                   {series.rows.items.map((r) => (
                     <Row key={r.id}>
                       <Cell header>
-                        {r.year === null ? formatMonthDay(r.date) : <LocalDate value={r.date} />}
+                        {r.year === null ? formatMonthDay(r.date) : <LocalDate value={`${r.year}-${r.date}`} />}
                         <Sub>{r.year === null ? "every year" : `once, in ${r.year}`}</Sub>
                       </Cell>
                       <Cell>

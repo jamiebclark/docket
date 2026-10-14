@@ -7,6 +7,7 @@ import {
   localToday,
   nextTargetDate,
   parseDatedValue,
+  resolvedCapDates,
   targetDateFor,
   type DatedSpec,
 } from "@/lib/series/dated";
@@ -223,13 +224,13 @@ export async function importDatedList(scope: ProjectScope, seriesId: string, fil
     }
     seenIdentity.set(identity, row.line);
 
-    const dateKey = `${spec.month}-${spec.day}-${spec.year ?? "any"}`;
-    const countSoFar = (seenDateCount.get(dateKey) ?? 0) + 1;
-    seenDateCount.set(dateKey, countSoFar);
-    if (countSoFar > DATED_ROWS_PER_DATE_MAX) {
+    const resolvedDates = resolvedCapDates(spec, today);
+    const overCap = resolvedDates.some((d) => (seenDateCount.get(d) ?? 0) + 1 > DATED_ROWS_PER_DATE_MAX);
+    if (overCap) {
       problems.push({ line: row.line, message: `Line ${row.line}: ${formatSpecDate(spec)} already has ${DATED_ROWS_PER_DATE_MAX} rows.` });
       continue;
     }
+    for (const d of resolvedDates) seenDateCount.set(d, (seenDateCount.get(d) ?? 0) + 1);
 
     const mediaRaw = mediaColumn ? (row.values[mediaColumn] ?? "").trim() : "";
     let mediaAssetId: string | null = null;
@@ -299,15 +300,18 @@ export async function importDatedList(scope: ProjectScope, seriesId: string, fil
         const existing: DatedRowRecord | undefined = storedByIdentity.get(identity);
         if (existing) {
           matchedIds.add(existing.id);
+          let refresh: { nextTargetDate: string | null } | Record<string, never> = {};
+          if (existing.nextTargetDate === null) {
+            const fired = (await tx.datedRows.firedYears([existing.id])).get(existing.id) ?? [];
+            refresh = { nextTargetDate: nextTargetDate(row.spec, today, fired)?.toString() ?? null };
+          }
           await tx.datedRows.update(existing.id, {
             ordinal: i,
             fields: row.fields,
             mediaFilename: row.mediaFilename,
             mediaAssetId: row.mediaAssetId,
             sourceLine: row.line,
-            ...(existing.nextTargetDate === null
-              ? { nextTargetDate: nextTargetDate(row.spec, today, [])?.toString() ?? null }
-              : {}),
+            ...refresh,
           });
           updated += 1;
         } else {

@@ -23,11 +23,20 @@ export function formatFull(value: Date | string, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "full", timeStyle: "long" }).format(new Date(value));
 }
 
-/** A calendar date, e.g. "Mar 14, 2027" (B30). `value` is a "YYYY-MM-DD" string — no zone involved. */
+export class InvalidLocalDateError extends Error {
+  constructor(value: string) {
+    super(`formatLocalDate expects "YYYY-MM-DD", got ${JSON.stringify(value)}`);
+    this.name = "InvalidLocalDateError";
+  }
+}
+
+/** A calendar date, e.g. "Mar 14, 2027" (B30). `value` must be a "YYYY-MM-DD" string — no zone involved. */
 export function formatLocalDate(value: string): string {
-  const [year, month, day] = value.split("-").map(Number);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new InvalidLocalDateError(value);
+  const [, year, month, day] = match;
   return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" }).format(
-    new Date(Date.UTC(year!, (month ?? 1) - 1, day)),
+    new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))),
   );
 }
 
