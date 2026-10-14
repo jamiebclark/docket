@@ -50,6 +50,12 @@ const FIXTURES: Record<string, Fixture> = {
   closeJob: { params: (p) => ({ jobId: p.job.id }), body: () => ({}) },
   cancelJob: { params: (p) => ({ jobId: p.job.id }), body: () => ({}) },
   retryFailedJobItems: { params: (p) => ({ jobId: p.job.id }), body: () => ({}) },
+  createProject: { body: () => ({ name: `P ${Math.random().toString(36).slice(2, 7)}`, slug: `p-${Math.random().toString(36).slice(2, 8)}`, timezone: "America/New_York" }) },
+  createVoiceProfile: { body: () => ({ name: "Scope test", content: { voiceAndTone: "x" } }) },
+  addSlot: { body: (p) => ({ accountId: p.account.id, weekday: 6, localTime: "06:00" }) },
+  addWeekSlots: { body: (p) => ({ accountId: p.account.id, localTime: "05:00" }) },
+  updateSlot: { params: (p) => ({ slotId: p.slot.id }), body: () => ({ paused: true }) },
+  deleteSlot: { params: (p) => ({ slotId: p.slot.id }) },
 };
 
 const KEYED = () => OPERATIONS.filter((op) => op.permission !== null);
@@ -146,6 +152,9 @@ describe("project isolation, per resource parameter", () => {
           mediaId: w.b.media.id,
           jobId: w.b.job.id,
           itemId: w.b.items[0]!.id,
+          accountId: w.b.account.id,
+          profileId: w.b.voiceProfile.id,
+          slotId: w.b.slot.id,
         };
         const other = await call(op, w.a, key, { [name]: foreign[name]! });
         const unknown = await call(op, w.a, key, { [name]: random });

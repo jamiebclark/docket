@@ -60,6 +60,16 @@ describe("API keys page", () => {
     expect(out).toContain("skip review");
   });
 
+  it("empty: offers the manage_setup checkbox, labelled, warned, and unchecked by default", async () => {
+    const env = await postsEnv();
+    const out = await html(env, env.owner);
+    expect(out).toContain('id="perm-manage_setup"');
+    expect(out).toMatch(/<label for="perm-manage_setup"[^>]*>manage_setup/);
+    expect(out).not.toMatch(/<input id="perm-manage_setup"[^>]*checked/);
+    expect(out).toContain("Create projects and voice profiles");
+    expect(out).toContain("Warning: this can retime a schedule and rewrite a voice.");
+  });
+
   it("populated: names, display form, status text, and never the plaintext", async () => {
     const env = await postsEnv();
     actAs(env.owner);

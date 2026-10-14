@@ -108,10 +108,10 @@ Single Next.js app at repository root: `src/`, `tests/`, `drizzle/`, `docs/`.
 
 ### Tests for User Story 3
 
-- [ ] T029 [US3] Create `tests/integration/api/setup-permission.test.ts` (FR-052): a key with every permission except `manage_setup` is refused 403 `missing_permission` (details naming `manage_setup`) by all eight new paths with nothing written; a key with no key at all gets 401; a key holding only `manage_setup` is refused 403 (naming its own permission) by every pre-existing keyed operation
-- [ ] T030 [US3] Extend `tests/integration/api/scope-enforcement.test.ts` with project-B fixtures for the `accountId`, `profileId` and `slotId` resource parameters, covering `PATCH /accounts/{accountId}`, `PATCH /voice-profiles/{profileId}` and `PATCH|DELETE /slots/{slotId}`
-- [ ] T031 [P] [US3] Extend the existing API-key form test (`tests/integration/api-keys/ui.test.tsx`) to confirm the `manage_setup` checkbox is labelled, carries its help text and warning, and is not checked by default
-- [ ] T032 [US3] Run `pnpm vitest run tests/integration/api` and confirm the full pre-existing suite still passes unchanged (SC-005) — no code change expected for this task, a verification gate before closing the story
+- [X] T029 [US3] Create `tests/integration/api/setup-permission.test.ts` (FR-052): a key with every permission except `manage_setup` is refused 403 `missing_permission` (details naming `manage_setup`) by all eight new paths with nothing written; a key with no key at all gets 401; a key holding only `manage_setup` is refused 403 (naming its own permission) by every pre-existing keyed operation
+- [X] T030 [US3] Extend `tests/integration/api/scope-enforcement.test.ts` with project-B fixtures for the `accountId`, `profileId` and `slotId` resource parameters, covering `PATCH /accounts/{accountId}`, `PATCH /voice-profiles/{profileId}` and `PATCH|DELETE /slots/{slotId}`
+- [X] T031 [P] [US3] Extend the existing API-key form test (`tests/integration/api-keys/ui.test.tsx`) to confirm the `manage_setup` checkbox is labelled, carries its help text and warning, and is not checked by default
+- [X] T032 [US3] Run `pnpm vitest run tests/integration/api` and confirm the full pre-existing suite still passes unchanged (SC-005) — no code change expected for this task, a verification gate before closing the story
 
 **Checkpoint**: All P1 stories (US1, US2, US3) are complete — the MVP.
 
