@@ -9,9 +9,9 @@ afterAll(async () => {
 });
 
 describe("anonymous entry redirect against the real install state", () => {
-  it("goes to /login once the shared test database has a user", async () => {
+  it("stays on the public home page once the shared test database has a user", async () => {
     await createUser();
-    expect(decideAnonymousRedirect(await setup.isAvailable())).toBe("/login");
+    expect(decideAnonymousRedirect(await setup.isAvailable())).toBeNull();
   });
 
   it("goes to /setup on an empty install", async () => {

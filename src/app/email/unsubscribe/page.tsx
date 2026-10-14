@@ -60,7 +60,7 @@ export default async function UnsubscribePage({ searchParams }: Props) {
   const focusProject = view.focusSlug ? view.projects.find((p) => p.slug === view.focusSlug) : undefined;
 
   return (
-    <AuthShell wide>
+    <AuthShell width="lg">
       <PageHeader title="Problem emails" />
       <div className="flex flex-col gap-4">
         {confirmation ? (

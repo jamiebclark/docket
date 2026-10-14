@@ -3358,3 +3358,23 @@ confirm", and only an explicit `leave_as_draft` skips the gate. *Reverse*: delet
 `src/server/api/operations/generate.ts` — a one-line change — if review prefers the spec's
 literal reading; the accepted cost of reversing it is that the generate tool becomes the only
 unconfirmed path to a live publish over MCP.
+
+## Public home page and privacy policy (2026-10-14)
+
+Pinterest refused the Trial request for the docket.jamiebclark.com installation: the website must be online and
+describe the app, and the privacy policy must load on a domain clearly associated with the app. Docket had no public
+page at all — anonymous `/` redirected to `/login`, and the policy existed only in the repository (served from GitHub
+Pages, which fails the domain test).
+
+- **`/` is public for anonymous visitors.** It renders a short description of the installation (what it does, the
+  platforms it posts to, that it is not a social network and is invitation-only) with a Log in button. A signed-in
+  visitor is still sent into their project and a fresh install to `/setup`. *Reverse:* drop `/` from `PUBLIC_EXACT`
+  and restore the `/login` redirect in `decideAnonymousRedirect`; the cost is that platform reviewers see a bare
+  sign-in form again.
+- **`/privacy` serves the policy from code** (`src/app/privacy/policy.tsx`), titled exactly "Privacy Policy", with a
+  test that keeps its sections in step with `docs/privacy.md`.
+- **Operator identity is configured, never inferred.** `DOCKET_OPERATOR_NAME` and `DOCKET_OPERATOR_CONTACT` are
+  optional; unset, the pages say "operated by whoever deployed it". A malformed value is a start-up warning, not a
+  refusal to start — these are cosmetic.
+- **`PINTEREST_DOMAIN_VERIFY`** emits `<meta name="p:domain_verify">` so the operator can claim the website on the
+  business account that owns the app.
