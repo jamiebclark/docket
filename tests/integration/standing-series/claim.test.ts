@@ -114,7 +114,7 @@ describe("claimDueStandingSeries", () => {
       config: { v: 1 },
     });
     const positions = createStandingSeriesPositionsRepo(getDb(), project.id);
-    const [position] = await positions.insertMany(run.id, 1);
+    const [position] = await positions.insertMany(run.id, 1, now);
     await positions.update(position!.id, { status: "running", startedAt: now, attemptCount: 1 });
     return { project, series, run, position: position!, positions };
   }

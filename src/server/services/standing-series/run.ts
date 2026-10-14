@@ -127,7 +127,7 @@ export async function openOrResumeRun(
   try {
     run = await scope.transaction(async (tx) => {
       const row = await tx.standingSeriesRuns.openRun(insert);
-      await tx.standingSeriesPositions.insertMany(row.id, insert.requestedCount);
+      await tx.standingSeriesPositions.insertMany(row.id, insert.requestedCount, now);
       await tx.standingSeries.update(series.id, {
         lastRunAt: now,
         nextRunAt: nextBoundaryAfter(periodStartAt, zone, period),

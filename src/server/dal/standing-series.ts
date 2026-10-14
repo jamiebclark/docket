@@ -115,7 +115,8 @@ export interface StandingSeriesRunsRepo {
 }
 
 export interface StandingSeriesPositionsRepo {
-  insertMany(runId: string, count: number): Promise<StandingSeriesPositionRecord[]>;
+  /** `nextAttemptAt` defaults to the engine clock, not the column's own `defaultNow()`, so a pinned test clock is honoured (FR-040). */
+  insertMany(runId: string, count: number, nextAttemptAt: Date): Promise<StandingSeriesPositionRecord[]>;
   listForRun(runId: string): Promise<StandingSeriesPositionRecord[]>;
   countByStatus(runId: string): Promise<Record<StandingSeriesPositionStatus, number>>;
   /** `status = 'queued' AND next_attempt_at <= now`, or `status = 'running'`; earliest position first. */
@@ -260,7 +261,7 @@ export function createStandingSeriesPositionsRepo(db: Database, projectId: strin
   const mine = (id: string) => and(eq(standingSeriesPositions.projectId, projectId), eq(standingSeriesPositions.id, id));
   const forRun = (runId: string) => and(eq(standingSeriesPositions.projectId, projectId), eq(standingSeriesPositions.runId, runId));
   return {
-    async insertMany(runId, count) {
+    async insertMany(runId, count, nextAttemptAt) {
       if (count <= 0) return [];
       return db
         .insert(standingSeriesPositions)
@@ -269,6 +270,7 @@ export function createStandingSeriesPositionsRepo(db: Database, projectId: strin
             projectId,
             runId,
             position,
+            nextAttemptAt,
           })),
         )
         .returning();

@@ -127,7 +127,7 @@ describe("standing-series DAL", () => {
     const runs = createStandingSeriesRunsRepo(getDb(), project.id);
     const run = await runs.openRun(runInput(series.id, { requestedCount: 1, config: { v: 1 } }));
     const positions = createStandingSeriesPositionsRepo(getDb(), project.id);
-    const [position] = await positions.insertMany(run.id, 1);
+    const [position] = await positions.insertMany(run.id, 1, new Date());
     const assetA = await createMediaAsset(project.id);
     const assetB = await createMediaAsset(project.id);
     expect(await positions.claimMedia(position!.id, assetA.id)).toBe(true);
@@ -143,7 +143,7 @@ describe("standing-series DAL", () => {
     const runs = createStandingSeriesRunsRepo(getDb(), project.id);
     const run = await runs.openRun(runInput(series.id, { requestedCount: 3 }));
     const positions = createStandingSeriesPositionsRepo(getDb(), project.id);
-    const made = await positions.insertMany(run.id, 3);
+    const made = await positions.insertMany(run.id, 3, new Date());
     expect(made).toHaveLength(3);
     await positions.update(made[0]!.id, { status: "produced", finishedAt: new Date() });
     await positions.update(made[1]!.id, { status: "failed", lastErrorKind: "interrupted", lastError: "oops" });
@@ -158,7 +158,7 @@ describe("standing-series DAL", () => {
     const runs = createStandingSeriesRunsRepo(getDb(), project.id);
     const run = await runs.openRun(runInput(series.id, { requestedCount: 2 }));
     const positions = createStandingSeriesPositionsRepo(getDb(), project.id);
-    const [first, second] = await positions.insertMany(run.id, 2);
+    const [first, second] = await positions.insertMany(run.id, 2, new Date());
     const future = new Date(Date.now() + 3600_000);
     await positions.update(first!.id, { nextAttemptAt: future });
     expect((await positions.nextDue(run.id, new Date()))!.id).toBe(second!.id);
