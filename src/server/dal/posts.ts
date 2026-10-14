@@ -18,6 +18,7 @@ export type NewPost = Partial<
     | "seriesId"
     | "seriesPosition"
     | "generationJobItemId"
+    | "queueNotBefore"
   >
 >;
 export type PostPatch = Partial<

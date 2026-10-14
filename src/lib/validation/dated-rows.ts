@@ -17,6 +17,7 @@ export const importDatedListSchema = z.object({ filename: z.string().trim().min(
 export type ImportDatedListInput = z.infer<typeof importDatedListSchema>;
 
 export const importProblemSchema = z.object({ line: z.number().int().nullable(), message: z.string().max(300) });
+export type ImportProblem = z.infer<typeof importProblemSchema>;
 export const importRecordSchema = z.object({
   filename: z.string(),
   at: z.string(),

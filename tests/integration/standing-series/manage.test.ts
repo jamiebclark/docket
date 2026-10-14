@@ -82,7 +82,7 @@ describe("createStandingSeries (FR-002-FR-008, FR-010)", () => {
     const e = await standingSeriesEnv();
     const { seriesId } = await createStandingSeries(e.scope, e.create({ cadence: { count: 1, period: "day" } }));
     const row = await e.scope.standingSeries.get(seriesId);
-    expect(row!.nextRunAt.getTime()).toBeGreaterThan(Date.now());
+    expect(row!.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
   });
 
   it("writes exactly one audit row with the standing_series_create action", async () => {
@@ -101,7 +101,7 @@ describe("updateStandingSeries (FR-056)", () => {
     const before = await e.scope.standingSeries.get(seriesId);
     await updateStandingSeries(e.scope, seriesId, e.create({ name: before!.name, brief: "Updated brief.", cadence: { count: 1, period: "day" } }));
     const after = await e.scope.standingSeries.get(seriesId);
-    expect(after!.nextRunAt.getTime()).toBe(before!.nextRunAt.getTime());
+    expect(after!.nextRunAt!.getTime()).toBe(before!.nextRunAt!.getTime());
     expect(after!.brief).toBe("Updated brief.");
   });
 
@@ -144,7 +144,7 @@ describe("pause/resume (FR-054, FR-055)", () => {
     const row = await e.scope.standingSeries.get(seriesId);
     expect(row!.enabled).toBe(true);
     expect(row!.autoPausedReason).toBeNull();
-    expect(row!.nextRunAt.getTime()).toBeGreaterThan(Date.now());
+    expect(row!.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
     const rows = await e.scope.audit.list();
     expect(rows.filter((r) => r.action === "standing_series_resume")).toHaveLength(1);
   });

@@ -1,6 +1,6 @@
 // standing-series/media: resolve one position's media (contracts/services.md §7.3 step 4).
 import { findProvider } from "@/providers/registry";
-import type { StandingSeriesRunConfig } from "@/lib/validation/standing-series";
+import type { DatedPosition, StandingSeriesRunConfig } from "@/lib/validation/standing-series";
 import type { AccountRecord } from "../../dal/accounts";
 import type { MediaRow } from "../../dal/media";
 import type { ProjectScope } from "../../dal/scope";
@@ -36,6 +36,15 @@ export async function resolvePositionMedia(
   const required = accountNeedingMedia(accounts);
   const fail = (reason: StandingSeriesSkipReason): MediaOutcome =>
     required ? { ok: false, skip: { reason, accountId: required.id } } : { ok: true, assets: [] };
+
+  const dated = position.dated as DatedPosition | null;
+  if (dated?.mediaAssetId) {
+    const [asset] = await scope.media.getMany([dated.mediaAssetId]);
+    if (!asset) return fail("media_unusable");
+    const prepared = await imagesForModel(scope, [asset]);
+    if (!prepared.ok) return fail("media_unusable");
+    return { ok: true, assets: [asset] };
+  }
 
   if (media.source === "none") return { ok: true, assets: [] };
 

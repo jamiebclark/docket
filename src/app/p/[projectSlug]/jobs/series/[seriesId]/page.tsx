@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LocalDate } from "@/components/ui/LocalDate";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Cell, Row, Sub, Table } from "@/components/ui/Table";
 import { getSession } from "@/server/auth/session";
@@ -19,6 +21,7 @@ import {
   accountNames,
   cadenceLabel,
   droppedAccountsLine,
+  leadLabel,
   mediaSummary,
   outcomeInfo,
   periodLabel,
@@ -76,11 +79,21 @@ export default async function StandingSeriesDetailPage({ params }: Props) {
 
       <Card title="What it is">
         <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="font-medium">Cadence</dt>
-          <dd>{cadenceLabel(series.cadence)}</dd>
+          <dt className="font-medium">Occurrence</dt>
+          <dd>{series.cadence ? cadenceLabel(series.cadence) : "Dated list"}</dd>
+          {series.occurrenceRule === "dated_list" ? (
+            <>
+              <dt className="font-medium">Lead time</dt>
+              <dd>{leadLabel(series.leadDays) === "On the day" ? "Posts are written on the day" : `Posts are written ${series.leadDays} day${series.leadDays === 1 ? "" : "s"} early`}</dd>
+            </>
+          ) : null}
           <dt className="font-medium">Next due</dt>
           <dd>
-            <LocalTime value={series.nextRunAt} timeZone={tz} />
+            {series.occurrenceRule === "dated_list" ? (
+              series.upcoming[0] ? <LocalDate value={series.upcoming[0].target} /> : "No upcoming dates"
+            ) : (
+              <LocalTime value={series.nextRunAt!} timeZone={tz} />
+            )}
           </dd>
           <dt className="font-medium">Last run</dt>
           <dd>{series.lastRunAt ? <LocalTime value={series.lastRunAt} timeZone={tz} /> : "Never"}</dd>
@@ -109,7 +122,13 @@ export default async function StandingSeriesDetailPage({ params }: Props) {
 
       {series.runs.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No runs yet. The first is due <LocalTime value={series.nextRunAt} timeZone={tz} />.
+          {series.nextRunAt ? (
+            <>
+              No runs yet. The first is due <LocalTime value={series.nextRunAt} timeZone={tz} />.
+            </>
+          ) : (
+            "No runs yet."
+          )}
         </p>
       ) : (
         <Table caption="Run history" columns={["Period", "Outcome", "Produced", "Problems"]}>
@@ -118,11 +137,20 @@ export default async function StandingSeriesDetailPage({ params }: Props) {
             return (
               <Row key={run.id}>
                 <Cell header>
-                  {periodLabel(run.period)} <LocalTime value={run.periodStartAt} timeZone={tz} />
-                  <Sub>
-                    Opened <LocalTime value={run.openedAt} timeZone={tz} />
-                    {run.missedPeriods > 0 ? ` · Missed ${run.missedPeriods} earlier periods` : ""}
-                  </Sub>
+                  {run.period === "date" ? (
+                    <>
+                      <LocalDate value={run.periodStart} />
+                      <Sub>Dated list</Sub>
+                    </>
+                  ) : (
+                    <>
+                      {periodLabel(run.period)} <LocalTime value={run.periodStartAt} timeZone={tz} />
+                      <Sub>
+                        Opened <LocalTime value={run.openedAt} timeZone={tz} />
+                        {run.missedPeriods > 0 ? ` · Missed ${run.missedPeriods} earlier periods` : ""}
+                      </Sub>
+                    </>
+                  )}
                 </Cell>
                 <Cell>
                   {run.outcome ? (

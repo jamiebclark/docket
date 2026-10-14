@@ -117,7 +117,7 @@ describe("Standing series detail page (US5 AS3-AS4, FR-064)", () => {
 
     const resumed = await atTime(now, () => resumeStandingSeriesAction(e.project.slug, seriesId));
     expect(resumed.ok).toBe(true);
-    if (resumed.ok) {
+    if (resumed.ok && resumed.data.nextRunAt) {
       expect(new Date(resumed.data.nextRunAt).getTime()).toBeGreaterThan(now.getTime());
     }
     expect(await detailHtml(e, seriesId)).toContain(">Running<");

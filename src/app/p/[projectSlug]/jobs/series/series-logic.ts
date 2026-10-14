@@ -2,7 +2,7 @@
 import type { BadgeTone } from "@/components/ui/Badge";
 import type { StandingSeriesAccountView, StandingSeriesRunProblem, StandingSeriesView } from "@/server/services/standing-series/read";
 
-type CadencePeriod = StandingSeriesView["cadence"]["period"];
+type CadencePeriod = "day" | "week" | "month";
 type Outcome = NonNullable<StandingSeriesView["lastRunOutcome"]>;
 
 const PERIOD_UNIT: Record<CadencePeriod, string> = { day: "day", week: "week", month: "month" };
@@ -10,6 +10,16 @@ const PERIOD_UNIT: Record<CadencePeriod, string> = { day: "day", week: "week", m
 /** "3 posts a week" / "1 post a day". */
 export function cadenceLabel(cadence: { count: number; period: CadencePeriod }): string {
   return `${cadence.count} ${cadence.count === 1 ? "post" : "posts"} a ${PERIOD_UNIT[cadence.period]}`;
+}
+
+/** The series-list/detail "how often" label: the cadence, or "Dated list" for a dated series. */
+export function ruleLabel(cadence: { count: number; period: CadencePeriod } | null): string {
+  return cadence ? cadenceLabel(cadence) : "Dated list";
+}
+
+/** "3 days before" / "On the day". */
+export function leadLabel(leadDays: number): string {
+  return leadDays === 0 ? "On the day" : `${leadDays} day${leadDays === 1 ? "" : "s"} before`;
 }
 
 export interface StateBadgeInfo {
@@ -91,7 +101,7 @@ export function droppedAccountsLine(droppedAccountIds: readonly string[]): strin
   return `Dropped ${n} account${n === 1 ? "" : "s"} that ${n === 1 ? "is" : "are"} no longer in this project.`;
 }
 
-/** "Week of"/day/month label prefix for a run's period, paired with a `LocalTime` of `periodStartAt`. */
+/** "Week of"/day/month label prefix for a cadence run's period, paired with a `LocalTime` of `periodStartAt`. */
 export function periodLabel(period: CadencePeriod): string {
   return period === "week" ? "Week of" : period === "month" ? "Month of" : "Day of";
 }

@@ -47,10 +47,10 @@ export async function pauseStandingSeriesAction(slug: string, seriesId: string):
   return result;
 }
 
-export async function resumeStandingSeriesAction(slug: string, seriesId: string): Promise<ActionResult<{ nextRunAt: string }>> {
+export async function resumeStandingSeriesAction(slug: string, seriesId: string): Promise<ActionResult<{ nextRunAt: string | null }>> {
   const result = await runAction(slug, async (scope) => {
     const { nextRunAt } = await resumeStandingSeries(scope, seriesId);
-    return { nextRunAt: nextRunAt.toISOString() };
+    return { nextRunAt: nextRunAt ? nextRunAt.toISOString() : null };
   });
   if (result.ok) refresh();
   return result;

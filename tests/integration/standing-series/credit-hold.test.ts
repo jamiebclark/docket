@@ -101,14 +101,14 @@ describe("standing-series credit hold (US6 AS1-AS3, FR-050-FR-052)", () => {
     expect(positionsAfterFirst[0]).toMatchObject({ status: "queued", attemptCount: 0, lastErrorKind: null, lastError: null });
 
     const seriesBefore = await e.scope.standingSeries.get(seriesId);
-    const nextRunAtBefore = seriesBefore!.nextRunAt.getTime();
+    const nextRunAtBefore = seriesBefore!.nextRunAt!.getTime();
 
     const t1 = new Date(t0.getTime() + 60_000); // well inside the hold interval, not the probe boundary
     const second = await tick(t1);
     expect(second).toMatchObject({ claimed: 0, held: 1 });
 
     const seriesAfter = await e.scope.standingSeries.get(seriesId);
-    expect(seriesAfter!.nextRunAt.getTime()).toBe(nextRunAtBefore);
+    expect(seriesAfter!.nextRunAt!.getTime()).toBe(nextRunAtBefore);
     const runsAfterSecond = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
     expect(runsAfterSecond[0]!.closedAt).toBeNull();
     const positionsAfterSecond = await e.scope.standingSeriesPositions.listForRun(runsAfterSecond[0]!.id);

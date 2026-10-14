@@ -77,6 +77,7 @@ export type StandingSeriesPositionPatch = Partial<
     | "lastError"
     | "skipReason"
     | "skipAccountId"
+    | "dated"
     | "startedAt"
     | "finishedAt"
   >

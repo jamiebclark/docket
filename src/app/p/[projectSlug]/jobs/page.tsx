@@ -22,7 +22,7 @@ import { loadPrerequisites } from "../generate/prerequisites";
 import { UNREVIEWED_QUEUE_LABEL } from "../generate/PolicyPicker";
 import { CreditHoldNotice } from "./CreditHoldNotice";
 import { SeriesRowActions } from "./series/SeriesRowActions";
-import { cadenceLabel, mediaSummary, outcomeWord, seriesStateInfo } from "./series/series-logic";
+import { mediaSummary, outcomeWord, ruleLabel, seriesStateInfo } from "./series/series-logic";
 
 export const metadata: Metadata = { title: "Batch jobs" };
 export const dynamic = "force-dynamic";
@@ -160,7 +160,7 @@ export default async function JobsPage({ params, searchParams }: Props) {
                     <Link href={`${base}/jobs/series/${s.id}`} className="underline">
                       {s.name}
                     </Link>
-                    <Sub>{cadenceLabel(s.cadence)}</Sub>
+                    <Sub>{ruleLabel(s.cadence)}</Sub>
                   </Cell>
                   <Cell>
                     <Badge tone={state.tone}>{state.label}</Badge>
@@ -180,7 +180,13 @@ export default async function JobsPage({ params, searchParams }: Props) {
                       "No runs yet"
                     )}
                     <Sub>
-                      Next due <LocalTime value={s.nextRunAt} timeZone={scope.project.timezone} />
+                      {s.nextRunAt ? (
+                        <>
+                          Next due <LocalTime value={s.nextRunAt} timeZone={scope.project.timezone} />
+                        </>
+                      ) : (
+                        "See the series page for its next due date"
+                      )}
                     </Sub>
                   </Cell>
                   <Cell>
