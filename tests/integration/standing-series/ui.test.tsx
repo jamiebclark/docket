@@ -40,7 +40,10 @@ const jobsHtml = async (e: Env, as: { id: string } = e.owner) => {
 const detailHtml = async (e: Env, seriesId: string, as: { id: string } = e.owner) => {
   actAs(as);
   return renderToStaticMarkup(
-    (await StandingSeriesDetailPage({ params: Promise.resolve({ projectSlug: e.project.slug, seriesId }) })) as never,
+    (await StandingSeriesDetailPage({
+      params: Promise.resolve({ projectSlug: e.project.slug, seriesId }),
+      searchParams: Promise.resolve({}),
+    })) as never,
   );
 };
 
@@ -117,7 +120,7 @@ describe("Standing series detail page (US5 AS3-AS4, FR-064)", () => {
 
     const resumed = await atTime(now, () => resumeStandingSeriesAction(e.project.slug, seriesId));
     expect(resumed.ok).toBe(true);
-    if (resumed.ok) {
+    if (resumed.ok && resumed.data.nextRunAt) {
       expect(new Date(resumed.data.nextRunAt).getTime()).toBeGreaterThan(now.getTime());
     }
     expect(await detailHtml(e, seriesId)).toContain(">Running<");

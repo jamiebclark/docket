@@ -45,6 +45,8 @@ export async function saveGeneratedPost(
     link: GeneratedPostLink;
     /** Claims this source record for the new post, in this transaction. Omit for untagged saves. */
     external?: { sourceKey: string; externalId: string };
+    /** A dated series' queue floor (B13); `null` for every other caller. */
+    queueNotBefore?: Date | null;
   },
 ): Promise<string> {
   const now = await clock.now();
@@ -59,6 +61,7 @@ export async function saveGeneratedPost(
     origin: "generated",
     reviewState: "needs_review",
     schedulingPolicy: args.schedulingPolicy,
+    queueNotBefore: args.queueNotBefore ?? null,
     ...args.link,
     generationMetadata: { v: 1, records: [args.record] },
   });

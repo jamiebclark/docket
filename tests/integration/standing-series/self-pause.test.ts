@@ -90,7 +90,7 @@ describe("standing-series self-pause (US6 AS4-AS5, FR-053)", () => {
       ok: { angles: [{ title: "Angle 1", description: "About thing 1" }, { title: "Angle 2", description: "About thing 2" }] },
     };
     setLlmForTests(createFakeLlm([plan, post("Back from pause, one."), post("Back from pause, two.")]));
-    const after = new Date(nextRunAt.getTime() + 1_000);
+    const after = new Date(nextRunAt!.getTime() + 1_000);
     const counts = await tick(after);
     expect(counts.produced).toBe(2);
   }, 60_000);
@@ -169,7 +169,7 @@ describe("standing-series self-pause (US6 AS4-AS5, FR-053)", () => {
     expect(resumed).toMatchObject({ enabled: true, autoPausedReason: null });
 
     setLlmForTests(createFakeLlm([post("Back from pause.")]));
-    const after = new Date(nextRunAt.getTime() + 1_000);
+    const after = new Date(nextRunAt!.getTime() + 1_000);
     const counts = await tick(after);
     expect(counts.produced).toBe(1);
 

@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { apiIdempotencyKeys } from "../../../src/server/db/schema";
+import { and, eq } from "drizzle-orm";
+import { apiIdempotencyKeys, standingSeriesOccurrences } from "../../../src/server/db/schema";
 import { runTick } from "../../../src/server/scheduler";
 import { runHousekeeping, STANDING_SERIES_RUN_RETENTION_DAYS } from "../../../src/server/scheduler/housekeeping";
 import { createStandingSeries } from "../../../src/server/services/standing-series/manage";
@@ -54,6 +54,50 @@ describe("housekeeping", () => {
     await runHousekeeping();
     expect(await e.scope.standingSeriesRuns.get(oldRun.id)).toBeNull();
     expect(await e.scope.standingSeriesRuns.get(openRun.id)).not.toBeNull();
+  });
+
+  it("prunes settled standing-series occurrences past the 90-day cutoff, but never a pending one", async () => {
+    const e = await standingSeriesEnv();
+    const { seriesId } = await createStandingSeries(e.scope, e.create());
+    const row = await e.scope.datedRows.insert(seriesId, {
+      ordinal: 1,
+      month: 6,
+      day: 15,
+      year: null,
+      keyValue: "row-1",
+      fields: {},
+      mediaFilename: null,
+      mediaAssetId: null,
+      nextTargetDate: null,
+      sourceLine: 2,
+    });
+    const run = await e.scope.standingSeriesRuns.openRun({
+      seriesId,
+      period: "day",
+      periodStart: "2026-01-01",
+      periodStartAt: new Date(),
+      requestedCount: 1,
+      config: {},
+    });
+    const [position1, position2] = await e.scope.standingSeriesPositions.insertMany(run.id, 2, new Date());
+
+    const old = new Date(Date.now() - (STANDING_SERIES_RUN_RETENTION_DAYS + 1) * 24 * 3600_000);
+    const settledOld = await e.scope.datedOccurrences.insert({ seriesId, rowId: row.id, year: 2020, targetDate: "2020-06-15", positionId: position1!.id });
+    await e.scope.datedOccurrences.settle(settledOld.id, "produced", old);
+    await testDb()
+      .update(standingSeriesOccurrences)
+      .set({ recordedAt: old })
+      .where(and(eq(standingSeriesOccurrences.projectId, e.project.id), eq(standingSeriesOccurrences.id, settledOld.id)));
+
+    const pending = await e.scope.datedOccurrences.insert({ seriesId, rowId: row.id, year: 2019, targetDate: "2019-06-15", positionId: position2!.id });
+    await testDb()
+      .update(standingSeriesOccurrences)
+      .set({ recordedAt: old })
+      .where(and(eq(standingSeriesOccurrences.projectId, e.project.id), eq(standingSeriesOccurrences.id, pending.id)));
+
+    await runHousekeeping();
+    expect(await e.scope.datedOccurrences.get(settledOld.id)).toBeNull();
+    expect(await e.scope.datedOccurrences.get(pending.id)).not.toBeNull();
   });
 
   it("is a section of the tick", async () => {

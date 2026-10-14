@@ -12,7 +12,7 @@ vi.mock("next/navigation", async () => ({
 import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
 import { CancelJobDialog } from "../../../src/app/p/[projectSlug]/jobs/[jobId]/CancelJobDialog";
 import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
-import { CsvProblemList } from "../../../src/app/p/[projectSlug]/jobs/new/csv/CsvJobForm";
+import { CsvProblemList } from "../../../src/components/ui/CsvProblemList";
 import MediaPage from "../../../src/app/p/[projectSlug]/media/page";
 import { AutoRefresh } from "../../../src/components/ui/AutoRefresh";
 import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";

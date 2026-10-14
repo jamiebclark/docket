@@ -1,7 +1,11 @@
 // standing-series/read: list and detail views, gated on `post: ["view"]` (contracts/services.md §6, S26).
 import { findProvider } from "@/providers/registry";
+import type { CadencePeriod } from "@/lib/series/cadence";
+import { upcoming as upcomingOccurrences } from "@/lib/series/dated";
+import type { ImportProblem } from "@/lib/validation/dated-rows";
 import { NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
+import type { DatedOutcome, DatedRowRecord } from "../../dal/standing-series-dated";
 import type {
   StandingSeriesOutcome,
   StandingSeriesPositionRecord,
@@ -13,6 +17,7 @@ import { need } from "../generation/single";
 
 export const STANDING_SERIES_PAGE_SIZE = 50;
 export const STANDING_SERIES_RUN_HISTORY_LIMIT = 20;
+export const DATED_ROWS_PAGE_SIZE = 50;
 
 function canView(scope: ProjectScope): void {
   need(scope, { post: ["view"] });
@@ -42,14 +47,17 @@ async function resolveAccounts(scope: ProjectScope, accountIds: readonly string[
 export interface StandingSeriesView {
   id: string;
   name: string;
-  cadence: { count: number; period: StandingSeriesRecord["cadencePeriod"] };
+  occurrenceRule: StandingSeriesRecord["occurrenceRule"];
+  leadDays: number;
+  cadence: { count: number; period: CadencePeriod } | null;
   enabled: boolean;
   autoPausedReason: StandingSeriesRecord["autoPausedReason"];
   accounts: StandingSeriesAccountView[];
   media: { source: StandingSeriesRecord["mediaSource"]; tag: string | null; prompt: string | null };
   lastRunAt: Date | null;
   lastRunOutcome: StandingSeriesOutcome | null;
-  nextRunAt: Date;
+  /** Always NULL for a dated series (B5); the screen shows `upcoming[0]` instead. */
+  nextRunAt: Date | null;
   approvalPolicy: StandingSeriesRecord["approvalPolicy"];
   schedulingPolicy: StandingSeriesRecord["schedulingPolicy"];
   producedCount: number;
@@ -64,7 +72,9 @@ async function toView(scope: ProjectScope, row: StandingSeriesRecord): Promise<S
   return {
     id: row.id,
     name: row.name,
-    cadence: { count: row.cadenceCount, period: row.cadencePeriod },
+    occurrenceRule: row.occurrenceRule,
+    leadDays: row.leadDays,
+    cadence: row.occurrenceRule === "cadence" ? { count: row.cadenceCount!, period: row.cadencePeriod as CadencePeriod } : null,
     enabled: row.enabled,
     autoPausedReason: row.autoPausedReason,
     accounts,
@@ -100,6 +110,7 @@ export interface StandingSeriesRunProblem {
 export interface StandingSeriesRun {
   id: string;
   period: StandingSeriesRunRecord["period"];
+  periodStart: string;
   periodStartAt: Date;
   openedAt: Date;
   closedAt: Date | null;
@@ -151,6 +162,7 @@ async function toRunView(scope: ProjectScope, run: StandingSeriesRunRecord): Pro
   return {
     id: run.id,
     period: run.period,
+    periodStart: run.periodStart,
     periodStartAt: run.periodStartAt,
     openedAt: run.openedAt,
     closedAt: run.closedAt,
@@ -165,6 +177,27 @@ async function toRunView(scope: ProjectScope, run: StandingSeriesRunRecord): Pro
   };
 }
 
+export interface UpcomingOccurrence {
+  rowId: string;
+  keyValue: string;
+  target: string;
+  dueAt: Date;
+}
+
+export interface DatedRowView {
+  id: string;
+  date: string;
+  year: number | null;
+  keyValue: string;
+  fields: Record<string, string>;
+  mediaFilename: string | null;
+  mediaMissing: boolean;
+  nextTargetDate: string | null;
+  lastOutcome: DatedOutcome | null;
+}
+
+const UPCOMING_LIMIT = 10;
+
 export interface StandingSeriesDetail extends StandingSeriesView {
   brief: string;
   template: string;
@@ -173,9 +206,38 @@ export interface StandingSeriesDetail extends StandingSeriesView {
   requestedScheduling: StandingSeriesRecord["requestedScheduling"];
   creditHold: Awaited<ReturnType<typeof generationCreditHold>>;
   runs: StandingSeriesRun[];
+  /** Dated only. Up to 10, soonest first (FR-047). Computed from the rows, never cached (B5). */
+  upcoming: UpcomingOccurrence[];
+  /** Dated only, the first page (FR-047). */
+  rows: { items: DatedRowView[]; total: number; page: number };
+  lastImport: { filename: string; at: Date; rowCount: number; problems: ImportProblem[] } | null;
+  templateFields: string[];
 }
 
-export async function getStandingSeries(scope: ProjectScope, seriesId: string): Promise<StandingSeriesDetail> {
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+async function datedRowView(scope: ProjectScope, row: DatedRowRecord): Promise<DatedRowView> {
+  const [lastOccurrence] = await scope.datedOccurrences.listForRow(row.id, { limit: 1 });
+  return {
+    id: row.id,
+    date: `${pad(row.month)}-${pad(row.day)}`,
+    year: row.year,
+    keyValue: row.keyValue,
+    fields: row.fields as Record<string, string>,
+    mediaFilename: row.mediaFilename,
+    mediaMissing: row.mediaFilename != null && row.mediaAssetId == null,
+    nextTargetDate: row.nextTargetDate,
+    lastOutcome: lastOccurrence?.outcome ?? null,
+  };
+}
+
+export async function getStandingSeries(
+  scope: ProjectScope,
+  seriesId: string,
+  opts: { rowsPage?: number } = {},
+): Promise<StandingSeriesDetail> {
   canView(scope);
   const row = await scope.standingSeries.get(seriesId);
   if (!row) throw new NotFoundError("Standing series not found");
@@ -186,6 +248,29 @@ export async function getStandingSeries(scope: ProjectScope, seriesId: string): 
     generationCreditHold(scope),
   ]);
   const runs = await Promise.all(runRows.map((r) => toRunView(scope, r)));
+
+  let upcoming: UpcomingOccurrence[] = [];
+  const rowsPage = Math.max(1, opts.rowsPage ?? 1);
+  let rows: { items: DatedRowView[]; total: number; page: number } = { items: [], total: 0, page: rowsPage };
+  if (row.occurrenceRule === "dated_list") {
+    const [allRows, page] = await Promise.all([
+      scope.datedRows.listForSeries(seriesId),
+      scope.datedRows.page(seriesId, { page: rowsPage, pageSize: DATED_ROWS_PAGE_SIZE }),
+    ]);
+    upcoming = upcomingOccurrences(allRows, row.leadDays, scope.project.timezone, UPCOMING_LIMIT);
+    rows = { items: await Promise.all(page.rows.map((r) => datedRowView(scope, r))), total: page.total, page: rowsPage };
+  }
+
+  const lastImport =
+    row.lastImportAt && row.lastImportFilename
+      ? {
+          filename: row.lastImportFilename,
+          at: row.lastImportAt,
+          rowCount: row.lastImportRowCount ?? 0,
+          problems: (row.lastImportProblems as ImportProblem[] | null) ?? [],
+        }
+      : null;
+
   return {
     ...view,
     brief: row.brief,
@@ -195,5 +280,9 @@ export async function getStandingSeries(scope: ProjectScope, seriesId: string): 
     requestedScheduling: row.requestedScheduling,
     creditHold,
     runs,
+    upcoming,
+    rows,
+    lastImport,
+    templateFields: row.templateFields,
   };
 }

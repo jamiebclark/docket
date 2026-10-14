@@ -190,6 +190,12 @@ function queueableGate(post: PostRecord, t: TargetRecord): TargetResult<never> |
   return null;
 }
 
+/** The earliest instant a QUEUE allocation may place `post`. Never earlier than now (B13). */
+export function queueFloor(post: PostRecord, now: Date): Date {
+  const floor = post.queueNotBefore;
+  return floor && floor.getTime() > now.getTime() ? floor : now;
+}
+
 function pickTargets(all: TargetRecord[], ids: string[] | undefined): TargetRecord[] {
   if (!ids) return all;
   const byId = new Map(all.map((t) => [t.id, t]));
@@ -510,7 +516,7 @@ export async function queueTargetsInTx(
       out.push(fail(t, g.code, g.message, g.issues));
       continue;
     }
-    const slot = await allocateNextFree(tx, { id: t.id, accountId: t.socialAccountId }, { after: now });
+    const slot = await allocateNextFree(tx, { id: t.id, accountId: t.socialAccountId }, { after: queueFloor(post, now) });
     if (!slot.ok) {
       out.push(fail(t, slot.code, slot.message));
       continue;

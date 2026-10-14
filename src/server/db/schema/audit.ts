@@ -29,6 +29,10 @@ export const membershipAction = pgEnum("membership_action", [
   "standing_series_pause",
   "standing_series_resume",
   "standing_series_delete",
+  "standing_series_dated_import",
+  "standing_series_dated_row_add",
+  "standing_series_dated_row_update",
+  "standing_series_dated_row_delete",
 ]);
 
 /** Append-only: the DAL exposes insert and list only (FR-033). */

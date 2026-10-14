@@ -2,7 +2,7 @@
 import type { BadgeTone } from "@/components/ui/Badge";
 import type { StandingSeriesAccountView, StandingSeriesRunProblem, StandingSeriesView } from "@/server/services/standing-series/read";
 
-type CadencePeriod = StandingSeriesView["cadence"]["period"];
+type CadencePeriod = "day" | "week" | "month";
 type Outcome = NonNullable<StandingSeriesView["lastRunOutcome"]>;
 
 const PERIOD_UNIT: Record<CadencePeriod, string> = { day: "day", week: "week", month: "month" };
@@ -10,6 +10,16 @@ const PERIOD_UNIT: Record<CadencePeriod, string> = { day: "day", week: "week", m
 /** "3 posts a week" / "1 post a day". */
 export function cadenceLabel(cadence: { count: number; period: CadencePeriod }): string {
   return `${cadence.count} ${cadence.count === 1 ? "post" : "posts"} a ${PERIOD_UNIT[cadence.period]}`;
+}
+
+/** The series-list/detail "how often" label: the cadence, or "Dated list" for a dated series. */
+export function ruleLabel(cadence: { count: number; period: CadencePeriod } | null): string {
+  return cadence ? cadenceLabel(cadence) : "Dated list";
+}
+
+/** "3 days before" / "On the day". */
+export function leadLabel(leadDays: number): string {
+  return leadDays === 0 ? "On the day" : `${leadDays} day${leadDays === 1 ? "" : "s"} before`;
 }
 
 export interface StateBadgeInfo {
@@ -91,7 +101,7 @@ export function droppedAccountsLine(droppedAccountIds: readonly string[]): strin
   return `Dropped ${n} account${n === 1 ? "" : "s"} that ${n === 1 ? "is" : "are"} no longer in this project.`;
 }
 
-/** "Week of"/day/month label prefix for a run's period, paired with a `LocalTime` of `periodStartAt`. */
+/** "Week of"/day/month label prefix for a cadence run's period, paired with a `LocalTime` of `periodStartAt`. */
 export function periodLabel(period: CadencePeriod): string {
   return period === "week" ? "Week of" : period === "month" ? "Month of" : "Day of";
 }
@@ -106,8 +116,33 @@ export const STANDING_SERIES_AUTHORISED_NOTE =
 
 export const NO_PLACEHOLDERS_HINT = "Don't use {{placeholders}} — a standing series has no per-post data yet.";
 
+export const DATED_INSTRUCTIONS_HINT =
+  "Use {{ column name }} for any column of your list. The columns come from the file you import — import the list first, then add the placeholders.";
+
 export const IMAGE_PROMPT_HINT =
   "Docket adds an instruction never to depict a real, identifiable person. Nothing from the post text, your brand fields or the voice profile is sent to the image provider.";
+
+/** The Rows table's "Row" `Sub` line: the non-key fields as `name: value · name: value`, one line (ui.md §3.3). */
+export function rowSummary(fields: Record<string, string>, keyColumn: string | null): string {
+  return Object.entries(fields)
+    .filter(([name]) => name !== keyColumn)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(" · ");
+}
+
+/** The Rows table's "Next due" `Sub` line (ui.md §3.3). */
+export const LAST_OUTCOME_LABEL: Record<"produced" | "missed" | "skipped" | "failed" | "none", string> = {
+  produced: "Posted",
+  missed: "Missed",
+  skipped: "Skipped",
+  failed: "Failed",
+  none: "",
+};
+
+/** One Last-import problem line, with its line number when it has one (ui.md §3.2). */
+export function importProblemLine(problem: { line: number | null; message: string }): string {
+  return problem.line !== null ? `Line ${problem.line}: ${problem.message}` : problem.message;
+}
 
 export const CADENCE_HINT = (zone: string): string =>
   `Between 1 and 10 posts per period. A week starts Monday, a month on the 1st, in this project's time zone (${zone}).`;

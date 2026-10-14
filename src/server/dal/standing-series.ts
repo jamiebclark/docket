@@ -18,31 +18,41 @@ export type StandingSeriesOutcome = NonNullable<StandingSeriesRunRecord["outcome
 
 export type NewStandingSeries = Omit<typeof standingSeries.$inferInsert, "id" | "projectId" | "createdAt" | "updatedAt">;
 export type StandingSeriesPatch = Partial<
-  Pick<
-    typeof standingSeries.$inferInsert,
-    | "name"
-    | "brief"
-    | "template"
-    | "templateFields"
-    | "voiceProfileId"
-    | "targetAccountIds"
-    | "cadenceCount"
-    | "cadencePeriod"
-    | "mediaSource"
-    | "mediaPoolTag"
-    | "imagePrompt"
-    | "requestedApproval"
-    | "requestedScheduling"
-    | "approvalPolicy"
-    | "schedulingPolicy"
-    | "enabled"
-    | "autoPausedReason"
-    | "lastRunAt"
-    | "nextRunAt"
-    | "leaseOwner"
-    | "leaseUntil"
-    | "lastClaimedAt"
-  >
+  Omit<
+    Pick<
+      typeof standingSeries.$inferInsert,
+      | "name"
+      | "brief"
+      | "template"
+      | "templateFields"
+      | "voiceProfileId"
+      | "targetAccountIds"
+      | "occurrenceRule"
+      | "leadDays"
+      | "listVersion"
+      | "lastImportAt"
+      | "lastImportFilename"
+      | "lastImportRowCount"
+      | "lastImportProblems"
+      | "cadenceCount"
+      | "cadencePeriod"
+      | "mediaSource"
+      | "mediaPoolTag"
+      | "imagePrompt"
+      | "requestedApproval"
+      | "requestedScheduling"
+      | "approvalPolicy"
+      | "schedulingPolicy"
+      | "enabled"
+      | "autoPausedReason"
+      | "lastRunAt"
+      | "nextRunAt"
+      | "leaseOwner"
+      | "leaseUntil"
+      | "lastClaimedAt"
+    >,
+    "nextRunAt"
+  > & { nextRunAt: Date | null }
 >;
 
 export type NewStandingSeriesRun = Omit<typeof standingSeriesRuns.$inferInsert, "id" | "projectId" | "openedAt" | "closedAt" | "outcome">;
@@ -67,6 +77,7 @@ export type StandingSeriesPositionPatch = Partial<
     | "lastError"
     | "skipReason"
     | "skipAccountId"
+    | "dated"
     | "startedAt"
     | "finishedAt"
   >
@@ -78,6 +89,7 @@ const emptyPositionCounts = (): Record<StandingSeriesPositionStatus, number> => 
   produced: 0,
   failed: 0,
   skipped: 0,
+  missed: 0,
 });
 
 export interface StandingSeriesRepo {
@@ -96,6 +108,8 @@ export interface StandingSeriesRepo {
   nameTaken(name: string, exceptId?: string): Promise<boolean>;
   /** Positions ever `produced` across every run, for the delete confirmation's post count. */
   countProduced(id: string): Promise<number>;
+  /** `UPDATE … SET list_version = list_version + 1 WHERE id = ? AND list_version = ?` (B21). */
+  bumpListVersion(id: string, expected: number): Promise<boolean>;
 }
 
 export interface StandingSeriesRunsRepo {
@@ -200,6 +214,14 @@ export function createStandingSeriesRepo(db: Database, projectId: string): Stand
           ),
         );
       return Number(row?.n ?? 0);
+    },
+    async bumpListVersion(id, expected) {
+      const rows = await db
+        .update(standingSeries)
+        .set({ listVersion: expected + 1 })
+        .where(and(mine(id), eq(standingSeries.listVersion, expected)))
+        .returning({ id: standingSeries.id });
+      return rows.length > 0;
     },
   };
 }
@@ -371,15 +393,24 @@ export function createStandingSeriesPositionsRepo(db: Database, projectId: strin
  * deleting a still-referenced position would null `project_id` too and fail its `NOT NULL`. Clearing
  * the link first, for every post under the given runs, leaves the cascade below nothing to act on.
  */
-async function clearPostLinksForRuns(exec: Database, runIds: readonly string[]): Promise<void> {
+async function clearPostLinksForRuns(exec: Database, runIds: readonly string[], projectId?: string): Promise<void> {
   if (runIds.length === 0) return;
+  const positionIds = exec
+    .select({ id: standingSeriesPositions.id })
+    .from(standingSeriesPositions)
+    .where(
+      and(
+        inArray(standingSeriesPositions.runId, runIds as string[]),
+        projectId ? eq(standingSeriesPositions.projectId, projectId) : undefined,
+      ),
+    );
   await exec
     .update(posts)
     .set({ standingSeriesPositionId: null })
     .where(
-      inArray(
-        posts.standingSeriesPositionId,
-        exec.select({ id: standingSeriesPositions.id }).from(standingSeriesPositions).where(inArray(standingSeriesPositions.runId, runIds as string[])),
+      and(
+        inArray(posts.standingSeriesPositionId, positionIds),
+        projectId ? eq(posts.projectId, projectId) : undefined,
       ),
     );
 }
@@ -390,7 +421,7 @@ export async function clearPostLinksForSeries(exec: Database, projectId: string,
     .select({ id: standingSeriesRuns.id })
     .from(standingSeriesRuns)
     .where(and(eq(standingSeriesRuns.projectId, projectId), eq(standingSeriesRuns.seriesId, seriesId)));
-  await clearPostLinksForRuns(exec, runs.map((r) => r.id));
+  await clearPostLinksForRuns(exec, runs.map((r) => r.id), projectId);
 }
 
 /**

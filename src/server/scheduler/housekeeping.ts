@@ -5,6 +5,7 @@ import { purgeExpiredIdempotencyKeys } from "../dal/idempotency";
 import { pruneAllowanceUsesBefore } from "../dal/scheduler";
 import { crossProject } from "../dal/scope";
 import { pruneClosedStandingSeriesRunsBefore } from "../dal/standing-series";
+import { pruneSettledOccurrencesBefore } from "../dal/standing-series-dated";
 import { listExpiredUploads, markUploadExpired } from "../dal/uploads-housekeeping";
 import { listCollectableVideoVersions, reposForProject } from "../dal/video-housekeeping";
 import { getEnv } from "../env";
@@ -34,6 +35,7 @@ export interface HousekeepingCounts {
   videoVersionsRemoved: number;
   orphanHoldsPruned: number;
   standingSeriesRunsPruned: number;
+  standingSeriesOccurrencesPruned: number;
 }
 
 export function emptyHousekeepingCounts(): HousekeepingCounts {
@@ -44,6 +46,7 @@ export function emptyHousekeepingCounts(): HousekeepingCounts {
     videoVersionsRemoved: 0,
     orphanHoldsPruned: 0,
     standingSeriesRunsPruned: 0,
+    standingSeriesOccurrencesPruned: 0,
   };
 }
 
@@ -131,6 +134,14 @@ export async function pruneClosedStandingSeriesRuns(at = new Date()): Promise<nu
   );
 }
 
+/** Deletes closed standing-series occurrences past retention (contracts/worker.md §6), one bounded batch per tick; a pending occurrence is never matched. */
+export async function pruneSettledOccurrences(at = new Date()): Promise<number> {
+  const before = new Date(at.getTime() - STANDING_SERIES_RUN_RETENTION_DAYS * 86_400_000);
+  return crossProject("housekeeping: prune settled standing series occurrences", () =>
+    pruneSettledOccurrencesBefore(before, STANDING_SERIES_RUN_PRUNE_BATCH),
+  );
+}
+
 /** Deletes at most one batch per table, so a tick never stalls on a large backlog. */
 export async function runHousekeeping(): Promise<HousekeepingCounts> {
   const idempotencyPurged = await crossProject("housekeeping: purge expired idempotency keys", () =>
@@ -141,6 +152,7 @@ export async function runHousekeeping(): Promise<HousekeepingCounts> {
   const videoVersionsRemoved = await collectVideoVersions(await now());
   const orphanHoldsPruned = await pruneOrphanHolds();
   const standingSeriesRunsPruned = await pruneClosedStandingSeriesRuns(await now());
+  const standingSeriesOccurrencesPruned = await pruneSettledOccurrences(await now());
   return {
     idempotencyPurged,
     uploadsExpired,
@@ -148,5 +160,6 @@ export async function runHousekeeping(): Promise<HousekeepingCounts> {
     videoVersionsRemoved,
     orphanHoldsPruned,
     standingSeriesRunsPruned,
+    standingSeriesOccurrencesPruned,
   };
 }

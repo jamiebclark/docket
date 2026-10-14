@@ -43,7 +43,7 @@ export function SeriesRowActions({
         setMessage(r.ok ? "Paused." : r.message);
       } else {
         const r = await resumeStandingSeriesAction(slug, seriesId);
-        setMessage(r.ok ? `Resumed. Next due ${formatLocal(r.data.nextRunAt, timezone)}.` : r.message);
+        setMessage(r.ok ? (r.data.nextRunAt ? `Resumed. Next due ${formatLocal(r.data.nextRunAt, timezone)}.` : "Resumed.") : r.message);
       }
     });
   }

@@ -1,8 +1,11 @@
 // standing-series/runner: process one claimed series (contracts/services.md §7.2-§7.5). Mirrors
 // jobs/runner.ts's structure and vocabulary; shares `withinBudget`/`Overran`/`logLine` (S36).
 import { AVOID_RUNS, avoidTitles } from "@/lib/series/avoid";
+import { periodStartInstant } from "@/lib/series/cadence";
+import { renderTemplate } from "@/lib/jobs/template";
+import { Temporal } from "@js-temporal/polyfill";
 import type { GenerationRecord } from "@/lib/validation/generation";
-import type { StandingSeriesRunConfig } from "@/lib/validation/standing-series";
+import type { DatedPosition, StandingSeriesRunConfig } from "@/lib/validation/standing-series";
 import * as clock from "../../dal/clock";
 import { ConflictError } from "../../dal/errors";
 import type { ClaimedStandingSeries } from "../../dal/standing-series-claims";
@@ -47,6 +50,10 @@ export interface StandingSeriesCounts {
   notRunnable: 0 | 1;
   held: 0 | 1;
   probed: 0 | 1;
+  /** Dated occurrences recorded as missed this tick (contracts/worker.md §5). */
+  missed: number;
+  /** Dated rows whose `next_target_date` moved forward this tick (contracts/worker.md §5). */
+  retired: number;
 }
 
 export const emptyStandingSeriesCounts = (): StandingSeriesCounts => ({
@@ -69,6 +76,8 @@ export const emptyStandingSeriesCounts = (): StandingSeriesCounts => ({
   notRunnable: 0,
   held: 0,
   probed: 0,
+  missed: 0,
+  retired: 0,
 });
 
 export interface StandingSeriesContext {
@@ -106,6 +115,12 @@ function hasOpenWork(byStatus: Record<StandingSeriesPositionRecord["status"], nu
   return byStatus.queued + byStatus.running > 0;
 }
 
+/** Settles the dated occurrence matching `positionId`, if any (a cadence position is a no-op). */
+async function settleOccurrence(scope: ProjectScope, positionId: string, outcome: "produced" | "failed" | "skipped", at: Date): Promise<void> {
+  const occurrence = await scope.datedOccurrences.forPosition(positionId);
+  if (occurrence) await scope.datedOccurrences.settle(occurrence.id, outcome, at);
+}
+
 export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: StandingSeriesContext): Promise<void> {
   const { series, token, owner } = claimed;
   const cfg = standingSeriesConfig(ctx.config);
@@ -126,8 +141,8 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
     return;
   }
 
-  // 7.2 — plan, only when requested_count >= 2 and plan IS NULL.
-  if (run.requestedCount >= 2 && plan === null) {
+  // 7.2 — plan, only when requested_count >= 2 and plan IS NULL, and only for a cadence run (B9).
+  if (config.rule === "cadence" && run.requestedCount >= 2 && plan === null) {
     const remaining = ctx.deadline - (await clock.now()).getTime();
     if (remaining - cfg.persistReserveMs < cfg.minCallMs) {
       counts.released++;
@@ -240,6 +255,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
         skipAccountId: media.skip.accountId,
         finishedAt: iterNow,
       });
+      await settleOccurrence(scope, position.id, "skipped", iterNow);
       counts.skipped++;
       continue;
     }
@@ -270,7 +286,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
     const angles = plan?.angles ?? null;
     const angle = angles?.[position.position];
     const seriesField =
-      run.requestedCount >= 2 && angle
+      config.rule === "cadence" && run.requestedCount >= 2 && angle
         ? {
             id: run.id,
             position: position.position,
@@ -278,6 +294,8 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
             otherAngles: angles!.filter((_, i) => i !== position.position).map((a) => a.title),
           }
         : null;
+    const dated = position.dated as DatedPosition | null;
+    const instructions = dated ? renderTemplate(config.template, dated.values, { mark: true }) : config.template;
 
     const window = Math.min(llmTimeoutMs(), ctx.deadline - (await clock.now()).getTime() - cfg.persistReserveMs);
     if (window < cfg.minCallMs) {
@@ -296,7 +314,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
         voice,
         groups,
         assets: media.assets,
-        inputs: { brief: config.brief, sourceText: null, instructions: config.template, series: seriesField },
+        inputs: { brief: config.brief, sourceText: null, instructions, series: seriesField },
         timeoutMs: window,
       },
       llm,
@@ -336,7 +354,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
         inputs: {
           brief: config.brief,
           sourceText: null,
-          instructions: config.template,
+          instructions,
           mediaAssetIds: media.assets.map((a) => a.id),
           targetAccountIds: accounts.map((a) => a.id),
           series: seriesField,
@@ -349,7 +367,9 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
       if (TEMPORARY.has(kind as ErrorKind)) {
         const attempts = position.attemptCount + 1;
         if (attempts >= cfg.maxAttempts) {
-          await scope.standingSeriesPositions.update(position.id, { status: "failed", lastErrorKind: kind as ErrorKind, lastError: llmFailureMessage(kind), finishedAt: await clock.now() });
+          const finishedAt = await clock.now();
+          await scope.standingSeriesPositions.update(position.id, { status: "failed", lastErrorKind: kind as ErrorKind, lastError: llmFailureMessage(kind), finishedAt });
+          await settleOccurrence(scope, position.id, "failed", finishedAt);
           counts.failed++;
         } else {
           await scope.standingSeriesPositions.update(position.id, {
@@ -360,7 +380,9 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
           counts.retried++;
         }
       } else {
-        await scope.standingSeriesPositions.update(position.id, { status: "failed", lastErrorKind: kind as ErrorKind, lastError: llmFailureMessage(kind), finishedAt: await clock.now() });
+        const finishedAt = await clock.now();
+        await scope.standingSeriesPositions.update(position.id, { status: "failed", lastErrorKind: kind as ErrorKind, lastError: llmFailureMessage(kind), finishedAt });
+        await settleOccurrence(scope, position.id, "failed", finishedAt);
         counts.failed++;
       }
       await recorder.flush();
@@ -370,7 +392,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
     const inputs: GenerationRecord["inputs"] = {
       brief: config.brief,
       sourceText: null,
-      instructions: config.template,
+      instructions,
       mediaAssetIds: media.assets.map((a) => a.id),
       targetAccountIds: accounts.map((a) => a.id),
       series: seriesField,
@@ -406,6 +428,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
           schedulingPolicy: config.resolved.scheduling,
           createdByUserId: series.createdByUserId,
           link: { standingSeriesPositionId: position.id },
+          queueNotBefore: dated ? periodStartInstant(Temporal.PlainDate.from(dated.targetDate), scope.project.timezone) : null,
         });
       });
     } catch (error) {
@@ -471,5 +494,7 @@ async function finishPosition(
       if (!(error instanceof ConflictError)) throw error;
     }
   }
-  await scope.standingSeriesPositions.update(position.id, { status: "produced", finishedAt: await clock.now() });
+  const finishedAt = await clock.now();
+  await scope.standingSeriesPositions.update(position.id, { status: "produced", finishedAt });
+  await settleOccurrence(scope, position.id, "produced", finishedAt);
 }

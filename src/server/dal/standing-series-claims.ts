@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
-import { standingSeries, standingSeriesPositions, standingSeriesRuns } from "../db/schema";
+import { projects, standingSeries, standingSeriesPositions, standingSeriesRuns } from "../db/schema";
 import { credentialOwnerFor, resolveBlockedProjectIds, standingSeriesExcludingProjects } from "./credential-owners";
 import { gateCreditHolds, rewindCreditProbe } from "./credit-holds";
 import { INTERRUPTED_MESSAGE } from "./job-claims";
@@ -76,22 +76,32 @@ export function claimDueStandingSeries(opts: {
               )
             )
         )
+        -- a dated row whose window is open or already past (contracts/worker.md §2)
+        OR EXISTS (
+          SELECT 1 FROM "standing_series_dated_rows" r
+          WHERE r."project_id" = ${standingSeries.projectId} AND r."series_id" = ${standingSeries.id}
+            AND r."next_target_date" IS NOT NULL
+            AND r."next_target_date" - ${standingSeries.leadDays} <= (${now} AT TIME ZONE ${projects.timezone})::date
+        )
       )`;
 
-      const rows = await exec
-        .select()
-        .from(standingSeries)
-        .where(
-          and(
-            eq(standingSeries.enabled, true),
-            sql`(${standingSeries.leaseUntil} IS NULL OR ${standingSeries.leaseUntil} <= ${now})`,
-            dueCondition,
-            standingSeriesExcludingProjects(blockedProjects.ids, blockedProjects.allBlocked),
-          ),
-        )
-        .orderBy(asc(standingSeries.nextRunAt), sql`${standingSeries.lastClaimedAt} ASC NULLS FIRST`, asc(standingSeries.id))
-        .limit(opts.limit)
-        .for("update", { skipLocked: true });
+      const rows = (
+        await exec
+          .select({ series: standingSeries })
+          .from(standingSeries)
+          .innerJoin(projects, eq(projects.id, standingSeries.projectId))
+          .where(
+            and(
+              eq(standingSeries.enabled, true),
+              sql`(${standingSeries.leaseUntil} IS NULL OR ${standingSeries.leaseUntil} <= ${now})`,
+              dueCondition,
+              standingSeriesExcludingProjects(blockedProjects.ids, blockedProjects.allBlocked),
+            ),
+          )
+          .orderBy(asc(standingSeries.nextRunAt), sql`${standingSeries.lastClaimedAt} ASC NULLS FIRST`, asc(standingSeries.id))
+          .limit(opts.limit)
+          .for("update", { of: standingSeries, skipLocked: true })
+      ).map((r) => r.series);
 
       if (rows.length === 0) {
         for (const owner of probing) await rewindCreditProbe(owner, now, exec);

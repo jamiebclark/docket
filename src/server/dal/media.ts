@@ -128,6 +128,8 @@ export interface MediaRepo {
   lockShared(ids: readonly string[]): Promise<MediaRow[]>;
   postsUsing(id: string): Promise<{ postId: string; targetStatuses: PostTargetStatus[] }[]>;
   softDelete(id: string, at: Date): Promise<void>;
+  /** Live assets whose `original_filename` matches `names`, case-insensitively (B23). */
+  findLiveByFilenames(names: readonly string[]): Promise<{ filename: string; id: string; kind: MediaKind }[]>;
   /** Removes the asset from the given posts and renumbers the remaining positions. */
   detachFromPosts(id: string, postIds: readonly string[]): Promise<void>;
   getVariant(assetId: string, hash: string): Promise<VariantRow | null>;
@@ -367,6 +369,15 @@ export function createMediaRepo(db: Database, projectId: string): MediaRepo {
     },
     async softDelete(id, at) {
       await db.update(mediaAssets).set({ deletedAt: at }).where(and(mine(id), isNull(mediaAssets.deletedAt)));
+    },
+    async findLiveByFilenames(names) {
+      if (names.length === 0) return [];
+      const lowered = names.map((n) => n.toLowerCase());
+      const rows = await db
+        .select({ filename: mediaAssets.originalFilename, id: mediaAssets.id, kind: mediaAssets.kind })
+        .from(mediaAssets)
+        .where(and(live, inArray(sql`lower(${mediaAssets.originalFilename})`, lowered)));
+      return rows.map((r) => ({ filename: r.filename ?? "", id: r.id, kind: r.kind as MediaKind }));
     },
     async detachFromPosts(id, postIds) {
       for (const postId of postIds) {

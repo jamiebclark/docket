@@ -218,6 +218,74 @@ toward this: a held run was never claimed, so it was never "produced nothing" in
 any other named object (1–100 characters, unique per project, case-insensitive), and run history is
 retained for 90 days (housekeeping prunes closed runs older than that; an open run is never pruned).
 
+### Dated list
+
+A series' occurrence rule is chosen once, at creation, and cannot be changed afterward: cadence (above)
+or **dated list** — a spreadsheet of rows, each pegged to a calendar date, firing on its own anniversary
+every year instead of on a recurring schedule. A birthday list is the motivating case: one row per
+person, one post per person per year, on their date.
+
+**The file.** A dated list is a CSV with a `date` column (required) and an optional `media` column,
+both matched case-insensitively; every other column, in file order, becomes a template field, and the
+first of them is the row's identity (its "key column" — a person's name, typically). `date` and `media`
+are reserved and cannot also be used as a template field's name. A file with only a `date` column is
+allowed — the row's date is the only thing that varies, and the series' instructions use no fields.
+
+**Date formats.** `MM-DD` for a date that recurs every year, or `YYYY-MM-DD` for a date pinned to one
+specific year (an anniversary that happened once, like a grand opening, rather than every year).
+Leading/trailing spaces are trimmed before parsing. `02-29` is accepted and follows the leap-day rule
+below; `YYYY-02-29` is only accepted when `YYYY` is actually a leap year. A year-specific row in the
+past at import time is refused.
+
+**The leap-day rule.** A `02-29` row fires on 29 February in a leap year and on 28 February in the
+three years in between — never 1 March. It keeps its own fire history per year, so firing on 28
+February in a non-leap year does not consume the row's turn for the leap year that follows.
+
+**Limits.** At most 500 rows per list (the same ceiling a batch job's CSV uses) and at most 10 rows
+sharing one calendar date (the same ceiling a cadence run's per-period post count uses) — the eleventh
+row on a shared date is reported and skipped, not silently dropped from the file. A key-column value
+that is blank after trimming is reported and skipped. The rendered instructions for a row are capped
+at 10,000 characters.
+
+**The window, lead time and missed occurrences.** Each row's occurrence has a window: it opens
+`lead_days` (0–30, set once per series, same as the cadence count's range) days before the row's local
+date and closes at the end of that date, both in the project's time zone. `lead_days: 0` means the
+window is the date itself; a positive lead time opens the window early so the post can be generated,
+reviewed and even queued before the day arrives, while never actually publishing early (see below). If
+the worker is down for the entire window — a missed tick, a long outage — the occurrence is recorded
+**missed** once the window closes, not backfilled; the row's next occurrence is still computed
+correctly for the following year. The bounded sweep that records misses processes at most 50 rows per
+tick and only records a miss within 30 days of the window having closed, so a very old stale row is
+still advanced to its next occurrence without flooding one tick with historical misses.
+
+**Lead time and queueing.** A post generated early from its lead time is never queued earlier than the
+row's own local date: the post carries a queue floor at that date's local midnight, read at every point
+a queue allocation picks a slot, so auto-approve-and-queue, pulling a draft forward and a reviewer
+approving after the fact all respect the same floor. Review-required leaves the post waiting with no
+slot held at all until someone approves it.
+
+**Media.** A row may name its own image in the `media` column, matched by filename against the
+project's media library; that reference wins over whatever media source the series itself is
+configured with, and a row naming none falls back to the series' source. A row's own image is never
+reserved or marked used — the same portrait fires again next year. A reference to a video, to nothing
+in the library, or to more than one file with that name is reported at import; a referenced asset later
+deleted from the library skips that occurrence with the media reason rather than failing it. **`generate`
+is deliberately the wrong media source for a dated list of people**: it would send a photorealistic
+prompt for a named individual to an image model with no actual photo of them, producing a fabricated
+likeness — the pool and a row's own named asset are the only sound choices for that case; `generate`
+remains available for a dated list that is not about named people.
+
+**Re-import.** Importing again replaces the list, not appends to it: a row matched by identity (date
+plus key-column value) to a row already stored keeps its fire history and its place in the current
+year; a row no longer in the file is removed along with its history; a new row is added fresh. Posts
+already produced are never touched by a re-import. Two imports racing each other resolve to one winner
+and the other refused as a conflict, never a half-replaced list.
+
+**Permissions.** Viewing a dated series — its rows, upcoming dates and import problems — needs the same
+access as viewing any series; importing, adding, editing or deleting a row needs owner or admin, the
+same boundary as creating or editing the series itself, enforced on the server regardless of what the
+interface happens to show an editor.
+
 ## Out of scope
 
 A public API (the public-api roadmap entry). Single and series generation run inside the request; jobs run in the background.

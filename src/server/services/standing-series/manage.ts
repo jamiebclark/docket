@@ -1,6 +1,6 @@
 // standing-series/manage: create, edit, pause, resume and delete a standing series (contracts/services.md §5).
 import { unknownPlaceholders } from "@/lib/jobs/template";
-import { nextBoundaryAfter } from "@/lib/series/cadence";
+import { nextBoundaryAfter, type CadencePeriod } from "@/lib/series/cadence";
 import { createStandingSeriesSchema, updateStandingSeriesSchema, type CreateStandingSeriesInput } from "@/lib/validation/standing-series";
 import * as clock from "../../dal/clock";
 import { ConflictError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
@@ -10,6 +10,7 @@ import { getStorage, MEDIA_STORAGE_NOT_SET_UP } from "../../storage";
 import { assertGroupLimit, groupsForAccounts } from "../generation/groups";
 import { resolvePolicies } from "../generation/policy";
 import { isUniqueViolation, loadAccounts, need, takeVoice } from "../generation/single";
+import { evaluateDatedSeries } from "./dated-due";
 
 function requireManage(scope: ProjectScope): void {
   need(scope, { standing_series: ["manage"] });
@@ -28,8 +29,10 @@ async function getOrThrow(scope: ProjectScope, seriesId: string): Promise<Standi
   return row;
 }
 
-/** Steps 3–7 of contracts/services.md §5, shared by create and update. */
-async function resolveInput(scope: ProjectScope, parsed: CreateStandingSeriesInput) {
+/** Steps 3–7 of contracts/services.md §5, shared by create and update. `templateFields` is `[]` at
+ *  create and for a cadence series; for a dated series' update it is the existing stored fields, so
+ *  the placeholder check runs against what the list actually supplies (FR-027). */
+async function resolveInput(scope: ProjectScope, parsed: CreateStandingSeriesInput, templateFields: readonly string[] = []) {
   const policies = resolvePolicies(scope, {
     approval: parsed.approval,
     scheduling: parsed.scheduling,
@@ -39,8 +42,8 @@ async function resolveInput(scope: ProjectScope, parsed: CreateStandingSeriesInp
   const accounts = await loadAccounts(scope, parsed.targetAccountIds);
   assertGroupLimit(groupsForAccounts(accounts));
 
-  const unknown = unknownPlaceholders(parsed.template, []);
-  if (unknown.length > 0) throw issue("template", `Unknown field: ${unknown.join(", ")}. Available: none`);
+  const unknown = unknownPlaceholders(parsed.template, templateFields);
+  if (unknown.length > 0) throw issue("template", `Unknown field: ${unknown.join(", ")}. Available: ${templateFields.length > 0 ? templateFields.join(", ") : "none"}`);
 
   if ((parsed.media.source === "pool" || parsed.media.source === "generate") && !getStorage()) {
     throw issue("media", MEDIA_STORAGE_NOT_SET_UP, "media_storage");
@@ -51,16 +54,19 @@ async function resolveInput(scope: ProjectScope, parsed: CreateStandingSeriesInp
 function fieldsFrom(
   parsed: CreateStandingSeriesInput,
   policies: ReturnType<typeof resolvePolicies>,
+  templateFields: readonly string[] = [],
 ): Omit<NewStandingSeries, "nextRunAt"> {
   return {
     name: parsed.name,
     brief: parsed.brief,
     template: parsed.template,
-    templateFields: [],
+    templateFields: [...templateFields],
     voiceProfileId: parsed.voiceProfileId,
     targetAccountIds: parsed.targetAccountIds,
-    cadenceCount: parsed.cadence.count,
-    cadencePeriod: parsed.cadence.period,
+    occurrenceRule: parsed.occurrenceRule,
+    leadDays: parsed.leadDays,
+    cadenceCount: parsed.occurrenceRule === "cadence" ? parsed.cadence!.count : null,
+    cadencePeriod: parsed.occurrenceRule === "cadence" ? parsed.cadence!.period : null,
     mediaSource: parsed.media.source,
     mediaPoolTag: parsed.media.source === "pool" ? (parsed.media.tag ?? null) : null,
     imagePrompt: parsed.media.source === "generate" ? parsed.media.prompt : null,
@@ -77,7 +83,7 @@ export async function createStandingSeries(scope: ProjectScope, input: unknown):
   const policies = await resolveInput(scope, parsed);
   if (await scope.standingSeries.nameTaken(parsed.name)) throw duplicateNameError(parsed.name);
   const now = await clock.now();
-  const nextRunAt = nextBoundaryAfter(now, scope.project.timezone, parsed.cadence.period);
+  const nextRunAt = parsed.occurrenceRule === "cadence" ? nextBoundaryAfter(now, scope.project.timezone, parsed.cadence!.period) : null;
 
   const write = () =>
     scope.transaction(async (tx) => {
@@ -108,17 +114,26 @@ export async function createStandingSeries(scope: ProjectScope, input: unknown):
 export async function updateStandingSeries(scope: ProjectScope, seriesId: string, input: unknown): Promise<void> {
   requireManage(scope);
   const parsed = updateStandingSeriesSchema.parse(input);
-  const policies = await resolveInput(scope, parsed);
+  const existingForCheck = await getOrThrow(scope, seriesId);
+  if (parsed.occurrenceRule !== existingForCheck.occurrenceRule) {
+    throw issue(
+      "occurrenceRule",
+      "A series keeps the occurrence rule it was created with. To change it, create another series.",
+    );
+  }
+  const templateFields = parsed.occurrenceRule === "dated_list" ? existingForCheck.templateFields : [];
+  const policies = await resolveInput(scope, parsed, templateFields);
   if (await scope.standingSeries.nameTaken(parsed.name, seriesId)) throw duplicateNameError(parsed.name);
 
   const write = () =>
     scope.transaction(async (tx) => {
       requireManage(tx);
       const existing = await getOrThrow(tx, seriesId);
-      const patch: StandingSeriesPatch = { ...fieldsFrom(parsed, policies) };
-      if (parsed.cadence.period !== existing.cadencePeriod) {
-        patch.nextRunAt = nextBoundaryAfter(await clock.now(), tx.project.timezone, parsed.cadence.period);
+      const patch: StandingSeriesPatch = { ...fieldsFrom(parsed, policies, templateFields) };
+      if (parsed.occurrenceRule === "cadence" && parsed.cadence!.period !== existing.cadencePeriod) {
+        patch.nextRunAt = nextBoundaryAfter(await clock.now(), tx.project.timezone, parsed.cadence!.period);
       }
+      if (parsed.occurrenceRule === "dated_list") patch.nextRunAt = null;
       await tx.standingSeries.update(seriesId, patch);
       await tx.audit.insert({
         action: "standing_series_update",
@@ -149,13 +164,24 @@ export async function pauseStandingSeries(scope: ProjectScope, seriesId: string)
   });
 }
 
-export async function resumeStandingSeries(scope: ProjectScope, seriesId: string): Promise<{ nextRunAt: Date }> {
+export async function resumeStandingSeries(scope: ProjectScope, seriesId: string): Promise<{ nextRunAt: Date | null }> {
   requireManage(scope);
   return scope.transaction(async (tx) => {
     requireManage(tx);
     const existing = await getOrThrow(tx, seriesId);
     const now = await clock.now();
-    const nextRunAt = nextBoundaryAfter(now, tx.project.timezone, existing.cadencePeriod);
+    if (existing.occurrenceRule === "dated_list") {
+      await tx.standingSeries.update(seriesId, { enabled: true, autoPausedReason: null, nextRunAt: null });
+      await tx.audit.insert({
+        action: "standing_series_resume",
+        actorUserId: tx.membership.userId || null,
+        details: { seriesId },
+      });
+      const resumed = (await tx.standingSeries.get(seriesId)) ?? existing;
+      await evaluateDatedSeries(tx, resumed, now);
+      return { nextRunAt: null };
+    }
+    const nextRunAt = nextBoundaryAfter(now, tx.project.timezone, existing.cadencePeriod as CadencePeriod);
     await tx.standingSeries.update(seriesId, { enabled: true, autoPausedReason: null, nextRunAt });
     await tx.audit.insert({
       action: "standing_series_resume",

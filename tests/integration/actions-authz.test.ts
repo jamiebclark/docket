@@ -22,6 +22,7 @@ import { setLlmForTests } from "../../src/server/llm";
 import { runTick } from "../../src/server/scheduler";
 import { createJob } from "../../src/server/services/jobs";
 import { createStandingSeries } from "../../src/server/services/standing-series/manage";
+import { addDatedRow } from "../../src/server/services/standing-series/dated-rows";
 import { startSeries } from "../../src/server/services/generation/series";
 import { generateSingle } from "../../src/server/services/generation/single";
 import * as posts from "../../src/server/services/posts";
@@ -35,7 +36,7 @@ import * as connectService from "../../src/server/services/connect";
 import * as accountService from "../../src/server/services/accounts";
 import { eq } from "drizzle-orm";
 import { createFakeLlm } from "../helpers/fake-llm";
-import { createPostInReview, createSession, createUser, createVoiceProfile } from "../helpers/factories";
+import { createPostInReview, createSession, createUser, createVoiceProfile, csvBuilder } from "../helpers/factories";
 import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterThrowaway } from "../helpers/connect-group";
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
@@ -102,9 +103,30 @@ async function fixtures(env: Env) {
   setLlmForTests(createFakeLlm([fakeOk(), fakeOk()]));
   const attemptId = await readyAttempt(env.scope, await sessionFor(env.owner.id), pageCandidate("authz", "Authz", false));
   const apiKey = await createApiKey(env.scope, { name: "fixture", permissions: ["read"], rateLimitPerMinute: 60, expiry: "never" });
+  const datedSeriesId = (
+    await createStandingSeries(env.scope, {
+      name: `Authz dated series ${randomUUID()}`,
+      brief: "Brief.",
+      template: "Write a short post.",
+      voiceProfileId: voice.id,
+      targetAccountIds: [account.id],
+      occurrenceRule: "dated_list",
+      cadence: null,
+      media: { source: "none" },
+      approval: null,
+      scheduling: null,
+      confirmUnreviewedQueue: false,
+    })
+  ).seriesId;
+  await env.scope.standingSeries.update(datedSeriesId, { templateFields: ["name"] });
+  const datedRowId = (
+    await addDatedRow(env.scope, datedSeriesId, { date: "03-14", media: null, fields: { name: "Ada Lovelace" } })
+  ).rowId;
   return {
     attemptId,
     apiKeyId: apiKey.key.id,
+    datedSeriesId,
+    datedRowId,
     voiceProfileId: voice.id,
     seriesId: (
       await startSeries(env.scope, {
@@ -329,6 +351,26 @@ const CASES: Case[] = [
   { name: "pauseStandingSeriesAction", manage: true, run: (s, f) => standingSeriesActions.pauseStandingSeriesAction(s, f.standingSeriesId) },
   { name: "resumeStandingSeriesAction", manage: true, run: (s, f) => standingSeriesActions.resumeStandingSeriesAction(s, f.standingSeriesId) },
   { name: "deleteStandingSeriesAction", manage: true, run: (s, f) => standingSeriesActions.deleteStandingSeriesAction(s, f.standingSeriesId) },
+  {
+    name: "importDatedListAction",
+    manage: true,
+    run: (s, f) => {
+      const body = new FormData();
+      body.set("file", new File([new Uint8Array(csvBuilder(["date", "name"], [["04-01", "Grace Hopper"]]))], "list.csv", { type: "text/csv" }));
+      return standingSeriesActions.importDatedListAction(s, f.datedSeriesId, body);
+    },
+  },
+  {
+    name: "addDatedRowAction",
+    manage: true,
+    run: (s, f) => standingSeriesActions.addDatedRowAction(s, f.datedSeriesId, { date: "05-01", media: null, fields: { name: randomUUID().slice(0, 8) } }),
+  },
+  {
+    name: "updateDatedRowAction",
+    manage: true,
+    run: (s, f) => standingSeriesActions.updateDatedRowAction(s, f.datedSeriesId, f.datedRowId, { date: "03-14", media: null, fields: { name: "Edited" } }),
+  },
+  { name: "deleteDatedRowAction", manage: true, run: (s, f) => standingSeriesActions.deleteDatedRowAction(s, f.datedSeriesId, f.datedRowId) },
 ];
 
 const SECRET = /credentialsEncrypted|accessToken|refreshToken|secretAccessKey|S3_SECRET|"token"/i;

@@ -2965,6 +2965,204 @@ allocator and worker-tick machinery. Full text in `specs/071-evergreen-series/sp
 - **No video**: a pooled asset is an image, and no video is generated or attached.
 - **No per-series provider, model, credential, rate limit or spend cap.**
 
+## 062 — Date-pegged series (2026-10-14)
+
+Spec: `specs/072-dated-series`. Roadmap entry 4 of 6
+(`.specify/roadmaps/content-engine-roadmap.json`, slug `dated-series`): content that fires on an
+anniversary — a birthday, a grand opening — from a spreadsheet, as a second occurrence rule on the
+standing series built in entry 061. Full text in `specs/072-dated-series/spec.md` (A1–A38) and
+`specs/072-dated-series/plan.md`/`research.md` (B1–B34).
+
+### Spec decisions (A1–A38)
+
+- **A1 — A dated series is a standing series with a different occurrence rule, not a new object.**
+  Name, brief, template, voice profile, target accounts, policies, media source, enabled flag, runs,
+  positions, failures, self-pause, the credit hold and the per-tick bounds all behave exactly as they
+  do today. The product word is **Dated list**; such a series is a **dated series** in prose.
+- **A2 — The occurrence rule is chosen at creation and refused on edit.** Converting one rule to the
+  other would have to decide what happens to an open run and a half-fired list; the edit screen says
+  to create another series instead.
+- **A3 — A dated series has no cadence.** Count and period are not asked for, not stored, refused if
+  submitted.
+- **A4 — A dated series uses the same worker section, claim, lease and per-tick limits as cadence.**
+  No new process, no new environment variable, no second code path for generation, policy, allocation,
+  media or failure handling.
+- **A5 — A row is a date, the template's field values, and an optional media reference.** No per-row
+  accounts, voice profile, policy, lead time or prompt — a row that overrode those would be a second
+  series in disguise.
+- **A6 — A date is a month and day, optionally preceded by a year.** Without a year it fires every
+  year, forever; with one, once, then history.
+- **A7 — The list's columns are the series' template fields** — what `templateFields` was kept for
+  (W3/W4); instructions use `{{ column name }}`, rendered through the existing template renderer.
+- **A8 — Two reserved column names, `date` and `media`; every other column is a template field.**
+  `date` required, `media` optional, both matched case-insensitively.
+- **A9 — One date format: `MM-DD`, or `YYYY-MM-DD` for a row that names its year.** Zero-padded,
+  hyphens only; several accepted formats would mean guessing whether `03-04` is March 4th or April 3rd.
+- **A10 — A row's identity is its date plus the key column's value** (the first non-reserved column,
+  trimmed, case-insensitive). Re-import matches on it, a list may not hold the same date and key
+  twice, and two subjects on one date are plainly two rows.
+- **A11 — At most 10 rows resolve to one calendar date**, counted across every-year and year-specific
+  rows together — the same cap a run's positions already have.
+- **A12 — 500 rows per series, 1 MB per file, 50,000 characters per row** — the jobs CSV limits
+  exactly, nothing raised or lowered.
+- **A13 — A row's media reference names an image already in the library, by filename**, exactly one
+  live, non-video asset, case-insensitive. Nothing uploaded, nothing fetched from a URL.
+- **A14 — A row's image is used, not consumed.** Not reserved, not marked used — the same portrait
+  posts on the same birthday every year; two rows may share one file.
+- **A15 — A row's media reference wins over the series' media source for that row**, which is the
+  fallback for rows naming none. The media-required skip is unchanged.
+- **A16 — Row field values are never sent to an image provider.** `generate` still sends only the
+  series' stored prompt plus the fixed real-people instruction, so a dated series about a person is
+  text and typography over a pooled or named image — `docs/generator.md` says `generate` is the wrong
+  source for a birthday list.
+- **A17 — One parser, extended with a mode — not a second parser.** Whole-file problems still refuse
+  the import whole; the jobs source keeps today's all-or-nothing behaviour byte for byte, proved by
+  its existing tests staying green unchanged.
+- **A18 — A row-level problem skips that row, names its line and says what is wrong**, and the import
+  succeeds with whatever was usable.
+- **A19 — An import replaces the whole list.** Matched rows (A10) are updated in place and keep their
+  fire history; unmatched stored rows are removed with their history; new rows are added. Nothing an
+  import does touches a post already produced.
+- **A20 — The last import's problems are kept on the series, up to 100, with the file's name and
+  when it ran**, replaced by the next successful import.
+- **A21 — An unknown template placeholder is refused on save; an import that would remove a column
+  the template uses is refused whole.** The alternative — a silently empty value for the next year — is
+  the failure nobody notices.
+- **A22 — Rows are editable one at a time: add, edit, delete**, the same validation and messages as an
+  import; deleting a row deletes its fire history and leaves its posts.
+- **A23 — An occurrence is a row and a year**; its target date is the row's month/day in that year, as
+  a local date in the project's zone.
+- **A24 — 29 February in a non-leap year fires on 28 February.** Skipping would make a brand's
+  anniversary vanish three years out of four; moving to 1 March puts it in the wrong month.
+- **A25 — A series-level lead time of 0–30 days, default 0.** The due instant is local midnight at
+  (target − lead days), through `periodStartInstant`'s existing disambiguation.
+- **A26 — The window closes at the end of the target date's local day.** Late is fine until the day is
+  over; a worker down across the date and a series paused across it behave identically, and neither
+  backfills.
+- **A27 — Missed occurrences are recorded lazily and boundedly**: windows closed in the last 30 days,
+  at most 50 per pass, so a series off for a year does not write 365 history rows.
+- **A28 — One run per due date, one position per row due on it, oldest date first** — the existing
+  one-open-run rule, unchanged; rows whose window closes while waiting are missed, visibly.
+- **A29 — A dated run never calls the angle planner.** Each position already has the row's own data,
+  which is what makes it distinct.
+- **A30 — A queued post is allocated from the start of its target date, not from now**, or lead time
+  would defeat itself. No free occurrence inside the horizon leaves it an approved draft, as W23
+  already specifies.
+- **A31 — A row fires at most once per year, under a uniqueness constraint on the occurrence** —
+  cadence's guarantee, restated for dates, enforced in the database.
+- **A32 — Due resolution reads the project's time zone every time.** A zone change moves every
+  unfired occurrence; an already-missed one stays missed.
+- **A33 — A dated series with no usable rows simply has no next due date.** Not an error, and the
+  self-pause rule never fires on an empty list.
+- **A34 — Pause and resume are unchanged (W12).** Resuming does not backfill; windows that closed
+  while paused are recorded missed on resume.
+- **A35 — The dated list lives on the existing series detail screen**: Upcoming, Last import, the
+  rows table (paginated, add/edit/delete), and Import, in that order. The run history is unchanged
+  beyond naming the date a run fired for.
+- **A36 — Importing, adding, editing and deleting rows needs `standing_series: ["manage"]`** — owner
+  and admin, enforced on the server for every route; viewing needs `post: ["view"]`, as the rest of
+  the screen already does.
+- **A37 — The list is shown as a plain table of the file's own columns**, following `docket-ui` and
+  `docs/design-system.md`.
+- **A38 — No API, webhook, notification, real-time push or external date source.**
+
+### Plan decisions (B1–B34)
+
+- **B1 — One parser, one pass, two views.** `parseCsvFile(bytes)` returns tagged problems
+  (`scope: "file" | "row"`) in today's push order; `parseJobCsv` becomes a four-line wrapper, so
+  `csv.test.ts` passes unchanged — proving FR-020 rather than asserting it.
+- **B2 — The dated importer consumes the tagged result directly.** File-scope problems refuse the
+  import whole; row-scope problems carry through to the import record.
+- **B3 — Over-length rendered instructions are a row problem**, reusing `assertRenderedFits`'s
+  message shape, checked on import, row add, row edit and a template edit.
+- **B4 — Eligibility is decided on local dates, and the local-date form is normative**: `target − lead
+  ≤ today ≤ target`, identical to `dueInstant ≤ now < windowEnd` by construction. The date form
+  survives a time-zone change with nothing stored to migrate.
+- **B5 — `standing_series.next_run_at` becomes nullable and is always NULL for a dated series.** A
+  cached due instant is the one thing a zone change could falsify; the next due date is computed from
+  the rows at read time, in the zone read at that moment.
+- **B6 — Each row stores `next_target_date date`**, zero-independent, forward-only, advanced in the
+  same transaction that fires or retires the occurrence.
+- **B7 — The due instant and window end reuse `periodStartInstant`.** No new local-midnight resolver.
+- **B8 — The claim gains one OR branch, joined to `projects` for the zone.**
+- **B9 — A dated run never plans, gated on the run config's `rule`, not on `requested_count`.** A
+  CHECK makes a dated plan impossible to store; `seriesField` stays `null` for a dated position.
+- **B10 — The row's values are rendered into `inputs.instructions` at the single existing call
+  site.** Same data marks, same `runGenerationStep`, same schema, same retry, same usage purpose, same
+  `generation_mode` — no new enum value anywhere.
+- **B11 — The per-position dated payload is one `dated jsonb` column**, NULL for a cadence position:
+  `{ rowId, year, targetDate, keyValue, values, mediaAssetId, mediaFilename }`. The row's asset id
+  lives inside jsonb where the reservation index cannot see it, which is how A14 becomes structural.
+- **B12 — `resolvePositionMedia` gains a prefix, not a branch.** A named asset is loaded through the
+  scoped media repo, validated the same way, returned without `claimMedia` and without `markUsed`.
+- **B13 — The queue floor is stored on the post: `posts.queue_not_before timestamptz` (nullable).**
+  One helper, `queueFloor`, read by all three `allocateNextFree` floor call sites. Explicit scheduling
+  is a deliberate human act and is not floored.
+- **B14 — Two new tables, not three.** `standing_series_dated_rows` and `standing_series_occurrences`;
+  the import record is four columns on `standing_series`, not a fifth table.
+- **B15 — `standing_series_period` gains the value `'date'`.** Reuses `unique(series_id, period,
+  period_start)` as "one run per due date" and the existing one-open-run index unchanged.
+- **B16 — `standing_series_position_status` gains the value `'missed'`** — neither a failure nor a
+  skip, keeping the skip-reason enum free of a non-skip.
+- **B17 — An occurrence is inserted when the run opens, under `unique(row_id, year)`.** That
+  constraint, not a prior read, is what makes two overlapping ticks collide safely.
+- **B18 — The row's identity is a unique index over `(series_id, month, day, coalesce(year, 0),
+  lower(btrim(key_value)))`.**
+- **B19 — The stored month/day must be a date that can exist in some year**, by CHECK — `02-30`,
+  `13-01` and `2027-02-29` are impossible to store even by a direct write.
+- **B20 — The per-date cap and the 500-row cap are service rules**, re-counted under the
+  list-version guard so a concurrent add cannot slip past them.
+- **B21 — Every list write is serialised by an optimistic `list_version` on the series.** The loser
+  of two concurrent imports is refused as a conflict, having written nothing — no advisory lock,
+  nothing session-level.
+- **B22 — `media_asset_id` on a row is a single-column FK with `ON DELETE SET NULL`**, because
+  `media_assets` has no `unique(project_id, id)`. Cross-project reference is prevented by resolving
+  filenames through the scoped media repo, covered by an isolation test.
+- **B23 — The import resolves every filename in one query**, classifying none / more than one / a
+  video / one image in memory.
+- **B24 — One evaluation pass, `evaluateDatedSeries`, called from three places**: the producer, Resume,
+  and the read service in a read-only mode for the upcoming list.
+- **B25 — Retiring is always done; recording a miss is bounded.** If retiring were also bounded to 30
+  days, a row whose window closed 40 days ago would never fire again.
+- **B26 — Advancing is deterministic and forward-only**, with `02-29` constrained to `02-28` in a
+  non-leap year, the same rule the monthly cadence boundary already relies on.
+- **B27 — Occurrences are pruned by age in the existing housekeeping pass**, same 90-day horizon and
+  limit as the run prune; a pending occurrence is never matched.
+- **B28 — The rows table is five columns, and the full row lives in its editor**: Date · Subject ·
+  Image · Next due · Actions. A37 asks for the file's own columns, but the five-column rule
+  `docs/design-system.md` states is absolute; recorded here so review judges the trade.
+- **B29 — Three sections and one control on the existing detail page, in A35's order**: Upcoming,
+  Last import, Rows (`?rows=N`), and Import. No new route except the row dialogs' server actions.
+- **B30 — Two new exports in the one formatter file, plus one component.** `formatLocalDate` and
+  `formatMonthDay` in `src/lib/time/format.ts`; `LocalDate` mirrors `LocalTime` with no tooltip.
+- **B31 — The occurrence rule is a `SegmentedControl`, shown only on create**; on edit a read-only
+  line with A2's sentence, and the server refuses a changed rule.
+- **B32 — The import reuses the existing CSV file input and `CsvProblemList`**, moved to
+  `src/components/ui/` so both screens import one component.
+- **B33 — The run config stays `v: 1`.** `rule` defaults to `"cadence"`, `cadence` becomes nullable
+  and `leadDays` is added, so every config `071` already stored parses unchanged.
+- **B34 — Two new tick counts, `missed` and `retired`**, joining `StandingSeriesCounts` and the
+  one-line tick summary.
+
+### What this entry does not do
+
+- **No external date source.** No holiday calendar, no almanac, no "on this day" feed, no API import.
+- **No likeness generation.** Row data never reaches an image provider; a dated series about a real
+  person is text and typography over an image a person chose.
+- **No change to cadence semantics.** Boundaries, no-backfill, planning, avoid-titles, self-pause and
+  the per-tick bounds are untouched.
+- **No conversion between occurrence rules.**
+- **No per-row accounts, voice profile, policy, lead time, instructions or image prompt.**
+- **No recurrence beyond "this month and day, every year or once".** No "second Tuesday", no "every
+  three years", no ranges, no spans, no multi-day events, no lunar or non-Gregorian calendars.
+- **No backfill** of occurrences whose windows closed, and no retry of a missed occurrence.
+- **No public API, MCP, webhook, notification, email or real-time push** for dated lists.
+- **No spreadsheet editing experience**: rows are added, edited and deleted one at a time; re-import
+  is how a bulk change is made.
+- **No media upload during import**, and no fetching an image from a URL named in a row.
+- **No video**: a row's asset is an image, and none is generated.
+- **No explicit-time scheduling**: a dated post is a draft or takes a real slot on or after its date.
+
 ## 072 — Pinterest provider (2026-10-14)
 
 Judgement calls from `specs/072-pinterest-provider/spec.md` and its plan (`research.md`, K1–K38). External facts come

@@ -35,6 +35,8 @@ export const projectOwnedTables = [
   { table: "standing_series", scopeColumn: "project_id" },
   { table: "standing_series_runs", scopeColumn: "project_id" },
   { table: "standing_series_positions", scopeColumn: "project_id" },
+  { table: "standing_series_dated_rows", scopeColumn: "project_id" },
+  { table: "standing_series_occurrences", scopeColumn: "project_id" },
   { table: "external_item_claims", scopeColumn: "project_id" },
   { table: "api_keys", scopeColumn: "project_id" },
   { table: "api_idempotency_keys", scopeColumn: "project_id" },

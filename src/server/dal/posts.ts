@@ -18,6 +18,7 @@ export type NewPost = Partial<
     | "seriesId"
     | "seriesPosition"
     | "generationJobItemId"
+    | "queueNotBefore"
   >
 >;
 export type PostPatch = Partial<
@@ -30,6 +31,7 @@ export type PostPatch = Partial<
     | "reviewedByUserId"
     | "reviewedAt"
     | "rejectionReason"
+    | "queueNotBefore"
   >
 >;
 

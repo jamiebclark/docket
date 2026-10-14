@@ -148,7 +148,7 @@ describe("standing-series DAL", () => {
     await positions.update(made[0]!.id, { status: "produced", finishedAt: new Date() });
     await positions.update(made[1]!.id, { status: "failed", lastErrorKind: "interrupted", lastError: "oops" });
     const counts = await positions.countByStatus(run.id);
-    expect(counts).toEqual({ queued: 1, running: 0, produced: 1, failed: 1, skipped: 0 });
+    expect(counts).toEqual({ queued: 1, running: 0, produced: 1, failed: 1, skipped: 0, missed: 0 });
   });
 
   it("nextDue finds the earliest queued-and-due or running position", async () => {

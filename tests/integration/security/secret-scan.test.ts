@@ -62,6 +62,7 @@ import { createOpenAiProvider } from "../../../src/server/llm/openai";
 import type { LlmConfig } from "../../../src/server/llm/config";
 import { setLlmForTests, setLlmFactoryForTests } from "../../../src/server/llm";
 import { createStandingSeries } from "../../../src/server/services/standing-series/manage";
+import { importDatedList } from "../../../src/server/services/standing-series/dated-import";
 import StandingSeriesDetailPage from "../../../src/app/p/[projectSlug]/jobs/series/[seriesId]/page";
 import ModelPage from "../../../src/app/p/[projectSlug]/settings/model/page";
 import UsagePage from "../../../src/app/p/[projectSlug]/settings/usage/page";
@@ -86,7 +87,7 @@ import { createApiKey } from "../../../src/server/services/api-keys";
 import { setStorageForTests } from "../../../src/server/storage";
 import { api } from "../../helpers/api";
 import { closeDb, testDb } from "../../helpers/db";
-import { addMember } from "../../helpers/factories";
+import { addMember, csvBuilder } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
@@ -629,7 +630,18 @@ describe("secret scan (FR-020, SC-005)", () => {
       createStandingSeries(genEnv.scope, seriesInput({ media: { source: "generate", prompt: "A cool picture" } })),
     );
 
-    setLlmForTests(createFakeLlm([modelOk("Scan pool post.", 1), modelOk("Scan generate post.", 1)]));
+    // A dated series (T067): an import with a problem row alongside a good one, firing the good row
+    // in the same tick, so its import-problems alert and rows table render too.
+    const { seriesId: datedSeriesId } = await atTime(seriesCreatedAt, () =>
+      createStandingSeries(genEnv.scope, seriesInput({ occurrenceRule: "dated_list", cadence: null, media: { source: "none" } })),
+    );
+    const datedCsv = csvBuilder(["date", "name"], [["01-11", "Ada Lovelace"], ["02-30", "Impossible"]]);
+    const datedImportResult = await atTime(seriesCreatedAt, () =>
+      importDatedList(genEnv.scope, datedSeriesId, { name: "scan.csv", bytes: new Uint8Array(datedCsv) }),
+    );
+    pieces.push({ place: "service result: dated import", text: JSON.stringify(datedImportResult) });
+
+    setLlmForTests(createFakeLlm([modelOk("Scan pool post.", 1), modelOk("Scan generate post.", 1), modelOk("Scan dated post.")]));
     await atTime(seriesFiringAt, () => runTick({ config: {} }));
     setLlmForTests(null);
     setImageProviderForTests(null);
@@ -637,22 +649,35 @@ describe("secret scan (FR-020, SC-005)", () => {
     const renderSeriesDetail = async (u: { id: string }, seriesId: string) => {
       asUser(u);
       return renderToStaticMarkup(
-        (await StandingSeriesDetailPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, seriesId }) })) as never,
+        (await StandingSeriesDetailPage({
+          params: Promise.resolve({ projectSlug: genEnv.project.slug, seriesId }),
+          searchParams: Promise.resolve({}),
+        })) as never,
       );
     };
     const renderJobsPage = async (u: { id: string }) => {
       asUser(u);
       return renderToStaticMarkup(await JobsPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) }));
     };
-    for (const seriesId of [poolSeriesId, generateSeriesId]) {
+    for (const { id, label } of [
+      { id: poolSeriesId, label: "pool" },
+      { id: generateSeriesId, label: "generate" },
+      { id: datedSeriesId, label: "dated" },
+    ]) {
       for (const [role, u] of [["owner", genEnv.owner], ["admin", genEnv.admin], ["editor", genEnv.editor]] as const) {
-        pieces.push({ place: `page: standing series detail (${seriesId === poolSeriesId ? "pool" : "generate"}, ${role})`, text: await renderSeriesDetail(u, seriesId) });
+        pieces.push({ place: `page: standing series detail (${label}, ${role})`, text: await renderSeriesDetail(u, id) });
       }
     }
     for (const [role, u] of [["owner", genEnv.owner], ["admin", genEnv.admin], ["editor", genEnv.editor]] as const) {
       pieces.push({ place: `page: jobs with standing series (${role})`, text: await renderJobsPage(u) });
     }
     session.current = sessionBeforeLlm;
+    // Worker databases are shared across test files (see the `afterAll` comment above): a series left
+    // enabled here would otherwise become due for a later file's plain `runTick()`, which has no
+    // reason to expect standing series in play at all.
+    for (const id of [poolSeriesId, generateSeriesId, datedSeriesId]) {
+      await genEnv.scope.standingSeries.update(id, { enabled: false });
+    }
 
     // Stored rows.
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });
