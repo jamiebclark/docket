@@ -61,6 +61,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G26 | `accountDetails?` | 18 |
 | G27 | `consent?` | 18 |
 | G28 | `exchangeCode` receives `callbackParams` | 4, 18 |
+| G29 | `labelKey` on a `choice` posting field view | 18, 19 |
 | G18 | the group's own message in the accounts banner | 4 |
 | G23 | `afterPublish`, `credentialsInvalid` on `ambiguous` | 6, 7 |
 | G24 | `continue` may carry `wait`, shown as `lastError` | 7 |
@@ -474,3 +475,26 @@ Bluesky video adds no engine code beyond G24 and shows how a multi-step upload f
   the `publish_id` as the external id.
 - **Where to look.** `src/providers/tiktok/` (`capabilities.ts`, `posting.ts`, `creator.ts`, `steps.ts`, `publish.ts`, `state.ts`, `sealed.ts`, `errors.ts`)
   and `tests/integration/tiktok/`.
+
+## 19. Worked example: the `pinterest` provider
+
+`src/providers/pinterest/` is the smallest provider in the registry: one create request, no state machine, no consent and no
+chunked upload. All of it is tested with mocked HTTP only; the live checks are listed in `docs/pinterest-setup.md`.
+
+- **Posting fields (G25) and the board choice (G29).** `posting` declares a `choice` field for the board (built from
+  `accountDetails`, `required: true`, `labelKey: "boardName"`), plus `title` and `link` text fields. `labelKey` makes the panel
+  store the chosen board's **name** alongside its id, which is how `targetNote()` can show "Board: \<name\>" on the posts list,
+  post detail and calendar — none of which have a live board list to resolve an id against (G29, the only generic addition this
+  provider needed).
+- **Account details (G26).** `accountDetails` pages `GET /v5/boards` (`privacy=PUBLIC`) up to 10 pages of 250, cached in process
+  for 60 seconds through the engine's single refresh path. A board no longer in the list but still stored stays selected, shown
+  disabled as "\<name\> — no longer on Pinterest" rather than silently falling back to the placeholder.
+- **No `consent`, no `state.ts`.** `stepFor` always returns one step, `create_pin`, with `mayPublish: true` — there is nothing to
+  persist between ticks, so a lost lease is simply `ambiguous` (the safe side).
+- **One create request, one outcome table.** `advance` sends exactly one `POST /v5/pins`; a 5xx is `ambiguous`, not retryable,
+  because with a single step there is no "before the request was sent" left to be safely before (the 072 ambiguous-on-create
+  rule, `docs/decisions.md`).
+- **The three-slot text mapping.** The post's shared text becomes the pin's `description`; `title` and `link` are per-target
+  posting fields, not shared text, because only a pin's own fields make sense per target.
+- **Where to look.** `src/providers/pinterest/` (`capabilities.ts`, `boards.ts`, `posting.ts`, `validate.ts`, `steps.ts`,
+  `publish.ts`, `oauth.ts`, `connect-group.ts`) and `tests/integration/pinterest/`.

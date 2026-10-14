@@ -12,6 +12,7 @@ export type DocPage =
   | "limits"
   | "meta-setup"
   | "n8n"
+  | "pinterest-setup"
   | "security"
   | "storage"
   | "tiktok-setup"

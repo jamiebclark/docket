@@ -28,6 +28,7 @@ nav:
       - Meta app (Facebook, Instagram, Threads): meta-setup.md
       - X: x-setup.md
       - TikTok: tiktok-setup.md
+      - Pinterest: pinterest-setup.md
   - Using Docket:
       - Getting started: getting-started.md
       - Members and accounts: accounts.md

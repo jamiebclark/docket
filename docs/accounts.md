@@ -178,6 +178,26 @@ First register the TikTok app: [tiktok-setup.md](tiktok-setup.md). Then open **A
 - **Removing access:** removing the account in Docket deletes its tokens. To revoke the app entirely, remove it in
   TikTok's app settings (Docket does not revoke the grant itself).
 
+## Pinterest
+
+First register the Pinterest app: [pinterest-setup.md](pinterest-setup.md). Then open **Accounts** and choose
+**Pinterest**.
+
+- **HTTPS is required.** Pinterest refuses `http://` and `localhost` redirect addresses, so the login button only
+  works when `BETTER_AUTH_URL` is an `https://` address that is not localhost.
+- **A board is chosen per post**, not per account: the composer reads the account's boards live and a post cannot be
+  scheduled or approved without one.
+- **While the app has Trial access**, pins are visible only to the connected account's owner, and the whole server
+  shares 300 pin creations a day across every connected Pinterest account — shown on the account card and in the
+  composer.
+- **What is stored:** the access and refresh tokens, encrypted. Docket renews them automatically; **Needs
+  reconnecting** means Pinterest rejected the refresh token.
+- **Removing access:** removing the account in Docket deletes its tokens. To revoke the app entirely, remove it in
+  Pinterest's app settings (Docket does not revoke the grant itself).
+- **Not supported:** video pins, carousel pins, board management, secret or protected boards, analytics,
+  product/rich pins, catalogs, ads, Business Access, AI-disclosure labels, and automatic detection of Trial vs.
+  Standard access. See [pinterest-setup.md](pinterest-setup.md) for the full list.
+
 ## Scheduling for someone else's accounts
 
 A common setup: you run Docket, and a friend or client owns the Page and accounts you post for.
