@@ -149,22 +149,20 @@ export async function pauseStandingSeries(scope: ProjectScope, seriesId: string)
   });
 }
 
-export async function resumeStandingSeries(scope: ProjectScope, seriesId: string): Promise<void> {
+export async function resumeStandingSeries(scope: ProjectScope, seriesId: string): Promise<{ nextRunAt: Date }> {
   requireManage(scope);
-  await scope.transaction(async (tx) => {
+  return scope.transaction(async (tx) => {
     requireManage(tx);
     const existing = await getOrThrow(tx, seriesId);
     const now = await clock.now();
-    await tx.standingSeries.update(seriesId, {
-      enabled: true,
-      autoPausedReason: null,
-      nextRunAt: nextBoundaryAfter(now, tx.project.timezone, existing.cadencePeriod),
-    });
+    const nextRunAt = nextBoundaryAfter(now, tx.project.timezone, existing.cadencePeriod);
+    await tx.standingSeries.update(seriesId, { enabled: true, autoPausedReason: null, nextRunAt });
     await tx.audit.insert({
       action: "standing_series_resume",
       actorUserId: tx.membership.userId || null,
       details: { seriesId },
     });
+    return { nextRunAt };
   });
 }
 

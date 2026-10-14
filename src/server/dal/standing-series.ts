@@ -93,6 +93,8 @@ export interface StandingSeriesRepo {
   delete(id: string): Promise<boolean>;
   /** The friendly message before the index fires. */
   nameTaken(name: string, exceptId?: string): Promise<boolean>;
+  /** Positions ever `produced` across every run, for the delete confirmation's post count. */
+  countProduced(id: string): Promise<number>;
 }
 
 export interface StandingSeriesRunsRepo {
@@ -180,6 +182,21 @@ export function createStandingSeriesRepo(db: Database, projectId: string): Stand
         .where(and(...conds))
         .limit(1);
       return row !== undefined;
+    },
+    async countProduced(id) {
+      const [row] = await db
+        .select({ n: sql<number>`count(*)` })
+        .from(standingSeriesPositions)
+        .innerJoin(standingSeriesRuns, eq(standingSeriesRuns.id, standingSeriesPositions.runId))
+        .where(
+          and(
+            eq(standingSeriesPositions.projectId, projectId),
+            eq(standingSeriesRuns.projectId, projectId),
+            eq(standingSeriesRuns.seriesId, id),
+            eq(standingSeriesPositions.status, "produced"),
+          ),
+        );
+      return Number(row?.n ?? 0);
     },
   };
 }
