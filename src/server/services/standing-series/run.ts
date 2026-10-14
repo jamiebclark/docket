@@ -90,14 +90,17 @@ export interface OpenOrResumeResult {
 }
 
 /** Closes a stale open run (a prior period's) as its own outcome, never relabelling anything else. */
-async function closeStale(scope: ProjectScope, open: StandingSeriesRunRecord, now: Date): Promise<void> {
-  await closeRun(scope, open, now);
+async function closeStale(scope: ProjectScope, open: StandingSeriesRunRecord, now: Date): Promise<boolean> {
+  const { autoPaused } = await closeRun(scope, open, now);
+  return autoPaused;
 }
 
 /**
  * Opens the current period's run for `series`, or returns the one already open for it. Closes a
  * stale (prior-period) open run first (W11, FR-014). Returns `null` only when there is no open run
- * and the series is not yet due — defensive, since a claim should already guarantee due-ness.
+ * and the series is not yet due — defensive, since a claim should already guarantee due-ness — or
+ * when closing that stale run just auto-paused the series (review F2): opening a fresh run on a
+ * series that has just been disabled would leave an orphan that defeats Resume a period later.
  */
 export async function openOrResumeRun(
   scope: ProjectScope,
@@ -115,7 +118,8 @@ export async function openOrResumeRun(
     return { run: open, opened: false };
   }
   if (open) {
-    await closeStale(scope, open, now);
+    const autoPaused = await closeStale(scope, open, now);
+    if (autoPaused) return null;
     open = null;
   }
   if (!hadOpen && series.nextRunAt.getTime() > now.getTime()) return null;

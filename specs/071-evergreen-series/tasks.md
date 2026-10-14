@@ -301,3 +301,13 @@ and the location the review cited; the reasoning is in review.md, not here.
 with `standingSeriesMaxPosts` below the cadence so the per-tick bound is actually exercised (FR-044),
 and one that drives a temporary generation failure through its backoff to a later tick (FR-022). See
 review F12.
+
+---
+
+## Phase 10: Review remediation (second pass)
+
+**Purpose**: Close the blocking findings in [review.md](./review.md). Each task carries its finding id
+and the location the review cited; the reasoning is in review.md, not here.
+
+- [X] T083 Park standing series in `parkAllJobs` the way it already parks job items, holds and project credentials — set `enabled = false` and clear `lease_owner`/`lease_until` on every row — so a series left behind by a standing-series file stops being claimed by the next file's `runTick`; then confirm `DOCKET_TEST_WORKERS=1 npx vitest run --no-file-parallelism tests/integration/standing-series/ tests/integration/jobs/` is green and run the full suite once — review F1 (MAJOR), tests/helpers/jobs-env.ts:20
+- [X] T084 Stop `openOrResumeRun` opening a new run after the `closeStale` it just performed auto-paused the series (re-read `enabled` after run.ts:117-120 and return), so a self-paused series is not left with an orphan open run that closes as `produced_none` on the first tick after Resume and pauses it again; add a self-pause test that presses Resume on the `closeStale` path and asserts the next period produces — review F2 (MAJOR), src/server/services/standing-series/run.ts:117

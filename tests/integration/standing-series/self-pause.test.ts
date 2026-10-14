@@ -143,4 +143,38 @@ describe("standing-series self-pause (US6 AS4-AS5, FR-053)", () => {
     expect(closed.length).toBeGreaterThanOrEqual(3);
     for (const run of closed.slice(0, 3)) expect(run.outcome).toBe("produced_none");
   }, 60_000);
+
+  it("resumes cleanly after pausing on the closeStale path, with no orphan run to re-pause it a period later (review F2)", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-04-10T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ cadence: { count: 1, period: "day" } })),
+    );
+
+    // Same shape as the closeStale pause above: each tick fails its one position outright, and the
+    // 4th tick is the one whose closeStale call closes the 3rd run and crosses the self-pause
+    // threshold — the exact tick that, before the fix, also opened an orphan run on the now-disabled
+    // series.
+    for (let day = 1; day <= 4; day++) {
+      setLlmForTests(createFakeLlm([{ fail: "bad_request" }]));
+      const t = new Date(`2026-04-${String(10 + day).padStart(2, "0")}T00:00:01.000Z`);
+      await tick(t);
+    }
+
+    const paused = await e.scope.standingSeries.get(seriesId);
+    expect(paused).toMatchObject({ enabled: false, autoPausedReason: "no_output" });
+
+    const { nextRunAt } = await resumeStandingSeries(e.scope, seriesId);
+    const resumed = await e.scope.standingSeries.get(seriesId);
+    expect(resumed).toMatchObject({ enabled: true, autoPausedReason: null });
+
+    setLlmForTests(createFakeLlm([post("Back from pause.")]));
+    const after = new Date(nextRunAt.getTime() + 1_000);
+    const counts = await tick(after);
+    expect(counts.produced).toBe(1);
+
+    // One Resume was enough: the series must not have self-paused again.
+    const row = await e.scope.standingSeries.get(seriesId);
+    expect(row).toMatchObject({ enabled: true, autoPausedReason: null });
+  }, 60_000);
 });

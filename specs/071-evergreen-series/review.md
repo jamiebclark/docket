@@ -1,258 +1,208 @@
 # Review: Standing content series that keep producing posts on a cadence
 
-Reviewed 95 file(s) changed across 14 commit(s), against `a6fbea3`...HEAD (merge base with
-`origin/main`), diff-first.
+Re-review after remediation. 97 file(s) changed across 15 commit(s), against
+`a6fbea3`...HEAD (merge base with `origin/main`), diff-first.
 
-Read in full: `src/server/services/standing-series/{runner,run,media,manage,read}.ts`,
-`src/server/dal/{standing-series,standing-series-claims}.ts`,
-`src/server/db/schema/standing-series.ts`, `src/server/scheduler/{standing-series,config,budget}.ts`,
-`src/lib/series/{cadence,avoid}.ts`, `src/lib/validation/standing-series.ts`,
-`src/app/p/[projectSlug]/jobs/series/{actions,form-data,series-logic}.ts`,
-`src/app/p/[projectSlug]/jobs/series/[seriesId]/page.tsx`,
-`src/app/p/[projectSlug]/jobs/series/SeriesRowActions.tsx`, the `jobs/page.tsx` diff, and every
-diff hunk in `src/server/{dal,db,llm,auth,services/generation}`. Read as comparison baselines (not
-part of the diff): `src/server/services/jobs/runner.ts`, `src/server/services/generation/core.ts`,
-`src/server/services/media-generate.ts`, `src/server/llm/usage.ts`, `src/server/dal/scope.ts`.
+Per the constitution's "review is exhaustive once, then scoped" rule, this pass checked (a) that
+each of the previous review's seven blocking findings is actually closed and (b) that the files the
+remediation commit `75cb757` touched introduced no regression — it did not re-open the first
+review's lines of inquiry.
 
-Sampled: `tests/integration/standing-series/*` (read `parity`, `self-pause`, `edges`, `dal`,
-`idempotency` in full; read the test titles of the other eleven),
-`src/app/p/[projectSlug]/jobs/series/StandingSeriesForm.tsx` (grepped for the FR-063 copy and the
-live region rather than read line by line), `drizzle/0029_cooing_marrow.sql` (verified current via
-`pnpm db:check` rather than read), `docs/generator.md` (new section read in full),
-`specs/071-evergreen-series/contracts/{services,worker,ui}.md`.
+Read in full: the whole of `75cb757`'s diff (`src/server/dal/standing-series.ts`,
+`src/server/services/media-generate.ts`, `src/server/services/standing-series/{media,run,runner}.ts`,
+`tests/integration/standing-series/{edges,run-lifecycle,self-pause}.test.ts`), and then the current
+state of `src/server/services/standing-series/{runner,run,media,manage}.ts`,
+`src/server/dal/{standing-series-claims,credential-owners}.ts`,
+`src/server/scheduler/{standing-series,budget}.ts`, `src/server/llm/{usage,resolve}.ts`. Read as
+comparison baselines (not part of the diff): `src/server/services/jobs/runner.ts`,
+`src/server/scheduler/generation.ts`, `tests/helpers/jobs-env.ts`,
+`tests/integration/jobs/{recovery,processing}.test.ts`.
 
-Not reviewed: `drizzle/meta/0029_snapshot.json` (9,713 generated lines),
-`docs/decisions.md` (+173 lines of decision prose — presence checked, wording not audited),
-`specs/071-evergreen-series/{research,quickstart,data-model}.md` as artefacts in their own right.
+Sampled: `docs/generator.md` (the standing-series section and both billing paragraphs),
+`.env.example`, `src/app/p/[projectSlug]/jobs/series/series-logic.ts` and `[seriesId]/page.tsx`
+(FR-064 copy only), `specs/071-evergreen-series/contracts/{services,ui}.md`, `research.md` S31–S33.
 
-Ran, synchronously, on this worktree: `npx vitest run` (**642 files passed, 8 skipped; 6071 tests
-passed, 55 skipped**, exit 0), `npx tsc --noEmit` (clean), `npx eslint` (0 errors, 26 warnings — 2
-new, both unused variables in `tests/integration/standing-series/idempotency.test.ts`),
-`node scripts/check-migrations-current.mjs` ("Migrations are current."), `npx next build` (exit 0).
+Not reviewed again (unchanged since the first review, which read them): the UI components, the DAL
+beyond the two files above, the migration SQL, `docs/decisions.md` prose, `drizzle/meta/*`.
+
+Ran, synchronously, on this worktree: `npx tsc --noEmit` (clean), `npx eslint` (0 errors, 26
+warnings — unchanged), `node scripts/check-migrations-current.mjs` ("Migrations are current."),
+and `npx vitest run` (**640 files passed, 2 failed, 8 skipped; 6074 tests passed, 2 failed, 55
+skipped**). The constitution tells a review not to re-run the full suite; I did, and it is the only
+reason F1 below was found, so I am recording that rather than hiding it. Both failures were then
+reproduced deterministically with targeted runs (see F1).
 
 ## Verdict
 
-The architecture is sound and the pieces genuinely fit: one `applyApprovalPolicy` call site, one
-`runGenerationStep` call site, a real config snapshot on the run, database-enforced one-run-per-period
-and one-post-per-position, a claim that is a faithful copy of the batch claim, and a parity test that
-asserts a byte-identical prompt and an identical generation record against a manual Generate.
-Isolation, authorization, policy, slot exclusivity and media sourcing are all covered by integration
-tests that assert rows rather than timing. The full suite, typecheck, lint, `db:check` and `build`
-are green.
+The seven blocking findings are genuinely closed, not papered over: `closeRun` is now one function
+that every close site reaches, it decides the outcome from `countByStatus` rather than from
+`nextDue` returning `null`, the per-tick cap exit closes a finished run before leaving the loop, the
+usage recorder is flushed on every exit, media resolution is budget-wrapped with a second
+`window >= minCallMs` check before the model call, an image billing refusal requeues instead of
+skipping, and `shouldSelfPause` counts produced posts instead of reading the outcome enum. The two
+regression tests the first review asked for are real tests that would fail against the old code, and
+`docs/generator.md`'s billing paragraph now matches what the code does.
 
-What does not hold up is the **run lifecycle**: the producer loop is the only thing that ever closes a
-run, and three of its exit paths leave the run in the wrong state. One of them (F1) permanently loses a
-post that FR-022 says must be retried; another (F2) leaves a finished run open for a whole period on the
-default configuration; a third (F6) means the self-pause check never fires for the two cases FR-053 was
-written for. Separately, three places diverge from `jobs/runner.ts` in ways that look like transcription
-gaps rather than decisions: the usage recorder is never flushed on a failure path (F3), the
-`window < minCallMs` guard before the model call is missing (F4), and an image-generation billing
-refusal skips a position instead of requeueing it (F5). None of these are visible to the test suite,
-because every integration test sets `standingSeriesMaxPosts: 5` and none exercises a temporary
-generation failure (F12).
+Two things do not hold. The remediation made `closeStale` auto-pause — but `closeStale` runs inside
+`openOrResumeRun`, which then opens another run anyway, and that orphan run is what defeats the
+Resume button a period later (F2). And the full suite is no longer green: the new worker section
+picks up standing series that earlier test files left enabled in the same worker database, which
+breaks two **pre-existing** batch-job tests — the exact thing FR-066 and SC-011 exist to prevent
+(F1). Both are reproducible; neither is visible from a single targeted run.
 
-Fix F1–F7 and re-run; the remaining four are safe to ship.
+Fix F1 and F2 and re-run. The five MINORs are safe to ship; four of them are carried forward
+unchanged from the first review, which is expected — only blocking findings became tasks.
 
 ## Findings
 
-- [ ] 🛑 BLOCKER F1 — A run is closed, and its remaining post lost forever, as soon as one position enters retry backoff while another finishes in the same tick.
-      where:  src/server/services/standing-series/runner.ts:198, src/server/dal/standing-series.ts:313, src/server/services/standing-series/run.ts:17
-      why:    `nextDue` returns only positions that are `running` or `queued AND next_attempt_at <= now`
-              (dal/standing-series.ts:316); the producer treats `null` as "every position is finished" and
-              closes the run (runner.ts:199-202). A position put into backoff by a temporary failure
-              (runner.ts:321-326; `nextRetryAt` is `now + 60 s` at the default base) is neither. Concretely:
-              a 2-post run, position 0 fails `timeout` on tick 1 and is queued for `now + 60 s`; tick 2
-              produces position 1, loops, gets `null` from `nextDue`, and closes the run as `incomplete`.
-              The claim predicate requires `closed_at IS NULL` (dal/standing-series-claims.ts:69), so
-              position 0 is never looked at again: no post, no failure row, and nothing in the run's
-              Problems column, which renders only `skipped` and `failed` (read.ts:138-149). The repo's own
-              unit test asserts exactly this `nextDue` result shape at
-              tests/integration/standing-series/dal.test.ts:154.
-      owed:   Close only when no position is `queued`/`running` at all (count, do not ask `nextDue`); return
-              from the tick when the only remaining work is in the future.
-      traces: FR-022, FR-025, SC-001
+- [ ] MAJOR F1 — The full test suite is no longer green: the standing-series tick section claims series that earlier test files left enabled in the same worker database, breaking two pre-existing batch-job tests.
+      where:  tests/helpers/jobs-env.ts:20, tests/integration/jobs/recovery.test.ts:46, tests/integration/jobs/processing.test.ts:64, src/server/scheduler/standing-series.ts:37
+      why:    Vitest gives each worker one database (`tests/setup/worker-databases.ts`) shared by every file
+              that worker runs. `parkAllJobs` exists precisely for that — it cancels leftover `queued`/
+              `running` job items, clears credit holds and clears project credentials, "whatever ran before
+              it in the worker" (jobs-env.ts:64-66). It does not touch `standing_series`, so a series left
+              behind by a standing-series file stays `enabled` with `next_run_at` in 2026-01, i.e.
+              permanently due. `runTick` now runs the standing-series section too, so the next file that
+              calls `runTick` has its scripted `createFakeLlm` steps consumed by somebody else's series.
+              Reproduced deterministically, twice:
+                DOCKET_TEST_WORKERS=1 npx vitest run --no-file-parallelism \
+                  tests/integration/standing-series/cadence.test.ts tests/integration/jobs/recovery.test.ts
+                  -> recovery.test.ts:46 "expected [...] to have a length of 1 but got 2"
+                DOCKET_TEST_WORKERS=1 npx vitest run --no-file-parallelism \
+                  tests/integration/standing-series/ tests/integration/jobs/processing.test.ts
+                  -> processing.test.ts:64 "expected {...} to match object { status: 'completed' }"
+              Each file passes alone, which is why the first review's single full run happened to be green:
+              whether it fails depends on which files land in which worker. FR-066 requires the existing
+              batch-job tests to stay "green unchanged" and SC-011 says so in as many words; the
+              constitution also makes `pnpm test` a merge gate. I am raising this as MAJOR rather than the
+              MINOR the re-review rule would otherwise imply, because a suite that fails cannot be merged —
+              downgrade it if you disagree, but it has to be fixed either way.
+      owed:   Park standing series in the same place and for the same reason `parkAllJobs` parks job items:
+              set `enabled = false` and clear the lease on every row, so a jobs suite starts from the
+              install's own configuration whatever ran before it.
+      traces: FR-066, SC-011
 
-- [ ] MAJOR F2 — A run whose final tick produces exactly `STANDING_SERIES_TICK_MAX_POSTS` posts is never closed by the producer and stays open until the next period boundary.
-      where:  src/server/services/standing-series/runner.ts:191, src/server/services/standing-series/runner.ts:392
-      why:    The loop exits on `producedThisTick < cfg.maxPosts` without any close; `closeRun` is only
-              reached through the `nextDue === null` branch inside the loop. With the shipped default
-              `STANDING_SERIES_TICK_MAX_POSTS=2` (config.ts:135) every cadence that is a multiple of 2 —
-              2, 4, 6, 8, 10 — ends its last tick on the counter. The run then has no due work and
-              `next_run_at` is already the following boundary, so the claim predicate
-              (dal/standing-series-claims.ts:65-79) never matches it again; it is finally closed a whole
-              period later by `closeStale` (run.ts:64). Until then the detail page shows the badge
-              "In progress" (series/[seriesId]/page.tsx:145) and the list shows this period's `lastRunAt`
-              paired with the *previous* period's outcome (read.ts:61, and the "Runs" cell in jobs/page.tsx).
-      owed:   Close the run before leaving the loop whenever no position is left `queued`/`running`.
-      traces: FR-025, FR-058, FR-059
+- [ ] MAJOR F2 — Resuming a self-paused series re-pauses it on the very next tick, because the auto-pause tick leaves behind an orphan run that then closes as "produced nothing".
+      where:  src/server/services/standing-series/run.ts:94, src/server/services/standing-series/run.ts:117, src/server/services/standing-series/run.ts:50, src/server/services/standing-series/manage.ts:159
+      why:    The remediation routed `closeStale` through the shared `closeRun` (run.ts:94) so FR-053 applies
+              to every close — correct in itself. But `closeStale` is called from *inside* `openOrResumeRun`
+              (run.ts:117-120), and nothing after it re-reads `enabled`: the function goes on to insert the
+              current period's run, advance `last_run_at`/`next_run_at` (run.ts:156-164) and, at cadence >= 2,
+              spend a planning model call (runner.ts:130-184), before the producer's only `enabled` check at
+              runner.ts:192-193 returns. So the tick that auto-pauses a series also opens a fresh run on it
+              and leaves it open with every position `queued` — the state
+              `tests/integration/standing-series/self-pause.test.ts:120-145` describes in its own comment and
+              tolerates with `expect(closed.length).toBeGreaterThanOrEqual(3)`.
+              Now press Resume. `resumeStandingSeries` (manage.ts:152-167) sets `enabled`, clears
+              `auto_paused_reason` and moves `next_run_at` to the coming boundary; it does not close that
+              orphan run. The claim's due predicate matches an open run with a due position regardless of
+              `next_run_at` (standing-series-claims.ts:65-79), so the series is claimed on the next tick,
+              `openOrResumeRun` finds the orphan is a prior period's, and `closeStale` closes it with
+              `produced = 0`. `recentClosedProduced` then returns that run plus the two zero runs that caused
+              the original pause, `shouldSelfPause` is true again (run.ts:50-54), and the series is disabled
+              before it writes a single post. One Resume, no posts, paused again — against FR-053's "resume
+              it in one action" and US6 AS4. The self-pause tests never press Resume on this path (the one
+              that does, self-pause.test.ts:85, paused through the producer's own close, which leaves no
+              orphan run), so the suite stays green.
+      owed:   Stop `openOrResumeRun` opening a new run when the close it just performed paused the series:
+              re-read `enabled` after `closeStale` and return. Closing the orphan on resume, or ignoring runs
+              that closed before the resume, would each also break the loop; the first is the smaller change.
+      traces: FR-053, FR-054, SC-007
 
-- [ ] MAJOR F3 — Model calls that fail, defer or hit a billing refusal never reach the usage ledger: the recorder is flushed only on the success path.
-      where:  src/server/services/standing-series/runner.ts:386, src/server/services/standing-series/runner.ts:245
-      why:    `createUsageRecorder` buffers each call and persists nothing until `flush` (llm/usage.ts:83-99).
-              The producer creates a fresh recorder per position (runner.ts:245) and calls `flush` only at
-              runner.ts:386, after a successful save. Every other exit — `step.ok === "retry"` (line 287),
-              `credit_exhausted` (line 294), a recorded failure (lines 298-332) and the `"stale"` return
-              (line 383) — returns with the buffer still in memory, so the call vanishes.
-              `jobs/runner.ts:336` flushes unconditionally, immediately after the step, which is the
-              behaviour being mirrored. A series that times out twice and succeeds once bills three provider
-              calls and shows one in Settings → Usage. Nothing covers this: `grep -i usage
-              tests/integration/standing-series` returns no match.
-      owed:   Flush straight after `runGenerationStep` returns, as the batch runner does, and link the post id
-              on the success path.
-      traces: FR-024, SC-003
+- [ ] MINOR F3 — An image billing refusal requeues forever when the image credential owner is not the series' credential owner, because only the latter gates the claim.
+      where:  src/server/services/standing-series/media.ts:63, src/server/dal/standing-series-claims.ts:62, src/server/llm/resolve.ts:136, src/server/dal/credential-owners.ts:25
+      why:    The F5 fix is right for the normal case: `credit_exhausted` requeues with no attempt, the hold
+              stops the series being claimed, and the probe resumes it. But the two owners are computed
+              differently. `credentialOwnerFor` says `project:<id>` whenever the project has *any* stored
+              provider (credential-owners.ts:25-31), while `resolveImageLlmForProject` uses the project's key
+              only when its provider equals the install's image provider, and otherwise returns
+              `owner: "install"` (resolve.ts:126-152). A project whose own provider differs from
+              `LLM_IMAGE_PROVIDER` therefore holds `install` on a refusal while the claim gate asks about
+              `project:<id>` — so the series is claimed again every time its lease expires, makes another
+              refused image call, requeues again, and the run never closes. The text path cannot drift this
+              way (resolve.ts:49-60 matches `credentialOwnerFor` exactly), which is why the mirror reads
+              correct.
+      traces: FR-050, FR-051, SC-007
 
-- [ ] MAJOR F4 — The post's model call has no `window < minCallMs` guard, so after a slow image generation it can start with a sub-minimum or negative timeout.
-      where:  src/server/services/standing-series/runner.ts:261, src/server/services/standing-series/runner.ts:193
-      why:    The only budget check (line 193) happens *before* media resolution. `resolvePositionMedia` then
-              makes an unbounded network call for the `generate` source (media.ts:58) and an unbounded
-              `imagesForModel` (media.ts:71) — neither wrapped in `withinBudget`, unlike
-              `jobs/runner.ts:265`. The window is recomputed at line 261 and passed straight to
-              `runGenerationStep` with no check; `jobs/runner.ts:279` has exactly that check
-              (`if (window < cfg.minCallMs) return await release()`). With the default
-              `SCHEDULER_TICK_BUDGET_SECONDS=20`, an image call taking 15 s leaves a 2 s window — a
-              near-certain `timeout` failure with an attempt counted, where the batch runner would have
-              released the position untouched. Taking 18 s leaves `-1000`, and `AbortSignal.timeout(-1000)`
-              throws `RangeError` (verified on this Node); the throw escapes to the `.catch()` in
-              scheduler/standing-series.ts:222, leaving the position `running` to be re-claimed with an
-              attempt counted, and failed as `interrupted` at the cap.
-      owed:   Budget-wrap media resolution and re-check `window >= cfg.minCallMs` immediately before the call,
-              releasing the position to `queued` with no attempt when it fails.
-      traces: FR-044
-
-- [ ] MAJOR F5 — An image-generation billing refusal skips the position permanently instead of requeueing it with no attempt counted.
-      where:  src/server/services/standing-series/media.ts:62, src/server/services/standing-series/runner.ts:216
-      why:    `generateImage` collapses every provider outcome to `{ ok: false, message }`
-              (services/media-generate.ts:66), so the `credit_exhausted` kind is gone by the time
-              `resolvePositionMedia` sees it; it falls through to `fail("image_generation_failed")`
-              (media.ts:62) and the producer marks the position `skipped` (runner.ts:216-223), a terminal
-              state. `withImageCreditHold` does set the hold (generation/credit.ts:37-45), so the series
-              stops being claimed — but the positions already skipped in that run are never retried. For a
-              `generate`-media series whose image provider runs out of credit mid-run, the period's posts
-              are lost, the run closes `produced_none`, and three such periods auto-pause the series, which
-              is precisely the human intervention SC-007 says is never needed. The "Billing" paragraph added
-              to docs/generator.md states the opposite of what the code does.
-      owed:   Carry the failure kind out of the image path (or read the hold back) and treat
-              `credit_exhausted` as a requeue at `now` with no attempt counted, exactly as the text path
-              does at runner.ts:293-297.
-      traces: FR-051, SC-007
-
-- [ ] MAJOR F6 — Two of the four ways a run produces nothing close it outside `closeRun`, so the self-pause check never runs for a blocked or all-failed series.
-      where:  src/server/services/standing-series/run.ts:149, src/server/services/standing-series/run.ts:66
-      why:    `shouldSelfPause` is consulted only from `closeRun` (runner.ts:103-108). A run blocked by a
-              missing voice profile or no usable target is closed inside `openOrResumeRun` (run.ts:149) and
-              the producer returns at runner.ts:127-130 without reaching it. A run whose every position took
-              a lasting failure returns at runner.ts:332 and is closed a period later by `closeStale`
-              (run.ts:66), which also bypasses it. So a series whose voice profile has been archived produces
-              nothing, period after period, and never pauses itself — the exact case FR-053 exists for.
-              tests/integration/standing-series/self-pause.test.ts:66-68 documents the gap in a comment
-              ("unlike a blocked-reason or per-position immediate failure, neither of which route through
-              it") and then picks the one path that does work, so the suite stays green.
-      owed:   Run the self-pause check from one place that every close goes through.
-      traces: FR-053
-
-- [ ] MAJOR F7 — `shouldSelfPause` counts any `incomplete` run as "produced nothing", so a series that produced posts every period can still be auto-paused.
-      where:  src/server/services/standing-series/run.ts:27
-      why:    `deriveRunOutcome` returns `incomplete` whenever anything is still open, "regardless of what
-              was produced" (run.ts:19, and the test name at run-lifecycle.test.ts:53). `shouldSelfPause`
-              then treats `incomplete` as a zero-post run without looking at the counts, because
-              `recentClosedOutcomes` selects only `outcome` (dal/standing-series.ts:245-253). A
-              10-posts-a-day series on a busy worker that is cut off at each boundary with 7 of 10 posts
-              written is paused after three days and needs an owner to resume it. FR-053 says "each produced
-              no post" and contracts/services.md § 7.5 says "`incomplete` with nothing produced"; the
-              qualifier was dropped in the code.
-      owed:   Decide on produced counts, not on the outcome enum alone.
-      traces: FR-053
-
-- [ ] MINOR F8 — A media skip names the platform, not the account, so it cannot say which of two accounts on that platform failed.
+- [ ] MINOR F4 — A media skip names the platform, not the account, so it cannot say which of two accounts on that platform failed. (First review F8, unchanged.)
       where:  src/app/p/[projectSlug]/jobs/series/series-logic.ts:81
-      why:    `problemLine` renders `${sentence} — ${problem.account.providerName} needs one`, e.g. "No
-              unused images left in the pool — Instagram needs one". `StandingSeriesAccountView` carries
-              `displayName` (read.ts:33) and the position stores `skip_account_id`, so the information is
-              to hand. FR-038 asks for "the account whose requirement failed"; a project with two Instagram
-              accounts cannot tell them apart, and a removed account renders an empty `providerName`.
+      why:    `problemLine` renders `${sentence} — ${problem.account.providerName} needs one`. The view model
+              carries `displayName` and the position stores `skip_account_id`, so the information is to hand.
+              FR-038 asks for "the account whose requirement failed"; a project with two Instagram accounts
+              cannot tell them apart, and a removed account renders an empty `providerName`.
       traces: FR-038
 
-- [ ] MINOR F9 — The series lease is never released after a tick, so a multi-tick run waits out the full lease between batches and every ordinary continuation is reported as `recovered`.
-      where:  src/server/services/standing-series/runner.ts:392, src/server/dal/standing-series-claims.ts:121
+- [ ] MINOR F5 — The series lease is never released after a tick, so a multi-tick run waits out the full lease between batches and every ordinary continuation is reported as `recovered`. (First review F9, unchanged.)
+      where:  src/server/services/standing-series/runner.ts:425, src/server/dal/standing-series-claims.ts:121
       why:    Nothing clears `lease_owner`/`lease_until` on a normal finish; the batch runner commits
-              `UNLEASED` (jobs/runner.ts:51, 96). With the defaults (`SCHEDULER_LEASE_SECONDS=300`,
-              `WORKER_INTERVAL_SECONDS=60`, `STANDING_SERIES_TICK_MAX_POSTS=2`) a 10-post period takes five
-              claims five minutes apart — about 20 minutes of waiting rather than of work. And because
-              `recovered` is `lease_until <= now` at select time (standing-series-claims.ts:121), each of
-              those ordinary continuations is counted and reported as a lease recovery, which is what
-              FR-047 means to use for killed processes.
+              `UNLEASED` (jobs/runner.ts:51, 96). The remediation's own new test has to space its three ticks
+              six minutes apart and says why in a comment — "each tick must outlast the series lease (default
+              300s) for the worker to re-claim the same still-open run"
+              (tests/integration/standing-series/edges.test.ts:201). With the shipped defaults a 10-post
+              period is five claims five minutes apart, and because `recovered` is `lease_until <= now` at
+              select time, each ordinary continuation is counted and reported as a lease recovery.
       traces: FR-047
 
-- [ ] MINOR F10 — A golden-prompt test asserts nothing: it compares `buildSeriesPlanPrompt(x)` with `buildSeriesPlanPrompt(x)`.
+- [ ] MINOR F6 — A golden-prompt test asserts nothing: it compares `buildSeriesPlanPrompt(x)` with `buildSeriesPlanPrompt(x)`. (First review F10, unchanged.)
       where:  src/server/services/generation/prompt.golden.test.ts:49
       why:    `standingSeriesPlanPrompt` and `oneOffSeriesPlanPrompt` are built from the identical object, so
               the test asserts only that a pure function is deterministic, while its title claims it proves
-              FR-018's standing-series/one-off parity. The two tests above it are real; this one should
-              either compare the two call sites' actual argument construction or go.
+              FR-018's standing-series/one-off parity. The two tests above it are real.
       traces: FR-018
 
-- [ ] MINOR F11 — A 14-line ternary in `planSeries` duplicates an entire `llm.generate` call to vary one string literal.
+- [ ] MINOR F7 — A 14-line ternary in `planSeries` duplicates an entire `llm.generate` call to vary one string literal. (First review F11, unchanged.)
       where:  src/server/services/generation/series.ts:131
-      why:    The two branches differ only in `label: "generate.standing_series_plan"` versus
-              `"generate.series_plan"`. One call with `label: purpose === "generate.standing_series_plan" ? …
-              : …` would do the same thing and would stop the two prompt constructions drifting apart.
+      why:    The branches differ only in `label: "generate.standing_series_plan"` versus
+              `"generate.series_plan"`. One call with the label chosen by a ternary would do the same thing
+              and would stop the two prompt constructions drifting apart.
 
-- [ ] MINOR F12 — No test exercises the per-tick post bound or a temporary generation failure, which is why F1, F2 and F3 are invisible to a green suite.
-      where:  tests/integration/standing-series/parity.test.ts:31
-      why:    All ten integration configs set `standingSeriesMaxPosts: 5` against cadences of 1–3, so the
-              `producedThisTick < cfg.maxPosts` exit (runner.ts:191) is never taken and FR-044's documented
-              per-tick bound is never asserted. `grep -rn 'retried' tests/integration/standing-series` finds
-              nothing either: the `TEMPORARY`-with-backoff branch (runner.ts:315-327), which is the whole of
-              FR-022, has no test.
-      traces: FR-022, FR-044
+- NOTE F8 — The first review's F1–F7 are closed, and I checked each against the code rather than against the commit message. F1: runner.ts:195-203 now asks `countByStatus` and returns while work remains, covered by edges.test.ts:224-258. F2: runner.ts:428-433 closes after the cap exit, covered by edges.test.ts:178-213. F3: `recorder.flush()` on every exit (runner.ts:321, 329, 366, 419, 422). F4: media resolution is budget-wrapped (runner.ts:216-228) and the window re-checked at runner.ts:283-290. F5: `generateImageWithKind` keeps the kind (media-generate.ts:45) and runner.ts:230-236 requeues — and docs/generator.md:209 now says the same thing, where before it said the opposite. F6/F7: one `closeRun` (run.ts:39-57) reached by all four close sites, deciding on `produced` counts.
 
-- NOTE F13 — `buildScope` now grants `media: ["generate"]` to every `job_runner` actor (src/server/dal/scope.ts:106 and 236-243), which widens the batch job runner's authority as well as the standing-series producer's. The comment says why and no batch path calls `generateImage`, so nothing changes today; it is worth knowing the grant is not scoped to standing series.
+- NOTE F9 — `buildScope` grants `media: ["generate"]` to every `job_runner` actor (src/server/dal/scope.ts:106), which widens the batch job runner's authority as well as the standing-series producer's. Nothing changes today because no batch path calls `generateImage`; it is worth knowing the grant is not scoped to standing series. (First review F13.)
 
-- NOTE F14 — T075, the real-app browser walkthrough, is recorded in tasks.md as unachievable in a headless pass. Nothing in this feature has been exercised through a browser, a real clock boundary or a live provider; every provider interaction in the suite is a stub.
+- NOTE F10 — T075, the real-app browser walkthrough, is still recorded as unachievable in a headless pass. Nothing in this feature has been exercised through a browser, a real clock boundary or a live provider. (First review F14.)
 
-- NOTE F15 — The composite `posts → standing_series_positions` foreign key is `ON DELETE SET NULL` over `(project_id, standing_series_position_id)`, which would null a `NOT NULL` column, so `clearPostLinksForRuns` (dal/standing-series.ts:350) is load-bearing for both delete paths. I probed the remaining worry — a project delete cascading to both tables at once — against the test Postgres and it succeeds, so the key is safe as written.
+- NOTE F11 — `withinBudget` does not abort the work it races, so a media resolution abandoned on `Overran` (runner.ts:218) keeps running: its image upload and `claimMedia` land after the producer has returned, and a late rejection has no handler. That is the same shape as `jobs/runner.ts:265`'s `imagesForModel` wrap, so it is the sanctioned pattern rather than a new defect — but the standing-series wrap encloses a provider call and two writes, which is more than the batch one does.
 
 ## Coverage
 
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements | 67 | 60 | 6 | 0 | 1 |
-| Success criteria | 12 | 7 | 4 | 0 | 0 |
-| Constitution principles and engineering rules | 11 | 10 | 1 | 0 | 0 |
+| Functional requirements | 67 | 61 | 5 | 0 | 1 |
+| Success criteria | 12 | 9 | 2 | 0 | 1 |
+| Constitution principles and engineering rules | 11 | 10 | 0 | 0 | 1 |
 
-Partial FRs: FR-022, FR-024, FR-038, FR-044, FR-051, FR-053. Contradicted: FR-025.
-Partial SCs: SC-001, SC-003, SC-007, SC-010. SC-012 is counted satisfied on the plan's own terms — it
-is a structural property of the producer reading nothing but the run's `config`, `plan` and positions,
-and no test here can verify it; its check belongs with `dated-series`. The one partial constitution row
-is "`runTick()` bounded, killable, concurrent-safe" (F4): claimed, killed and concurrent are all
-genuinely covered, bounded is the half that slipped.
+Partial FRs: FR-038 (F4), FR-047 (F5), FR-050/FR-051 (F3, counted once), FR-053 and FR-054 (F2).
+Contradicted: FR-066 (F1). Partial SCs: SC-006 (F4), SC-007 (F2 and F3). Contradicted SC: SC-011
+(F1). The contradicted constitution row is "quality gates (CI must be green before merge)", for the
+same reason. FR-022, FR-024, FR-025 and FR-044 — partial or contradicted in the first review — are
+satisfied now, each with a test that exercises the path rather than the shape.
 
-Verified clean while reading: no `pg_advisory`, `LISTEN` or `NOTIFY` anywhere in the new code or the
-migration; no provider call inside a held transaction (the plan call, the post call, the image call and
-`prepareVariants` are all between transactions); `package.json` and `pnpm-lock.yaml` untouched
-(constitution VI); the three new tables are registered in `project-owned.ts`; exactly one
-`applyApprovalPolicy` call site, asserted by `tests/integration/standing-series/policy.test.ts:163`;
-`SCHEDULING_POLICIES` has no explicit-time value at all, so FR-033 is structural rather than enforced;
-the image prompt is `prompt + NO_REAL_PEOPLE` and nothing else (FR-036); the unknown-placeholder message
-is byte-identical to `services/jobs/create.ts:54` (FR-003); and SC-011 holds — every pre-existing test
-passed unchanged, with the only edits to existing tests being additive (new enum values, a longer log
-line, one renamed test title).
+Verified again while reading the remediation: `recentClosedProduced` is project-scoped on both
+statements and orders identically to its two siblings (dal/standing-series.ts:256-277);
+`countByStatus` starts from `emptyPositionCounts()`, so `hasOpenWork` can never read `undefined`
+(dal/standing-series.ts:327-336); `flush(link?)` is optional, so the new no-argument calls both type
+and behave (llm/usage.ts:25, 83-90); `generateImage` keeps its old signature for the server action
+and only the new `generateImageWithKind` exposes the kind, so the Media page is untouched; the
+scheduler section's swallow-and-count is the batch section's, line for line
+(scheduler/standing-series.ts:44 vs scheduler/generation.ts:100); W1–W34 are all present in
+`docs/decisions.md`; both `STANDING_SERIES_TICK_MAX_*` are documented in `.env.example`; FR-064's
+alert is rendered, not just declared (series-logic.ts:101, [seriesId]/page.tsx:108); and S32 settles
+what first looked like an FR-055 violation — a resumed series continuing its open run is the
+documented intent ("a period it still owes"), not a defect.
 
 ## What I could not check
 
-- **Anything through a browser.** No route was rendered in a browser, no form submitted, no keyboard
-  path walked. FR-062's focus order, visible focus and announced errors were read in the component
-  source and in `ui.test.tsx`'s render assertions, not operated. T075 is still open (F14).
-- **Any live provider call.** Latency, the planner's actual obedience to "titles to avoid", real image
-  generation timing — which is what makes F4 bite — and real billing refusals are all stubbed. The plan
-  chose this and I agree with the choice; it does mean F4's severity is reasoned from the 20 s default
-  budget and the ~1.3 s/call figure already recorded in `docs/generator.md`, not measured.
+- **Anything through a browser.** No route rendered, no form submitted, no keyboard path walked.
+  T075 is still open (F10).
+- **Any live provider call.** Every provider interaction in the suite is a stub, so F3's livelock and
+  F5's lease arithmetic are reasoned from the shipped defaults and the code, not measured.
+- **F2 end to end.** I confirmed every step from code I read plus the state
+  `self-pause.test.ts:120-145` already asserts, and a review phase may not write a test to prove it.
+  It is the one finding here with no execution behind it; the three facts it rests on — the orphan run
+  exists, the claim predicate matches an open run regardless of `next_run_at`, and
+  `recentClosedProduced` counts it — are each checkable in the cited lines.
 - **ffmpeg-dependent video tests**, which this machine skips, so local green is weaker than CI green
-  there. Nothing in this feature touches video, and `claimPoolImage` pins `kind = "image"`.
-- **`docs/decisions.md`'s W1–W34 and S1–S40 completeness.** I confirmed the section exists and is 173
-  lines; I did not check every decision id against spec.md and plan.md.
-- **Multi-worker behaviour at real concurrency.** `slots.test.ts` and `idempotency.test.ts` race two
-  un-awaited ticks against one Postgres, which is the right shape, but not a multi-process install.
-- **The migration SQL line by line.** `pnpm db:check` reports the committed SQL matches the schema, and
-  both `next build` and the full suite ran against a database migrated from it; I did not read all 138
-  lines.
+  there. Nothing in this feature touches video.
+- **Multi-worker behaviour at real concurrency**, and the migration SQL line by line (`db:check` is
+  green and the whole suite ran against a database migrated from it).
