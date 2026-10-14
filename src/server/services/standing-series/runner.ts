@@ -47,6 +47,10 @@ export interface StandingSeriesCounts {
   notRunnable: 0 | 1;
   held: 0 | 1;
   probed: 0 | 1;
+  /** Dated occurrences recorded as missed this tick (contracts/worker.md §5). */
+  missed: number;
+  /** Dated rows whose `next_target_date` moved forward this tick (contracts/worker.md §5). */
+  retired: number;
 }
 
 export const emptyStandingSeriesCounts = (): StandingSeriesCounts => ({
@@ -69,6 +73,8 @@ export const emptyStandingSeriesCounts = (): StandingSeriesCounts => ({
   notRunnable: 0,
   held: 0,
   probed: 0,
+  missed: 0,
+  retired: 0,
 });
 
 export interface StandingSeriesContext {

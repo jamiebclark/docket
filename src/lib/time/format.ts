@@ -22,3 +22,21 @@ export function formatLocal(value: Date | string, timeZone: string): string {
 export function formatFull(value: Date | string, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "full", timeStyle: "long" }).format(new Date(value));
 }
+
+/** A calendar date, e.g. "Mar 14, 2027" (B30). `value` is a "YYYY-MM-DD" string — no zone involved. */
+export function formatLocalDate(value: string): string {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" }).format(
+    new Date(Date.UTC(year!, (month ?? 1) - 1, day)),
+  );
+}
+
+/** A month and day with no year, e.g. "Mar 14" (B30). `value` is "MM-DD" or "YYYY-MM-DD". */
+export function formatMonthDay(value: string): string {
+  const parts = value.split("-");
+  const month = Number(parts.length === 3 ? parts[1] : parts[0]);
+  const day = Number(parts.length === 3 ? parts[2] : parts[1]);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(
+    new Date(Date.UTC(2001, month - 1, day)),
+  );
+}

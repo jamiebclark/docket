@@ -30,6 +30,12 @@ import { createPostsRepo, type PostsRepo } from "./posts";
 import { createProjectLlmRepo, type ProjectLlmRepo } from "./project-llm";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
 import {
+  createDatedOccurrencesRepo,
+  createDatedRowsRepo,
+  type DatedOccurrencesRepo,
+  type DatedRowsRepo,
+} from "./standing-series-dated";
+import {
   createStandingSeriesPositionsRepo,
   createStandingSeriesRepo,
   createStandingSeriesRunsRepo,
@@ -150,6 +156,8 @@ export interface ProjectScope {
   readonly standingSeries: StandingSeriesRepo;
   readonly standingSeriesRuns: StandingSeriesRunsRepo;
   readonly standingSeriesPositions: StandingSeriesPositionsRepo;
+  readonly datedRows: DatedRowsRepo;
+  readonly datedOccurrences: DatedOccurrencesRepo;
   readonly jobs: JobsRepo;
   readonly jobItems: JobItemsRepo;
   readonly apiKeys: ApiKeysRepo;
@@ -255,6 +263,8 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     standingSeries: createStandingSeriesRepo(exec, data.project.id),
     standingSeriesRuns: createStandingSeriesRunsRepo(exec, data.project.id),
     standingSeriesPositions: createStandingSeriesPositionsRepo(exec, data.project.id),
+    datedRows: createDatedRowsRepo(exec, data.project.id),
+    datedOccurrences: createDatedOccurrencesRepo(exec, data.project.id),
     jobs: createJobsRepo(exec, data.project.id),
     jobItems: createJobItemsRepo(exec, data.project.id),
     apiKeys: createApiKeysRepo(exec, data.project.id),

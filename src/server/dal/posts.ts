@@ -30,6 +30,7 @@ export type PostPatch = Partial<
     | "reviewedByUserId"
     | "reviewedAt"
     | "rejectionReason"
+    | "queueNotBefore"
   >
 >;
 

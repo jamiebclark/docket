@@ -18,31 +18,41 @@ export type StandingSeriesOutcome = NonNullable<StandingSeriesRunRecord["outcome
 
 export type NewStandingSeries = Omit<typeof standingSeries.$inferInsert, "id" | "projectId" | "createdAt" | "updatedAt">;
 export type StandingSeriesPatch = Partial<
-  Pick<
-    typeof standingSeries.$inferInsert,
-    | "name"
-    | "brief"
-    | "template"
-    | "templateFields"
-    | "voiceProfileId"
-    | "targetAccountIds"
-    | "cadenceCount"
-    | "cadencePeriod"
-    | "mediaSource"
-    | "mediaPoolTag"
-    | "imagePrompt"
-    | "requestedApproval"
-    | "requestedScheduling"
-    | "approvalPolicy"
-    | "schedulingPolicy"
-    | "enabled"
-    | "autoPausedReason"
-    | "lastRunAt"
-    | "nextRunAt"
-    | "leaseOwner"
-    | "leaseUntil"
-    | "lastClaimedAt"
-  >
+  Omit<
+    Pick<
+      typeof standingSeries.$inferInsert,
+      | "name"
+      | "brief"
+      | "template"
+      | "templateFields"
+      | "voiceProfileId"
+      | "targetAccountIds"
+      | "occurrenceRule"
+      | "leadDays"
+      | "listVersion"
+      | "lastImportAt"
+      | "lastImportFilename"
+      | "lastImportRowCount"
+      | "lastImportProblems"
+      | "cadenceCount"
+      | "cadencePeriod"
+      | "mediaSource"
+      | "mediaPoolTag"
+      | "imagePrompt"
+      | "requestedApproval"
+      | "requestedScheduling"
+      | "approvalPolicy"
+      | "schedulingPolicy"
+      | "enabled"
+      | "autoPausedReason"
+      | "lastRunAt"
+      | "nextRunAt"
+      | "leaseOwner"
+      | "leaseUntil"
+      | "lastClaimedAt"
+    >,
+    "nextRunAt"
+  > & { nextRunAt: Date | null }
 >;
 
 export type NewStandingSeriesRun = Omit<typeof standingSeriesRuns.$inferInsert, "id" | "projectId" | "openedAt" | "closedAt" | "outcome">;
@@ -78,6 +88,7 @@ const emptyPositionCounts = (): Record<StandingSeriesPositionStatus, number> => 
   produced: 0,
   failed: 0,
   skipped: 0,
+  missed: 0,
 });
 
 export interface StandingSeriesRepo {
@@ -96,6 +107,8 @@ export interface StandingSeriesRepo {
   nameTaken(name: string, exceptId?: string): Promise<boolean>;
   /** Positions ever `produced` across every run, for the delete confirmation's post count. */
   countProduced(id: string): Promise<number>;
+  /** `UPDATE … SET list_version = list_version + 1 WHERE id = ? AND list_version = ?` (B21). */
+  bumpListVersion(id: string, expected: number): Promise<boolean>;
 }
 
 export interface StandingSeriesRunsRepo {
@@ -200,6 +213,14 @@ export function createStandingSeriesRepo(db: Database, projectId: string): Stand
           ),
         );
       return Number(row?.n ?? 0);
+    },
+    async bumpListVersion(id, expected) {
+      const rows = await db
+        .update(standingSeries)
+        .set({ listVersion: expected + 1 })
+        .where(and(mine(id), eq(standingSeries.listVersion, expected)))
+        .returning({ id: standingSeries.id });
+      return rows.length > 0;
     },
   };
 }

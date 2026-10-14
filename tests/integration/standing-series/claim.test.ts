@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { claimDueStandingSeries } from "../../../src/server/dal/standing-series-claims";
 import { createStandingSeriesPositionsRepo, createStandingSeriesRepo, createStandingSeriesRunsRepo } from "../../../src/server/dal/standing-series";
+import { createDatedRowsRepo } from "../../../src/server/dal/standing-series-dated";
 import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
@@ -53,6 +54,44 @@ async function dueSeries(overrides: { nextRunAt?: Date; lastClaimedAt?: Date | n
     });
   }
   return { project, series };
+}
+
+async function datedSeries(opts: { nextTargetDate: string | null; leadDays?: number }) {
+  const project = await createProject();
+  const voice = await createVoiceProfile(project.id);
+  const repo = createStandingSeriesRepo(getDb(), project.id);
+  const series = await repo.insert({
+    name: `Dated ${randomUUID().slice(0, 8)}`,
+    brief: "Brief.",
+    template: "Write about {{brief}}.",
+    templateFields: [],
+    voiceProfileId: voice.id,
+    targetAccountIds: [randomUUID()],
+    cadenceCount: null,
+    cadencePeriod: null,
+    occurrenceRule: "dated_list",
+    leadDays: opts.leadDays ?? 0,
+    mediaSource: "none",
+    approvalPolicy: "review_required",
+    schedulingPolicy: "leave_as_draft",
+    nextRunAt: null,
+  });
+  const rows = createDatedRowsRepo(getDb(), project.id);
+  const [row] = await rows.insertMany(series.id, [
+    {
+      ordinal: 1,
+      month: 6,
+      day: 15,
+      year: null,
+      keyValue: "row-1",
+      fields: {},
+      mediaFilename: null,
+      mediaAssetId: null,
+      nextTargetDate: opts.nextTargetDate,
+      sourceLine: 2,
+    },
+  ]);
+  return { project, series, row: row! };
 }
 
 describe("claimDueStandingSeries", () => {
@@ -157,5 +196,59 @@ describe("claimDueStandingSeries", () => {
     const reread = await positions.update(position.id, {});
     expect(reread).toMatchObject({ status: "queued", attemptCount: 1 });
     expect(reread!.nextAttemptAt.getTime()).toBe(now.getTime());
+  });
+
+  it("claims a dated series whose window is open", async () => {
+    const now = new Date("2026-06-15T12:00:00.000Z");
+    const today = "2026-06-15";
+    const { series } = await datedSeries({ nextTargetDate: today });
+    const result = await claimDueStandingSeries({ now, limit: 5, leaseMs: LEASE_MS, maxAttempts: 3 });
+    expect(result.series.map((c) => c.series.id)).toContain(series.id);
+  });
+
+  it("claims a dated series whose window has already closed, for retirement", async () => {
+    const now = new Date("2026-06-20T12:00:00.000Z");
+    const { series } = await datedSeries({ nextTargetDate: "2026-06-15" });
+    const result = await claimDueStandingSeries({ now, limit: 5, leaseMs: LEASE_MS, maxAttempts: 3 });
+    expect(result.series.map((c) => c.series.id)).toContain(series.id);
+  });
+
+  it("does not claim a dated series whose window has not opened yet", async () => {
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const { series } = await datedSeries({ nextTargetDate: "2026-06-15" });
+    const result = await claimDueStandingSeries({ now, limit: 5, leaseMs: LEASE_MS, maxAttempts: 3 });
+    expect(result.series.map((c) => c.series.id)).not.toContain(series.id);
+  });
+
+  it("does not claim a dated series with no row due (next_target_date NULL everywhere)", async () => {
+    const now = new Date("2026-06-15T12:00:00.000Z");
+    const { series } = await datedSeries({ nextTargetDate: null });
+    const result = await claimDueStandingSeries({ now, limit: 5, leaseMs: LEASE_MS, maxAttempts: 3 });
+    expect(result.series.map((c) => c.series.id)).not.toContain(series.id);
+  });
+
+  it("respects lead_days when a dated row's window opens early", async () => {
+    const now = new Date("2026-06-13T12:00:00.000Z");
+    const { series } = await datedSeries({ nextTargetDate: "2026-06-15", leadDays: 3 });
+    const result = await claimDueStandingSeries({ now, limit: 5, leaseMs: LEASE_MS, maxAttempts: 3 });
+    expect(result.series.map((c) => c.series.id)).toContain(series.id);
+  });
+
+  it("orders a same-tick due dated series behind a due cadence series (NULLS LAST) without excluding it", async () => {
+    const now = new Date("2026-06-15T12:00:00.000Z");
+    const cadence = await dueSeries({ nextRunAt: now });
+    const { series: dated } = await datedSeries({ nextTargetDate: "2026-06-15" });
+    const result = await claimDueStandingSeries({ now, limit: 2, leaseMs: LEASE_MS, maxAttempts: 3 });
+    const ids = result.series.map((c) => c.series.id);
+    expect(ids).toEqual([cadence.series.id, dated.id]);
+  });
+
+  it("excludes a credit-held owner's dated series entirely", async () => {
+    const now = new Date("2026-06-15T12:00:00.000Z");
+    const { series } = await datedSeries({ nextTargetDate: "2026-06-15" });
+    await seedCreditHold(INSTALL_CREDENTIAL_OWNER, { heldSince: now, nextProbeAt: new Date(now.getTime() + 10 * LEASE_MS) });
+    const result = await claimDueStandingSeries({ now, limit: 5, leaseMs: LEASE_MS, maxAttempts: 3 });
+    expect(result.series.map((c) => c.series.id)).not.toContain(series.id);
+    expect(result.held).toEqual([INSTALL_CREDENTIAL_OWNER]);
   });
 });

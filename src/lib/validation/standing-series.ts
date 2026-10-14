@@ -30,30 +30,47 @@ const mediaSchema = z.discriminatedUnion("source", [
 ]);
 export type StandingSeriesMediaInput = z.infer<typeof mediaSchema>;
 
-export const createStandingSeriesSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, { error: "Give the series a name" })
-    .max(STANDING_SERIES_NAME_MAX, { error: `A name can be at most ${STANDING_SERIES_NAME_MAX} characters` }),
-  brief: z.string().trim().min(1, { error: "Describe what the series is about" }).max(BRIEF_MAX),
-  template: z
-    .string()
-    .trim()
-    .min(1, { error: "Write the instructions for each post" })
-    .max(INSTRUCTIONS_MAX, { error: `Instructions are at most ${INSTRUCTIONS_MAX} characters` }),
-  voiceProfileId: z.uuid({ error: "Choose a voice profile" }),
-  targetAccountIds: z
-    .array(z.uuid())
-    .min(1, { error: "Choose at least one account" })
-    .max(TARGET_ACCOUNTS_MAX)
-    .refine((ids) => new Set(ids).size === ids.length, { error: "Each account can be chosen once" }),
-  cadence: cadenceSchema,
-  media: mediaSchema,
-  approval: approvalPolicySchema.nullish(),
-  scheduling: schedulingPolicySchema.nullish(),
-  confirmUnreviewedQueue: z.boolean().default(false),
-});
+export const OCCURRENCE_RULES = ["cadence", "dated_list"] as const;
+export type OccurrenceRule = (typeof OCCURRENCE_RULES)[number];
+
+export const createStandingSeriesSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, { error: "Give the series a name" })
+      .max(STANDING_SERIES_NAME_MAX, { error: `A name can be at most ${STANDING_SERIES_NAME_MAX} characters` }),
+    brief: z.string().trim().min(1, { error: "Describe what the series is about" }).max(BRIEF_MAX),
+    template: z
+      .string()
+      .trim()
+      .min(1, { error: "Write the instructions for each post" })
+      .max(INSTRUCTIONS_MAX, { error: `Instructions are at most ${INSTRUCTIONS_MAX} characters` }),
+    voiceProfileId: z.uuid({ error: "Choose a voice profile" }),
+    targetAccountIds: z
+      .array(z.uuid())
+      .min(1, { error: "Choose at least one account" })
+      .max(TARGET_ACCOUNTS_MAX)
+      .refine((ids) => new Set(ids).size === ids.length, { error: "Each account can be chosen once" }),
+    occurrenceRule: z.enum(OCCURRENCE_RULES).default("cadence"),
+    cadence: cadenceSchema.nullish(),
+    leadDays: z.number().int().min(0).max(30).default(0),
+    media: mediaSchema,
+    approval: approvalPolicySchema.nullish(),
+    scheduling: schedulingPolicySchema.nullish(),
+    confirmUnreviewedQueue: z.boolean().default(false),
+  })
+  .superRefine((val, ctx) => {
+    if (val.occurrenceRule === "cadence" && !val.cadence) {
+      ctx.addIssue({ code: "custom", message: "Choose how often it posts", path: ["cadence"] });
+    }
+    if (val.occurrenceRule === "dated_list" && val.cadence) {
+      ctx.addIssue({ code: "custom", message: "A dated series has no cadence", path: ["cadence"] });
+    }
+    if (val.occurrenceRule === "cadence" && val.leadDays !== 0) {
+      ctx.addIssue({ code: "custom", message: "Lead time only applies to a dated list", path: ["leadDays"] });
+    }
+  });
 export type CreateStandingSeriesInput = z.infer<typeof createStandingSeriesSchema>;
 
 export const updateStandingSeriesSchema = createStandingSeriesSchema;
@@ -61,14 +78,29 @@ export type UpdateStandingSeriesInput = z.infer<typeof updateStandingSeriesSchem
 
 export const standingSeriesRunConfigSchema = z.object({
   v: z.literal(1),
+  rule: z.enum(OCCURRENCE_RULES).default("cadence"),
   brief: z.string(),
   template: z.string(),
   templateFields: z.array(z.string()),
   voiceProfileId: z.uuid(),
   targetAccountIds: z.array(z.uuid()),
-  cadence: cadenceSchema,
+  cadence: cadenceSchema.nullable(),
+  leadDays: z.number().int().min(0).max(30).default(0),
   media: mediaSchema,
   requested: z.object({ approval: approvalPolicySchema.nullable(), scheduling: schedulingPolicySchema.nullable() }),
   resolved: z.object({ approval: approvalPolicySchema, scheduling: schedulingPolicySchema }),
 });
 export type StandingSeriesRunConfig = z.infer<typeof standingSeriesRunConfigSchema>;
+
+/** `standing_series_positions.dated`: the position's whole dated payload (data-model.md §5). */
+export const datedPositionSchema = z.object({
+  v: z.literal(1),
+  rowId: z.string(),
+  year: z.number().int(),
+  targetDate: z.string(),
+  keyValue: z.string(),
+  values: z.record(z.string(), z.string()),
+  mediaAssetId: z.string().nullable(),
+  mediaFilename: z.string().nullable(),
+});
+export type DatedPosition = z.infer<typeof datedPositionSchema>;

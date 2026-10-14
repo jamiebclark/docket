@@ -15,23 +15,37 @@ export interface CsvProblem {
   line: number | null;
   message: string;
 }
+export interface TaggedCsvProblem extends CsvProblem {
+  scope: "file" | "row";
+}
 export interface CsvRow {
   line: number;
   values: Record<string, string>;
+}
+export interface CsvFileResult {
+  problems: TaggedCsvProblem[];
+  columns: string[];
+  rows: CsvRow[];
 }
 export type CsvParseResult =
   | { ok: true; columns: string[]; rowCount: number; rows: CsvRow[]; preview: CsvRow[] }
   | { ok: false; problems: CsvProblem[] };
 
-const fail = (message: string, line: number | null = null): CsvParseResult => ({ ok: false, problems: [{ line, message }] });
+/** The tagged core of `parseJobCsv`: every problem carries `scope: "file" | "row"`, in today's
+ *  push order (header problems, then row problems, then the over-500 count). Pure. (B1) */
+export function parseCsvFile(bytes: Uint8Array): CsvFileResult {
+  const fileFail = (message: string, line: number | null = null): CsvFileResult => ({
+    problems: [{ line, message, scope: "file" }],
+    columns: [],
+    rows: [],
+  });
 
-export function parseJobCsv(bytes: Uint8Array): CsvParseResult {
-  if (bytes.byteLength > CSV_MAX_BYTES) return fail("The file is larger than 1 MB.");
+  if (bytes.byteLength > CSV_MAX_BYTES) return fileFail("The file is larger than 1 MB.");
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    return fail("The file is not UTF-8 text.");
+    return fileFail("The file is not UTF-8 text.");
   }
 
   let records: { record: string[]; info: { lines: number } }[];
@@ -41,26 +55,26 @@ export function parseJobCsv(bytes: Uint8Array): CsvParseResult {
     if (error instanceof CsvError) {
       const line = Number((error as CsvError & { lines?: number }).lines) || null;
       const where = line === null ? "" : `Line ${line}: `;
-      if (error.code === "CSV_QUOTE_NOT_CLOSED") return fail(`${where}a quoted value is not closed`, line);
-      if (error.code === "INVALID_OPENING_QUOTE") return fail(`${where}a quote appears inside an unquoted value`, line);
-      return fail(`${where}the file could not be read as CSV`, line);
+      if (error.code === "CSV_QUOTE_NOT_CLOSED") return fileFail(`${where}a quoted value is not closed`, line);
+      if (error.code === "INVALID_OPENING_QUOTE") return fileFail(`${where}a quote appears inside an unquoted value`, line);
+      return fileFail(`${where}the file could not be read as CSV`, line);
     }
     throw error;
   }
 
-  const problems: CsvProblem[] = [];
+  const problems: TaggedCsvProblem[] = [];
   const header = records[0]?.record.map((h) => h.trim()) ?? [];
   const seen = new Map<string, number>();
   header.forEach((name, i) => {
     const n = i + 1;
-    if (name === "") problems.push({ line: 1, message: `Column ${n} has no name` });
+    if (name === "") problems.push({ line: 1, message: `Column ${n} has no name`, scope: "file" });
     else if (name.length > CSV_COLUMN_NAME_MAX || !COLUMN_NAME.test(name)) {
-      problems.push({ line: 1, message: `Column "${name}" can only use letters, numbers, spaces, _ - and .` });
+      problems.push({ line: 1, message: `Column "${name}" can only use letters, numbers, spaces, _ - and .`, scope: "file" });
     }
     if (name !== "") {
       const key = name.toLowerCase();
       const first = seen.get(key);
-      if (first !== undefined) problems.push({ line: 1, message: `Columns ${first} and ${n} have the same name` });
+      if (first !== undefined) problems.push({ line: 1, message: `Columns ${first} and ${n} have the same name`, scope: "file" });
       else seen.set(key, n);
     }
   });
@@ -70,22 +84,28 @@ export function parseJobCsv(bytes: Uint8Array): CsvParseResult {
     if (record.every((v) => v.trim() === "")) continue;
     const line = info.lines;
     if (record.length > header.length) {
-      problems.push({ line, message: `Line ${line}: ${record.length} values but the header has ${header.length} columns` });
+      problems.push({ line, message: `Line ${line}: ${record.length} values but the header has ${header.length} columns`, scope: "row" });
       continue;
     }
     if (record.reduce((n, v) => n + v.length, 0) > JOB_ITEM_DATA_MAX) {
-      problems.push({ line, message: `Line ${line}: the row is longer than ${JOB_ITEM_DATA_MAX.toLocaleString("en-US")} characters` });
+      problems.push({ line, message: `Line ${line}: the row is longer than ${JOB_ITEM_DATA_MAX.toLocaleString("en-US")} characters`, scope: "row" });
       continue;
     }
     rows.push({ line, values: Object.fromEntries(header.map((h, i) => [h, record[i] ?? ""])) });
   }
 
-  if (rows.length === 0 && problems.length === 0) return fail("The file has no data rows");
+  if (rows.length === 0 && problems.length === 0) return fileFail("The file has no data rows");
   if (rows.length > JOB_ITEMS_MAX) {
-    problems.push({ line: null, message: `The file has ${rows.length} data rows; the limit is ${JOB_ITEMS_MAX}` });
+    problems.push({ line: null, message: `The file has ${rows.length} data rows; the limit is ${JOB_ITEMS_MAX}`, scope: "file" });
   }
-  if (problems.length > 0) return { ok: false, problems };
-  return { ok: true, columns: header, rowCount: rows.length, rows, preview: rows.slice(0, 5) };
+  return { problems, columns: header, rows };
+}
+
+/** UNCHANGED signature and behaviour: any problem refuses the whole file. */
+export function parseJobCsv(bytes: Uint8Array): CsvParseResult {
+  const r = parseCsvFile(bytes);
+  if (r.problems.length > 0) return { ok: false, problems: r.problems.map(({ line, message }) => ({ line, message })) };
+  return { ok: true, columns: r.columns, rowCount: r.rows.length, rows: r.rows, preview: r.rows.slice(0, 5) };
 }
 
 const clip = (text: string) => (text.length > 200 ? text.slice(0, 200) : text);

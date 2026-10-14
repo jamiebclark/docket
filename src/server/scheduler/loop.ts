@@ -29,7 +29,7 @@ function summaryLine(result: unknown, ms: number): string {
   const counts = sections?.publishing?.counts ?? {};
   const gen = sections?.generation?.counts ?? {};
   const series = sections?.standingSeries?.counts ?? {};
-  return `Docket scheduler: tick ${ms}ms published=${counts.done ?? 0} failed=${counts.failed ?? 0} ambiguous=${counts.ambiguous ?? 0} deferred=${counts.deferred ?? 0} generated=${gen.done ?? 0} gen_failed=${gen.failed ?? 0} series_produced=${series.produced ?? 0} series_skipped=${series.skipped ?? 0} series_failed=${series.failed ?? 0}`;
+  return `Docket scheduler: tick ${ms}ms published=${counts.done ?? 0} failed=${counts.failed ?? 0} ambiguous=${counts.ambiguous ?? 0} deferred=${counts.deferred ?? 0} generated=${gen.done ?? 0} gen_failed=${gen.failed ?? 0} series_produced=${series.produced ?? 0} series_skipped=${series.skipped ?? 0} series_failed=${series.failed ?? 0} series_missed=${series.missed ?? 0} series_retired=${series.retired ?? 0}`;
 }
 
 /**

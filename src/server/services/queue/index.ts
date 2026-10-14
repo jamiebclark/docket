@@ -5,6 +5,7 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { ProjectScope } from "../../dal/scope";
 import { getEnv } from "../../env";
 import { hasLiveLease } from "../posts/cancel";
+import { queueFloor } from "../posts/index";
 import { applyDerivedStatus } from "../posts/status";
 import { occurrencesBetween } from "./occurrences";
 
@@ -146,7 +147,10 @@ export async function moveToNextFreeSlot(scope: ProjectScope, targetId: string):
     if (!target) throw new NotFoundError();
     if (target.status !== "scheduled") throw new ConflictError("Only a scheduled post can be moved.");
     const exclude = [target.slotOccurrenceAt, target.scheduledAt].filter((d): d is Date => d !== null);
-    const result = await allocateNextFree(tx, { id, accountId: target.socialAccountId }, { after: await clock.now(), exclude });
+    const now = await clock.now();
+    const post = await tx.posts.get(target.postId);
+    if (!post) throw new NotFoundError();
+    const result = await allocateNextFree(tx, { id, accountId: target.socialAccountId }, { after: queueFloor(post, now), exclude });
     if (!result.ok) throw new ConflictError(result.message);
     await applyDerivedStatus(tx, target.postId);
     return result.planned;
@@ -205,7 +209,10 @@ async function pullForwardBody(tx: ActionTx, id: string): Promise<PullMove[]> {
   let after = now;
   for (const t of queued) {
     const from = t.slotOccurrenceAt!;
-    const r = await allocateNextFree(tx, { id: t.id, accountId: id }, { after });
+    const post = await tx.posts.get(t.postId);
+    if (!post) throw new NotFoundError();
+    const floor = queueFloor(post, now);
+    const r = await allocateNextFree(tx, { id: t.id, accountId: id }, { after: floor.getTime() > after.getTime() ? floor : after });
     if (r.ok && r.instant.getTime() > from.getTime()) {
       // Only active slots are candidates, so a target on a paused or deleted slot can be
       // offered something later. Never move later: keep the occurrence it held (F19).

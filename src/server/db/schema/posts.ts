@@ -76,6 +76,7 @@ export const posts = pgTable(
     rejectionReason: text("rejection_reason"),
     createdByUserId: uuid("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
     createdByApiKeyId: uuid("created_by_api_key_id"),
+    queueNotBefore: timestamp("queue_not_before", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
