@@ -220,7 +220,20 @@ Pinterest behaviour is added here.
 
 ---
 
-## Phase 8: Parked — human-owned, run last
+## Phase 8: Review remediation
+
+**Purpose**: the blocking findings of `review.md` (one pass over this entry's landed code and docs). Each task
+carries its finding id and location so it can be traced back to the reasoning. Nothing else in `tasks.md`
+changes; T073–T074 stay parked and are not prerequisites of these.
+
+- [ ] T075 Count the pin title and link in **code points** when refusing them, so the refusal agrees with the panel's counter and the declared `countingRule`: in `validatePinterest`, replace `values.title.length` and `values.link.length` with the code-point count (`countText(value, "code_points")` from `src/providers/text.ts`, or `[...value].length`) for the comparison, the `count` field and the message; add a non-BMP case to `src/providers/pinterest/validate.test.ts` (a 51-emoji title is 51 code points and must publish; 101 emoji must be refused as 101) — review F1 (MAJOR), src/providers/pinterest/validate.ts:63
+- [ ] T076 Correct the Trial rate limits in `docs/pinterest-setup.md`: Trial caps the whole app at 300 pin creations a day shared across every connected account, and 100 a minute per user per app is the **Standard** rate (which is what Docket's `defaultPublishLimit` models) — match `docs/limits.md`'s Pinterest row and `docs/research/pinterest.md`'s rate-limit table, and keep the `tests/integration/docs/pinterest-docs.test.ts` "names the Trial rate limits" assertions satisfied — review F2 (MAJOR), docs/pinterest-setup.md:68
+
+**Checkpoint**: `pnpm vitest run src/providers/pinterest tests/integration/pinterest tests/integration/compose tests/integration/docs` passes, then the usual full `pnpm lint && pnpm typecheck && pnpm test` once at the end of the pass. No `pnpm db:check` (still no schema change).
+
+---
+
+## Phase 9: Parked — human-owned, run last
 
 **Purpose**: nothing in this feature depends on these tasks completing; they need a real Pinterest business
 account, a registered app and Trial approval, none of which any pipeline phase has (no browser, no network,
