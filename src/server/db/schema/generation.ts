@@ -219,9 +219,13 @@ export const generationFailures = pgTable(
       .on(t.projectId, t.standingSeriesRunId)
       .where(sql`${t.standingSeriesRunId} IS NOT NULL`),
     check("generation_failures_series_pair", sql`(${t.seriesId} IS NULL) = (${t.seriesPosition} IS NULL)`),
+    // Phrased as the complement of the pre-standing-series modes, not as the two new values
+    // themselves: a value just added by `ALTER TYPE ... ADD VALUE` cannot be used until that
+    // transaction commits, and a from-scratch migration run applies this constraint in the same
+    // transaction that adds the value.
     check(
       "generation_failures_standing_mode_pair",
-      sql`(${t.mode} IN ('standing_series_plan','standing_series_post')) = (${t.standingSeriesRunId} IS NOT NULL)`,
+      sql`(${t.mode} NOT IN ('single','series_plan','series_post','regenerate')) = (${t.standingSeriesRunId} IS NOT NULL)`,
     ),
     check(
       "generation_failures_standing_position_needs_run",

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import {
+  posts,
   standingSeries,
   standingSeriesPositions,
   standingSeriesRuns,
@@ -341,6 +342,34 @@ export function createStandingSeriesPositionsRepo(db: Database, projectId: strin
 }
 
 /**
+ * `posts(project_id, standing_series_position_id)` references a position through a composite key
+ * (FR-057's traceability), and Postgres has no per-column `SET NULL` for a composite foreign key —
+ * deleting a still-referenced position would null `project_id` too and fail its `NOT NULL`. Clearing
+ * the link first, for every post under the given runs, leaves the cascade below nothing to act on.
+ */
+async function clearPostLinksForRuns(exec: Database, runIds: readonly string[]): Promise<void> {
+  if (runIds.length === 0) return;
+  await exec
+    .update(posts)
+    .set({ standingSeriesPositionId: null })
+    .where(
+      inArray(
+        posts.standingSeriesPositionId,
+        exec.select({ id: standingSeriesPositions.id }).from(standingSeriesPositions).where(inArray(standingSeriesPositions.runId, runIds as string[])),
+      ),
+    );
+}
+
+/** Clears every post's link to a position under any run of `seriesId`, before the series cascades away. */
+export async function clearPostLinksForSeries(exec: Database, projectId: string, seriesId: string): Promise<void> {
+  const runs = await exec
+    .select({ id: standingSeriesRuns.id })
+    .from(standingSeriesRuns)
+    .where(and(eq(standingSeriesRuns.projectId, projectId), eq(standingSeriesRuns.seriesId, seriesId)));
+  await clearPostLinksForRuns(exec, runs.map((r) => r.id));
+}
+
+/**
  * Housekeeping: deletes at most `limit` closed runs older than `before`; positions and their
  * `generation_failures` cascade. An open run (`closedAt IS NULL`) is never matched. Callers wrap
  * this in `crossProject` (contracts/worker.md §6).
@@ -353,9 +382,11 @@ export async function pruneClosedStandingSeriesRunsBefore(before: Date, limit: n
     .where(and(isNotNull(standingSeriesRuns.closedAt), lt(standingSeriesRuns.closedAt, before)))
     .limit(limit);
   if (ids.length === 0) return 0;
+  const runIds = ids.map((r) => r.id);
+  await clearPostLinksForRuns(db, runIds);
   const gone = await db
     .delete(standingSeriesRuns)
-    .where(inArray(standingSeriesRuns.id, ids.map((r) => r.id)))
+    .where(inArray(standingSeriesRuns.id, runIds))
     .returning({ id: standingSeriesRuns.id });
   return gone.length;
 }

@@ -61,6 +61,8 @@ import { createAnthropicProvider } from "../../../src/server/llm/anthropic";
 import { createOpenAiProvider } from "../../../src/server/llm/openai";
 import type { LlmConfig } from "../../../src/server/llm/config";
 import { setLlmForTests, setLlmFactoryForTests } from "../../../src/server/llm";
+import { createStandingSeries } from "../../../src/server/services/standing-series/manage";
+import StandingSeriesDetailPage from "../../../src/app/p/[projectSlug]/jobs/series/[seriesId]/page";
 import ModelPage from "../../../src/app/p/[projectSlug]/settings/model/page";
 import UsagePage from "../../../src/app/p/[projectSlug]/settings/usage/page";
 import MediaPage from "../../../src/app/p/[projectSlug]/media/page";
@@ -90,6 +92,7 @@ import { createFakeLlm } from "../../helpers/fake-llm";
 import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
 import { clearHolds, clearProjectCredentials, jobsEnv, modelOk } from "../../helpers/jobs-env";
+import { atTime } from "../../helpers/clock";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { eventsFor } from "../../helpers/activity";
@@ -585,6 +588,70 @@ describe("secret scan (FR-020, SC-005)", () => {
     pieces.push({ place: "page: media (owner)", text: await renderMediaPage(genEnv.owner) });
     pieces.push({ place: "page: media (admin)", text: await renderMediaPage(genEnv.admin) });
     pieces.push({ place: "page: media (editor)", text: await renderMediaPage(genEnv.editor) });
+    session.current = sessionBeforeLlm;
+
+    // Standing series (T070): a pool series and a generate series, ticked through the worker (whose own
+    // log lines are already in `pieces` via the console spy), then /jobs and the series detail page
+    // rendered for all three roles.
+    const seriesCreatedAt = new Date("2026-01-10T00:00:00.000Z");
+    const seriesFiringAt = new Date("2026-01-11T00:00:01.000Z");
+    const seriesInput = (over: Record<string, unknown> = {}) => ({
+      name: `Scan series ${randomUUID().slice(0, 8)}`,
+      brief: "Brief.",
+      template: "Write a short post.",
+      voiceProfileId: genEnv.profile.id,
+      targetAccountIds: [genEnv.account.id],
+      cadence: { count: 1, period: "day" as const },
+      approval: null,
+      scheduling: null,
+      confirmUnreviewedQueue: false,
+      ...over,
+    });
+    const { seriesId: poolSeriesId } = await atTime(seriesCreatedAt, () =>
+      createStandingSeries(genEnv.scope, seriesInput({ media: { source: "pool" } })),
+    );
+    const poolAssetKey = `projects/${genEnv.project.id}/media/${randomUUID()}/original.png`;
+    const poolAssetBytes = await png(64, 64);
+    await genEnv.storage.put(poolAssetKey, poolAssetBytes, "image/png");
+    await genEnv.scope.media.insert({
+      storageKey: poolAssetKey,
+      publicUrl: genEnv.storage.publicUrl(poolAssetKey),
+      mimeType: "image/png",
+      byteSize: poolAssetBytes.length,
+      width: 64,
+      height: 64,
+      altText: "Pool photo",
+      tags: [],
+    });
+
+    setImageProviderForTests(createFakeImageProvider([{ bytes: await png(64, 64) }]));
+    const { seriesId: generateSeriesId } = await atTime(seriesCreatedAt, () =>
+      createStandingSeries(genEnv.scope, seriesInput({ media: { source: "generate", prompt: "A cool picture" } })),
+    );
+
+    setLlmForTests(createFakeLlm([modelOk("Scan pool post.", 1), modelOk("Scan generate post.", 1)]));
+    await atTime(seriesFiringAt, () => runTick({ config: {} }));
+    setLlmForTests(null);
+    setImageProviderForTests(null);
+
+    const renderSeriesDetail = async (u: { id: string }, seriesId: string) => {
+      asUser(u);
+      return renderToStaticMarkup(
+        (await StandingSeriesDetailPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, seriesId }) })) as never,
+      );
+    };
+    const renderJobsPage = async (u: { id: string }) => {
+      asUser(u);
+      return renderToStaticMarkup(await JobsPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug }), searchParams: Promise.resolve({}) }));
+    };
+    for (const seriesId of [poolSeriesId, generateSeriesId]) {
+      for (const [role, u] of [["owner", genEnv.owner], ["admin", genEnv.admin], ["editor", genEnv.editor]] as const) {
+        pieces.push({ place: `page: standing series detail (${seriesId === poolSeriesId ? "pool" : "generate"}, ${role})`, text: await renderSeriesDetail(u, seriesId) });
+      }
+    }
+    for (const [role, u] of [["owner", genEnv.owner], ["admin", genEnv.admin], ["editor", genEnv.editor]] as const) {
+      pieces.push({ place: `page: jobs with standing series (${role})`, text: await renderJobsPage(u) });
+    }
     session.current = sessionBeforeLlm;
 
     // Stored rows.

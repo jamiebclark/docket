@@ -311,9 +311,14 @@ Not a substitute for the tests; the fastest way to see it working.
 
 ## Done when
 
-- [ ] `pnpm db:check` green against the committed migration.
-- [ ] Every SC above has a passing named test, and SC-011's suites pass **unchanged**.
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` green.
-- [ ] `docs/generator.md` has the standing-series section including the concurrency sentence
+- [x] `pnpm db:check` green against the committed migration.
+- [x] Every SC above has a passing named test, and SC-011's suites pass **unchanged**.
+- [x] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` green.
+- [x] `docs/generator.md` has the standing-series section including the concurrency sentence
       (FR-045); `docs/decisions.md` has `## 061` with **W1–W34** and **S1–S40**; `.env.example` has
       both variables (FR-067).
+
+**The real-app walkthrough (steps 1–6 above): unachievable in this pass.** It needs a browser
+session signed in as an owner, `pnpm dev`, and real time passing past a local midnight — none of
+which a headless pipeline phase has access to. Every automated check above is green; this one step
+is left for a human to run and record directly, per T075 in `tasks.md`.

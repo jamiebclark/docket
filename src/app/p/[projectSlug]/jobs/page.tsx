@@ -130,70 +130,76 @@ export default async function JobsPage({ params, searchParams }: Props) {
         </>
       )}
 
-      <PageHeader
-        title="Standing series"
-        description="Keeps producing posts on a cadence until you pause it."
-        actions={
-          canManageSeries && seriesPrerequisites === null ? (
-            <Link href={`${base}/jobs/series/new`} className={buttonStyles({ variant: "primary" })}>
-              New standing series
-            </Link>
-          ) : undefined
-        }
-      />
-      {series.length === 0 ? (
-        seriesPrerequisites ? null : (
-          <EmptyState message="No standing series yet. A standing series keeps producing posts on a cadence — three a week, one a day — until you pause it." />
-        )
-      ) : (
-        <Table caption="Standing series" columns={["Series", "State", "Posts to", "Runs", "Actions"]}>
-          {series.map((s) => {
-            const state = seriesStateInfo(s);
-            return (
-              <Row key={s.id}>
-                <Cell header>
-                  <Link href={`${base}/jobs/series/${s.id}`} className="underline">
-                    {s.name}
-                  </Link>
-                  <Sub>{cadenceLabel(s.cadence)}</Sub>
-                </Cell>
-                <Cell>
-                  <Badge tone={state.tone}>{state.label}</Badge>
-                  {state.sub ? <Sub>{state.sub}</Sub> : null}
-                </Cell>
-                <Cell>
-                  {s.accounts.map((a) => a.displayName).join(", ")}
-                  <Sub>{mediaSummary(s.media)}</Sub>
-                </Cell>
-                <Cell>
-                  {s.lastRunAt ? (
-                    <>
-                      Last run <LocalTime value={s.lastRunAt} timeZone={scope.project.timezone} />
-                      {s.lastRunOutcome ? ` — ${outcomeWord(s.lastRunOutcome)}` : ""}
-                    </>
-                  ) : (
-                    "No runs yet"
-                  )}
-                  <Sub>
-                    Next due <LocalTime value={s.nextRunAt} timeZone={scope.project.timezone} />
-                  </Sub>
-                </Cell>
-                <Cell>
-                  <SeriesRowActions
-                    slug={projectSlug}
-                    seriesId={s.id}
-                    name={s.name}
-                    enabled={s.enabled}
-                    postCount={s.producedCount}
-                    timezone={scope.project.timezone}
-                    canManage={canManageSeries}
-                  />
-                </Cell>
-              </Row>
-            );
-          })}
-        </Table>
-      )}
+      <section aria-labelledby="standing-series-heading" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h2 id="standing-series-heading" className="text-2xl font-semibold sm:text-[1.75rem]">
+              Standing series
+            </h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">Keeps producing posts on a cadence until you pause it.</p>
+          </div>
+          {canManageSeries && seriesPrerequisites === null ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href={`${base}/jobs/series/new`} className={buttonStyles({ variant: "primary" })}>
+                New standing series
+              </Link>
+            </div>
+          ) : null}
+        </div>
+        {series.length === 0 ? (
+          seriesPrerequisites ? null : (
+            <EmptyState message="No standing series yet. A standing series keeps producing posts on a cadence — three a week, one a day — until you pause it." />
+          )
+        ) : (
+          <Table caption="Standing series" columns={["Series", "State", "Posts to", "Runs", "Actions"]}>
+            {series.map((s) => {
+              const state = seriesStateInfo(s);
+              return (
+                <Row key={s.id}>
+                  <Cell header>
+                    <Link href={`${base}/jobs/series/${s.id}`} className="underline">
+                      {s.name}
+                    </Link>
+                    <Sub>{cadenceLabel(s.cadence)}</Sub>
+                  </Cell>
+                  <Cell>
+                    <Badge tone={state.tone}>{state.label}</Badge>
+                    {state.sub ? <Sub>{state.sub}</Sub> : null}
+                  </Cell>
+                  <Cell>
+                    {s.accounts.map((a) => a.displayName).join(", ")}
+                    <Sub>{mediaSummary(s.media)}</Sub>
+                  </Cell>
+                  <Cell>
+                    {s.lastRunAt ? (
+                      <>
+                        Last run <LocalTime value={s.lastRunAt} timeZone={scope.project.timezone} />
+                        {s.lastRunOutcome ? ` — ${outcomeWord(s.lastRunOutcome)}` : ""}
+                      </>
+                    ) : (
+                      "No runs yet"
+                    )}
+                    <Sub>
+                      Next due <LocalTime value={s.nextRunAt} timeZone={scope.project.timezone} />
+                    </Sub>
+                  </Cell>
+                  <Cell>
+                    <SeriesRowActions
+                      slug={projectSlug}
+                      seriesId={s.id}
+                      name={s.name}
+                      enabled={s.enabled}
+                      postCount={s.producedCount}
+                      timezone={scope.project.timezone}
+                      canManage={canManageSeries}
+                    />
+                  </Cell>
+                </Row>
+              );
+            })}
+          </Table>
+        )}
+      </section>
     </section>
   );
 }

@@ -4,7 +4,7 @@ import { nextBoundaryAfter } from "@/lib/series/cadence";
 import { createStandingSeriesSchema, updateStandingSeriesSchema, type CreateStandingSeriesInput } from "@/lib/validation/standing-series";
 import * as clock from "../../dal/clock";
 import { ConflictError, NotFoundError, ValidationIssuesError } from "../../dal/errors";
-import type { NewStandingSeries, StandingSeriesPatch, StandingSeriesRecord } from "../../dal/standing-series";
+import { clearPostLinksForSeries, type NewStandingSeries, type StandingSeriesPatch, type StandingSeriesRecord } from "../../dal/standing-series";
 import type { ProjectScope } from "../../dal/scope";
 import { getStorage, MEDIA_STORAGE_NOT_SET_UP } from "../../storage";
 import { assertGroupLimit, groupsForAccounts } from "../generation/groups";
@@ -172,6 +172,7 @@ export async function deleteStandingSeries(scope: ProjectScope, seriesId: string
   await scope.transaction(async (tx) => {
     requireManage(tx);
     await getOrThrow(tx, seriesId);
+    await clearPostLinksForSeries(tx.exec, tx.project.id, seriesId);
     const deleted = await tx.standingSeries.delete(seriesId);
     if (!deleted) throw new NotFoundError("Standing series not found");
     await tx.audit.insert({
