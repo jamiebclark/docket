@@ -52,6 +52,10 @@ export const projectOperations = [
     },
     idempotent: true,
     idempotencyMode: "self_commit",
+    mcp: {
+      expose: true,
+      confirm: { effect: "Create this project. Its slug is permanent and the project cannot be removed." },
+    },
     async run(scope, { body }) {
       const project = await create({ user: { id: scope.membership.userId } }, body);
       return { status: 201, body: toProject(project) };

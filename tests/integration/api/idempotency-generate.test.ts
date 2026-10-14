@@ -26,6 +26,7 @@ const op = defineOperation({
   responses: { 200: { description: "ok" } },
   idempotent: true,
   idempotencyMode: "generate",
+  mcp: { expose: false, reason: "test-only operation" },
   body: {
     kind: "json",
     schema: z.object({

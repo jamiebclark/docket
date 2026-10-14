@@ -22,6 +22,7 @@ export const accountOperations = [
       },
     },
     idempotent: false,
+    mcp: { expose: true },
     async run(scope) {
       return { status: 200, body: { data: await listAccountsForApi(scope), nextCursor: null } };
     },
@@ -56,6 +57,7 @@ export const accountOperations = [
       ...standardErrors("manage_setup"),
     },
     idempotent: true,
+    mcp: { expose: true },
     async run(scope, { params, body }) {
       const { changed, instructions } = await setPostingInstructions(scope, params.accountId, body);
       return { status: 200, body: { accountId: params.accountId, postingInstructions: instructions, changed } };

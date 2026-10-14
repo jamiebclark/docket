@@ -2,6 +2,8 @@
 
 Docket's public API lets an n8n workflow do what the old scheduler flow did: take a row (an image URL and a brief), import the image, generate a post for each account, and queue it into the next free slot. Re-running the same rows creates nothing new, because every write carries a row-derived idempotency key.
 
+Prefer a conversational client over a workflow tool? The same operations, the same keys, are also reachable as MCP tools — see [`docs/mcp.md`](mcp.md).
+
 The full reference is generated from the code: `/api/v1/openapi.json` on your Docket host.
 
 ## 1. Create a key
@@ -259,4 +261,8 @@ Idempotency-Key: job-{{batch.id}}
 The response's `skippedAlreadyPosted` is how many of the submitted items were already claimed (including a duplicate id sent twice in the same call). Appending more items to an open job (`POST /jobs/{{jobId}}/items`) works the same way. If every item in a non-open job is already posted, the call is refused with a `400 validation_failed` naming the count — nothing is created.
 
 A job item whose id turns out to be already claimed by the time it runs (another submission won the race) finishes `status: "skipped"`, not `"failed"`: it does not count against your failure handling in section 4, and `GET /jobs/{{jobId}}/items/{{itemId}}` reports `skipped.reason` and the post it was already made as.
+
+## 11. Or drive it from a chat client
+
+Everything above is also reachable as MCP tools at `/api/mcp`, for a client that holds a conversation instead of running a workflow — the same keys, the same permissions, the same project scoping, nothing either door can reach that the other cannot. See [`docs/mcp.md`](mcp.md) for the tool list, the four that require confirmation, and the operations withheld from it (batch jobs, media upload, URL import, the ambiguous-publish recovery path).
 

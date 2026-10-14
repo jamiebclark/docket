@@ -144,6 +144,7 @@ describe("openapi.json", () => {
       summary: "Fixture",
       responses: { 200: { description: "ok" } },
       idempotent: true,
+      mcp: { expose: false, reason: "test-only operation" },
       body: { kind: "json", schema: z.object({ fixtureField: z.string() }) },
       async run() {
         return { status: 200, body: {} };

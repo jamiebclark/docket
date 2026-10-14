@@ -165,6 +165,11 @@ export const targetOperations = [
       429: { description: "Rate limited", examples: { limited: { summary: "Slow down", value: errorExample("rate_limited", "Too many requests.") } } },
     },
     idempotent: true,
+    mcp: {
+      expose: false,
+      reason:
+        "The ambiguous-publish recovery path. Constitution V: a publish of unknown outcome is never retried automatically, and a model is the last thing that should decide a post did not go out.",
+    },
     async run(scope, { params, body }) {
       const r = await retryTarget(scope, params.targetId, body, { postId: params.postId });
       return { status: 200, body: toRetryResult(params.postId, params.targetId, r) };
@@ -251,6 +256,11 @@ export const targetOperations = [
       429: { description: "Rate limited", examples: { limited: { summary: "Slow down", value: errorExample("rate_limited", "Too many requests.") } } },
     },
     idempotent: true,
+    mcp: {
+      expose: false,
+      reason:
+        "The ambiguous-publish recovery path. Constitution V: a publish of unknown outcome is never retried automatically, and a model is the last thing that should decide a post did not go out.",
+    },
     async run(scope, { params, body }) {
       // The service compares instants and accepts UTC only; the API accepts any RFC 3339 offset.
       const input = body.outcome === "not_published" && body.requeue && body.expected ? { ...body, expected: new Date(body.expected).toISOString() } : body;
@@ -335,6 +345,11 @@ export const targetOperations = [
     },
     idempotent: true,
     idempotencyMode: "self_commit",
+    mcp: {
+      expose: false,
+      reason:
+        "The ambiguous-publish recovery path. Constitution V: a publish of unknown outcome is never retried automatically, and a model is the last thing that should decide a post did not go out.",
+    },
     async run(scope, { body }) {
       const r = await retryAllFailed(scope, { ...(body.accountId ? { account: body.accountId } : {}), mode: body.mode });
       return { status: 200, body: toRetryFailedResult(r) };

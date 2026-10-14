@@ -3300,3 +3300,61 @@ Implementation outcome: `POST /projects`, `POST /voice-profiles`, `PATCH /voice-
 surface and covered by the integration suite, closing the gap `docs/brand-onboarding.md` named.
 The one step that stays in the browser, by design, is creating the API key itself — a key cannot
 create the project that will hold it.
+
+## 074 — An MCP server over the v1 API (2026-10-14)
+
+Spec and research: `specs/074-mcp-server/{spec,research}.md`, FR-030.
+
+- **A route in the Next app, not a separate process.** The deployment is three containers
+  (web, worker, postgres) and the constitution makes new infrastructure a justified exception.
+  Everything the MCP layer needs — `forApiKey`, the rate-limit counter, the permission check,
+  the idempotency table, `mapServiceError` — already lives in the web process; a separate
+  process would either duplicate them or talk to the web process over the very HTTP API it is
+  translating. Hosting it as a route also means one origin, one TLS certificate and one set of
+  secrets, and keeps the "same key, same answers" equivalence trivially true by sharing code
+  rather than reimplementing it against a second entry point. **Accepted cost**: a long-lived
+  MCP connection shares the web container's resources with the UI, rather than isolating MCP
+  traffic behind its own process boundary. *Reverse*: extract `src/server/mcp/*` into a
+  standalone process that calls the web app's own HTTP API internally; nothing in those modules
+  imports the database directly (`tests/lint/api-imports.test.ts` enforces it), so the move
+  costs a new deployment artifact, not a rewrite.
+- **The key decides the project; there is no project-selection step.** A key already belongs to
+  one project, so the project for an MCP session is whichever project the key the client was
+  configured with belongs to — no tool takes a project id, no tool switches project, and
+  driving two projects means two configured server entries with two keys. This carries 009's
+  rule forward unchanged, and makes the project-isolation test a statement about every tool at
+  once. **Accepted cost**: a person managing several brands from one chat client configures
+  several server entries rather than switching projects mid-conversation. *Reverse*: add a
+  project-selection tool and thread a project id through every other tool's schema — rejected
+  because it would let one compromised key enumerate project ids by trial, the opposite of the
+  isolation guarantee FR-016–FR-018 ask for.
+
+Implementation outcome: `/api/mcp` serves `initialize`, `tools/list` and `tools/call` over
+Streamable HTTP, built on `@modelcontextprotocol/sdk`. Nineteen of the v1 API's 34 operations
+are exposed as tools, derived — name, input schema, description — from each operation's own
+`mcp` disposition field rather than hand-maintained; a drift test fails the build if a new
+operation omits that field or the derived surface stops matching it (`tests/integration/api/mcp-surface.test.ts`).
+Documented in `docs/mcp.md`, cross-referenced from `docs/n8n.md` (FR-031, FR-032), and recorded
+in `docs/security.md` as adding no new credential or trust boundary (FR-033).
+
+**One open judgement for a reviewer to accept or reverse**: `docket_generate_post` deviates
+from this spec's own Decisions text, which said "generation is exposed without confirmation."
+`generatePost`'s body accepts `schedulingPolicy: "add_to_queue"`, which queues the generated
+post to the brand's live accounts in the same call — an irreversible publish FR-021's effects
+list (queueing a post) already requires confirmation for, even though FR-021's list of *tool
+names* does not mention `generatePost`. Research D9 resolved this in favor of the effect over
+the operation id: the tool's disposition carries a conditional confirmation,
+`confirm: { when: (args) => schedulingPolicy !== "leave_as_draft", effect: … }`, so a
+generate-that-could-queue demands confirmation (matching FR-020's effects-based rule).
+*Amended during review*: the predicate first read "`schedulingPolicy` present and not
+`leave_as_draft`", on the reasoning that a plain generate-to-draft needs no confirmation
+(matching the spec's text). That was wrong, because the effect is decided by the *resolved*
+policy, not the requested one: `resolvePolicies` falls back to the project's
+`defaultSchedulingPolicy`, so in a project configured `auto_approve` + `add_to_queue` a call
+passing no `schedulingPolicy` at all published to the brand's live accounts with no
+confirmation ever demanded. The predicate now treats an absent policy as "unknown, therefore
+confirm", and only an explicit `leave_as_draft` skips the gate. *Reverse*: delete the
+`confirm` key from `generatePost`'s disposition in
+`src/server/api/operations/generate.ts` — a one-line change — if review prefers the spec's
+literal reading; the accepted cost of reversing it is that the generate tool becomes the only
+unconfirmed path to a live publish over MCP.
