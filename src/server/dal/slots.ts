@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { postingSlots, type PostingSlotRow } from "../db/schema";
-import { ConflictError } from "./errors";
+import { ConflictError, NotFoundError } from "./errors";
 
 export type SlotRow = PostingSlotRow;
 
@@ -19,7 +19,7 @@ export interface SlotsRepo {
   insertWeek(accountId: string, weekdays: readonly number[], localTime: string): Promise<SlotRow[]>;
   /** Changes a slot's weekday and local time in place. Targets are untouched: `slot_id` keeps pointing here. */
   move(id: string, weekday: number, localTime: string): Promise<SlotRow>;
-  setPaused(id: string, paused: boolean): Promise<void>;
+  setPaused(id: string, paused: boolean): Promise<SlotRow>;
   delete(id: string): Promise<void>;
 }
 
@@ -87,14 +87,18 @@ export function createSlotsRepo(db: Database, projectId: string): SlotsRepo {
           .set({ weekday, localTime })
           .where(and(eq(postingSlots.projectId, projectId), eq(postingSlots.id, id)))
           .returning();
-        return row!;
+        if (!row) throw new NotFoundError();
+        return row;
       });
     },
     async setPaused(id, paused) {
-      await db
+      const [row] = await db
         .update(postingSlots)
         .set({ paused })
-        .where(and(eq(postingSlots.projectId, projectId), eq(postingSlots.id, id)));
+        .where(and(eq(postingSlots.projectId, projectId), eq(postingSlots.id, id)))
+        .returning();
+      if (!row) throw new NotFoundError();
+      return row;
     },
     async delete(id) {
       await db

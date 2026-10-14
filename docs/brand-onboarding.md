@@ -142,15 +142,29 @@ Bluesky handles can be set to a domain you own (`playupnext.live` instead of
 
 ## What cannot be scripted today
 
-The public API (`/api/v1`) is post-centric. It can list accounts and create posts, media and jobs,
-but there is **no endpoint that creates a project, a voice profile, a posting slot or an account's
-posting instructions**. Every step in the runbook above is browser-only.
+A `manage_setup` key can now drive steps 4, 5, 6 and 7 of the runbook above over HTTP:
 
-So onboarding a brand is currently a manual pass through the UI, with the brand-kit file as the
-thing that makes it repeatable rather than re-decided.
+- `POST /projects` — step 4, create the project (name, slug, timezone, and now the policy and
+  brand fields from step 7 in the same call).
+- `POST /voice-profiles` and `PATCH /voice-profiles/{profileId}` — step 5, create and later
+  refine the voice profile.
+- `PATCH /accounts/{accountId}` — step 6's posting-instructions half.
+- `POST /slots`, `POST /slots/week`, `PATCH /slots/{slotId}` and `DELETE /slots/{slotId}` —
+  step 6's scheduling half: book, move, pause/unpause and delete slots.
 
-**If brand onboarding becomes routine, the gap to close is write access to project setup**:
-`POST /projects`, `POST /voice-profiles`, `PATCH /accounts/{id}` for posting instructions, and
-`POST /slots`. With those, a brand kit could be applied in one command and the whole runbook
-below step 3 would collapse into it. Nothing else in the chain is automatable — the account
-creation is human-gated by design.
+See [docs/n8n.md §8](n8n.md#8-provision-a-brand) for a worked example chaining them.
+
+What still has to happen in the browser, because each is human-gated by design:
+
+- **Step 3, the account chain itself.** Connecting Facebook, Instagram, Threads and Bluesky is
+  each platform's own OAuth consent; there is no API that stands in for a human authorizing
+  Docket.
+- **Creating the API key that drives the rest.** A key is always created inside a project in
+  **Settings → API keys**, so the first key for a brand-new project is created after step 4, in
+  the browser, before any of the calls above can run.
+- **Step 1 and step 2**, the brand-kit file and the avatar: these are inputs you write and render
+  before scripting anything, not something Docket has an endpoint for.
+
+So onboarding a brand still opens and closes in the browser — write the brand kit, connect the
+accounts, create the key — but everything in between (project, voice, instructions, schedule) is
+now one scripted pass instead of a manual one.

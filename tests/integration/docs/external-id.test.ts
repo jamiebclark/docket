@@ -25,10 +25,10 @@ interface Block {
   body: string;
 }
 
-/** The fenced ```http blocks of docs/n8n.md's section 9 ("Post each record once"), parsed into requests. */
+/** The fenced ```http blocks of docs/n8n.md's section 10 ("Post each record once"), parsed into requests. */
 function readBlocks(): Block[] {
   const full = readFileSync(resolve(__dirname, "../../../docs/n8n.md"), "utf8");
-  const md = full.slice(full.indexOf("## 9. Post each record once"));
+  const md = full.slice(full.indexOf("## 10. Post each record once"));
   return [...md.matchAll(/```http\n([\s\S]*?)```/g)].map((m) => {
     const [head = "", ...rest] = (m[1] ?? "").trimEnd().split(/\n\n/);
     const [requestLine = "", ...headerLines] = head.split("\n");
@@ -47,7 +47,7 @@ const fill = (s: string, vars: Record<string, string>) => s.replace(/\{\{([\w.]+
 const operationExists = (method: string, path: string) =>
   OPERATIONS.some((op) => op.method === method && new RegExp(`^${op.path.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path.replace(/\{\{[^}]+\}\}/g, "x")));
 
-describe("docs/n8n.md § 9 Post each record once", () => {
+describe("docs/n8n.md § 10 Post each record once", () => {
   it("names only endpoints that exist", () => {
     const blocks = readBlocks();
     expect(blocks.map((b) => `${b.method} ${b.path}`)).toEqual(["POST /generate", "POST /jobs"]);

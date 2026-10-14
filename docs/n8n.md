@@ -140,7 +140,76 @@ Idempotency-Key: retry-{{event.id}}-{{targetId}}
 
 The action is recorded in the attempt log as "API key {name}". Branch on the 409 `details.reason` values listed in section 4.
 
-## 8. Read activity
+## 8. Provision a brand
+
+A `manage_setup` key can stand a new brand up over HTTP: create the project, its voice profile, an account's posting instructions and a week of slots, all idempotently. The one step that stays in the browser is connecting the brand's social accounts and creating the API key the rest of this flow uses — a key cannot create the project that will hold it, and **Settings → API keys → Create key** needs a project, and at least one connected account, to already exist.
+
+1. **Create the project**, with any existing `manage_setup` key — project creation is the one operation not scoped to the calling key's own project.
+
+   ```http
+   POST {{base}}/api/v1/projects
+   Authorization: Bearer {{key}}
+   Content-Type: application/json
+   Idempotency-Key: provision-project-{{brand.id}}
+
+   {"name":"{{brand.name}}","slug":"{{brand.slug}}","timezone":"{{brand.timezone}}","defaultApprovalPolicy":"review_required","defaultSchedulingPolicy":"add_to_queue"}
+   ```
+
+   The response's `id` is `{{project.id}}`. A re-run with the same key replays this response rather than creating a second project; a *different* run reusing a taken `slug` answers `409 conflict` with `details.reason: "slug_taken"`.
+
+2. **In the browser**, connect the brand's social accounts and create an API key scoped to the new project (ticking `manage_setup`, plus `read`, `write_posts` and `generate` for the flow that follows). Connecting a platform account requires that platform's own OAuth consent, which cannot be scripted; this, and the key creation that depends on it, is the one manual pass in provisioning. The rest of this section uses that new, project-scoped key — `{{newKey}}` — not the key from step 1.
+
+3. **Create its voice profile.**
+
+   ```http
+   POST {{base}}/api/v1/voice-profiles
+   Authorization: Bearer {{newKey}}
+   Content-Type: application/json
+   Idempotency-Key: provision-voice-{{brand.id}}
+
+   {"name":"House voice","content":{"voiceAndTone":"{{brand.voiceAndTone}}"}}
+   ```
+
+   `isDefault` comes back `true`: the project had no default profile yet.
+
+4. **Set the account's posting instructions.**
+
+   ```http
+   PATCH {{base}}/api/v1/accounts/{{accountId}}
+   Authorization: Bearer {{newKey}}
+   Content-Type: application/json
+   Idempotency-Key: provision-instructions-{{accountId}}
+
+   {"instructions":"{{brand.postingInstructions}}"}
+   ```
+
+5. **Book a week of posting times.**
+
+   ```http
+   POST {{base}}/api/v1/slots/week
+   Authorization: Bearer {{newKey}}
+   Content-Type: application/json
+   Idempotency-Key: provision-week-{{accountId}}
+
+   {"accountId":"{{accountId}}","localTime":"09:00"}
+   ```
+
+   The response's `added` lists the slots just created; `alreadySet` names any weekday that already had that time (for example on a re-run). Either way, the account ends the call with that time booked on every weekday.
+
+6. **Add one more, non-standard time** — for example a Friday livestream recap at a different hour than the rest of the week:
+
+   ```http
+   POST {{base}}/api/v1/slots
+   Authorization: Bearer {{newKey}}
+   Content-Type: application/json
+   Idempotency-Key: provision-extra-{{accountId}}
+
+   {"accountId":"{{accountId}}","weekday":5,"localTime":"18:30"}
+   ```
+
+Five HTTP calls against the public API, each idempotent on its own key, stand the brand up end to end: project, voice, instructions, the week, and the one extra time — with account connection and key creation (step 2) done once in the browser.
+
+## 9. Read activity
 
 `GET {{base}}/api/v1/activity` lists what happened to publishing, newest first, with a key holding `read`:
 
@@ -155,7 +224,7 @@ Each event has `outcome`, `message`, `occurredAt`, `platform`, `account`, `post`
 
 **To poll for new events**, re-read from your last `occurredAt` (`from=` takes a day, so start from that day), then drop ids you have already seen. A walk can miss an event that commits after the page it belongs to was read, so overlap rather than start exactly after the last one. Branch on `outcome`, not on the message text.
 
-## 9. Post each record once
+## 10. Post each record once
 
 If your source system (a CRM, a spreadsheet, a CMS) has its own id for each record, tag your submission with it and Docket guarantees that record is posted at most once, ever — even if your flow re-runs the whole backlog.
 

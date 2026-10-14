@@ -23,7 +23,7 @@ export type ApiExamples = Record<string, { summary: string; value: unknown }>;
 
 export interface ApiOperation<P = unknown, Q = unknown, B = unknown> {
   id: string;
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   /** "/posts/{postId}/queue" */
   path: string;
   /** null only for the public `getOpenApi`. */
@@ -49,7 +49,16 @@ export interface ApiOperation<P = unknown, Q = unknown, B = unknown> {
   /** Calls exactly one service and maps its result. */
   run: (scope: ProjectScope, input: ApiRunInput<P, Q, B>) => Promise<ApiRunResult>;
   /** For the scope test (FR-048): which path params name project resources. */
-  resourceParams?: ("postId" | "targetId" | "mediaId" | "jobId" | "itemId")[];
+  resourceParams?: (
+    | "postId"
+    | "targetId"
+    | "mediaId"
+    | "jobId"
+    | "itemId"
+    | "accountId"
+    | "profileId"
+    | "slotId"
+  )[];
 }
 
 // Operations have different parameter types; the table stores them erased and the pipeline parses with each schema.

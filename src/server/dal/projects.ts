@@ -8,6 +8,11 @@ export interface NewProject {
   name: string;
   slug: string;
   timezone: string;
+  defaultApprovalPolicy?: ProjectRecord["defaultApprovalPolicy"];
+  defaultSchedulingPolicy?: ProjectRecord["defaultSchedulingPolicy"];
+  tagline?: string | null;
+  description?: string | null;
+  websiteUrl?: string | null;
 }
 
 export interface ProjectSummary {
@@ -45,7 +50,17 @@ export async function createProject(
         if (!org) throw new Error("Organization insert returned no row");
         const [project] = await tx
           .insert(projects)
-          .values({ id: org.id, name: input.name, slug: input.slug, timezone: input.timezone })
+          .values({
+            id: org.id,
+            name: input.name,
+            slug: input.slug,
+            timezone: input.timezone,
+            ...(input.defaultApprovalPolicy !== undefined ? { defaultApprovalPolicy: input.defaultApprovalPolicy } : {}),
+            ...(input.defaultSchedulingPolicy !== undefined ? { defaultSchedulingPolicy: input.defaultSchedulingPolicy } : {}),
+            ...(input.tagline !== undefined ? { tagline: input.tagline } : {}),
+            ...(input.description !== undefined ? { description: input.description } : {}),
+            ...(input.websiteUrl !== undefined ? { websiteUrl: input.websiteUrl } : {}),
+          })
           .returning();
         if (!project) throw new Error("Project insert returned no row");
         await tx.insert(member).values({ organizationId: org.id, userId, role: "owner" });
@@ -56,7 +71,7 @@ export async function createProject(
       // 23505 = unique_violation on the slug.
       const code = (error as { code?: string; cause?: { code?: string } });
       if ((code.code ?? code.cause?.code) === "23505") {
-        throw new ConflictError("That URL name is already taken.", "slug");
+        throw new ConflictError("That URL name is already taken.", { field: "slug", reason: "slug_taken" });
       }
       throw error;
     }

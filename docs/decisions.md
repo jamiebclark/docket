@@ -3240,3 +3240,63 @@ service; the live checks are listed in `docs/pinterest-setup.md` (FR-037) and ar
 Trial access. Not built, and owned by no spec: the items in `docs/feature-map.md` — video pins, carousel pins, board
 management, secret/protected boards, analytics, product/rich pins, catalogs, ads, Business Access, AI-disclosure
 labels, `api-sandbox`, automatic tier detection, and the shared Trial cap as an enforced limit.
+
+## 073 — Public API for project setup (2026-10-14)
+
+Spec and research: `specs/073-setup-write-api/{spec,research}.md`, decisions D1–D10.
+
+- **One new permission, `manage_setup`, not four.** The four services in scope
+  (`projects.create`, `accounts.setPostingInstructions`, `slots.*`, `voice.*`) each ask for one
+  grant the existing `KEY_GRANTS` table has no entry for, so the permission set was settled by the
+  code rather than chosen freely. Standing a brand up is one job done by one integration, and a
+  separate `manage_project`/`manage_voice`/`manage_accounts`/`manage_slots` quartet would be four
+  checkboxes for that one job, and nothing forecloses splitting later if it turns out wrong. It is
+  deliberately not spread from `write_posts` or any `SEES`-derived set: a key that can retime a
+  schedule and rewrite a voice should not silently also be able to post, and a key that can post
+  should not silently gain the power to retime a schedule — FR-007/FR-008 keep those two kinds of
+  trust apart. No existing key holds the new value, so no existing key gains anything, and
+  `manage_setup` alone reaches none of the pre-existing operations because the pipeline checks an
+  operation's own permission first, not a key's whole grant set.
+- **A project's owner is the key's creator, not the key itself, and "no acting user" is a null
+  user id, not a departed member.** `createProject` passes `scope.membership.userId` as the owner
+  and refuses only when that id is empty — which happens when the creating user's *account* was
+  deleted, not merely when they left the project the key lives in. A key whose creator left the
+  project still creates projects they go on to own; that is not a contradiction, because owning a
+  project you created is independent of your membership in a different one. Guarding on anything
+  stricter (current membership in the key's own project) would break a legitimate provisioning key
+  after an ordinary staff change, for no safety gain.
+- **`POST /projects` commits its own transaction (`idempotencyMode: "self_commit"`), and the
+  documented backstop for a crash between that commit and the idempotency record is the slug's
+  global uniqueness, not a new mechanism.** Project creation is deliberately cross-project work on
+  its own connection, so it cannot run inside the calling key's project-scoped transaction the
+  default idempotency mode opens — doing so would risk a committed project whose idempotency
+  record then rolled back, and a replay creating a second one. The residual window between the
+  project's own commit and the idempotency record's write cannot produce two projects regardless,
+  because a replay reuses the same slug and the existing unique constraint on `projects.slug`
+  answers 409 before a second row is possible.
+- **The slug conflict earns a reason, `slug_taken`, and nothing else about it changes.** Without a
+  reason, a taken slug was a bare 409; `ConflictError` already carries one, so giving it
+  `{ field: "slug", reason: "slug_taken" }` costs no new error code (FR-039 requires reuse) and no
+  new class. The message is the same text regardless of whether the calling key can see the
+  project already holding the slug — no code path reads that project — so a cross-project slug
+  collision and a same-project one are byte-identical on the wire, by construction rather than by
+  care.
+- **`projects.slug` is unique across the whole install, not per tenant** — a pre-existing
+  constraint this entry depends on rather than introduces, but worth restating here because it is
+  the reason the slug conflict above needs no tenant-scoped lookup: the database already refuses
+  a second claim on any slug, from any project, and the API surface's job is just to report that
+  refusal cleanly.
+- **The whole-week slot add is its own operation, `POST /slots/week`, not a flag on `POST /slots`.**
+  `addSlot` and `addSlotsForWeek` are different service functions returning different shapes (one
+  slot versus created-plus-already-set), and the rule holding across this whole entry is one
+  service function per operation (FR-002). A single endpoint branching on a body flag would need a
+  discriminator in the request and a union in the response for no gain, and the route matcher
+  already resolves `/slots/week` against `/slots/{slotId}` and `/slots/upcoming` without
+  ambiguity, so there was no routing reason to collapse them either.
+
+Implementation outcome: `POST /projects`, `POST /voice-profiles`, `PATCH /voice-profiles/{id}`,
+`PATCH /accounts/{id}` (posting instructions), `POST /slots`, `POST /slots/week`,
+`PATCH /slots/{id}` and `DELETE /slots/{id}` are built, permissioned, documented in the OpenAPI
+surface and covered by the integration suite, closing the gap `docs/brand-onboarding.md` named.
+The one step that stays in the browser, by design, is creating the API key itself — a key cannot
+create the project that will hold it.

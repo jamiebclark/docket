@@ -1,0 +1,1 @@
+ALTER TYPE "public"."api_key_permission" ADD VALUE 'manage_setup';

@@ -42,7 +42,7 @@ describe("shared validation rules via projects.create", () => {
   it("accepts a 45-character slug", async () => {
     const u = await createUser();
     const slug = `a${uniq()}`.padEnd(45, "b");
-    expect(await projectsService.create(fakeSession(u.id), base({ slug }))).toEqual({ slug });
+    expect(await projectsService.create(fakeSession(u.id), base({ slug }))).toMatchObject({ slug });
   });
 });
 

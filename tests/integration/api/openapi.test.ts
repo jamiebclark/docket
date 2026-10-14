@@ -234,4 +234,41 @@ describe("openapi.json", () => {
     }
     expect(found.find((f) => f.op.operationId === "resolvePostTarget")!.op.responses["409"].description).toMatch(/already_resolved[\s\S]*cannot_publish/);
   });
+
+  it("documents every manage_setup operation fully (FR-042, FR-043)", () => {
+    const ids = [
+      "createProject",
+      "createVoiceProfile",
+      "updateVoiceProfile",
+      "setAccountPostingInstructions",
+      "addSlot",
+      "addWeekSlots",
+      "updateSlot",
+      "deleteSlot",
+    ];
+    const found = operations().filter(({ op }) => ids.includes(op.operationId));
+    expect(found.map((f) => f.op.operationId).sort()).toEqual([...ids].sort());
+    for (const { path, method, op } of found) {
+      const label = `${method.toUpperCase()} ${path}`;
+      expect(op.summary, label).toBeTruthy();
+      expect(op.description, label).toContain("Requires the `manage_setup` permission.");
+      expect(op.tags, label).toEqual([expect.any(String)]);
+      expect(op["x-required-permission"], label).toBe("manage_setup");
+      const names = (op.parameters ?? []).map((p: { name: string }) => p.name);
+      expect(names, label).toContain("Idempotency-Key");
+      for (const status of [400, 401, 403, 404, 409, 422, 429]) {
+        const examples = op.responses[String(status)]?.content?.["application/json"]?.examples;
+        expect(Object.keys(examples ?? {}).length, `${label} ${status}`).toBeGreaterThan(0);
+      }
+      if (op.requestBody) {
+        const examples = op.requestBody.content["application/json"].examples;
+        expect(Object.keys(examples ?? {}).length, label).toBeGreaterThan(0);
+      }
+      const responseStatuses = Object.keys(op.responses).filter((s) => Number(s) < 400);
+      for (const status of responseStatuses) {
+        const examples = op.responses[status]?.content?.["application/json"]?.examples;
+        expect(Object.keys(examples ?? {}).length, `${label} ${status}`).toBeGreaterThan(0);
+      }
+    }
+  });
 });
