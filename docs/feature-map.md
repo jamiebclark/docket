@@ -207,3 +207,38 @@ commits say `Claude Sonnet 5`, review commits say `Claude Opus 5`. Each names it
 is the right behaviour; the template is what is wrong. A trailer that misattributes work to a model
 that did not do it is worse than one that does not match a fixed string, so the amendment should
 make the trailer name the acting model rather than a fixed version.
+
+## Verification owed (content-engine roadmap, entries 069–074)
+
+Four checks across the six merged entries were never performed. Each needs something a
+headless pipeline phase cannot have — a signed-in browser, a funded provider key, real time
+passing, or a real MCP client — so each was written as a human-owned task and left for an
+operator.
+
+**Read the task lists with care: three of the four are ticked `[X]` and were still never
+run.** They were checked off to release the implement loop, which otherwise stalls on a task
+it cannot do, not because anyone did them. Only `074`'s is honestly unchecked. That
+inconsistency is recorded here rather than fixed in the task lists, because a task list is a
+record of what the pipeline did and rewriting it afterwards would be its own kind of lie.
+
+| Entry | Task | Marked | What it checks | Needs |
+|---|---|---|---|---|
+| `070-image-generation` | T045 | `[X]` — **not performed** | Generate an image for real: live-region announcements, the new tile with badge and prompt, the cost row | A **funded OpenAI key**, browser, `pnpm dev` |
+| `071-evergreen-series` | T075 | `[X]` — **not performed** | A daily series crossing a real local midnight: the post appears in Review, last/next run update, pause/resume | Browser, `pnpm dev`, **real time passing** (or the system clock moved) |
+| `072-dated-series` | T071 | `[X]` — **not performed** | Every screen state of the CSV import walkthrough | Browser, `pnpm dev`, a **real CSV file** |
+| `074-mcp-server` | T056 | `[ ]` — not performed | A real MCP client end to end: list tools, ask what's scheduled, generate, queue with the confirmation refused once and accepted once, then a second client on another project's key to prove isolation | Browser, **a real MCP client** |
+
+Each entry's `quickstart.md` has the steps. None of these is a known defect — every one of
+them is a path with automated coverage against mocks, and the live check exists to catch what
+a mock cannot: a provider's real response shape, a real clock, a real client's idea of the
+protocol. Two are worth prioritising:
+
+- **`070` T045** is the only one that spends real money, and it is the only exercise of the
+  OpenAI image path against a live API rather than a fixture. Note
+  `docs/decisions.md`'s OpenAI free-tier finding: the model is free only with a positive
+  organisation balance, so an unfunded key fails in a way the mocks do not model.
+- **`074` T056** is the only verification of the MCP server against a real client, and
+  Docket deliberately targets protocol revision `2025-11-25` (the newest the installed SDK
+  implements) while the published current revision is `2026-07-28` — see
+  `docs/research/mcp.md` §1 and §6. A client that speaks only the newer revision is exactly
+  what this check would discover, and nothing in the suite can.
