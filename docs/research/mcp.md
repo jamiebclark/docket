@@ -119,10 +119,34 @@ shape:
 An `EventStore` interface exists for resumability; Docket needs none, since nothing it
 exposes is long-running enough to resume.
 
-**[confirm]** remaining: the exact `McpServer`/`Server` registration API for tools and
-whether tool input schemas are registered as Zod or as JSON Schema (the package ships
-`zod-compat.js` and `zod-json-schema-compat.js`, which suggests both are accommodated —
-read them before writing `protocol.ts`).
+**Settled 2026-10-14 [verified]** — read from
+`node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.d.ts` and
+`.../server/index.d.ts`:
+
+- `McpServer.registerTool`'s `inputSchema` config field is typed
+  `ZodRawShapeCompat | AnySchema` — a Zod shape or schema, never a plain JSON Schema
+  object. Registering `inputSchemaFor`'s output (T025, already a JSON Schema object with
+  `$ref`/`$defs` inlined) through `McpServer` would mean converting it back to Zod, which
+  does not round-trip losslessly and would duplicate work `schema.ts` already did in the
+  other direction.
+- The low-level `Server` class (same file's sibling `index.d.ts`) does not have this
+  problem: `setRequestHandler(ListToolsRequestSchema, handler)` returns whatever the
+  handler returns, validated only against `ToolSchema`, whose `inputSchema` field is
+  `{type: z.ZodLiteral<"object">, properties?: Record<string, object>, required?:
+  string[]}` with an `unknown` catchall for the rest — a plain JSON Schema object, exactly
+  `inputSchemaFor`'s return shape, no conversion needed. `setRequestHandler(CallToolRequestSchema,
+  handler)` is the matching hook for `tools/call`.
+- `Server` is marked `@deprecated` in favour of `McpServer`, but only because `McpServer`
+  is the friendlier default for callers who want Zod-validated args, prompts and
+  resources; Docket uses none of that surface (no prompts, no resources, args are already
+  validated by the pipeline this bridges to) and the deprecation note itself says `Server`
+  remains the documented path "for advanced use cases" — this is one.
+- **Conclusion: `protocol.ts` uses `Server` + `WebStandardStreamableHTTPServerTransport`
+  directly**, constructing both per request (stateless mode has no session to keep one
+  alive across requests), registering `ListToolsRequestSchema` and `CallToolRequestSchema`
+  handlers that call `toolsFor`/`callTool` from the already-built modules, then
+  `transport.handleRequest(request)`. `initialize` and `notifications/initialized` are
+  handled by `Server`'s own `Protocol` base with no code of Docket's own.
 
 ## 3. Tools
 
