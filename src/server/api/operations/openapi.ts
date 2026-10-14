@@ -12,6 +12,10 @@ export const openApiOperations = [
     summary: "Get this OpenAPI document",
     responses: { 200: { description: "The OpenAPI 3.1 document", schema: z.record(z.string(), z.unknown()) } },
     idempotent: false,
+    mcp: {
+      expose: false,
+      reason: "Public and unauthenticated, and the largest response the API produces; a model is already holding the tool list it describes.",
+    },
     async run() {
       return { status: 200, body: buildOpenApiDocument(), headers: { "Cache-Control": "public, max-age=300" } };
     },

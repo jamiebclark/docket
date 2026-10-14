@@ -21,6 +21,7 @@ const echo = defineOperation({
   summary: "Echo",
   responses: { 200: { description: "ok" } },
   idempotent: false,
+  mcp: { expose: false, reason: "test-only operation" },
   body: { kind: "json", schema: z.object({ n: z.number() }) },
   async run() {
     return { status: 200, body: { ok: true } };

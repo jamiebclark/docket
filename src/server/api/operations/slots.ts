@@ -36,6 +36,7 @@ export const slotOperations = [
     query: upcomingQuerySchema,
     responses: { 200: { description: "Occurrences in time order", schema: z.object({ data: z.array(OccurrenceSchema), nextCursor: z.null() }) } },
     idempotent: false,
+    mcp: { expose: true },
     async run(scope, { query }) {
       const data = await listUpcomingOccurrences(scope, {
         days: query.days,
@@ -69,6 +70,7 @@ export const slotOperations = [
       ...standardErrors("manage_setup"),
     },
     idempotent: true,
+    mcp: { expose: true },
     async run(scope, { body }) {
       const slot = await addSlot(scope, body);
       return { status: 201, body: toSlot(slot) };
@@ -102,6 +104,7 @@ export const slotOperations = [
       ...standardErrors("manage_setup"),
     },
     idempotent: true,
+    mcp: { expose: true },
     async run(scope, { body }) {
       const { added, alreadySet } = await addSlotsForWeek(scope, body);
       return { status: 200, body: { added: added.map(toSlot), alreadySet } };
@@ -131,6 +134,7 @@ export const slotOperations = [
       ...standardErrors("manage_setup"),
     },
     idempotent: true,
+    mcp: { expose: true },
     async run(scope, { params, body }) {
       const slot =
         "paused" in body
@@ -155,6 +159,7 @@ export const slotOperations = [
       ...standardErrors("manage_setup"),
     },
     idempotent: true,
+    mcp: { expose: true, confirm: { effect: "Delete this posting slot." } },
     async run(scope, { params }) {
       await deleteSlot(scope, params.slotId);
       return { status: 200, body: { id: params.slotId, deleted: true } };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createDocument, type ZodOpenApiObject, type ZodOpenApiOperationObject, type ZodOpenApiPathsObject } from "zod-openapi";
-import { API_ERROR_CODES, statusFor } from "./errors";
+import { codesForStatus, errorStatuses } from "./error-surface";
+import { API_ERROR_CODES } from "./errors";
 import { OPERATIONS, type AnyApiOperation } from "./operations";
 import type { ApiExamples } from "./operations/types";
 
@@ -37,12 +38,6 @@ const ERROR_DESCRIPTIONS: Record<number, string> = {
   503: "Not configured or unavailable",
 };
 
-function codesFor(status: number): string {
-  return API_ERROR_CODES.filter((c) => statusFor(c) === status)
-    .map((c) => `\`${c}\``)
-    .join(", ");
-}
-
 /**
  * The shared error response for `status`: the Error schema, the codes that map to it, and its headers.
  * `own` is the operation's own description of the status, which replaces the generic one.
@@ -57,21 +52,10 @@ function errorResponse(
   if (status === 429 || status === 503) headers["Retry-After"] = RETRY_AFTER_HEADER;
   const lead = (own ?? ERROR_DESCRIPTIONS[status] ?? "Error").replace(/\.$/, "");
   return {
-    description: `${lead}. Codes: ${codesFor(status)}.`,
+    description: `${lead}. Codes: ${codesForStatus(status)}.`,
     content: { "application/json": { schema: ErrorSchema, ...(examples ? { examples } : {}) } },
     headers,
   };
-}
-
-function errorStatuses(op: AnyApiOperation): number[] {
-  const set = new Set<number>([500]);
-  if (op.permission !== null) [401, 403, 429].forEach((s) => set.add(s));
-  if (op.params || op.resourceParams?.length) set.add(404);
-  if (op.query || op.body) set.add(400);
-  if (op.idempotent) [400, 409, 413, 415, 422].forEach((s) => set.add(s));
-  if (op.body?.kind === "multipart") [413, 415].forEach((s) => set.add(s));
-  for (const s of Object.keys(op.responses).map(Number)) set.delete(s);
-  return [...set].sort((a, b) => a - b);
 }
 
 function buildOperation(op: AnyApiOperation): ZodOpenApiOperationObject {

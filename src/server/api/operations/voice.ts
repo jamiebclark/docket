@@ -36,6 +36,7 @@ export const voiceOperations = [
       ...standardErrors("manage_setup"),
     },
     idempotent: true,
+    mcp: { expose: true },
     async run(scope, { body }) {
       const { profileId, version, isDefault } = await createVoiceProfile(scope, body);
       return { status: 201, body: { id: profileId, version, isDefault } };
@@ -71,6 +72,7 @@ export const voiceOperations = [
       ...standardErrors("manage_setup"),
     },
     idempotent: true,
+    mcp: { expose: true },
     async run(scope, { params, body }) {
       const { version, isDefault } = await saveVoiceProfile(scope, params.profileId, body);
       return { status: 200, body: { id: params.profileId, version, isDefault } };

@@ -38,21 +38,21 @@ Single Next.js project. Source under `src/`, tests under `tests/`, docs under `d
 **⚠️ CRITICAL**: No user-story work can begin until this phase is complete and `pnpm typecheck` passes.
 
 - [ ] T002 Add `McpConfirm` and `McpDisposition` types and the required `mcp: McpDisposition` field to `ApiOperation` in `src/server/api/operations/types.ts`, per data-model.md §1
-- [ ] T003 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/accounts.ts` per data-model.md §2 (listAccounts: exposed)
-- [ ] T004 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/activity.ts` per data-model.md §2 (listActivity: exposed)
-- [ ] T005 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/posts.ts` per data-model.md §2 (getPost: exposed; createPost: exposed+idempotent; queuePost: exposed+confirm+idempotent; schedulePost: exposed+confirm+idempotent)
-- [ ] T006 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/targets.ts` per data-model.md §2 (getPostTarget: exposed; retryPostTarget/resolvePostTarget/retryFailedTargets: withheld — ambiguous-publish recovery path)
-- [ ] T007 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/media.ts` per data-model.md §2 (listMedia/getMedia: exposed; uploadMedia: withheld — multipart; registerMediaFromUrl: withheld — arbitrary URL fetch)
-- [ ] T008 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/generate.ts` per data-model.md §2 and research D9 (generatePost: exposed with conditional `confirm.when` on `schedulingPolicy` present and not `leave_as_draft`, `confirm.effect`/`whenDescription` stating the generate-then-queue effect)
-- [ ] T009 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/slots.ts` per data-model.md §2 (listUpcomingSlots/addSlot/addWeekSlots/updateSlot: exposed, deleteSlot: exposed+confirm)
-- [ ] T010 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/jobs.ts` per data-model.md §2 (all nine job operations: withheld — bulk-generation/one-way reasons from data-model.md §2 table)
-- [ ] T011 [P] Add `mcp` disposition to `src/server/api/operations/openapi.ts` per data-model.md §2 (getOpenApi: withheld — public/unauthenticated, largest response)
-- [ ] T012 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/projects.ts` per data-model.md §2 (createProject: exposed+confirm+idempotent)
-- [ ] T013 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/voice.ts` per data-model.md §2 (createVoiceProfile/updateVoiceProfile/setAccountPostingInstructions: exposed+idempotent)
-- [ ] T014 Add `mcp: { expose: false, reason: "test-only operation" }` to the throwaway operations built with `defineOperation` in `tests/integration/api/errors.test.ts`, `tests/integration/api/idempotency.test.ts`, `tests/integration/api/idempotency-generate.test.ts`, `tests/integration/api/openapi.test.ts`, `tests/integration/api/pipeline.test.ts` (research §"Build order" step 1 — these splice into/out of `OPERATIONS` in `beforeAll`/`afterAll`)
-- [ ] T015 Run `pnpm typecheck` and confirm it fails loudly on any operation still missing `mcp` before fixing, then confirm it passes once T002–T014 are complete (SC-002's compile-time half)
-- [ ] T016 Extract `errorStatuses` and `codesFor` out of `src/server/api/openapi.ts` into new `src/server/api/error-surface.ts` as `errorStatuses(op)` and `codesForStatus(status)`, and rewire `openapi.ts` to import them with no behaviour change (research D8)
-- [ ] T017 Run `pnpm vitest run tests/integration/api/openapi.test.ts` unedited and confirm it stays green, proving the T016 extraction was neutral
+- [X] T003 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/accounts.ts` per data-model.md §2 (listAccounts: exposed)
+- [X] T004 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/activity.ts` per data-model.md §2 (listActivity: exposed)
+- [X] T005 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/posts.ts` per data-model.md §2 (getPost: exposed; createPost: exposed+idempotent; queuePost: exposed+confirm+idempotent; schedulePost: exposed+confirm+idempotent)
+- [X] T006 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/targets.ts` per data-model.md §2 (getPostTarget: exposed; retryPostTarget/resolvePostTarget/retryFailedTargets: withheld — ambiguous-publish recovery path)
+- [X] T007 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/media.ts` per data-model.md §2 (listMedia/getMedia: exposed; uploadMedia: withheld — multipart; registerMediaFromUrl: withheld — arbitrary URL fetch)
+- [X] T008 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/generate.ts` per data-model.md §2 and research D9 (generatePost: exposed with conditional `confirm.when` on `schedulingPolicy` present and not `leave_as_draft`, `confirm.effect`/`whenDescription` stating the generate-then-queue effect)
+- [X] T009 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/slots.ts` per data-model.md §2 (listUpcomingSlots/addSlot/addWeekSlots/updateSlot: exposed, deleteSlot: exposed+confirm)
+- [X] T010 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/jobs.ts` per data-model.md §2 (all nine job operations: withheld — bulk-generation/one-way reasons from data-model.md §2 table)
+- [X] T011 [P] Add `mcp` disposition to `src/server/api/operations/openapi.ts` per data-model.md §2 (getOpenApi: withheld — public/unauthenticated, largest response)
+- [X] T012 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/projects.ts` per data-model.md §2 (createProject: exposed+confirm+idempotent)
+- [X] T013 [P] Add `mcp` dispositions to every operation in `src/server/api/operations/voice.ts` per data-model.md §2 (createVoiceProfile/updateVoiceProfile/setAccountPostingInstructions: exposed+idempotent)
+- [X] T014 Add `mcp: { expose: false, reason: "test-only operation" }` to the throwaway operations built with `defineOperation` in `tests/integration/api/errors.test.ts`, `tests/integration/api/idempotency.test.ts`, `tests/integration/api/idempotency-generate.test.ts`, `tests/integration/api/openapi.test.ts`, `tests/integration/api/pipeline.test.ts` (research §"Build order" step 1 — these splice into/out of `OPERATIONS` in `beforeAll`/`afterAll`)
+- [X] T015 Run `pnpm typecheck` and confirm it fails loudly on any operation still missing `mcp` before fixing, then confirm it passes once T002–T014 are complete (SC-002's compile-time half)
+- [X] T016 Extract `errorStatuses` and `codesFor` out of `src/server/api/openapi.ts` into new `src/server/api/error-surface.ts` as `errorStatuses(op)` and `codesForStatus(status)`, and rewire `openapi.ts` to import them with no behaviour change (research D8)
+- [X] T017 Run `pnpm vitest run tests/integration/api/openapi.test.ts` unedited and confirm it stays green, proving the T016 extraction was neutral
 
 **Checkpoint**: `pnpm typecheck` and the OpenAPI test are green. Every operation has a disposition. The error-surface module exists. User story work can now begin.
 
