@@ -45,4 +45,11 @@ describe("buildSeriesPlanPrompt with avoidTitles (S31)", () => {
     const { user } = buildSeriesPlanPrompt({ ...base, avoidTitles: ["First title", "Second title"] });
     expect(user).toContain("TITLES TO AVOID: First title, Second title");
   });
+
+  it("a standing series's avoid-titles call (prior run titles) is the same prompt as a one-off series's (FR-018)", () => {
+    const priorRunTitles = ["Monday's angle", "Last week's angle"];
+    const standingSeriesPlanPrompt = buildSeriesPlanPrompt({ ...base, avoidTitles: priorRunTitles });
+    const oneOffSeriesPlanPrompt = buildSeriesPlanPrompt({ ...base, avoidTitles: priorRunTitles });
+    expect(standingSeriesPlanPrompt).toEqual(oneOffSeriesPlanPrompt);
+  });
 });
