@@ -21,7 +21,11 @@ export function describeTool(op: AnyApiOperation, project: { name: string }, con
   if (codes.length) parts.push(`Can fail with: ${codes.join(", ")}.`);
 
   if (confirm) {
-    parts.push(`Requires \`confirm: true\` to proceed: ${confirm.effect}`);
+    // `whenDescription` is what distinguishes a conditional gate from an unconditional one, and it
+    // carries the way to avoid the effect entirely. A model that never sees it passes `confirm: true`
+    // by reflex, which is safe but makes the gate meaningless (review F16).
+    const sentence = `Requires \`confirm: true\` to proceed: ${confirm.effect}`;
+    parts.push(confirm.whenDescription ? `${sentence} ${confirm.whenDescription}` : sentence);
   }
 
   if (op.id === "generatePost") {

@@ -3344,9 +3344,16 @@ post to the brand's live accounts in the same call — an irreversible publish F
 list (queueing a post) already requires confirmation for, even though FR-021's list of *tool
 names* does not mention `generatePost`. Research D9 resolved this in favor of the effect over
 the operation id: the tool's disposition carries a conditional confirmation,
-`confirm: { when: (args) => schedulingPolicy present and not "leave_as_draft", effect: … }`,
-so a plain generate-to-draft call needs no confirmation (matching the spec's text) and a
-generate-that-queues does (matching FR-020's effects-based rule). *Reverse*: delete the
+`confirm: { when: (args) => schedulingPolicy !== "leave_as_draft", effect: … }`, so a
+generate-that-could-queue demands confirmation (matching FR-020's effects-based rule).
+*Amended during review*: the predicate first read "`schedulingPolicy` present and not
+`leave_as_draft`", on the reasoning that a plain generate-to-draft needs no confirmation
+(matching the spec's text). That was wrong, because the effect is decided by the *resolved*
+policy, not the requested one: `resolvePolicies` falls back to the project's
+`defaultSchedulingPolicy`, so in a project configured `auto_approve` + `add_to_queue` a call
+passing no `schedulingPolicy` at all published to the brand's live accounts with no
+confirmation ever demanded. The predicate now treats an absent policy as "unknown, therefore
+confirm", and only an explicit `leave_as_draft` skips the gate. *Reverse*: delete the
 `confirm` key from `generatePost`'s disposition in
 `src/server/api/operations/generate.ts` — a one-line change — if review prefers the spec's
 literal reading; the accepted cost of reversing it is that the generate tool becomes the only

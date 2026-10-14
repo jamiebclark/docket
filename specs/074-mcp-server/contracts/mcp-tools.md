@@ -87,7 +87,7 @@ tool ran.
 | `docket_schedule_post` | the post publishes to live accounts at the time given | always |
 | `docket_delete_slot` | the schedule row is destroyed, with no undo | always |
 | `docket_create_project` | a globally unique slug is permanently consumed and no API call can remove the project | always |
-| `docket_generate_post` | the generated post is queued to live accounts | only when `schedulingPolicy` is present and not `leave_as_draft` |
+| `docket_generate_post` | the generated post is queued to live accounts | unless `schedulingPolicy` is explicitly `leave_as_draft` (an absent policy may queue, via the project default) |
 
 The argument is `confirm`, and only the JSON literal `true` proceeds. The refusal is
 `confirmation_required`, names the effect in plain words, names `confirm`, and happens

@@ -23,7 +23,33 @@ describe("describeTool", () => {
       if (confirm) {
         expect(text).toContain(confirm.effect);
         expect(text.toLowerCase()).toContain("confirm");
+        // A conditional gate must publish its condition, not just its effect (review F16).
+        if (confirm.whenDescription) expect(text).toContain(confirm.whenDescription);
       }
+    }
+  });
+
+  it("names the condition for a conditional confirmation, and adds nothing for an unconditional one", () => {
+    const conditional = EXPOSED.filter((o) => o.mcp.expose && o.mcp.confirm?.when);
+    const unconditional = EXPOSED.filter((o) => o.mcp.expose && o.mcp.confirm && !o.mcp.confirm.when);
+
+    // Both sets must be non-empty, or this test proves nothing about the distinction.
+    expect(conditional.length).toBeGreaterThan(0);
+    expect(unconditional.length).toBeGreaterThan(0);
+
+    for (const op of conditional) {
+      const confirm = op.mcp.expose ? op.mcp.confirm! : undefined!;
+      const text = describeTool(op, project, confirm);
+      // The escape hatch has to reach the model, not only docs/mcp.md.
+      expect(text).toContain(confirm.whenDescription!);
+      expect(text).toMatch(/leave_as_draft/);
+    }
+
+    for (const op of unconditional) {
+      const confirm = op.mcp.expose ? op.mcp.confirm! : undefined!;
+      const text = describeTool(op, project, confirm);
+      expect(text).toContain(`Requires \`confirm: true\` to proceed: ${confirm.effect}`);
+      expect(confirm.whenDescription).toBeUndefined();
     }
   });
 

@@ -70,9 +70,10 @@ Exposed (19). `C` marks a confirmation; `I` marks an operation that accepts
 | `updateSlot` | `docket_update_slot` | `manage_setup` | | I |
 | `deleteSlot` | `docket_delete_slot` | `manage_setup` | C | I |
 
-`C*` is conditional: `docket_generate_post` demands `confirm` only when
-`schedulingPolicy` is present and is not `leave_as_draft`, because that queues the post it
-generates (research D9).
+`C*` is conditional: `docket_generate_post` demands `confirm` unless `schedulingPolicy` is
+explicitly `leave_as_draft`, because anything else may queue the post it generates — an
+absent policy falls back to the project's default, which can be `add_to_queue` (research D9,
+amended by review F2).
 
 Withheld (15), with the reason published verbatim from the field:
 
