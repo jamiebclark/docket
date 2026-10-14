@@ -29,6 +29,14 @@ import { createUploadsRepo, type UploadsRepo } from "./uploads";
 import { createPostsRepo, type PostsRepo } from "./posts";
 import { createProjectLlmRepo, type ProjectLlmRepo } from "./project-llm";
 import { createSlotsRepo, type SlotsRepo } from "./slots";
+import {
+  createStandingSeriesPositionsRepo,
+  createStandingSeriesRepo,
+  createStandingSeriesRunsRepo,
+  type StandingSeriesPositionsRepo,
+  type StandingSeriesRepo,
+  type StandingSeriesRunsRepo,
+} from "./standing-series";
 import { createTargetsRepo, type TargetsRepo } from "./targets";
 import { createTokensRepo, type TokensRepo } from "./tokens";
 import { createMembersRepo, type MembersRepo } from "./members";
@@ -95,6 +103,12 @@ function keyCan(permissions: readonly ApiKeyPermission[], request: PermissionReq
   );
 }
 
+/** The one permission the fixed-editor job runner needs beyond its role (see `buildScope`). */
+function jobRunnerGrants(request: PermissionRequest): boolean {
+  const entries = Object.entries(request) as [string, readonly string[]][];
+  return entries.every(([resource, actions]) => resource === "media" && actions.every((a) => a === "generate"));
+}
+
 export interface ProjectScope {
   readonly actor: ScopeActor;
   /** The database or transaction this scope is pinned to. For a write that spans a DAL this scope has no repo for
@@ -133,6 +147,9 @@ export interface ProjectScope {
   readonly voiceVersions: VoiceVersionsRepo;
   readonly series: SeriesRepo;
   readonly generationFailures: GenerationFailuresRepo;
+  readonly standingSeries: StandingSeriesRepo;
+  readonly standingSeriesRuns: StandingSeriesRunsRepo;
+  readonly standingSeriesPositions: StandingSeriesPositionsRepo;
   readonly jobs: JobsRepo;
   readonly jobItems: JobItemsRepo;
   readonly apiKeys: ApiKeysRepo;
@@ -219,7 +236,12 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     can:
       actor.kind === "api_key"
         ? (request) => keyCan(actor.permissions, request)
-        : (request) => roles[data.membership.role].authorize(request as never).success,
+        : // The job runner acts on a series an owner/admin already configured to generate images
+          // (standing_series:manage is owner/admin-only); it needs media:generate for that, regardless
+          // of the fixed editor role it otherwise runs as.
+          (request) =>
+            roles[data.membership.role].authorize(request as never).success ||
+            (actor.kind === "job_runner" && jobRunnerGrants(request)),
     audit: createAuditRepo(exec, data.project.id),
     members: createMembersRepo(exec, data.project.id),
     uploads: createUploadsRepo(exec, data.project.id),
@@ -230,6 +252,9 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
     voiceVersions: createVoiceVersionsRepo(exec, data.project.id),
     series: createSeriesRepo(exec, data.project.id),
     generationFailures: createGenerationFailuresRepo(exec, data.project.id),
+    standingSeries: createStandingSeriesRepo(exec, data.project.id),
+    standingSeriesRuns: createStandingSeriesRunsRepo(exec, data.project.id),
+    standingSeriesPositions: createStandingSeriesPositionsRepo(exec, data.project.id),
     jobs: createJobsRepo(exec, data.project.id),
     jobItems: createJobItemsRepo(exec, data.project.id),
     apiKeys: createApiKeysRepo(exec, data.project.id),

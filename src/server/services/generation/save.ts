@@ -24,7 +24,8 @@ export async function fillEmptyAltTexts(
 export type GeneratedPostLink =
   | { generationRequestId: string }
   | { seriesId: string; seriesPosition: number }
-  | { generationJobItemId: string };
+  | { generationJobItemId: string }
+  | { standingSeriesPositionId: string };
 
 /** Writes the post, its media and its targets in the caller's transaction and returns the post id. */
 export async function saveGeneratedPost(

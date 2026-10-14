@@ -19,6 +19,9 @@ export interface SchedulerConfig {
   jobMaxAttempts?: number;
   jobBackoffBaseMs?: number;
   jobBackoffMaxMs?: number;
+  /** Standing series (071): series claimed per tick, posts one claimed series may produce per tick. */
+  standingSeriesMaxSeries?: number;
+  standingSeriesMaxPosts?: number;
   /** Outgoing webhooks (009). */
   webhookMaxPerTick?: number;
   webhookConcurrency?: number;
@@ -110,6 +113,24 @@ export function jobConfig(config: SchedulerConfig) {
   };
 }
 
+/** The standing-series section's settings with defaults filled in; physical constants shared with jobs (S23). */
+export function standingSeriesConfig(config: SchedulerConfig) {
+  return {
+    maxSeries: config.standingSeriesMaxSeries ?? STANDING_SERIES_MAX_SERIES_DEFAULT,
+    maxPosts: config.standingSeriesMaxPosts ?? STANDING_SERIES_MAX_POSTS_DEFAULT,
+    minCallMs: JOB_MIN_CALL_MS,
+    persistReserveMs: JOB_PERSIST_RESERVE_MS,
+    maxAttempts: JOB_ITEM_MAX_ATTEMPTS,
+    backoffBaseMs: JOB_BACKOFF_BASE_MS,
+    backoffMaxMs: JOB_BACKOFF_MAX_MS,
+    leaseMs: config.leaseMs,
+    timeBudgetMs: config.timeBudgetMs,
+  };
+}
+
+export const STANDING_SERIES_MAX_SERIES_DEFAULT = 2;
+export const STANDING_SERIES_MAX_POSTS_DEFAULT = 2;
+
 export const JOB_MIN_CALL_MS = 8_000;
 export const JOB_PERSIST_RESERVE_MS = 3_000;
 export const JOB_ITEM_MAX_ATTEMPTS = 3;
@@ -128,6 +149,8 @@ type EnvLike = Pick<
   | "PUBLISH_MAX_DURATION_HOURS"
   | "TOKEN_REFRESH_WINDOW_HOURS"
   | "GENERATION_TICK_MAX_ITEMS"
+  | "STANDING_SERIES_TICK_MAX_SERIES"
+  | "STANDING_SERIES_TICK_MAX_POSTS"
 >;
 
 /** `overrides` is for tests. */
@@ -150,6 +173,8 @@ export function schedulerConfig(env: EnvLike, overrides: Partial<SchedulerConfig
     jobMaxAttempts: JOB_ITEM_MAX_ATTEMPTS,
     jobBackoffBaseMs: JOB_BACKOFF_BASE_MS,
     jobBackoffMaxMs: JOB_BACKOFF_MAX_MS,
+    standingSeriesMaxSeries: env.STANDING_SERIES_TICK_MAX_SERIES,
+    standingSeriesMaxPosts: env.STANDING_SERIES_TICK_MAX_POSTS,
     ...overrides,
   };
 }

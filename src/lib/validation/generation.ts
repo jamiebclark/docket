@@ -69,7 +69,7 @@ const usage = z.object({ inputTokens: z.number().nullable(), outputTokens: z.num
 
 export const generationRecordSchema = z.object({
   at: z.string(),
-  mode: z.enum(["single", "series_post", "regenerate", "job_item"]),
+  mode: z.enum(["single", "series_post", "regenerate", "job_item", "standing_series_post"]),
   job: z
     .object({ id: z.string(), itemId: z.string(), position: z.number().int().min(0), sourceKind: z.string() })
     .nullish(),

@@ -2791,3 +2791,176 @@ generation entries landed. Full text in `specs/070-image-generation/spec.md` (G1
   in-request, single-attempt action.
 - **A cooldown, quota or per-project generation limit.** G25; visibility in the Usage figures is the
   chosen control.
+
+## 061 — Standing content series (2026-10-14)
+
+Spec: `specs/071-evergreen-series`. Roadmap entry 3 of 6
+(`.specify/roadmaps/content-engine-roadmap.json`, slug `evergreen-series`): a recurring series that
+keeps producing posts on a cadence until someone stops it, built on the existing generation, policy,
+allocator and worker-tick machinery. Full text in `specs/071-evergreen-series/spec.md` (W1–W34) and
+`specs/071-evergreen-series/plan.md`/`research.md` (S1–S40).
+
+### Spec decisions (W1–W34)
+
+- **W1 — "Standing series", a new word.** The in-request, 2–10-angle generation path keeps the bare
+  word *Series*; the new recurring object is a **standing series** everywhere, and the new Batch jobs
+  section is titled **Standing series**.
+- **W2 — A standing series is configuration, not a work list.** It holds what to generate and how
+  often; each firing opens a **run**, which carries positions, counts, outcomes and failures — so
+  `dated-series` can add a second way to decide when a run opens without touching anything else.
+- **W3 — The stored shape deliberately mirrors a batch job**: project, name, voice profile, the
+  `template`/`templateFields` pair, target account ids, resolved approval/scheduling policy, an
+  enabled flag, `lastRunAt`/`nextRunAt`.
+- **W4 — No per-run data fields in this entry.** `templateFields` is always empty, so the template may
+  carry no placeholders; `dated-series` can feed per-occurrence fields in later with no second
+  migration.
+- **W5 — A series also stores a brief**, bounded like the existing one, because the planning call
+  needs to know what the series is about, not just how to write it.
+- **W6 — A name is required and unique within a project**, 1–100 characters, trimmed,
+  case-insensitively unique.
+- **W7 — A cadence is a count and a period: N posts per day, week or month.** Nothing finer than a day
+  (a rate-limit problem) and nothing coarser than a month (better expressed as a dated series).
+- **W8 — N is 1 to 10 per period**, matching the existing in-request series maximum.
+- **W9 — Period boundaries are the project's local day, week (Monday) or month (the 1st)**, resolved
+  through Temporal with explicit disambiguation; a series created mid-period is first due at the next
+  boundary.
+- **W10 — At most one run per period, and no backfill.** A worker outage across several boundaries is
+  recorded as missed periods and the series jumps to the current one, rather than dumping a backlog.
+- **W11 — A new period closes a still-open run**, with its counts recorded as incomplete, so a slow or
+  unsatisfiable series cannot accumulate open runs forever.
+- **W12 — Pausing stops new runs and stops the open run producing more; resuming sets `nextRunAt` to
+  the next boundary**, never a missed one.
+- **W13 — Deleting a series keeps its posts.** Deletion removes the series and its run history only,
+  is immediate and final, and needs the same permission as creating one.
+- **W14 — A run of two or more posts plans its angles first, through the existing planning call; a
+  run of exactly one post skips planning**, because the planner refuses a count below two.
+- **W15 — The plan is stored on the run before any post is written**, so a restart finishes the plan
+  it already committed to rather than re-planning.
+- **W16 — The plan is told which angles the series has already used**, via the existing avoid-titles
+  prompt mechanism, so a weekly series does not repeat itself; golden prompt tests are updated.
+- **W17 — Each post of a run goes through the existing generation path unchanged** — same prompt
+  composition, brand context, voice ordering, schema, correction retry, failure vocabulary, usage
+  ledger and credit-hold wrapper.
+- **W18 — The voice profile's current version is taken at run time**, recorded on the post, as every
+  generated post already does.
+- **W19 — A position is produced at most once**, enforced by a uniqueness constraint; a writer that
+  loses the race re-reads and reports the winner.
+- **W20 — A temporary failure retries on a later tick; a lasting one is recorded as a failure for that
+  position and the run moves on.** The run closes when every position has a post, a failure or a skip.
+- **W21 — Policies are authorised once, at creation or edit, and stored on the series** — the only
+  honest option, since the authorising member may not be a member by the time the series fires.
+- **W22 — The one policy function decides every post, with no bypass.** A validation failure forces
+  review even under auto-approve — intended behaviour, not a defect.
+- **W23 — Queued posts take real slots through the existing allocator, inside the policy transaction**,
+  so two series or two workers cannot land on one occurrence; a post with no free occurrence stays a
+  draft with that reason recorded.
+- **W24 — A series never schedules at an explicit time.** It leaves posts as drafts or queues them;
+  picking times is what slots are for.
+- **W25 — A series declares one media source: none, a pool, or generate.**
+- **W26 — A pooled image is reserved like a batch job's image** — one unused image per post, reserved
+  inside the write, videos never eligible.
+- **W27 — A generated image uses a prompt stored on the series**, sent with the fixed real-people
+  instruction and nothing else — no post text, no brand fields, no voice profile.
+- **W28 — A post whose media requirement cannot be satisfied is skipped whole, with the reason
+  recorded**, naming the account whose requirement failed, rather than dropping one target.
+- **W29 — A skip is not a failure.** It is a neutral, recorded outcome and does not count an attempt or
+  mark a run "completed with failures".
+- **W30 — A new bounded section of the existing tick, not a new process** — claimed, leased,
+  skip-locked, kill-safe and deadline-aware exactly like the batch section.
+- **W31 — Its per-tick budget is its own and additive**, documented so an install knows enabling
+  standing series raises its total concurrent model calls.
+- **W32 — Claims rotate, oldest-due first**, so one busy series or project cannot starve another.
+- **W33 — A credit hold pauses a series cleanly, with no state to clear.** A held owner's series is not
+  claimed at all; a mid-run billing refusal requeues the position with no attempt counted.
+- **W34 — A series that produces nothing three runs in a row pauses itself, with the reason**, undone
+  by the same Resume control a person's pause is.
+
+### Plan decisions (S1–S40)
+
+- **S1 — Three tables**: `standing_series`, `standing_series_runs`, `standing_series_positions` — a
+  position is a row because every idempotency guarantee is a per-slot statement.
+- **S2 — The run carries a configuration snapshot (`config jsonb`) written at open**; the producer
+  reads the run, never the series, which is the whole of FR-056.
+- **S3 — Run counts are derived from positions; only `outcome` is stored, once, at close** — the
+  `refreshJobStatus` rule, which keeps counters from double-counting under retries.
+- **S4 — A period is `(period, local date)` with `unique(series_id, period, period_start)`.**
+- **S5 — The cadence engine is a pure module**, `src/lib/series/cadence.ts`, following
+  `src/lib/email/schedule.ts`.
+- **S6 — The claim unit is the series, leased on the series row.** One holder makes "one open run"
+  true by construction.
+- **S7 — Claim predicate**: `enabled AND lease free AND (next_run_at <= now OR EXISTS (an open run
+  with work due))` — `next_run_at` advances when a run opens.
+- **S8 — Positions are created when the run opens; the plan is written with `UPDATE … WHERE plan IS
+  NULL`**, so "a restart must not re-plan" is a database fact.
+- **S9 — Plan retry bookkeeping is two run columns**, `plan_attempt_count` and
+  `plan_next_attempt_at`; the kind and message live in `generation_failures`.
+- **S10 — `posts` gains one nullable column, `standing_series_position_id`**, FK `ON DELETE SET NULL`,
+  with a partial unique index.
+- **S11 — `GeneratedPostLink` gains `{ standingSeriesPositionId }`; `GenerationRecord.mode` gains
+  `standing_series_post`.**
+- **S12 — `generation_failures` gains `standing_series_run_id` + `standing_series_position`** (nullable,
+  so a plan failure belongs to the run); `generation_mode` gains two values.
+- **S13 — Two new `llm_usage_purpose` values and no new column on `llm_call_usage`.**
+- **S14 — Media is resolved per position, before the model call, and written onto the position**, so a
+  restart reuses the image instead of generating a second one.
+- **S15 — The pool reservation is a partial unique index on positions; `src/server/dal/media.ts`'s
+  reservation predicate is widened to count both tables.**
+- **S16 — The pool claim is `SELECT … FOR UPDATE SKIP LOCKED LIMIT 1`** over unused, unreserved,
+  tag-matching live images, oldest first.
+- **S17 — The `generate` source calls `createImageGenerator(scope)` with the series' stored prompt and
+  nothing else.**
+- **S18 — A position's `last_error_kind` reuses the existing `generation_job_item_error` enum.**
+- **S19 — A new `standing_series_skip_reason` enum of six values plus `skip_account_id`.**
+- **S20 — The run carries `outcome` (four values) and `blocked_reason` (two).** Voice profiles are
+  archived, never deleted, so the spec's "deleted voice profile" edge case is the archived case.
+- **S21 — The run records `dropped_account_ids uuid[]`.**
+- **S22 — A seventh section, `src/server/scheduler/standing-series.ts`, inside the existing `runTick()`**
+  — the existing `section()` wrapper gives FR-047's isolation for free.
+- **S23 — Two environment variables for the section's own claim limits**; the physical per-call
+  constants are shared.
+- **S24 — Series are processed concurrently, positions within a run sequentially.**
+- **S25 — One new statement, `standing_series: ["manage"]`, for owner and admin, with no `KEY_GRANTS`
+  entry** — no public API surface is structural.
+- **S26 — Viewing the list and run history is gated by `post: ["view"]`**, as the Jobs page already is.
+- **S27 — FR-008's log is the audit log**: five new `membership_action` values; `activity_events` is
+  publish-and-connect outcomes only.
+- **S28 — No posting-instructions snapshot**: a manual Generate reads them live, so FR-019 requires
+  the prompt to compose exactly as a manual Generate's does.
+- **S29 — `template_fields` emptiness is enforced in Zod, not by a CHECK.**
+- **S30 — Avoid-titles: the 3 most recent closed runs, capped at 20 titles, both named constants.**
+- **S31 — `buildSeriesPlanPrompt` gains `avoidTitles` and emits nothing when empty**, so today's
+  committed golden snapshots stay byte-identical.
+- **S32 — The producer re-reads `enabled` before each position** — the only safe point FR-054's "next
+  safe point" can mean.
+- **S33 — A position left `running` is reset by the next claim**, counting an attempt unless the claim
+  is a credit probe; at the cap it fails as `interrupted`.
+- **S34 — A position that already has a post but no applied policy is a finish position**: variants
+  and policy, no model call — the batch runner's already-reviewed recovery, reused.
+- **S35 — Self-pause reads the three most recent closed runs' stored `outcome`, at close, in one
+  indexed query.**
+- **S36 — `withinBudget`/`Overran`/the redacted log line move to `src/server/scheduler/budget.ts`**;
+  `jobs/runner.ts` imports them — a pure move, proved by its existing tests staying green.
+- **S37 — `resolveBlockedProjectIds` is generalised to take candidate project ids.**
+- **S38 — A Standing series section on `/jobs`, plus `/jobs/series/new`, `/jobs/series/[seriesId]` and
+  `…/edit`.**
+- **S39 — Housekeeping prunes closed runs older than 90 days, 200 per tick; positions and failures
+  cascade; an open run is never pruned.**
+- **S40 — No webhook, no notification, no email, no API, no real-time push.**
+
+### What this entry does not do
+
+- **No date-pegged occurrences.** Anniversaries, a spreadsheet occurrence, lead time, leap days and
+  missed-window handling belong to `dated-series`, which adds a second way to decide when a run opens
+  on this engine.
+- **No change to one-off Generate, the in-request series, or finite batch jobs**, beyond refactoring
+  shared code with no behaviour change.
+- **No public API, MCP or webhook surface** for standing series.
+- **No notifications or email** about a series' runs, skips or failures beyond what a post already
+  produces and what the Batch jobs screens show.
+- **No explicit-time scheduling**, no per-post overrides, no editing a run's plan, and no re-running a
+  closed run.
+- **No backfill** of periods missed while the worker was down.
+- **No cross-period deduplication of post text**; angle titles of recent runs are avoided, but Docket
+  does not compare produced copy.
+- **No video**: a pooled asset is an image, and no video is generated or attached.
+- **No per-series provider, model, credential, rate limit or spend cap.**

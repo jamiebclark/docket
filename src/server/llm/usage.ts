@@ -10,6 +10,8 @@ export type UsagePurpose =
   | "generate.series_post"
   | "generate.regenerate"
   | "generate.job_item"
+  | "generate.standing_series_plan"
+  | "generate.standing_series_post"
   | "voice.try"
   | "llm.check"
   | "image.generate";

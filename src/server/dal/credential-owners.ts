@@ -1,6 +1,9 @@
 import { and, eq, inArray, isNotNull, notInArray, sql, type SQL } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
-import { generationJobs, projectLlmSettings } from "../db/schema";
+import { generationJobs, projectLlmSettings, standingSeries } from "../db/schema";
+// Self-imported so a test's `vi.spyOn(credentialOwners, "credentialOwnersFor")` reaches this module's own
+// call below: a bare reference to the local const would bypass the mocked export entirely.
+import * as self from "./credential-owners";
 
 /** The install's env-configured credential: the only credential owner that exists today (C7). */
 export const INSTALL_CREDENTIAL_OWNER = "install";
@@ -44,11 +47,28 @@ export async function credentialOwnersFor(
 }
 
 /**
+ * Resolves `owners` to the subset of `candidateProjectIds` whose credential owner is one of them, by
+ * asking `credentialOwnersFor` about every candidate in one round trip — a genuine per-owner lookup
+ * rather than an all-or-nothing guess (SC-010). The candidate list is the caller's: job claims pass
+ * the projects with an active job, the standing-series claim passes the projects with an enabled
+ * series (S37), so neither claim's own statement count grows with the other's rows.
+ */
+export async function resolveBlockedProjectIds(
+  exec: Database,
+  owners: readonly string[],
+  candidateProjectIds: readonly string[],
+): Promise<{ ids: string[]; allBlocked: boolean }> {
+  if (owners.length === 0 || candidateProjectIds.length === 0) return { ids: [], allBlocked: false };
+  const blocked = new Set(owners);
+  const ownersByProject = await self.credentialOwnersFor(candidateProjectIds, exec);
+  const ids = candidateProjectIds.filter((id) => blocked.has(ownersByProject.get(id) ?? INSTALL_CREDENTIAL_OWNER));
+  return { ids, allBlocked: ids.length > 0 && ids.length === candidateProjectIds.length };
+}
+
+/**
  * A predicate over `generation_jobs` keeping only jobs whose project id is not in `projectIds` (already
- * resolved from the blocked owners — see `job-claims.ts`'s `resolveBlockedProjectIds`, which asks
- * `credentialOwnerFor` about each candidate project, a genuine per-owner lookup rather than an
- * all-or-nothing guess, SC-010). `undefined` when `projectIds` is empty, so the claim's statement is
- * unchanged with no hold in place.
+ * resolved from the blocked owners — see `resolveBlockedProjectIds`). `undefined` when `projectIds` is
+ * empty, so the claim's statement is unchanged with no hold in place.
  */
 export function jobsExcludingProjects(projectIds: readonly string[], allBlocked = false): SQL | undefined {
   if (projectIds.length === 0) return undefined;
@@ -57,4 +77,11 @@ export function jobsExcludingProjects(projectIds: readonly string[], allBlocked 
   // the one that matters once projects own credentials (review F5).
   if (allBlocked) return sql`false`;
   return notInArray(generationJobs.projectId, [...projectIds]);
+}
+
+/** The same predicate, over `standing_series` (S37). */
+export function standingSeriesExcludingProjects(projectIds: readonly string[], allBlocked = false): SQL | undefined {
+  if (projectIds.length === 0) return undefined;
+  if (allBlocked) return sql`false`;
+  return notInArray(standingSeries.projectId, [...projectIds]);
 }

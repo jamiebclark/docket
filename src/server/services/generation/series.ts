@@ -14,7 +14,7 @@ import { LlmNotConfiguredError, missingLlmSettings } from "../../llm";
 import { resolveLlmForProject } from "../../llm/resolve";
 import type { LlmFailureKind, LlmProvider, LlmResult } from "../../llm/types";
 import { withCreditHold } from "./credit";
-import { createUsageRecorder } from "../../llm/usage";
+import { createUsageRecorder, type UsagePurpose } from "../../llm/usage";
 import { recordFailure } from "./failures";
 import { saveGeneratedPost } from "./save";
 import { runGeneration } from "./core";
@@ -85,7 +85,14 @@ type Attempts = GenerationRecord["attempts"];
 
 const RETRYABLE = new Set<LlmFailureKind>(["invalid_output", "refused", "incomplete", "timeout"]);
 
-export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmProvider): Promise<PlanSeriesResult> {
+export async function planSeries(
+  scope: ProjectScope,
+  input: unknown,
+  llm?: LlmProvider,
+  opts: { avoidTitles?: readonly string[]; purpose?: UsagePurpose } = {},
+): Promise<PlanSeriesResult> {
+  const avoidTitles = opts.avoidTitles ?? [];
+  const purpose = opts.purpose ?? "generate.series_plan";
   let owner: string | undefined;
   let source: "project" | "install" = "install";
   if (!llm) {
@@ -99,7 +106,7 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmP
     owner = resolved.owner;
     source = resolved.source;
   }
-  const recorder = createUsageRecorder({ projectId: scope.project.id, purpose: "generate.series_plan", source });
+  const recorder = createUsageRecorder({ projectId: scope.project.id, purpose, source });
   llm = recorder.wrap(withCreditHold(llm, owner ?? (await credentialOwnerFor(scope.project.id))));
   const parsed = planSeriesSchema.parse(input);
   need(scope, { generation: ["run"], post: ["edit"] });
@@ -117,16 +124,25 @@ export async function planSeries(scope: ProjectScope, input: unknown, llm?: LlmP
     sourceText: parsed.sourceText?.trim() ? parsed.sourceText : null,
     count: parsed.count,
     brand: brandOf(scope.project),
+    avoidTitles,
   };
   const attempts: Attempts = [];
   const call = async (retry: { previousOutput: string; problems: string[] } | null) =>
-    llm.generate({
-      label: "generate.series_plan",
-      ...buildSeriesPlanPrompt({ ...base, retry }),
-      images: [],
-      schemaName: "series_plan",
-      schema: seriesPlanSchema,
-    });
+    purpose === "generate.standing_series_plan"
+      ? llm.generate({
+          label: "generate.standing_series_plan",
+          ...buildSeriesPlanPrompt({ ...base, retry }),
+          images: [],
+          schemaName: "series_plan",
+          schema: seriesPlanSchema,
+        })
+      : llm.generate({
+          label: "generate.series_plan",
+          ...buildSeriesPlanPrompt({ ...base, retry }),
+          images: [],
+          schemaName: "series_plan",
+          schema: seriesPlanSchema,
+        });
   const attemptOf = (r: LlmResult<unknown>, kind: Attempts[number]["kind"]) =>
     attempts.push({ kind, latencyMs: r.latencyMs, usage: r.usage });
   const identity = (r: LlmResult<unknown>) => ({ provider: r.provider, model: r.model });

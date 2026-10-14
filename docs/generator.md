@@ -133,6 +133,91 @@ A job generates one post per item, in the background, so a person can hand the g
 - **Measuring.** `pnpm llm:check` prints `job_call` lines and a `jobs budget_ms=…` line with a key; without one it prints `latency: unmeasured; live path verified with mocks only`. `fits=no` means a typical call is too slow for the tick budget. Measured against the live API on 2026-10-12 with `LLM_MODEL=gpt-5.4-mini`: about **1.3 s** a call (1.1 s image, 1.5 s text), **58 input / 42 output tokens** on a trivial prompt, and `fits=yes` for both call kinds against the default 17 s window — so the batch runner is not latency-bound on this model. `pnpm llm:check -- --project <slug>` runs the same check on one project's resolved credential and prints `source=project` or `source=install`, which is the quickest way to tell which credential a project is actually spending.
 - **Usage.** A job's own page shows its calls and input/output token totals, labelled "to date" while it is still running, with no money figure under any rate configuration — see "Usage" above for where rates are set and what they mean.
 
+## Standing series
+
+A standing series keeps producing posts on a cadence until someone pauses or deletes it, instead of
+being created once. It is a different object from the in-request "Series" above: that one asks for
+2–10 angles while you wait; a standing series is configuration — a voice profile, a template, target
+accounts, a media source and a cadence — that fires on its own, in the background, under **Batch
+jobs → Standing series**. Creating, editing, pausing, resuming and deleting a series needs owner or
+admin; everyone who can view posts can see the list and each series' run history.
+
+**Cadence and period boundaries.** A cadence is a count (1–10) and a period: day, week or month.
+Boundaries are the project's own local day, a Monday-starting week, or the 1st of the month, resolved
+in the project's time zone. A series created mid-period is first due at the *next* boundary, so
+turning one on never immediately spends credit on a partial period. At most one run is open per
+series at a time: if the next boundary arrives while a run is still producing, that run closes as
+incomplete (its counts are kept) and the new period's run opens.
+
+**No backfill.** If the worker has been down across several boundaries, a series does not catch up by
+producing one run per missed boundary — it records how many periods it missed and jumps straight to
+the current one. A series that has been off for three weeks produces one period's worth of posts, not
+three.
+
+**What a run does.** A run of two or more posts plans its angles first, through the same planning call
+the in-request series uses, telling it which angles recent runs already used so a weekly series does
+not repeat itself; a run of exactly one post skips planning. Each post then goes through the ordinary
+generation path — the same prompt composition, brand context, voice profile, schema validation,
+correction retry and usage ledger as a manual Generate — so nothing about how a post is written
+differs because it came from a series.
+
+**Policy, with no bypass.** A series' approval and scheduling policy is authorised once, at creation
+or edit, and stored on the series — the member who allowed auto-approve may not even be on the project
+by the time it fires. The one policy function still decides every post: a post that fails platform
+validation goes to review even under auto-approve, exactly as it would from any other path. A post set
+to queue takes a real slot through the existing allocator, inside the same transaction as the policy
+decision, so two series — or two worker processes — competing for the same account's slots cannot
+double-book; a post with no free slot in the queue horizon is left as a draft with that reason
+recorded, not retried into a different policy.
+
+**Media sources.** A series declares one media source: `none`, `pool` (an unused image from the
+project's media library, optionally narrowed by a tag) or `generate` (one freshly generated image per
+post, through the same `ImageGenerator` contract the Media page's "Generate an image" action uses, with
+the series' own stored prompt and nothing else — no post text, no brand fields, no voice profile — sent
+with the same fixed real-people instruction). A pooled image is reserved exactly like a batch job's
+image, so the same image is never claimed by two posts, two jobs or two series at once; videos are
+never eligible. Creating a pool or generate series needs media storage configured; if storage is
+removed later, an existing series simply skips with that reason rather than failing.
+
+**The media-required skip.** When a series targets an account whose platform requires media (Instagram,
+TikTok) and the series cannot produce a usable image for a given post — the pool is exhausted, image
+generation is not configured, image generation failed, or storage is not set up — that position is
+skipped whole, with the reason recorded and the account named; no half-complete post is written. A
+skip is not a failure: it is a neutral outcome that does not count an attempt and does not mark the
+run "completed with failures" on its own.
+
+**Idempotency and the per-tick bounds.** A series is claimed and leased exactly like a batch job: the
+claim is skip-locked, a lease protects it from a second worker, and a position is produced at most once
+under a uniqueness constraint, so overlapping ticks or a restart mid-run cannot double-generate a post.
+The standing-series section is its own bounded part of the same worker tick, with its own two limits:
+
+| Variable | Meaning |
+| --- | --- |
+| `STANDING_SERIES_TICK_MAX_SERIES` | Most standing series one tick claims, 1–10. Default 2. |
+| `STANDING_SERIES_TICK_MAX_POSTS` | Most posts one claimed series produces in that tick, 1–10. Default 2. |
+
+These limits are additive to `GENERATION_TICK_MAX_ITEMS`: enabling standing series raises the install's
+total concurrent model calls per tick by up to `GENERATION_TICK_MAX_ITEMS + STANDING_SERIES_TICK_MAX_SERIES`
+(each claimed series can itself produce several posts within `STANDING_SERIES_TICK_MAX_POSTS`, so the
+true ceiling on in-flight calls per tick is `GENERATION_TICK_MAX_ITEMS` from batch jobs plus up to
+`STANDING_SERIES_TICK_MAX_SERIES × STANDING_SERIES_TICK_MAX_POSTS` from standing series). Claims rotate
+oldest-due-first, so one busy series or project cannot starve another.
+
+**Billing.** A credit hold behaves exactly as it does for batch jobs: a held credential owner's series
+is not claimed at all — nothing is generated, no attempt is counted, no failure is recorded, and
+`next_run_at` does not advance, so the run simply waits where it left off. The existing probe (one call
+every 5 minutes) clears the hold with nothing else to do; a billing refusal reached mid-run requeues
+the position with no attempt counted and refreshes the hold on whichever credential actually ran.
+
+**Self-pausing.** A series that closes three runs in a row with zero posts produced pauses itself,
+recording why (no usable target, a missing voice profile, and so on), visible on the series' detail
+page and undone by the same Resume control a person's own pause uses. A credit hold never counts
+toward this: a held run was never claimed, so it was never "produced nothing" in this sense.
+
+**Limits.** Same per-run cadence bound as the in-request series (1–10 posts), the same name rules as
+any other named object (1–100 characters, unique per project, case-insensitive), and run history is
+retained for 90 days (housekeeping prunes closed runs older than that; an open run is never pruned).
+
 ## Out of scope
 
 A public API (the public-api roadmap entry). Single and series generation run inside the request; jobs run in the background.

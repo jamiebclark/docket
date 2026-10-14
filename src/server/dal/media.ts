@@ -11,6 +11,10 @@ import {
   type PostTargetStatus,
 } from "../db/schema";
 
+export interface PoolImageOptions {
+  tag: string | null;
+}
+
 export type MediaRow = MediaAssetRow;
 export type NewMedia = Pick<typeof mediaAssets.$inferInsert, "storageKey" | "publicUrl" | "mimeType" | "byteSize"> &
   Partial<
@@ -107,8 +111,10 @@ export interface MediaRepo {
    * that want the same images; it does not block `FOR SHARE` readers' foreign-key checks.
    */
   lockForReservation(ids: readonly string[]): Promise<MediaRow[]>;
-  /** The subset of `ids` held by a queued, running or failed job item. */
+  /** The subset of `ids` held by a queued, running or failed job item, or a live standing-series position. */
   reservedAmong(ids: readonly string[]): Promise<string[]>;
+  /** One unused, unreserved live image, tag-matching when given, oldest first (S15, S16). `FOR UPDATE SKIP LOCKED`. */
+  claimPoolImage(opts: PoolImageOptions): Promise<MediaRow | null>;
   /** The job whose queued, running or failed item holds this asset, or null when none does. */
   reservedJobFor(id: string): Promise<string | null>;
   /** The subset of `ids` with `first_used_at` set. */
@@ -143,8 +149,12 @@ export function createMediaRepo(db: Database, projectId: string): MediaRepo {
   const assetId = sql.raw('"media_assets"."id"');
   // A job item that still holds the asset (research D15): the same predicate as the partial unique index.
   const reservedJobExpr = sql<string | null>`(SELECT i."job_id" FROM "generation_job_items" i WHERE i."project_id" = ${projectId} AND i."media_asset_id" = ${assetId} AND i."status" IN ('queued','running','failed') LIMIT 1)`;
-  // Counts, not NOT EXISTS: the scope checker rejects any negation in a predicate.
-  const reservations = sql`(SELECT count(*) FROM "generation_job_items" i WHERE i."project_id" = ${projectId} AND i."media_asset_id" = ${assetId} AND i."status" IN ('queued','running','failed'))`;
+  // Counts, not NOT EXISTS: the scope checker rejects any negation in a predicate. Widened (S15) to count a
+  // live standing-series position holding the asset, so a batch job and a series cannot both claim it.
+  const reservations = sql`(
+    (SELECT count(*) FROM "generation_job_items" i WHERE i."project_id" = ${projectId} AND i."media_asset_id" = ${assetId} AND i."status" IN ('queued','running','failed'))
+    + (SELECT count(*) FROM "standing_series_positions" p WHERE p."project_id" = ${projectId} AND p."media_asset_id" = ${assetId} AND p."status" IN ('queued','running'))
+  )`;
   const notReserved = sql`${reservations} = 0`;
   const searchCond = (f: {
     tag?: string;
@@ -275,6 +285,24 @@ export function createMediaRepo(db: Database, projectId: string): MediaRepo {
         .from(mediaAssets)
         .where(and(inProject, inArray(mediaAssets.id, [...ids]), sql`${reservations} > 0`));
       return rows.map((r) => r.id);
+    },
+    async claimPoolImage({ tag }) {
+      const conds: (SQL | undefined)[] = [
+        live,
+        eq(mediaAssets.kind, "image"),
+        eq(mediaAssets.processingState, "ready"),
+        isNull(mediaAssets.firstUsedAt),
+        notReserved,
+      ];
+      if (tag) conds.push(sql`${tag} = ANY(${mediaAssets.tags})`);
+      const [row] = await db
+        .select()
+        .from(mediaAssets)
+        .where(and(...conds))
+        .orderBy(asc(mediaAssets.createdAt), asc(mediaAssets.id))
+        .limit(1)
+        .for("update", { skipLocked: true });
+      return row ?? null;
     },
     async reservedJobFor(id) {
       const [row] = await db

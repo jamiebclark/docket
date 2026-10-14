@@ -8,10 +8,14 @@ import { NO_REAL_PEOPLE, type ImageGenerationRequest, type ImageGenerationResult
 import { imageFailureMessage } from "../llm/image-messages";
 import { ImageNotConfiguredError, getImageStatus } from "../llm/image-provider";
 import { missingLlmImageSettings, resolveImageLlmForProject } from "../llm/resolve";
+import type { LlmFailureKind } from "../llm/types";
 import { createUsageRecorder } from "../llm/usage";
 import { getStorage, MEDIA_STORAGE_NOT_SET_UP } from "../storage";
 import { withImageCreditHold } from "./generation/credit";
 import { uploadMedia } from "./media";
+
+/** `generateImage`'s result plus the failure `kind`, for callers that need to tell a billing refusal apart (FR-051). */
+export type ImageGenerationOutcome = { ok: true; mediaAssetId: string } | { ok: false; message: string; kind: LlmFailureKind | null };
 
 /** The filename given to every generated image (G18, FR-026). */
 export const GENERATED_FILENAME = "Generated image.png";
@@ -33,15 +37,22 @@ export function createImageGenerator(scope: ProjectScope): ImageGenerator {
 
 /** What the server action calls. */
 export async function generateImage(scope: ProjectScope, input: unknown, signal?: AbortSignal): Promise<ImageGenerationResult> {
+  const outcome = await generateImageWithKind(scope, input, signal);
+  return outcome.ok ? outcome : { ok: false, message: outcome.message };
+}
+
+/** Same as {@link generateImage}, but keeps the failure `kind` so a caller can tell a billing refusal apart (FR-051). */
+export async function generateImageWithKind(scope: ProjectScope, input: unknown, signal?: AbortSignal): Promise<ImageGenerationOutcome> {
   requirePermission(scope, { media: ["generate"] });
   const parsed = generateImageSchema.parse(input);
 
-  if (!getStorage()) return { ok: false, message: MEDIA_STORAGE_NOT_SET_UP };
+  if (!getStorage()) return { ok: false, message: MEDIA_STORAGE_NOT_SET_UP, kind: null };
 
   const resolved = await resolveImageLlmForProject(scope.project.id);
   if (!resolved.ok) {
     return {
       ok: false,
+      kind: null,
       message:
         resolved.reason === "key_unreadable"
           ? LLM_KEY_UNREADABLE
@@ -63,12 +74,12 @@ export async function generateImage(scope: ProjectScope, input: unknown, signal?
   } finally {
     await recorder.flush({});
   }
-  if (!result.ok) return { ok: false, message: imageFailureMessage(result.kind) };
+  if (!result.ok) return { ok: false, message: imageFailureMessage(result.kind), kind: result.kind };
 
   const uploaded = await uploadMedia(scope, {
     file: { name: GENERATED_FILENAME, bytes: result.bytes },
     generation: { prompt: parsed.prompt, provider: result.provider, model: result.model, at: await clock.now() },
   });
-  if (!uploaded.ok) return { ok: false, message: uploaded.message };
+  if (!uploaded.ok) return { ok: false, message: uploaded.message, kind: null };
   return { ok: true, mediaAssetId: uploaded.asset.id };
 }

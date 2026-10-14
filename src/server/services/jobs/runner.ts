@@ -18,7 +18,7 @@ import { llmFailureMessage } from "../../llm/messages";
 import type { LlmFailureKind, LlmProvider } from "../../llm/types";
 import { jobConfig, type SchedulerConfig } from "../../scheduler/config";
 import { nextRetryAt } from "../../scheduler/backoff";
-import { redact } from "../../scheduler/redact";
+import { Overran, withinBudget, logLine } from "../../scheduler/budget";
 import type { GenerationCounts } from "../../scheduler/generation";
 import { runGenerationStep, type PendingRetry } from "../generation/core";
 import { createUsageRecorder } from "../../llm/usage";
@@ -50,7 +50,6 @@ export const INTERNAL_MESSAGE = "Something went wrong while generating this post
 const TEMPORARY = new Set<ErrorKind>(["timeout", "rate_limited", "unavailable", "internal", "interrupted"]);
 const UNLEASED = { leaseOwner: null, leaseUntil: null } as const;
 
-class Overran extends Error {}
 /** The guard inside the policy transaction found the job cancelled or the lease lost. */
 class GuardLost extends Error {
   constructor(readonly why: "cancelled" | "stale") {
@@ -58,20 +57,8 @@ class GuardLost extends Error {
   }
 }
 
-function withinBudget<T>(work: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Overran()), Math.max(ms, 0));
-  });
-  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
-}
-
 function llmTimeoutMs(): number {
   return parseLlmLimits(process.env).timeoutMs;
-}
-
-function logLine(parts: string, resolvedKey: string | null): void {
-  console.log(redact(parts, resolvedKey ? [resolvedKey] : []));
 }
 
 export async function processClaimedItem(claimed: ClaimedJobItem, ctx: RunnerContext): Promise<void> {

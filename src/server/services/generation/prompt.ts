@@ -282,6 +282,7 @@ export function buildSeriesPlanPrompt(input: {
   count: number;
   retry: PromptInput["retry"];
   brand?: BrandContext | null;
+  avoidTitles?: readonly string[];
 }): { system: string; user: string } {
   const system = systemFor(input.voice, input.platforms, input.groups, {
     imageCount: 0,
@@ -292,6 +293,9 @@ export function buildSeriesPlanPrompt(input: {
   parts.push(
     `SERIES PLAN: Plan a series of exactly ${input.count} posts. Give each a short title and a one or two sentence description of its angle. The angles must differ.`,
   );
+  if (input.avoidTitles && input.avoidTitles.length > 0) {
+    parts.push(`TITLES TO AVOID: ${input.avoidTitles.join(", ")}`);
+  }
   if (input.retry) parts.push(...retrySection(input.retry));
   return { system, user: parts.join("\n\n") };
 }
