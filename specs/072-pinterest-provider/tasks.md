@@ -156,20 +156,20 @@ after send, timeout after send) and assert the recorded outcome, retry timing an
 
 ### Tests for User Story 3
 
-- [ ] T047 [P] [US3] Write `src/providers/pinterest/errors.test.ts` for `explainPinterest(status, message, boardName, secrets)`: every sentence in contracts/pinterest-publishing.md §4's outcome table, the `(Pinterest: <scrubbed>)` suffix only when a message came back, and that a numeric `code` is never consulted.
-- [ ] T048 [P] [US3] Write `src/providers/pinterest/steps.test.ts` for `pinterestStepFor`: returns `{ name: "create_pin", mayPublish: true }` for `state === null` and for any junk state — pure and total.
-- [ ] T049 [US3] Write `src/providers/pinterest/publish.test.ts` for `advancePinterest`: the three pre-send guards (unreadable credentials, unparseable/missing board, wrong image count) as plain failures, never ambiguous; the exact one-request body per data-model.md §7 with each optional key omitted when blank; and every row of contracts/pinterest-publishing.md §4's outcome table, including both `network` phases, an unparseable 2xx, a 2xx without an id, and 429 with/without a readable reset.
+- [X] T047 [P] [US3] Write `src/providers/pinterest/errors.test.ts` for `explainPinterest(status, message, boardName, secrets)`: every sentence in contracts/pinterest-publishing.md §4's outcome table, the `(Pinterest: <scrubbed>)` suffix only when a message came back, and that a numeric `code` is never consulted.
+- [X] T048 [P] [US3] Write `src/providers/pinterest/steps.test.ts` for `pinterestStepFor`: returns `{ name: "create_pin", mayPublish: true }` for `state === null` and for any junk state — pure and total.
+- [X] T049 [US3] Write `src/providers/pinterest/publish.test.ts` for `advancePinterest`: the three pre-send guards (unreadable credentials, unparseable/missing board, wrong image count) as plain failures, never ambiguous; the exact one-request body per data-model.md §7 with each optional key omitted when blank; and every row of contracts/pinterest-publishing.md §4's outcome table, including both `network` phases, an unparseable 2xx, a 2xx without an id, and 429 with/without a readable reset.
 
 ### Implementation for User Story 3
 
-- [ ] T050 [P] [US3] Create `src/providers/pinterest/errors.ts`: `explainPinterest`, status-only matching, per contracts/pinterest-publishing.md §4 and §6. Make T047 pass.
-- [ ] T051 [P] [US3] Create `src/providers/pinterest/steps.ts`: `pinterestStepFor`. Make T048 pass.
-- [ ] T052 [US3] Create `src/providers/pinterest/publish.ts`: `advancePinterest` (guards, the one `POST /v5/pins` request, `pinUrl`, the full outcome table using `errors.ts`), per contracts/pinterest-publishing.md §4. Depends on T009, T020, T050. Make T049 pass.
-- [ ] T053 [US3] Replace the Phase 3 stub `advance` in `src/providers/pinterest/index.ts` with `steps.ts` + `publish.ts` wired in (`stepFor`, `advance`). Depends on T051, T052.
-- [ ] T054 [US3] Confirm `tests/integration/pinterest/publish-e2e.test.ts` (T045) now passes against the real `advance`.
-- [ ] T055 [US3] Write `tests/integration/pinterest/failures.test.ts`: the whole outcome table via `runTick` — connection refused, lost connection after send, unparseable 2xx, 2xx with no id, 401→refresh→retry, 429 with/without reset, 400, 403, 404 (naming the stored board, not retried), another 4xx, 5xx; confirm no automatic retry ever sends a second create request and a target over 100/60s is deferred not failed. Depends on T053, T043, T029.
-- [ ] T056 [US3] Write `tests/integration/pinterest/no-secrets.test.ts`: the fake echoes the client secret, access token and refresh token in every reply; assert none appear in `lastError`, `publish_attempts`, the attempt summary, activity, the rendered page or a snapshot, and stored credentials are ciphertext. Depends on T053, T029.
-- [ ] T057 [US3] Run `pnpm vitest run src/providers/pinterest tests/integration/pinterest` and confirm every US1–US3 Pinterest suite passes together.
+- [X] T050 [P] [US3] Create `src/providers/pinterest/errors.ts`: `explainPinterest`, status-only matching, per contracts/pinterest-publishing.md §4 and §6. Make T047 pass.
+- [X] T051 [P] [US3] Create `src/providers/pinterest/steps.ts`: `pinterestStepFor`. Make T048 pass.
+- [X] T052 [US3] Create `src/providers/pinterest/publish.ts`: `advancePinterest` (guards, the one `POST /v5/pins` request, `pinUrl`, the full outcome table using `errors.ts`), per contracts/pinterest-publishing.md §4. Depends on T009, T020, T050. Make T049 pass.
+- [X] T053 [US3] Replace the Phase 3 stub `advance` in `src/providers/pinterest/index.ts` with `steps.ts` + `publish.ts` wired in (`stepFor`, `advance`). Depends on T051, T052.
+- [X] T054 [US3] Confirm `tests/integration/pinterest/publish-e2e.test.ts` (T045) now passes against the real `advance`.
+- [X] T055 [US3] Write `tests/integration/pinterest/failures.test.ts`: the whole outcome table via `runTick` — connection refused, lost connection after send, unparseable 2xx, 2xx with no id, 401→refresh→retry, 429 with/without reset, 400, 403, 404 (naming the stored board, not retried), another 4xx, 5xx; confirm no automatic retry ever sends a second create request and a target over 100/60s is deferred not failed. Depends on T053, T043, T029.
+- [X] T056 [US3] Write `tests/integration/pinterest/no-secrets.test.ts`: the fake echoes the client secret, access token and refresh token in every reply; assert none appear in `lastError`, `publish_attempts`, the attempt summary, activity, the rendered page or a snapshot, and stored credentials are ciphertext. Depends on T053, T029.
+- [X] T057 [US3] Run `pnpm vitest run src/providers/pinterest tests/integration/pinterest` and confirm every US1–US3 Pinterest suite passes together.
 
 **Checkpoint**: publishing is honest and duplicate-safe under every mocked failure — independently testable
 via quickstart.md §4–§5 and §7.
