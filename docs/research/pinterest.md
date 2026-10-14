@@ -19,6 +19,24 @@ literal sandbox host exists (`https://api-sandbox.pinterest.com/v5`) — see "Tw
 sandbox" below; do not conflate it with Trial access.
 
 ## Blockers for a self-hosted deployment (read first)
+0. **Every account a deployer connects must itself be a business account, for any app registered on or after
+   2026-09-14.** Added to this file 2026-10-14 after reading the page live during a real registration; the
+   original pass missed it because it is a callout box on the access-tiers page, not part of its table.
+   "If you registered your app on or after September 14, 2026, you may receive HTTP 403
+   `PINNER_DATA_ACCESS_DENIED` error when you request a board or Pin without Pinterest's authorization."
+   The body is `{"code": 403, "message": "PINNER_DATA_ACCESS_DENIED", "detail": "Your application does not
+   have access to read pinner data. Your application must be approved for pinner data access."}`, and the
+   changelog entry says plainly: "Approval is required for **non-business users** before the request can
+   succeed. To request access after registration, contact your Pinterest account manager if you have one."
+   The endpoints it names are `GET /v5/boards/{board_id}`, `GET /v5/boards/{board_id}/pins`,
+   `GET /v5/boards/{board_id}/sections`, `GET /v5/boards/{board_id}/sections/{section_id}/pins` and
+   `GET /v5/pins/{pin_id}`. **`GET /v5/boards` — the list call Docket's board picker actually makes — is not
+   on that list**, so Docket's own reads may be unaffected even for a personal account; that is an inference
+   from the omission, not a statement Pinterest makes, so treat connecting a personal account as UNVERIFIED
+   and tell deployers to connect business accounts. Nothing here restricts *which* accounts may authorise an
+   app: app ownership and account connection are separate, as in any OAuth flow.
+   https://developers.pinterest.com/docs/key-concepts/access-tiers/ ,
+   https://developers.pinterest.com/docs/changelog/changelog/#pinner-data-access-denial-error
 1. **A Pinterest business account is required before any app can be registered.** "Access to the Pinterest API
    requires you to have business account." A deployer who only has a personal Pinterest account cannot start.
    https://developers.pinterest.com/docs/developer-tools/quickstart-tools/

@@ -7,6 +7,22 @@ not offered. Who can connect which account is in [accounts.md](accounts.md#pinte
 Pinterest only lets a **business account** register a developer app. If you only have a personal account, convert it
 first (free, in Pinterest's own settings) before registering the app below.
 
+> **Connect business accounts, not personal ones.** For any app registered **on or after 14 September 2026**,
+> Pinterest answers `403 PINNER_DATA_ACCESS_DENIED` — "your application must be approved for pinner data access" —
+> when it reads a board or Pin belonging to a **non-business** user. Pinterest's own advice is not to retry it:
+> approval has to be arranged through an account manager. The call Docket's board picker makes (listing the
+> connected account's own boards) is not among the endpoints Pinterest names, so a personal account may well work —
+> but that is read from an omission, not something Pinterest states, so connect business accounts and treat a
+> personal one as unsupported.
+
+**One app serves every project on the server.** `PINTEREST_CLIENT_ID` and `PINTEREST_CLIENT_SECRET` are per
+installation, not per project, exactly like the Meta, X and TikTok credentials. Each project then connects its own
+Pinterest account through that one app by the normal authorisation flow — an account does not need to own the app,
+or be related to whoever registered it. Register the app under an account that represents **the installation**
+rather than one brand, so that handing a brand over later does not hand over every other project's connection with
+it. Note the cost of sharing one app: on Trial access the 300-creations-a-day cap is shared across every connected
+account on the server (see [Trial rate limits](#trial-rate-limits)).
+
 > **Unverified steps.** Docket's Pinterest support has been tested with mocks only. The steps below follow Pinterest's
 > own documentation (checked 2026-10-14, sources in [research/pinterest.md](research/pinterest.md)) but have not been
 > run against Pinterest's live service. Steps marked **unverified** could not be confirmed. If one does not match what
