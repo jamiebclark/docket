@@ -150,14 +150,14 @@ Single Next.js project. Source under `src/`, tests under `tests/`, docs under `d
 
 **Purpose**: Documentation (FR-030 through FR-033) and the full quality-gate sweep.
 
-- [ ] T049 [P] Write `docs/mcp.md`: operator-register guide beside `docs/n8n.md` — creating and configuring a key, which permission each tool needs, the full list of 19 exposed tools (names, effects, confirmations), the withheld 15 operations and their reasons, the two-projects-two-servers rule (FR-031, SC-008)
-- [ ] T050 [P] Add a cross-reference from `docs/mcp.md` to `docs/n8n.md` and a new trailing section (no heading renumbered) in `docs/n8n.md` cross-referencing `docs/mcp.md`, per research "Open risks" item 4 (FR-032)
-- [ ] T051 [P] Update `docs/security.md`: MCP uses the same keys, the same permissions and the same project scoping, and adds no new credential type or trust boundary (FR-033)
-- [ ] T052 Add `docs/mcp.md` to `mkdocs.yml` nav beside the `n8n.md` entry (`strict: true` requires this in the same commit as T049)
-- [ ] T053 Append the 074 entry to `docs/decisions.md`: the hosting choice (route in the Next app, not a separate process) and the per-session project rule, with their reasoning and accepted costs, per plan.md D2/D5 (FR-030)
-- [ ] T054 Record the D9 judgement (conditional confirmation on `docket_generate_post`) in `docs/decisions.md` as the one open call for a reviewer to accept or reverse, per research.md "Open risks" item 5
-- [ ] T055 Run the full quality gate: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, and `pnpm db:check` (expected unaffected — no migration), per quickstart.md §5 "what done looks like"
-- [ ] T056 [Human-owned, needs a signed-in browser session and a real MCP client] Manual end-to-end pass per quickstart.md §4: create a key, configure a client, ask what's scheduled/failed, generate a post, queue it (confirm once refused, once accepted), then point a second client at a different project's key and confirm isolation. Depends on Phase 6 being complete; if Phase 6 is not yet done by the time this entry is reviewed, mark this task as blocked-on-Phase-6 rather than done or skipped
+- [X] T049 [P] Write `docs/mcp.md`: operator-register guide beside `docs/n8n.md` — creating and configuring a key, which permission each tool needs, the full list of 19 exposed tools (names, effects, confirmations), the withheld 15 operations and their reasons, the two-projects-two-servers rule (FR-031, SC-008)
+- [X] T050 [P] Add a cross-reference from `docs/mcp.md` to `docs/n8n.md` and a new trailing section (no heading renumbered) in `docs/n8n.md` cross-referencing `docs/mcp.md`, per research "Open risks" item 4 (FR-032)
+- [X] T051 [P] Update `docs/security.md`: MCP uses the same keys, the same permissions and the same project scoping, and adds no new credential type or trust boundary (FR-033)
+- [X] T052 Add `docs/mcp.md` to `mkdocs.yml` nav beside the `n8n.md` entry (`strict: true` requires this in the same commit as T049)
+- [X] T053 Append the 074 entry to `docs/decisions.md`: the hosting choice (route in the Next app, not a separate process) and the per-session project rule, with their reasoning and accepted costs, per plan.md D2/D5 (FR-030)
+- [X] T054 Record the D9 judgement (conditional confirmation on `docket_generate_post`) in `docs/decisions.md` as the one open call for a reviewer to accept or reverse, per research.md "Open risks" item 5
+- [X] T055 Run the full quality gate: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, and `pnpm db:check` (expected unaffected — no migration), per quickstart.md §5 "what done looks like"
+- [ ] T056 [Human-owned, needs a signed-in browser session and a real MCP client — BLOCKED on a human operator, not on Phase 6 (Phase 6 is complete)] Manual end-to-end pass per quickstart.md §4: create a key, configure a client, ask what's scheduled/failed, generate a post, queue it (confirm once refused, once accepted), then point a second client at a different project's key and confirm isolation.
 
 ---
 

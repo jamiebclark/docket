@@ -35,6 +35,7 @@ nav:
       - Members and accounts: accounts.md
       - Generator and jobs: generator.md
       - n8n and the public API: n8n.md
+      - MCP server: mcp.md
       - Failures and retrying: failures.md
       - Activity: activity.md
   - Reference:

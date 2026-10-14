@@ -18,6 +18,8 @@ interface JsonRpcResult {
 /** Drives `POST /api/mcp` in-process with a real JSON-RPC request (no listening server). */
 async function rpc(method: string, params: Record<string, unknown>, key?: string): Promise<{ status: number; body: JsonRpcResult }> {
   const mod = (await import(/* @vite-ignore */ ROUTE)) as Record<string, (req: Request) => Promise<Response>>;
+  const handler = mod.POST;
+  if (!handler) throw new Error("route module has no POST handler");
   const headers = new Headers({
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
@@ -28,7 +30,7 @@ async function rpc(method: string, params: Record<string, unknown>, key?: string
     headers,
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
-  const response = await mod.POST(request);
+  const response = await handler(request);
   const text = await response.text();
   const body = (text ? JSON.parse(text) : null) as JsonRpcResult;
   return { status: response.status, body };
