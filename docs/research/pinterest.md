@@ -94,9 +94,16 @@ sandbox" below; do not conflate it with Trial access.
   `redirect_uri` sent during OAuth "will be matched against the redirect URIs listed in your app profile. They
   must be an exact match"; "The specified redirect URI must not cause the responding server to send a secondary
   redirect" (no open-redirect chaining). No explicit `https`-only or no-localhost rule was found on an official
-  page (example in the docs uses `https://example.com/`); **UNVERIFIED** whether `http://localhost` is accepted —
-  treat as `redirectRequirement: { https: true, publicHost: true }` conservatively until tested, same posture
-  Docket already uses for Threads/X. https://developers.pinterest.com/docs/getting-started/connect-app/
+  page (example in the docs uses `https://example.com/`); treat as
+  `redirectRequirement: { https: true, publicHost: true }`, same posture Docket already uses for Threads/X.
+  https://developers.pinterest.com/docs/getting-started/connect-app/
+  **Resolved 2026-10-14 (was UNVERIFIED), read off a real app's own Redirect URIs panel:** "Redirect URIs must
+  use **https**, an app-specific scheme, or **http with localhost**." So https-only holds for any real host,
+  and Pinterest additionally allows `http://localhost`, which Docket refuses. Docket is therefore deliberately
+  stricter than Pinterest here, not merely conservative pending a test — a localhost callback cannot serve a
+  deployment anyone else reaches. Also observed on the same panel: **the Redirect URIs box and the app secret
+  are both disabled while an app's Trial request is pending** ("Unavailable while trial access pending"), so a
+  deployer cannot register the callback or read the secret until Pinterest approves the app.
 
 ## OAuth
 - Authorize: `GET https://www.pinterest.com/oauth/` with `client_id`, `redirect_uri` (exact match), `response_type=code`,
