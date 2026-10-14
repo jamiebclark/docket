@@ -19,7 +19,7 @@ export interface SlotsRepo {
   insertWeek(accountId: string, weekdays: readonly number[], localTime: string): Promise<SlotRow[]>;
   /** Changes a slot's weekday and local time in place. Targets are untouched: `slot_id` keeps pointing here. */
   move(id: string, weekday: number, localTime: string): Promise<SlotRow>;
-  setPaused(id: string, paused: boolean): Promise<void>;
+  setPaused(id: string, paused: boolean): Promise<SlotRow>;
   delete(id: string): Promise<void>;
 }
 
@@ -91,10 +91,12 @@ export function createSlotsRepo(db: Database, projectId: string): SlotsRepo {
       });
     },
     async setPaused(id, paused) {
-      await db
+      const [row] = await db
         .update(postingSlots)
         .set({ paused })
-        .where(and(eq(postingSlots.projectId, projectId), eq(postingSlots.id, id)));
+        .where(and(eq(postingSlots.projectId, projectId), eq(postingSlots.id, id)))
+        .returning();
+      return row!;
     },
     async delete(id) {
       await db

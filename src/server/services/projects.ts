@@ -10,22 +10,45 @@ import {
   taglineSchema,
   timeZoneSchema,
 } from "@/lib/validation";
-import { createProject, getProject, listMyProjects } from "../dal/projects";
+import { createProject, getProject, listMyProjects, type ProjectRecord } from "../dal/projects";
 import type { ProjectScope, SessionLike } from "../dal/scope";
-import { ForbiddenError, NotFoundError } from "../dal/errors";
+import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import { recordAudit } from "./audit";
 
 export const createProjectSchema = z.object({
   name: projectNameSchema,
   slug: slugSchema,
   timezone: timeZoneSchema,
+  defaultApprovalPolicy: approvalPolicySchema.optional(),
+  defaultSchedulingPolicy: schedulingPolicySchema.optional(),
+  confirmUnreviewedQueue: z.boolean().default(false),
+  tagline: taglineSchema.optional(),
+  description: brandDescriptionSchema.optional(),
+  websiteUrl: brandWebsiteSchema.optional(),
 });
 
-/** Throws ZodError for bad input and ConflictError (field `slug`) for a taken slug. */
-export async function create(session: SessionLike, input: unknown): Promise<{ slug: string }> {
-  const parsed = createProjectSchema.parse(input);
-  const project = await createProject(session.user.id, parsed);
-  return { slug: project.slug };
+/**
+ * Throws ZodError for bad input, ZodError on `confirmUnreviewedQueue` for the unreviewed-queue
+ * combination, ConflictError (field `slug`, reason `slug_taken`) for a taken slug, and
+ * ConflictError (reason `no_acting_user`) when there is no user to own the project.
+ */
+export async function create(session: SessionLike, input: unknown): Promise<ProjectRecord> {
+  const { confirmUnreviewedQueue, ...parsed } = createProjectSchema.parse(input);
+  if (parsed.defaultApprovalPolicy === "auto_approve" && parsed.defaultSchedulingPolicy === "add_to_queue" && !confirmUnreviewedQueue) {
+    throw new z.ZodError([
+      { code: "custom", path: ["confirmUnreviewedQueue"], message: CONFIRM_UNREVIEWED_QUEUE_MESSAGE, input: undefined },
+    ]);
+  }
+  if (!session.user.id) {
+    throw new ConflictError("This key has no user to own a new project.", { reason: "no_acting_user" });
+  }
+  // A key submitted as an explicit `undefined` still survives `.optional()`'s parse, so `in` is not a
+  // safe test for "the caller meant to change this" — only a defined value belongs in the insert.
+  const rest = { ...parsed };
+  for (const field of BRAND_FIELDS) {
+    if (rest[field] === undefined) delete rest[field];
+  }
+  return createProject(session.user.id, rest);
 }
 
 export async function listMine(session: SessionLike) {

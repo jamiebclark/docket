@@ -1,7 +1,20 @@
 import { z } from "zod";
 import { ACTIVITY_KINDS, ACTIVITY_OUTCOMES } from "@/lib/activity/outcomes";
+import {
+  approvalPolicySchema,
+  APPROVAL_POLICIES,
+  brandDescriptionSchema,
+  brandWebsiteSchema,
+  projectNameSchema,
+  schedulingPolicySchema,
+  SCHEDULING_POLICIES,
+  slugSchema,
+  taglineSchema,
+  timeZoneSchema,
+} from "@/lib/validation";
 import { pageQuerySchema } from "@/lib/validation/api";
-import { atSchema, externalUrlSchema } from "@/lib/validation/scheduling";
+import { atSchema, externalUrlSchema, localTimeSchema, weekdaySchema } from "@/lib/validation/scheduling";
+import { voiceContentInputSchema, voiceNameSchema } from "@/lib/validation/voice";
 
 // Output shapes of the public API (contracts/http-api.md). Each carries `.meta({ id })` so the OpenAPI
 // document registers it as a component. The presenters in `src/server/services/views/` build these.
@@ -378,4 +391,123 @@ export const ApiActivityQuerySchema = z.strictObject({
   ...pageQuerySchema.shape,
 });
 export type ApiActivityQuery = z.infer<typeof ApiActivityQuerySchema>;
+
+// ---------------------------------------------------------------- project setup (073)
+
+export const CreateProjectRequestSchema = z
+  .strictObject({
+    name: projectNameSchema,
+    slug: slugSchema,
+    timezone: timeZoneSchema,
+    defaultApprovalPolicy: approvalPolicySchema.optional(),
+    defaultSchedulingPolicy: schedulingPolicySchema.optional(),
+    confirmUnreviewedQueue: z.boolean().optional(),
+    tagline: taglineSchema.optional(),
+    description: brandDescriptionSchema.optional(),
+    websiteUrl: brandWebsiteSchema.optional(),
+  })
+  .meta({ id: "CreateProjectRequest" });
+
+export const CreateVoiceProfileRequestSchema = z
+  .strictObject({
+    name: voiceNameSchema,
+    content: voiceContentInputSchema,
+  })
+  .meta({ id: "CreateVoiceProfileRequest" });
+
+export const UpdateVoiceProfileRequestSchema = z
+  .strictObject({
+    name: voiceNameSchema,
+    content: voiceContentInputSchema,
+    baseVersion: z.number().int().min(1),
+  })
+  .meta({ id: "UpdateVoiceProfileRequest" });
+
+export const SetPostingInstructionsRequestSchema = z
+  .strictObject({
+    instructions: z.string(),
+  })
+  .meta({ id: "SetPostingInstructionsRequest" });
+
+export const AddSlotRequestSchema = z
+  .strictObject({
+    accountId: z.uuid(),
+    weekday: weekdaySchema,
+    localTime: localTimeSchema,
+  })
+  .meta({ id: "AddSlotRequest" });
+
+export const AddWeekSlotsRequestSchema = z
+  .strictObject({
+    accountId: z.uuid(),
+    localTime: localTimeSchema,
+  })
+  .meta({ id: "AddWeekSlotsRequest" });
+
+export const UpdateSlotRequestSchema = z
+  .union([
+    z.strictObject({ weekday: weekdaySchema, localTime: localTimeSchema }),
+    z.strictObject({ paused: z.boolean() }),
+  ])
+  .meta({ id: "UpdateSlotRequest" });
+
+export const ProjectSchema = z
+  .object({
+    id: z.uuid(),
+    slug: z.string(),
+    name: z.string(),
+    timezone: z.string(),
+    defaultApprovalPolicy: z.enum(APPROVAL_POLICIES),
+    defaultSchedulingPolicy: z.enum(SCHEDULING_POLICIES),
+    tagline: z.string().nullable(),
+    description: z.string().nullable(),
+    websiteUrl: z.string().nullable(),
+  })
+  .meta({ id: "Project" });
+
+export const VoiceProfileRefSchema = z
+  .object({
+    id: z.uuid(),
+    version: z.number().int(),
+    isDefault: z.boolean(),
+  })
+  .meta({ id: "VoiceProfileRef" });
+
+export const AccountPostingInstructionsSchema = z
+  .object({
+    accountId: z.uuid(),
+    postingInstructions: z.string().nullable(),
+    changed: z.boolean(),
+  })
+  .meta({ id: "AccountPostingInstructions" });
+
+export const SlotSchema = z
+  .object({
+    id: z.uuid(),
+    accountId: z.uuid(),
+    weekday: z.number().int(),
+    localTime: z.string(),
+    paused: z.boolean(),
+  })
+  .meta({ id: "Slot" });
+
+export const WeekSlotsResultSchema = z
+  .object({
+    added: z.array(SlotSchema),
+    alreadySet: z.array(z.number().int()),
+  })
+  .meta({ id: "WeekSlotsResult" });
+
+export const DeletedSlotSchema = z
+  .object({
+    id: z.uuid(),
+    deleted: z.literal(true),
+  })
+  .meta({ id: "DeletedSlot" });
+
+export type ApiProject = z.infer<typeof ProjectSchema>;
+export type ApiSlot = z.infer<typeof SlotSchema>;
+export type ApiWeekSlotsResult = z.infer<typeof WeekSlotsResultSchema>;
+export type ApiVoiceProfileRef = z.infer<typeof VoiceProfileRefSchema>;
+export type ApiAccountPostingInstructions = z.infer<typeof AccountPostingInstructionsSchema>;
 export type ApiActivityPage = z.infer<typeof ApiActivityPageSchema>;

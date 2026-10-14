@@ -19,6 +19,12 @@ const PERMISSIONS = [
     help: "Let this key skip review: posts it generates can be approved, and queued, without anyone checking them.",
     warning: true,
   },
+  {
+    value: "manage_setup",
+    label: "manage_setup",
+    help: "Create projects and voice profiles, refine a voice profile, set an account's posting instructions, and book, move, pause or delete its posting slots. Warning: this can retime a schedule and rewrite a voice.",
+    warning: true,
+  },
 ] as const;
 
 export function CreateKeyForm({ slug, onCreated }: { slug: string; onCreated: () => void }) {

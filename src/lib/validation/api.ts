@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { JOB_ITEM_DATA_MAX, JOB_ITEMS_MAX } from "./jobs";
 
-export const API_KEY_PERMISSIONS = ["read", "write_posts", "generate", "auto_approve", "manage_jobs"] as const;
+export const API_KEY_PERMISSIONS = [
+  "read",
+  "write_posts",
+  "generate",
+  "auto_approve",
+  "manage_jobs",
+  "manage_setup",
+] as const;
 export const apiKeyPermissionSchema = z.enum(API_KEY_PERMISSIONS);
 
 export const API_KEY_EXPIRY_CHOICES = ["never", "30", "90", "365"] as const;

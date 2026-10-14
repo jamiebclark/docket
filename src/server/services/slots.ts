@@ -76,13 +76,13 @@ export async function moveSlot(scope: ProjectScope, input: unknown): Promise<Slo
   });
 }
 
-export async function setSlotPaused(scope: ProjectScope, slotId: string, paused: boolean): Promise<void> {
+export async function setSlotPaused(scope: ProjectScope, slotId: string, paused: boolean): Promise<SlotView> {
   const id = idSchema.parse(slotId);
   if (!scope.can({ slot: ["manage"] })) throw new ForbiddenError();
-  await scope.transaction(async (tx) => {
+  return scope.transaction(async (tx) => {
     if (!tx.can({ slot: ["manage"] })) throw new ForbiddenError();
     if (!(await tx.slots.get(id))) throw new NotFoundError();
-    await tx.slots.setPaused(id, paused);
+    return tx.slots.setPaused(id, paused);
   });
 }
 

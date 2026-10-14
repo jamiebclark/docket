@@ -36,20 +36,20 @@ Single Next.js app at repository root: `src/`, `tests/`, `drizzle/`, `docs/`.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 Widen `ApiOperation["method"]` to `"GET" | "POST" | "PATCH" | "DELETE"` and widen `resourceParams` to include `"accountId" | "profileId" | "slotId"` in `src/server/api/operations/types.ts`
-- [ ] T003 Add `"manage_setup"` to the `apiKeyPermission` pg enum in `src/server/db/schema/api.ts`, appended last after `"manage_jobs"`
-- [ ] T004 Run `pnpm db:generate` to write `drizzle/0034_*.sql` (`ALTER TYPE "public"."api_key_permission" ADD VALUE 'manage_setup'`) and confirm `pnpm db:check` passes
-- [ ] T005 [P] Add `"manage_setup"` to `API_KEY_PERMISSIONS` in `src/lib/validation/api.ts`
-- [ ] T006 [P] Add the `manage_setup` grant (`project: ["view","update"]`, `account: ["view","manage"]`, `slot: ["view","manage"]`, `voice: ["view","manage"]`) to `KEY_GRANTS` in `src/server/dal/scope.ts`
-- [ ] T007 [P] Add the `manage_setup` checkbox to `PERMISSIONS` in `src/app/p/[projectSlug]/settings/api-keys/CreateKeyForm.tsx`, with plain-language help text warning it can retime a schedule and rewrite a voice, `defaultChecked` left off (FR-009, FR-046)
-- [ ] T008 [P] Add `"manage_setup"` to `ApiPermission`/`ALL_PERMISSIONS` in `tests/helpers/api.ts`, and extend `world()` there to provision a voice profile and a slot id per project for the new endpoint tests to reuse
-- [ ] T009 Grow `createProjectSchema` and `create()` in `src/server/services/projects.ts` to accept `defaultApprovalPolicy?`, `defaultSchedulingPolicy?`, `confirmUnreviewedQueue` (default `false`), `tagline?`, `description?`, `websiteUrl?`; refuse an empty `session.user.id` with `ConflictError("This key has no user to own a new project.", { reason: "no_acting_user" })`; apply the unreviewed-queue confirmation rule; return the full `ProjectRecord`
-- [ ] T010 Grow `NewProject` in `src/server/dal/projects.ts` to carry the five optional columns (written only when present) and change the unique-violation branch to `ConflictError("That URL name is already taken.", { field: "slug", reason: "slug_taken" })`
-- [ ] T011 [P] Grow `setSlotPaused` in `src/server/services/slots.ts` to return `SlotView` instead of `void`
-- [ ] T012 [P] Add `.returning()` to `setPaused` in `src/server/dal/slots.ts` and return `row!`, matching `move`
-- [ ] T013 Add the request schemas to `src/lib/api/schemas.ts`: `CreateProjectRequestSchema`, `CreateVoiceProfileRequestSchema`, `UpdateVoiceProfileRequestSchema`, `SetPostingInstructionsRequestSchema`, `AddSlotRequestSchema`, `AddWeekSlotsRequestSchema`, `UpdateSlotRequestSchema` (strict objects/union per data-model.md §4, each with `.meta({ id })`)
-- [ ] T014 Add the response schemas to `src/lib/api/schemas.ts`: `ProjectSchema`, `VoiceProfileRefSchema`, `AccountPostingInstructionsSchema`, `SlotSchema`, `WeekSlotsResultSchema`, `DeletedSlotSchema`, each transform-free with `.meta({ id })`, and export `ApiProject`, `ApiSlot`, `ApiWeekSlotsResult`, `ApiVoiceProfileRef`, `ApiAccountPostingInstructions`
-- [ ] T015 Add `src/server/api/operations/errors-doc.ts`: a shared helper that produces the documented error statuses (400, 401, 403, 404, 409, 422, 429) with one example each, for every new operation to reuse (FR-042)
+- [X] T002 Widen `ApiOperation["method"]` to `"GET" | "POST" | "PATCH" | "DELETE"` and widen `resourceParams` to include `"accountId" | "profileId" | "slotId"` in `src/server/api/operations/types.ts`
+- [X] T003 Add `"manage_setup"` to the `apiKeyPermission` pg enum in `src/server/db/schema/api.ts`, appended last after `"manage_jobs"`
+- [X] T004 Run `pnpm db:generate` to write `drizzle/0034_*.sql` (`ALTER TYPE "public"."api_key_permission" ADD VALUE 'manage_setup'`) and confirm `pnpm db:check` passes
+- [X] T005 [P] Add `"manage_setup"` to `API_KEY_PERMISSIONS` in `src/lib/validation/api.ts`
+- [X] T006 [P] Add the `manage_setup` grant (`project: ["view","update"]`, `account: ["view","manage"]`, `slot: ["view","manage"]`, `voice: ["view","manage"]`) to `KEY_GRANTS` in `src/server/dal/scope.ts`
+- [X] T007 [P] Add the `manage_setup` checkbox to `PERMISSIONS` in `src/app/p/[projectSlug]/settings/api-keys/CreateKeyForm.tsx`, with plain-language help text warning it can retime a schedule and rewrite a voice, `defaultChecked` left off (FR-009, FR-046)
+- [X] T008 [P] Add `"manage_setup"` to `ApiPermission`/`ALL_PERMISSIONS` in `tests/helpers/api.ts`, and extend `world()` there to provision a voice profile and a slot id per project for the new endpoint tests to reuse
+- [X] T009 Grow `createProjectSchema` and `create()` in `src/server/services/projects.ts` to accept `defaultApprovalPolicy?`, `defaultSchedulingPolicy?`, `confirmUnreviewedQueue` (default `false`), `tagline?`, `description?`, `websiteUrl?`; refuse an empty `session.user.id` with `ConflictError("This key has no user to own a new project.", { reason: "no_acting_user" })`; apply the unreviewed-queue confirmation rule; return the full `ProjectRecord`
+- [X] T010 Grow `NewProject` in `src/server/dal/projects.ts` to carry the five optional columns (written only when present) and change the unique-violation branch to `ConflictError("That URL name is already taken.", { field: "slug", reason: "slug_taken" })`
+- [X] T011 [P] Grow `setSlotPaused` in `src/server/services/slots.ts` to return `SlotView` instead of `void`
+- [X] T012 [P] Add `.returning()` to `setPaused` in `src/server/dal/slots.ts` and return `row!`, matching `move`
+- [X] T013 Add the request schemas to `src/lib/api/schemas.ts`: `CreateProjectRequestSchema`, `CreateVoiceProfileRequestSchema`, `UpdateVoiceProfileRequestSchema`, `SetPostingInstructionsRequestSchema`, `AddSlotRequestSchema`, `AddWeekSlotsRequestSchema`, `UpdateSlotRequestSchema` (strict objects/union per data-model.md §4, each with `.meta({ id })`)
+- [X] T014 Add the response schemas to `src/lib/api/schemas.ts`: `ProjectSchema`, `VoiceProfileRefSchema`, `AccountPostingInstructionsSchema`, `SlotSchema`, `WeekSlotsResultSchema`, `DeletedSlotSchema`, each transform-free with `.meta({ id })`, and export `ApiProject`, `ApiSlot`, `ApiWeekSlotsResult`, `ApiVoiceProfileRef`, `ApiAccountPostingInstructions`
+- [X] T015 Add `src/server/api/operations/errors-doc.ts`: a shared helper that produces the documented error statuses (400, 401, 403, 404, 409, 422, 429) with one example each, for every new operation to reuse (FR-042)
 
 **Checkpoint**: Foundation ready — every user story phase below can now be implemented.
 

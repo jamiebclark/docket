@@ -1,11 +1,18 @@
 import type { ProjectScope } from "../../src/server/dal/scope";
 import { postsEnv } from "./posts-env";
-import { createJob } from "./factories";
+import { createJob, createVoiceProfile } from "./factories";
 import { createDraftPost, createMediaAsset, createSlots } from "./scheduling";
 
-export type ApiPermission = "read" | "write_posts" | "generate" | "auto_approve" | "manage_jobs";
+export type ApiPermission = "read" | "write_posts" | "generate" | "auto_approve" | "manage_jobs" | "manage_setup";
 
-export const ALL_PERMISSIONS: readonly ApiPermission[] = ["read", "write_posts", "generate", "auto_approve", "manage_jobs"];
+export const ALL_PERMISSIONS: readonly ApiPermission[] = [
+  "read",
+  "write_posts",
+  "generate",
+  "auto_approve",
+  "manage_jobs",
+  "manage_setup",
+];
 
 interface KeyOpts {
   name?: string;
@@ -93,18 +100,20 @@ export async function api(method: string, path: string, opts: ApiOptions = {}): 
 async function oneProject() {
   const env = await postsEnv();
   const account = await env.account({}, false);
-  await createSlots(env.project.id, account.id, [{ weekday: 1, localTime: "09:00" }]);
+  const [slot] = await createSlots(env.project.id, account.id, [{ weekday: 1, localTime: "09:00" }]);
   const media = await createMediaAsset(env.project.id, { altText: "A test image" });
   const { post, targets } = await createDraftPost(env.project.id, { accountIds: [account.id], mediaIds: [media.id] });
   const { job, items } = await createJob(env.project.id, { items: 2, accountIds: [account.id] });
+  const voiceProfile = await createVoiceProfile(env.project.id);
   const keys = {
     read: await createKey(env.scope, ["read"]),
     write: await createKey(env.scope, ["read", "write_posts"]),
     generate: await createKey(env.scope, ["read", "generate"]),
     manageJobs: await createKey(env.scope, ["read", "manage_jobs"]),
+    manageSetup: await createKey(env.scope, ["read", "manage_setup"]),
     all: await createKey(env.scope, ALL_PERMISSIONS),
   };
-  return { ...env, account, media, post, targets, job, items, keys };
+  return { ...env, account, media, post, targets, job, items, slot, voiceProfile, keys };
 }
 
 /** Two isolated projects (A and B), each fully populated, for cross-project and permission tests. */
