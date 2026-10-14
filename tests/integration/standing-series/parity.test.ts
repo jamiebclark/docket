@@ -145,4 +145,27 @@ describe("standing-series parity with a manual Generate (SC-003, FR-019)", () =>
     // Both forced to review by the same policy, with the same decision recorded by `applyApprovalPolicy`.
     expect(standingRecord.policies.decision).toEqual(manualRecord.policies.decision);
   }, 60_000);
+
+  it("a cadence series created after this entry still gets cadence's defaults untouched (SC-011)", async () => {
+    const e = await standingSeriesEnv();
+    const created = new Date("2026-01-10T00:00:00.000Z");
+    const { seriesId } = await atTime(created, () =>
+      createStandingSeries(e.scope, e.create({ cadence: { count: 1, period: "day" } })),
+    );
+    const series = await e.scope.standingSeries.get(seriesId);
+    expect(series!.occurrenceRule).toBe("cadence");
+    expect(series!.leadDays).toBe(0);
+    expect(series!.nextRunAt).not.toBeNull();
+
+    setLlmForTests(createFakeLlm([post("A cadence post.")]));
+    const counts = await tick(new Date("2026-01-11T00:00:01.000Z"));
+    expect(counts.produced).toBe(1);
+
+    const runs = await e.scope.standingSeriesRuns.listForSeries(seriesId, { limit: 5 });
+    const positions = await e.scope.standingSeriesPositions.listForRun(runs[0]!.id);
+    expect(positions).toHaveLength(1);
+    expect(positions[0]!.dated).toBeNull();
+    const standingPost = await e.scope.posts.findByStandingSeriesPosition(positions[0]!.id);
+    expect(standingPost!.queueNotBefore).toBeNull();
+  });
 }, 60_000);

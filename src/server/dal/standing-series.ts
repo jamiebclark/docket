@@ -393,15 +393,24 @@ export function createStandingSeriesPositionsRepo(db: Database, projectId: strin
  * deleting a still-referenced position would null `project_id` too and fail its `NOT NULL`. Clearing
  * the link first, for every post under the given runs, leaves the cascade below nothing to act on.
  */
-async function clearPostLinksForRuns(exec: Database, runIds: readonly string[]): Promise<void> {
+async function clearPostLinksForRuns(exec: Database, runIds: readonly string[], projectId?: string): Promise<void> {
   if (runIds.length === 0) return;
+  const positionIds = exec
+    .select({ id: standingSeriesPositions.id })
+    .from(standingSeriesPositions)
+    .where(
+      and(
+        inArray(standingSeriesPositions.runId, runIds as string[]),
+        projectId ? eq(standingSeriesPositions.projectId, projectId) : undefined,
+      ),
+    );
   await exec
     .update(posts)
     .set({ standingSeriesPositionId: null })
     .where(
-      inArray(
-        posts.standingSeriesPositionId,
-        exec.select({ id: standingSeriesPositions.id }).from(standingSeriesPositions).where(inArray(standingSeriesPositions.runId, runIds as string[])),
+      and(
+        inArray(posts.standingSeriesPositionId, positionIds),
+        projectId ? eq(posts.projectId, projectId) : undefined,
       ),
     );
 }
@@ -412,7 +421,7 @@ export async function clearPostLinksForSeries(exec: Database, projectId: string,
     .select({ id: standingSeriesRuns.id })
     .from(standingSeriesRuns)
     .where(and(eq(standingSeriesRuns.projectId, projectId), eq(standingSeriesRuns.seriesId, seriesId)));
-  await clearPostLinksForRuns(exec, runs.map((r) => r.id));
+  await clearPostLinksForRuns(exec, runs.map((r) => r.id), projectId);
 }
 
 /**

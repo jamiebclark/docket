@@ -363,7 +363,11 @@ export const standingSeriesOccurrences = pgTable(
     year: smallint("year").notNull(),
     targetDate: date("target_date", { mode: "string" }).notNull(),
     outcome: standingSeriesOccurrenceOutcome("outcome"),
-    positionId: uuid("position_id"),
+    // Single-column, not composite with project_id (B22's precedent): a composite `ON DELETE SET
+    // NULL` would null every column of the FK, including the NOT-NULL `project_id`, when a position
+    // is deleted (review finding, T070). `position_id` is always written from within the same
+    // transaction that already matched the occurrence's own `project_id`.
+    positionId: uuid("position_id").references(() => standingSeriesPositions.id, { onDelete: "set null" }),
     recordedAt: timestamp("recorded_at", { withTimezone: true }).defaultNow().notNull(),
     settledAt: timestamp("settled_at", { withTimezone: true }),
   },
@@ -380,11 +384,6 @@ export const standingSeriesOccurrences = pgTable(
       columns: [t.projectId, t.rowId],
       foreignColumns: [standingSeriesDatedRows.projectId, standingSeriesDatedRows.id],
     }).onDelete("cascade"),
-    foreignKey({
-      name: "standing_series_occurrences_position_fk",
-      columns: [t.projectId, t.positionId],
-      foreignColumns: [standingSeriesPositions.projectId, standingSeriesPositions.id],
-    }).onDelete("set null"),
     check("standing_series_occurrences_year_match", sql`extract(year from ${t.targetDate}) = ${t.year}`),
     check("standing_series_occurrences_missed_no_position", sql`${t.outcome} <> 'missed' OR ${t.positionId} IS NULL`),
     check("standing_series_occurrences_pending_has_position", sql`${t.outcome} IS NOT NULL OR ${t.positionId} IS NOT NULL`),
