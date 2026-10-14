@@ -26,7 +26,7 @@ function importLines(file: string): string[] {
 
 const strict = ["src/app/api/v1", "src/server/api/operations"].flatMap(files);
 const operations = files("src/server/api/operations");
-const pipeline = files("src/server/api");
+const pipeline = [...files("src/server/api"), ...files("src/server/mcp")];
 
 describe("public API import boundary", () => {
   it("finds the API files", () => {
