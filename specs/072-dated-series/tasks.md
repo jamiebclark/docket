@@ -177,7 +177,7 @@ date, on whichever path queues it.
 **Independent Test**: Set a lead time, fire an occurrence, and assert the post exists before the date
 while its queued target holds a slot occurrence on or after the target date.
 
-- [ ] T058 [US4] Create `tests/integration/dated-series/lead-time.test.ts`: a lead time of 3 producing the post three days early and nothing on the two days after; auto-approve + queue holding a slot at or after local midnight of the target date, never earlier, including when a reviewer approves from Review afterward (the `queueFloor` guarantee); review-required leaving the post in Review with no slot held; the queue-horizon-exhausted case staying an approved draft not queued earlier than the target date; a content-validation failure leaving it in review under auto-approve (US4 AS1–AS5, SC-003) (depends on T026, T036)
+- [X] T058 [US4] Create `tests/integration/dated-series/lead-time.test.ts`: a lead time of 3 producing the post three days early and nothing on the two days after; auto-approve + queue holding a slot at or after local midnight of the target date, never earlier, including when a reviewer approves from Review afterward (the `queueFloor` guarantee); review-required leaving the post in Review with no slot held; the queue-horizon-exhausted case staying an approved draft not queued earlier than the target date; a content-validation failure leaving it in review under auto-approve (US4 AS1–AS5, SC-003) (depends on T026, T036)
 
 **Checkpoint**: US4 complete — SC-003 is covered.
 
