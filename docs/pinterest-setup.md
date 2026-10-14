@@ -40,7 +40,20 @@ Every new app starts with **Trial access**:
 - While your app has Trial access, every pin and board it creates is **visible only to its owner** — the connected
   account — even if the board is public. Submitting a post through Docket while on Trial does not make it public.
 - To move from Trial to **Standard** access (public pins), Pinterest asks for a **demo video of the full flow**:
-  connecting the account, composing and publishing a pin, and the published pin visible on Pinterest.
+  connecting the account, composing and publishing a pin, and the published pin visible on Pinterest. Pinterest
+  asks for the video even when you are the only intended user of its API.
+
+The request form asks a few things worth answering deliberately (observed on the live form, 2026-10-14):
+
+| Field | Answer for Docket | Why |
+|---|---|---|
+| Developer purpose | **Personal API access (single, personal use)** | One operator publishing their own brands, not a product sold to other people |
+| Use cases | **Pin creation & scheduling** | The only thing it does. Leave reporting, ads, ecommerce and the rest unticked |
+| Reads Pins and/or Boards Data | **Yes, mine** | Docket lists the *connected* account's own boards so a post can pick one. The third option, "Yes, for general users", is reading other Pinners' data and says on the form that it **requires separate approval** — that is the `PINNER_DATA_ACCESS_DENIED` gate above, and Docket does not need it |
+| Privacy policy | A page that **resolves right now** | Docket publishes one at [Privacy](privacy.md). An unreachable link is a documented refusal reason, so check it loads before submitting |
+
+A CAPTCHA guards the submit button, and **there is no redirect-URI field on this form** — you register the
+callback on the app's own page after the request is approved (see [Callback address](#callback-address)).
 
 ## Callback address
 

@@ -35,6 +35,13 @@ sandbox" below; do not conflate it with Trial access.
    from the omission, not a statement Pinterest makes, so treat connecting a personal account as UNVERIFIED
    and tell deployers to connect business accounts. Nothing here restricts *which* accounts may authorise an
    app: app ownership and account connection are separate, as in any OAuth flow.
+   **The registration form settles the scope question more cleanly than the changelog does** (seen on the live
+   form, 2026-10-14): it asks "Reads Pins and/or Boards Data" with three answers — "No", "**Yes, mine** — your
+   app accesses the authenticated Pinner's own Pins and Boards", and "Yes, for general users — your app
+   accesses other Pinners' Pins and Boards. **This requires separate approval.**" Docket is "Yes, mine", which
+   needs no extra approval; the 403 above is what the third answer buys you if you claim it without approval.
+   The same form has no redirect-URI field at all — the callback is registered on the app's page after the
+   request is approved — and its submit button is behind a reCAPTCHA.
    https://developers.pinterest.com/docs/key-concepts/access-tiers/ ,
    https://developers.pinterest.com/docs/changelog/changelog/#pinner-data-access-denial-error
 1. **A Pinterest business account is required before any app can be registered.** "Access to the Pinterest API
