@@ -144,12 +144,12 @@ Single Next.js app at repository root: `src/`, `tests/`, `drizzle/`, `docs/`.
 
 ### Tests for User Story 5
 
-- [ ] T036 [US5] Integration tests for `PATCH /voice-profiles/{profileId}` in `tests/integration/api/endpoints/voice-write.test.ts` (patch portion): append happy path (version 2, version 1 unchanged), stale `baseVersion` (409, no new version), identical name/content with current `baseVersion` (200, same version, nothing appended), archived profile (409 telling the caller to restore first), another-project profile id vs. unknown id (identical 404), missing-permission 403, idempotent replay
+- [X] T036 [US5] Integration tests for `PATCH /voice-profiles/{profileId}` in `tests/integration/api/endpoints/voice-write.test.ts` (patch portion): append happy path (version 2, version 1 unchanged), stale `baseVersion` (409, no new version), identical name/content with current `baseVersion` (200, same version, nothing appended), archived profile (409 telling the caller to restore first), another-project profile id vs. unknown id (identical 404), missing-permission 403, idempotent replay
 
 ### Implementation for User Story 5
 
-- [ ] T037 [US5] Add the `updateVoiceProfile` operation (`PATCH /voice-profiles/{profileId}`, `resourceParams: ["profileId"]`) to `src/server/api/operations/voice.ts` calling `services/voice.saveVoiceProfile` and mapping `{version}` to `{id: params.profileId, version}`
-- [ ] T038 [US5] Register the updated voice operations array (if not already covered by T020) in `src/server/api/operations/index.ts`
+- [X] T037 [US5] Add the `updateVoiceProfile` operation (`PATCH /voice-profiles/{profileId}`, `resourceParams: ["profileId"]`) to `src/server/api/operations/voice.ts` calling `services/voice.saveVoiceProfile` and mapping `{version}` to `{id: params.profileId, version}`
+- [X] T038 [US5] Register the updated voice operations array (if not already covered by T020) in `src/server/api/operations/index.ts`
 
 **Checkpoint**: All five user stories are independently functional.
 

@@ -52,6 +52,7 @@ const FIXTURES: Record<string, Fixture> = {
   retryFailedJobItems: { params: (p) => ({ jobId: p.job.id }), body: () => ({}) },
   createProject: { body: () => ({ name: `P ${Math.random().toString(36).slice(2, 7)}`, slug: `p-${Math.random().toString(36).slice(2, 8)}`, timezone: "America/New_York" }) },
   createVoiceProfile: { body: () => ({ name: "Scope test", content: { voiceAndTone: "x" } }) },
+  updateVoiceProfile: { params: (p) => ({ profileId: p.voiceProfile.id }), body: () => ({ name: "Scope test", content: { voiceAndTone: "x" }, baseVersion: 1 }) },
   addSlot: { body: (p) => ({ accountId: p.account.id, weekday: 6, localTime: "06:00" }) },
   addWeekSlots: { body: (p) => ({ accountId: p.account.id, localTime: "05:00" }) },
   updateSlot: { params: (p) => ({ slotId: p.slot.id }), body: () => ({ paused: true }) },

@@ -19,6 +19,7 @@ interface Fixture {
 const SETUP_FIXTURES: Record<string, Fixture> = {
   createProject: { body: () => ({ name: `Nope ${Math.random().toString(36).slice(2, 7)}`, slug: `nope-${Math.random().toString(36).slice(2, 8)}`, timezone: "America/New_York" }) },
   createVoiceProfile: { body: () => ({ name: "Nope", content: { voiceAndTone: "x" } }) },
+  updateVoiceProfile: { params: (p) => ({ profileId: p.voiceProfile.id }), body: () => ({ name: "Nope", content: { voiceAndTone: "x" }, baseVersion: 1 }) },
   addSlot: { body: (p) => ({ accountId: p.account.id, weekday: 5, localTime: "08:00" }) },
   addWeekSlots: { body: (p) => ({ accountId: p.account.id, localTime: "07:00" }) },
   updateSlot: { params: (p) => ({ slotId: p.slot.id }), body: () => ({ paused: true }) },

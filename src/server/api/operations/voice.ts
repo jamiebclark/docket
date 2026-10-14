@@ -1,5 +1,6 @@
-import { CreateVoiceProfileRequestSchema, VoiceProfileRefSchema } from "@/lib/api/schemas";
-import { createVoiceProfile } from "../../services/voice";
+import { CreateVoiceProfileRequestSchema, UpdateVoiceProfileRequestSchema, VoiceProfileRefSchema } from "@/lib/api/schemas";
+import { z } from "zod";
+import { createVoiceProfile, saveVoiceProfile } from "../../services/voice";
 import { standardErrors } from "./errors-doc";
 import { defineOperation } from "./types";
 
@@ -8,6 +9,8 @@ const example = {
   name: "House voice",
   content: { voiceAndTone: "Warm, a little playful, never salesy." },
 };
+
+const voiceProfileParams = z.object({ profileId: z.uuid() });
 
 export const voiceOperations = [
   defineOperation({
@@ -37,6 +40,42 @@ export const voiceOperations = [
       const isDefault = scope.project.defaultVoiceProfileId === null;
       const { profileId, version } = await createVoiceProfile(scope, body);
       return { status: 201, body: { id: profileId, version, isDefault } };
+    },
+  }),
+  defineOperation({
+    id: "updateVoiceProfile",
+    method: "PATCH",
+    path: "/voice-profiles/{profileId}",
+    permission: "manage_setup",
+    tag: "Voice",
+    summary: "Update a voice profile",
+    description:
+      "Appends a new version of the profile's name and content, protected by optimistic concurrency: `baseVersion` must match the profile's current version. Requires the `manage_setup` permission.",
+    params: voiceProfileParams,
+    body: {
+      kind: "json",
+      schema: UpdateVoiceProfileRequestSchema,
+      examples: {
+        update: {
+          summary: "Update a voice profile",
+          value: { name: example.name, content: example.content, baseVersion: 1 },
+        },
+      },
+    },
+    resourceParams: ["profileId"],
+    responses: {
+      200: {
+        description: "The profile's current version after the update",
+        schema: VoiceProfileRefSchema,
+        examples: { updated: { summary: "Updated", value: { id: example.id, version: 2, isDefault: true } } },
+      },
+      ...standardErrors("manage_setup"),
+    },
+    idempotent: true,
+    async run(scope, { params, body }) {
+      const isDefault = scope.project.defaultVoiceProfileId === params.profileId;
+      const { version } = await saveVoiceProfile(scope, params.profileId, body);
+      return { status: 200, body: { id: params.profileId, version, isDefault } };
     },
   }),
 ];
