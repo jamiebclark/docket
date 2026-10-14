@@ -1,351 +1,408 @@
-# Review: An MCP server over the v1 API (074)
+# Review: An MCP server over the v1 API (074) — re-review after Phase 8 remediation
 
-Reviewed 59 file(s) changed across 12 commit(s), against `406e426...HEAD` (`git merge-base HEAD origin/main`).
+Second review of this entry. The first review (commit `2696e94`, which also carried the
+remediation) found 0 BLOCKER and 6 MAJOR; Phase 8 (T057–T062) closed all six. Per the
+constitution's "review is exhaustive once, then scoped", this pass checks **only** that each
+earlier finding is fixed and that the files the remediation touched introduced no regression.
+It deliberately opens no new lines of inquiry, and everything it noticed anyway is recorded
+as MINOR for a hardening entry rather than as a blocker.
 
-Read in full: `src/server/mcp/{types,dispositions,naming,schema,describe,bridge,protocol}.ts`,
-`src/app/api/mcp/route.ts`, `src/server/api/error-surface.ts`,
-`src/server/api/operations/types.ts`, the whole `src/server/api/operations/` diff (all 34
-dispositions), the `src/server/api/openapi.ts` diff, `tests/unit/mcp/*.test.ts`,
-`tests/integration/api/{mcp-surface,mcp-tools,mcp-protocol,scope-enforcement}.test.ts`,
-`tests/helpers/{api-fixtures,mcp-bridge,mcp}.ts`, `tests/lint/api-imports.test.ts`,
-the `secret-scan.test.ts` diff, `docs/mcp.md`, and the `docs/{decisions,n8n,security}.md` +
-`mkdocs.yml` diffs. Also read, as the obligation sources and the pre-existing code the
-feature leans on: `spec.md`, `plan.md`, `tasks.md`, `data-model.md`,
-`contracts/mcp-transport.md`, `.specify/memory/constitution.md`,
-`src/server/api/{handle,auth,errors,respond,idempotency}.ts`,
-`src/server/services/generation/{policy,single}.ts`, `src/lib/validation/policies.ts`,
-`src/server/db/schema/projects.ts`.
+Reviewed the remediation diff (`git show 2696e94`): 13 files, 516 insertions. Read in full,
+at their current state: `src/server/mcp/{protocol,bridge,schema,describe}.ts`,
+`src/server/api/operations/generate.ts`, `src/server/api/error-surface.ts`,
+`src/server/api/operations/slots.ts`, `docs/mcp.md`,
+`tests/integration/api/{mcp-tools,mcp-protocol}.test.ts`,
+`tests/unit/mcp/{describe,schema}.test.ts`, `tests/helpers/{mcp,mcp-bridge,api}.ts`.
+Also read, to settle specific claims: `src/server/api/handle.ts` (the `Retry-After` source),
+`src/server/api/idempotency.ts` (the `Idempotent-Replayed` source),
+`src/server/services/generation/policy.ts` (policy resolution, the subject of F2),
+`src/server/dal/projects.ts` (`ProjectSettingsPatch`, used by the new F2 test),
+`src/server/db/schema/projects.ts` (the policy defaults the test restores),
+`src/server/api/operations/errors-doc.ts` (`standardErrors`, the subject of F6),
+`src/server/mcp/dispositions.ts`, `.specify/memory/constitution.md`, `spec.md`, `plan.md`,
+`tasks.md`, `contracts/mcp-tools.md`, `contracts/mcp-transport.md`, and the 074 entry in
+`docs/decisions.md`.
 
-Sampled: `specs/074-mcp-server/research.md` (D5-D16, the decisions the code is measured
-against), `node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js` (to settle who
-answers `initialize`).
+Not re-reviewed, because the remediation did not touch them and the first review swept them:
+the 34 dispositions, `naming.ts`, `types.ts`, the route module, `api-fixtures.ts`,
+`api-imports.test.ts`, `mkdocs.yml`, `docs/{n8n,security}.md`. Still not reviewed for factual
+accuracy against the published MCP specification: `docs/research/mcp.md` (this phase cannot
+fetch the cited pages).
 
-Not reviewed: `docs/research/mcp.md` for factual accuracy against the official MCP
-specification (this phase cannot fetch the cited pages - see "What I could not check"),
-`specs/074-mcp-server/{quickstart,contracts/mcp-tools}.md`, `pnpm-lock.yaml`.
+**Targeted runs** (the constitution bars a re-review from re-running the full suite, and
+permits probes that prove or disprove a finding — these prove the six fixes):
+
+| Command | Result |
+|---|---|
+| `vitest run tests/unit/mcp/` | 4 files, 14 tests passed — proves F3, F6 |
+| `vitest run tests/integration/api/mcp-{tools,protocol,surface}.test.ts` | 3 files, 28 tests passed — proves F1, F2, F4, F5 |
+| `vitest run tests/integration/security/secret-scan.test.ts tests/integration/api/{openapi,scope-enforcement}.test.ts` | 3 files, 25 tests passed — regression guard on the remediated response path |
+
+67 tests across 7 files, all green, against the real Postgres on port 5555.
 
 ## Verdict
 
-The architecture is right and the hard part landed well: the disposition field is genuinely
-required, the 34 operations are each decided, the 19 tools are derived end to end (name,
-schema, description, permission), and a tool call really is one `Request` through
-`handleApiRequest` - so FR-011's "no second pipeline" is structural rather than asserted.
-Phases 2-5 are solid, and the drift test, the permission loop over all 19 tools and the
-idempotency tests are real tests of real behaviour.
+**The remediation holds. Nothing blocks the merge.** All six MAJORs are genuinely closed, not
+just ticked: the protocol layer now folds the pipeline's `Retry-After` and
+`Idempotent-Replayed` into the tool result and a protocol-level test proves it (F1); the
+generate gate fires on the *resolved* effect rather than the requested policy, with a test
+against a project configured `auto_approve` + `add_to_queue` (F2); `confirm` is
+optional-but-still-`literal(true)` in a conditional tool's published schema, with the
+`required` array asserted both ways (F3); the bridge forwards `x-api-key` (F4); the isolation
+test now covers all six resource-param types the nineteen tools take and throws rather than
+skipping on a seventh (F5); and the failure list unions each operation's own documented
+`>= 400` responses, so `docket_create_project` names `conflict` and `docket_get_post` names
+`not_found` (F6). I checked F5's completeness directly: the exposed tools' `resourceParams`
+are exactly `{postId, targetId, mediaId, accountId, profileId, slotId}`, so the new `throw`
+cannot fire spuriously, and `jobId`/`itemId` belong only to withheld operations.
 
-What did not survive the pass boundary is the **protocol layer**. Phase 4's bridge returns
-`Retry-After` and `Idempotent-Replayed` in `McpToolOutcome.headers`; Phase 6's `tools/call`
-handler never reads them, so over the wire a rate-limited model is told to slow down with no
-wait and a replay is invisible (F1) - and because Phase 4's tests assert at the bridge, not
-the wire, nothing caught it. Two more defects cluster on `docket_generate_post`, whose
-conditional confirmation is both too narrow (it reads the *requested* scheduling policy, not
-the resolved one, so a project configured to auto-approve and queue publishes to live
-accounts with no confirmation - F2) and, in its published JSON Schema, unconditionally
-required (so a schema-following client either cannot make the plain generate-to-draft call
-the docs promise, or always passes `confirm: true` and renders the gate a no-op - F3). These
-two must be fixed together: fixing F3 alone makes F2 easier to reach. Beyond that, the bridge
-forwards only `Authorization`, so a key presented the other way `docs/n8n.md` documents lists
-tools fine and fails every call (F4); the new cross-project test silently skips three of the
-nine exposed tools that take a resource id (F5); and the generated "Can fail with" sentence
-lists each operation's *residual* statuses, so `docket_create_project` never mentions
-`conflict` or `missing_permission` (F6).
+What the remediation left behind is a **documentation lag, not a defect**: the F2 fix changed
+what the generate gate does, and three of the four places that publish that predicate were
+not updated with it. `docs/decisions.md:3347` still tells a future reader "a plain
+generate-to-draft call needs no confirmation", which the code no longer does (F17), and the
+`whenDescription` the remediation carefully rewrote is a field nothing renders — so the
+escape hatch it describes (`schedulingPolicy: "leave_as_draft"`) reaches a human reading
+`docs/mcp.md` but never reaches the model reading the tool description (F16). That is the one
+thing worth fixing soon, because F16 is the residue of F3's original concern: a model told
+flatly "Requires `confirm: true` to proceed" and shown an optional `confirm` will pass
+`confirm: true` by reflex. It is safe — passing the confirmation is the *conservative* answer
+and nothing publishes without the API's own `confirmUnreviewedQueue` guard as well — but it
+makes the gate carry less signal than it should.
 
-None of this is architectural rework - F1, F3, F4 and F6 are a few lines each in one file,
-F2 is a predicate, F5 is three map entries. Fix the six MAJORs and this is ready. Nothing
-found would corrupt data, leak a secret or cross a project boundary.
+Six MINORs carried forward from the first review and five new ones are listed below. None would corrupt
+data, leak a secret, or cross a project boundary. The single genuinely unverified thing is
+unchanged from the first review: T056, the manual pass with a real MCP client, which no
+automated test can replace and which is correctly still unchecked in `tasks.md`.
+
+## Remediation of the first review's findings
+
+Checked means verified fixed at the location given, by reading the code and by the named test
+actually running green in this pass.
+
+- [x] MAJOR F1 — **Closed.** `bodyWithHeaders` (src/server/mcp/protocol.ts:51-62) folds
+      `Retry-After` into `error.retryAfterSeconds` and `Idempotent-Replayed` into a top-level
+      `alreadyReplayed: true`, and `tools/call` serialises that instead of the raw body
+      (src/server/mcp/protocol.ts:81). Proven at the wire, not the bridge, by
+      tests/integration/api/mcp-protocol.test.ts:85 (a key with `rateLimitPerMinute: 1`, second
+      call asserts `error.retryAfterSeconds >= 1`) and :94 (a replayed `docket_create_post`
+      asserts `alreadyReplayed`). The wait cannot be zero: `retryAfterSeconds` in
+      src/server/api/handle.ts:87 clamps to `[1, 60]`. Broader than the `contracts/mcp-tools.md`
+      wording, which promised the wait only for `rate_limited` — the implementation also
+      surfaces it for the 409 in-flight idempotency conflict (src/server/api/idempotency.ts:89)
+      and `generation_unavailable`. More information, correctly sourced; no objection.
+
+- [x] MAJOR F2 — **Closed.** The predicate is now
+      `(args) => args.schedulingPolicy !== "leave_as_draft"`
+      (src/server/api/operations/generate.ts:70), so an absent policy — the case that fell
+      through to `scope.project.defaultSchedulingPolicy` in
+      src/server/services/generation/policy.ts:50 — demands confirmation. I confirmed the hole
+      was real and is now shut: `resolvePolicies` skips its `auto_approve` grant check entirely
+      when the project *default* is `auto_approve` (policy.ts:51-57), so the key need not even
+      hold `auto_approve` to reach `decidePolicy`'s queue branch (policy.ts:34). The new test
+      at tests/integration/api/mcp-tools.test.ts:215 sets the project to
+      `auto_approve` + `add_to_queue` via `updateProject`, asserts `confirmation_required` for a
+      plain call, and restores `review_required` + `leave_as_draft` in a `finally` — which match
+      the column defaults in src/server/db/schema/projects.ts:19,22, so the shared world fixture
+      is left as it was found.
+
+- [x] MAJOR F3 — **Closed.** src/server/mcp/schema.ts:36 is now
+      `confirm.when ? z.literal(true).optional() : z.literal(true)`, so a conditional tool's
+      published schema permits the plain call while still rejecting any non-`true` value, and
+      the four unconditional tools keep `confirm` required. tests/unit/mcp/schema.test.ts:23
+      asserts the `required` array both ways — the gap the first review named (only property
+      *names* were compared) is now covered.
+
+- [x] MAJOR F4 — **Closed.** src/server/mcp/bridge.ts:83-84 copies `x-api-key` alongside
+      `authorization`, so the credential `readKey` accepted at the shape check
+      (src/server/api/auth.ts:10) is the one `handleApiRequest` receives. Covered by
+      tests/integration/api/mcp-tools.test.ts:105 through the new `keyHeader` option in
+      tests/helpers/mcp-bridge.ts:35-38. A key sent both ways with different values is still
+      `readKey`'s `"conflict"` and refused (bridge.ts:44).
+
+- [x] MAJOR F5 — **Closed and now unskippable.** `foreign` carries `profileId` and `slotId`
+      (tests/integration/api/mcp-tools.test.ts:122-123) and the silent `continue` became
+      `throw new Error(...)` (:129). I verified the map is exhaustive rather than merely larger:
+      grepping `resourceParams` across `src/server/api/operations/` shows the nineteen exposed
+      operations take exactly `postId`, `targetId`, `mediaId`, `accountId`, `profileId` and
+      `slotId`; `jobId`/`itemId` appear only on withheld job operations. So the `throw` cannot
+      fire today and will fire the moment a new exposed operation adds a seventh.
+
+- [x] MAJOR F6 — **Closed.** src/server/mcp/describe.ts:16-19 unions `errorStatuses(op)` with
+      the `>= 400` keys of `op.responses` before mapping to codes, which is the right shape of
+      fix: `error-surface.ts:19` deletes the documented statuses on purpose, because
+      `openapi.ts` emits those separately. tests/unit/mcp/describe.test.ts:30 asserts `conflict`
+      for `createProject` and `not_found` for `getPost` — the two examples the finding named —
+      so the test no longer confirms the implementation against itself. `listActivity`, the
+      third example, documents 400/401/403 inline (src/server/api/operations/activity.ts:80-98)
+      and so is covered by the same union.
 
 ## Findings
 
-- [ ] MAJOR F1 — The protocol layer throws away the pipeline's `Retry-After` and `Idempotent-Replayed`, so a tool call never reports the wait or the replay.
-      where:  src/server/mcp/protocol.ts:63, src/server/mcp/bridge.ts:102
-      why:    `callTool` carefully lifts `Retry-After` and `Idempotent-Replayed` into
-              `McpToolOutcome.headers` (bridge.ts:102-108), and the `tools/call` handler
-              returns only `{ content, isError }` — the headers are dropped. `handle.ts:140`
-              puts the rate-limit wait **only** in the header (`details` is `undefined`), so
-              a model that hits the limit over MCP receives "Too many requests. Slow down and
-              retry." with no number and will retry immediately, which is the exact failure
-              FR-015 exists to prevent. The same drop makes a replay indistinguishable from a
-              first execution (FR-025's "replay marking"). Research D6 ("the response's
-              status, JSON body and `Retry-After`/`Idempotent-Replayed` headers become the
-              tool result") and D14 ("plus the wait in seconds when the code is
-              `rate_limited`") both specify the opposite, and `docs/mcp.md:66` publishes the
-              behaviour as fact. The Phase 4 tests assert both headers
-              (mcp-tools.test.ts:282, :320, :335) but only through the bridge, so the wire
-              regression is invisible to the suite.
-      owed:   Carry the outcome's headers into the `CallToolResult` — append the wait to the
-              text content (or the error body's `details`) when the code is `rate_limited`,
-              and surface the replay marker — and assert it in a protocol-level test, not
-              just a bridge-level one.
-      traces: FR-015, FR-025, FR-028, SC-009
+0 BLOCKER, 0 MAJOR. Eleven MINORs and four notes. Per the constitution's re-review rule, the
+five findings this pass noticed for the first time (F16–F20) are MINOR by construction, not by
+judgement of their size — they are recorded for a hardening entry, and none of them blocks.
 
-- [ ] MAJOR F2 — `docket_generate_post`'s confirmation reads the *requested* scheduling policy, so a project whose default is `add_to_queue` publishes to live accounts unconfirmed.
-      where:  src/server/api/operations/generate.ts:70, src/server/services/generation/policy.ts:50
-      why:    The predicate is `typeof args.schedulingPolicy === "string" && policy !==
-              "leave_as_draft"`, but the effect is decided by the *resolved* policy:
-              `resolvePolicies` falls back to `scope.project.defaultSchedulingPolicy`
-              (policy.ts:50) and `decidePolicy` queues whenever the resolved pair is
-              `auto_approve` + `add_to_queue` (policy.ts:34). Both project defaults are
-              settable from the project settings form
-              (`src/app/p/[projectSlug]/settings/settings-form.tsx`), so in a project
-              configured for hands-off generation, a model calling
-              `docket_generate_post { brief, accountIds, confirmUnreviewedQueue: true }` —
-              with no `schedulingPolicy` at all — generates, approves and queues the post to
-              the brand's live accounts, and `when()` returns false, so no confirmation is
-              ever demanded. FR-020 is a MUST about effects, and US1 promises "nothing
-              reaches a social account until that confirmation". The `whenDescription`
-              published in `docs/mcp.md:29` ("a plain generate-to-draft needs no
-              confirmation") is then untrue for that project.
-      owed:   Demand the confirmation whenever the call *could* queue — treat an absent
-              `schedulingPolicy` as "unknown, therefore confirm", or resolve against the
-              project's default before deciding. Fix together with F3. Add a test with a
-              project whose defaults are `auto_approve` + `add_to_queue`.
-      traces: FR-020, FR-021, SC-005, US1
+### New in this pass
 
-- [ ] MAJOR F3 — `confirm` is a required property of every confirmation tool's input schema, including the conditionally-confirmed generate tool.
-      where:  src/server/mcp/schema.ts:36
-      why:    `shape.confirm = z.literal(true)` is not `.optional()`, so
-              `z.toJSONSchema(..., { io: "input" })` emits `confirm` in the schema's
-              `required` array (verified by running Zod 4.6.5 over the same shape). For the
-              four unconditional tools that is faithful. For `docket_generate_post` it
-              contradicts data-model.md §2's `C*`, research D9 and `docs/mcp.md:29`: a client
-              that validates arguments against `inputSchema` cannot make the plain
-              generate-to-draft call at all, and a model that simply follows the schema will
-              always send `confirm: true` — which turns the conditional gate into a no-op and
-              silently covers F2. No test looks at the `required` array;
-              mcp-surface.test.ts:38 compares only the *property names*.
-      owed:   Make `confirm` optional in the schema when the disposition carries a `when`
-              (keeping the `literal(true)` type so a non-affirmative value is still
-              rejected), and assert the `required` array for a conditional tool and for an
-              unconditional one.
-      traces: FR-005, FR-020, SC-005
+- [ ] MINOR F16 — `confirm.whenDescription` is written by three artifacts and rendered by none, so the escape hatch the F2 fix created never reaches the model.
+      where:  src/server/mcp/describe.ts:24, src/server/api/operations/generate.ts:70-72
+      why:    `describeTool` emits only `confirm.effect` — "Requires `confirm: true` to
+              proceed: Generate a post from the brief, then queue it to publish on each target
+              account's next free slot." Nothing in `src/` reads `whenDescription`; grepping it
+              finds only the field's declaration (operations/types.ts:31) and
+              `dispositionProblems`' check that it is non-empty when `when` is set
+              (src/server/mcp/dispositions.ts:41-45). T058 duly rewrote the string, and
+              `docs/mcp.md:29` publishes it for a human — but the model choosing the tool is
+              told the effect is a live publish and is not told that
+              `schedulingPolicy: "leave_as_draft"` is the way to generate a draft without
+              confirming. Combined with F3's (correct) fix making `confirm` optional, the
+              likely model behaviour is to send `confirm: true` on every generate call, which
+              is the no-op the first review warned about. Two secondary inaccuracies follow
+              from the same omission: the effect sentence describes queueing even for a
+              project whose default is `leave_as_draft` (where `confirm: true` queues
+              nothing), and the generate tool is the only one whose confirmation is
+              conditional, so a reader of the description cannot tell it apart from the four
+              unconditional ones.
+      owed:   Append `confirm.whenDescription` to the confirmation sentence in `describeTool`
+              when it is present, and extend tests/unit/mcp/describe.test.ts to assert that a
+              conditional tool's description names the condition. (`dispositionProblems`
+              already guarantees the string exists whenever `when` does, so there is no new
+              invariant to enforce.)
+      traces: FR-006, FR-020, SC-006
 
-- [ ] MAJOR F4 — The bridge forwards only `Authorization`, so a key sent as `X-API-Key` lists tools successfully and then fails every tool call with `invalid_api_key`.
-      where:  src/server/mcp/bridge.ts:81, src/server/api/auth.ts:10
-      why:    `callTool` validates the credential with `readKey`, which accepts
-              `Authorization: Bearer` **or** `X-API-Key` (auth.ts:10), and then builds the
-              inner `Request` from a fresh `Headers` into which it copies only
-              `authorization` (bridge.ts:80-84). An `X-API-Key`-only request therefore passes
-              the shape check, reaches `handleApiRequest` with no credential at all, and is
-              refused 401 `invalid_api_key` — while `tools/list` succeeds, because
-              `protocol.ts:54` reads the real headers. FR-008 requires the key be "read the
-              same ways the HTTP API accepts one", the spec's Decisions say "the key is read
-              exactly as `readKey` reads it for HTTP", contracts/mcp-transport.md §7 step 5
-              says "the credential headers copied from the MCP request" (plural), and
-              `docs/n8n.md:15` tells operators `X-API-Key: dkt_...` also works, with
-              `docs/security.md` asserting MCP reads the same keys "the same way". The
-              failure mode — listing works, every call is unauthorized — is maximally
-              confusing to diagnose.
-      owed:   Copy `x-api-key` alongside `authorization` (or forward both credential headers
-              verbatim), and cover an `X-API-Key` tool call in the tools test.
-      traces: FR-008, FR-009, SC-009
+- [ ] MINOR F17 — Three published descriptions of the generate confirmation still state the predicate the F2 fix replaced, including the decisions log.
+      where:  docs/decisions.md:3347, specs/074-mcp-server/data-model.md:74, specs/074-mcp-server/contracts/mcp-tools.md:90
+      why:    All three say confirmation is required when `schedulingPolicy` is "present and
+              not `leave_as_draft`", and `docs/decisions.md:3348` draws the conclusion "so a
+              plain generate-to-draft call needs no confirmation (matching the spec's text)".
+              After T058 the code demands confirmation for a plain call, so the live judgement
+              log — the artifact the constitution points a future reader at, and the one
+              FR-030 names — now describes behaviour the code does not have, and states the
+              opposite of `docs/mcp.md:29`. The remediation updated `docs/mcp.md` and the
+              `whenDescription` and stopped there. (`research.md:261` says the same thing but
+              is a Phase 0 record of what was decided then, so it is history rather than a
+              stale claim.)
+      owed:   Update the 074 entry's "One open judgement" paragraph to the predicate that
+              shipped and to its real consequence — confirmation unless the caller explicitly
+              asks for a draft — and the same one-line correction in `data-model.md` §2 and
+              `contracts/mcp-tools.md`'s confirmation table.
+      traces: FR-030
 
-- [ ] MAJOR F5 — The MCP project-isolation test silently skips `profileId` and `slotId`, leaving three of the nine exposed id-taking tools with no cross-project test.
-      where:  tests/integration/api/mcp-tools.test.ts:109, tests/integration/api/mcp-tools.test.ts:119
-      why:    The `foreign` map holds only `postId`, `targetId`, `mediaId` and `accountId`,
-              and line 119 is `if (!(name in foreign)) continue;` — so
-              `docket_update_voice_profile` (`resourceParams: ["profileId"]`, voice.ts:65),
-              `docket_update_slot` and `docket_delete_slot` (`["slotId"]`, slots.ts:131,
-              slots.ts:156) are skipped, and `expect(checked).toBeGreaterThan(0)` passes
-              regardless. FR-018 is a MUST for "every exposed tool that takes a resource
-              identifier", and SC-003 says a resource from another project is never reachable
-              through any tool. The HTTP test this was modelled on carries all eight ids and
-              skips nothing (scope-enforcement.test.ts:87-96, which already has
-              `w.b.voiceProfile.id` and `w.b.slot!.id` to hand) — so the new front door is
-              tested more weakly than the old one, and the `continue` means any future
-              resource-param type is skipped silently too.
-      owed:   Add `profileId: w.b.voiceProfile.id` and `slotId: w.b.slot!.id`, and replace the
-              silent `continue` with a failure when a resourceParam has no foreign fixture
-              (or assert the checked count equals the expected set).
-      traces: FR-018, SC-003
+- [ ] MINOR F18 — `docs/mcp.md` still introduces the surface as "four tools demand an explicit `confirm: true`", which the F2 fix made misleading.
+      where:  docs/mcp.md:17, docs/mcp.md:29
+      why:    Line 17 is read before the table, and after T058 a fifth tool demands
+              confirmation on every call that does not explicitly pass
+              `schedulingPolicy: "leave_as_draft"` — i.e. on the default call an operator will
+              actually make. The generate row at line 29 is accurate, but a reader who stops at
+              line 17 (or who counts the **yes** markers) will not expect their first generate
+              call to be refused. Line 17's remaining sentence, about `false`/`"true"`/`1`
+              being refused, is correct for all five.
+      owed:   Reword line 17 to "four tools always demand it, and `docket_generate_post`
+              demands it unless the call explicitly asks for a draft", so the count and the
+              table agree.
+      traces: FR-031
 
-- [ ] MAJOR F6 — The generated "Can fail with" sentence lists each operation's *residual* statuses, so the better-documented tools name none of the failures that matter.
-      where:  src/server/mcp/describe.ts:16, src/server/api/error-surface.ts:19
-      why:    `errorStatuses` ends with `for (const s of Object.keys(op.responses)) set.delete(s)`
-              — it returns the statuses an operation can answer with *beyond the ones it
-              documents itself*, because `openapi.ts` emits the documented ones separately in
-              `buildOperation`. `describeTool` uses it as if it were the complete set. For
-              `createProject`, whose `responses` are `201` plus `standardErrors("manage_setup")`
-              (400/401/403/404/409/422/429), the surviving statuses are 413/415/500, so the
-              tool description reads "Can fail with: `payload_too_large`,
-              `unsupported_media_type`, `internal_error`" and never mentions `conflict` (the
-              taken slug — the one failure US2 acceptance 3 is about), `missing_permission` or
-              `validation_failed`. `listActivity` yields only `rate_limited`/`internal_error`;
-              `getPost` never mentions `not_found`, the answer the spec's own edge case says a
-              foreign id gets. FR-006 requires the description to state "the failure modes it
-              can answer with"; reusing the OpenAPI derivation was about not duplicating the
-              logic, not about shipping its complement.
-              `tests/unit/mcp/describe.test.ts:17` asserts only that whatever `errorStatuses`
-              returns appears in the text, so it confirms the implementation against itself and
-              locks the gap in (FR-007, SC-006 "verified by test rather than by reading, so it
-              cannot rot").
-      owed:   Union `errorStatuses(op)` with the `>= 400` keys of `op.responses` before mapping
-              to codes, and assert in `describe.test.ts` that a documented failure (e.g.
-              `conflict` for `createProject`, `not_found` for `getPost`) appears.
-      traces: FR-006, FR-007, SC-006
+- [ ] MINOR F19 — The two fields the F1 fix synthesises into the tool result are documented nowhere, so a client author cannot find the wait or the replay marker.
+      where:  src/server/mcp/protocol.ts:56, src/server/mcp/protocol.ts:59, docs/mcp.md:41, docs/mcp.md:66
+      why:    `error.retryAfterSeconds` and the top-level `alreadyReplayed: true` are the only
+              two places an MCP response differs from the HTTP response for the same call, and
+              they exist precisely because a `CallToolResult` has no header channel. But
+              `docs/mcp.md:66` still describes a failure as carrying "the same code, human
+              message and request id the public API would give" and says only that a
+              rate-limited call "reports the wait" without saying where, and `docs/mcp.md:41`
+              describes a replay as returning "the first result" with no mention of the marker.
+              `contracts/mcp-transport.md:113` and `contracts/mcp-tools.md:68` describe the
+              intent but not the field names. The consequence is small and entirely
+              documentation-shaped — the behaviour is right and tested — but the one audience
+              the page exists for cannot act on it.
+      owed:   Name both fields in `docs/mcp.md` §3 (the idempotency paragraph) and §6 (errors),
+              as the MCP translation of the two HTTP response headers.
+      traces: FR-025, FR-028, FR-031, SC-009
+
+- [ ] MINOR F20 — `bodyWithHeaders` spreads the response body into an object literal, which would silently corrupt an array-shaped body.
+      where:  src/server/mcp/protocol.ts:59
+      why:    `body = { ...body, alreadyReplayed: true }` on an array yields
+              `{"0": …, "1": …, alreadyReplayed: true}` — a different type, not an annotated
+              one. It is harmless today, and I checked rather than assumed: every exposed
+              idempotent operation returns a JSON object at the top level (`createPost`,
+              `queuePost`/`schedulePost` return `{results}`, `addWeekSlots` returns
+              `{added, alreadySet}`, `createProject`/`addSlot`/`updateSlot` return a single
+              entity, the voice operations return `{id, version, isDefault}`). So this is a
+              latent trap for a future operation rather than a live bug, and it is the kind of
+              thing that fails as a wrong shape rather than as an error.
+      owed:   Guard with `!Array.isArray(body)`, or carry the marker in a sibling field of the
+              result rather than inside the operation's body. Worth one line while the reason
+              is still fresh.
+      traces: FR-027
+
+### Carried forward from the first review, re-confirmed still open
+
+Each was MINOR then and is MINOR now; I re-read each location to confirm the remediation did
+not incidentally fix or worsen it. Full reasoning is in the first review's text, preserved in
+`git show 2696e94:specs/074-mcp-server/review.md`.
 
 - [ ] MINOR F7 — `tools/list` counts against the key's rate limit but is never refused when the key is over it.
-      where:  src/server/mcp/protocol.ts:54
-      why:    `authenticate` returns `forApiKey`'s `{ scope, rate }` and the handler
-              destructures only `{ scope }`. `forApiKey` always increments the window
-              (`countRequest`, scope.ts:366), so a listing spends a request, but unlike
-              `handle.ts:138` nothing compares `rate.count` with `rate.limit` — a key being
-              refused 429 on every tool call can still list tools unboundedly, each listing
-              pushing the counter further past the limit. FR-015 says the existing rate limit
-              "MUST apply to MCP traffic"; today it is counted there but not enforced.
+      where:  src/server/mcp/protocol.ts:72
+      why:    The handler still destructures only `{ scope }` from `authenticate`, so
+              `forApiKey`'s `rate` is discarded and nothing compares `rate.count` with
+              `rate.limit` the way src/server/api/handle.ts:138 does. Line number moved from
+              :54 to :72 with the F1 insertion; the code is unchanged.
       owed:   Refuse the listing with the same `rate_limited` message and wait when
               `rate.count > rate.limit`.
       traces: FR-015
 
-- [ ] MINOR F8 — `initialize` is served with no key, contrary to FR-009 and the transport contract.
-      where:  src/server/mcp/protocol.ts:50
-      why:    `newServer()` registers handlers for `tools/list` and `tools/call` only; the SDK
-              installs its own `initialize` handler
-              (`node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js:52`), which
-              authenticates nothing. FR-009 requires authentication "before any MCP request is
-              served", and contracts/mcp-transport.md §9 states plainly that "`initialize` and
-              `tools/list` resolve the key with `forApiKey(key)`". Impact is small — the
-              handshake discloses only the server name, version and capabilities, nothing about
-              the project, and the transport is stateless so no session is created — but it is
-              an unmetered, unauthenticated endpoint and the contract says otherwise.
-      owed:   Either authenticate `initialize` (check the credential in `handleMcpRequest`
-              before `transport.handleRequest`), or amend contract §9 and FR-009's reading to
-              exclude the handshake, with the reason.
+- [ ] MINOR F8 — `initialize` is served with no key, contrary to FR-009 and `contracts/mcp-transport.md` §9.
+      where:  src/server/mcp/protocol.ts:68
+      why:    `newServer()` still registers handlers for `tools/list` and `tools/call` only;
+              the SDK answers `initialize` itself and authenticates nothing. The handshake
+              discloses only the server name, version and capabilities, and the transport is
+              stateless, so no session is created — but it is an unmetered, unauthenticated
+              endpoint and the contract says otherwise.
+      owed:   Authenticate in `handleMcpRequest` before `transport.handleRequest`, or amend
+              the contract and FR-009's reading to exclude the handshake, with the reason.
       traces: FR-009
 
 - [ ] MINOR F9 — A refused `tools/list` carries no `invalid_api_key` code, only the JSON-RPC code.
       where:  src/server/mcp/protocol.ts:37
-      why:    `throw new McpError(ErrorCode.InvalidRequest, "Invalid API key.")` produces
-              `{ code: -32600, message: "Invalid API key." }` with no `data`. The message
-              matches the HTTP API's, but FR-009 asks for "the same code and message", and the
-              spec's Decisions say a listing "gets the same `invalid_api_key` refusal ... as for
-              a tool call". A client cannot branch on a stable code.
-              mcp-protocol.test.ts:37 only asserts that *an* error came back, so the code is
-              unconstrained.
+      why:    Still `throw new McpError(ErrorCode.InvalidRequest, "Invalid API key.")` with no
+              `data`, so a client cannot branch on a stable code; and
+              tests/integration/api/mcp-protocol.test.ts:37 still asserts only that *an* error
+              came back.
       owed:   Attach the API error body as the `McpError`'s `data` and assert the
               `invalid_api_key` code in the protocol test.
       traces: FR-009, FR-028
 
 - [ ] MINOR F10 — Bridge-level refusals carry an empty `requestId`.
       where:  src/server/mcp/bridge.ts:26
-      why:    `outcomeFor` calls `errorBody(e, "")`, so the three refusals the bridge answers
-              itself — `invalid_api_key`, `validation_failed` for an unknown argument, and
-              `confirmation_required` — return `error.requestId: ""`. FR-028 requires the error
-              shape's "stable code, human message and request id", and `docs/mcp.md:66`
-              promises "the same code, human message and request id the public API would give".
-              The equivalent HTTP call always carries a uuid.
+      why:    `outcomeFor` still calls `errorBody(e, "")`, so the three refusals the bridge
+              answers itself — `invalid_api_key`, `validation_failed` for an unknown argument,
+              and `confirmation_required` — return `error.requestId: ""` where the equivalent
+              HTTP call always carries a uuid. More visible after F2 than before, because a
+              plain generate call is now one of those refusals.
       owed:   Mint a request id in `callTool` (or accept one) and pass it to `errorBody`.
       traces: FR-028, SC-009
 
 - [ ] MINOR F11 — `WITHHELD` is exported and used nowhere; the 15 published reasons are a hand copy no test ties to the field.
       where:  src/server/mcp/dispositions.ts:8, docs/mcp.md:49
-      why:    Nothing in `src/`, `tests/` or `scripts/` imports `WITHHELD` (grepped) — it is a
-              dead end from Phase 3 that no later pass wired in. FR-024 asks for each reason to
-              be "recorded alongside its declaration and published in the documentation", and
-              the documentation's table is a manual transcription of the `reason` strings, so
-              editing a reason in the operation table leaves the published list stale with
-              nothing failing. The export that exists to prevent exactly that is unused.
-      owed:   Either drive a test (or the page) from `WITHHELD` so the published reasons cannot
-              drift from the field, or delete the export and say in the code that the
-              documentation is the published copy.
+      why:    Re-grepped `src/`, `tests/` and `scripts/`: the only occurrence is the
+              declaration. `docs/mcp.md`'s withheld table remains a manual transcription of
+              the `reason` strings, so editing a reason in the operation table leaves the
+              published list stale with nothing failing — and the export that exists to
+              prevent exactly that is the dead end.
+      owed:   Drive a test (or the page) from `WITHHELD`, or delete the export and say in the
+              code that the documentation is the published copy.
       traces: FR-024, SC-008
 
 - [ ] MINOR F12 — The new runtime dependency has no decision entry of its own in `docs/decisions.md`.
-      where:  docs/decisions.md:3304
-      why:    Constitution VI: "Adding any other runtime dependency ... requires a
-              justification in plan.md and an entry in `docs/decisions.md`." plan.md's
-              Complexity Tracking carries the justification, and the 074 entry names
-              `@modelcontextprotocol/sdk` in its implementation-outcome paragraph, but the
-              dependency gets none of the treatment the entry's other two decisions get — no
-              accepted cost, no reversal path — so the one judgement a future reader is most
-              likely to revisit is the one not written down as a decision.
-      owed:   Add a third bullet to the 074 entry for the dependency: why the SDK rather than a
-              hand-rolled JSON-RPC endpoint, the accepted cost, and how to reverse it (the
-              fallback already written in plan.md's Complexity Tracking).
+      where:  docs/decisions.md:3333
+      why:    Constitution VI requires both a justification in plan.md and an entry in
+              `docs/decisions.md` for any new runtime dependency. The justification is in
+              plan.md's Complexity Tracking, and the 074 entry names
+              `@modelcontextprotocol/sdk` in its implementation-outcome paragraph, but it gets
+              none of the accepted-cost / reversal treatment the entry's other two decisions
+              get.
+      owed:   Add a third bullet to the 074 entry: why the SDK rather than a hand-rolled
+              JSON-RPC endpoint, the accepted cost, and how to reverse it (the fallback is
+              already written in plan.md's Complexity Tracking).
       traces: Constitution VI, FR-030
 
-- NOTE F13 — **Ruling on the one open judgement the plan asked a reviewer to settle**
-  (plan.md:190, research D9, `docs/decisions.md`'s "One open judgement"): keep the conditional
-  confirmation on `docket_generate_post`. FR-020 is written about *effects* ("operations whose
-  effect is irreversible or destructive"), not about the four tool names FR-021 happens to
-  list, and generate-then-queue publishes to live accounts in one call. Do not reverse it — but
-  it is only worth keeping if F2 and F3 are fixed, because as it stands the gate misses the
-  project-default path and is schema-required anyway.
+### Notes
 
-- NOTE F14 — The write-tool half of the equivalence proof (mcp-tools.test.ts:92-100) works by
-  sending the HTTP call and the MCP call with the *same* `Idempotency-Key`, so the MCP answer is
-  `runIdempotent`'s replay of the HTTP one. That is a genuine proof that the bridge built the
-  same method, route and canonical body (a mismatch would be 422 `idempotency_key_reused`), but
-  it is not two independent executions compared — worth knowing before trusting it as
-  response-level equivalence. The seven reads are compared independently.
+- NOTE F21 — **The generate gate is now stricter than the spec's Decisions text, and that is
+  the right trade.** The spec says "Generation is exposed without confirmation"; after T058 a
+  generate call needs either `schedulingPolicy: "leave_as_draft"` or `confirm: true`. This is
+  what the first review's F2 *owed* asked for ("treat an absent `schedulingPolicy` as
+  'unknown, therefore confirm'"), it errs toward refusing rather than publishing, and the
+  alternative — resolving the project's default inside the `when` predicate — would have put a
+  database read into a function the bridge calls before building any request. Recorded so a
+  human merging knows the deviation is deliberate and ruled on twice (first review's F13, and
+  here). US1 acceptance 3 still holds, with one extra argument in the call.
 
-- NOTE F15 — Research D15 said the missing `listPosts` gap would be "noted in the
-  documentation's withheld/gaps section"; `docs/mcp.md` §4 lists the 15 withheld operations but
-  never mentions that a project's posts cannot be browsed. FR-027 is satisfied (the gap is
-  recorded in `research.md`), so this is a one-line docs omission, not a defect.
+- NOTE F22 — The first review's F14 observation is unchanged and still worth knowing: the
+  write-tool half of the equivalence proof (tests/integration/api/mcp-tools.test.ts:93-101)
+  sends the HTTP call and the MCP call with the *same* `Idempotency-Key`, so the MCP answer is
+  `runIdempotent`'s replay of the HTTP one rather than an independent execution. It is a real
+  proof that the bridge built the same method, route and canonical body — a mismatch would be
+  422 `idempotency_key_reused` — but it is not two executions compared. The seven reads are
+  compared independently.
+
+- NOTE F23 — First review's F15, unchanged: research D15 said the missing `listPosts` gap
+  would be noted in the documentation's withheld/gaps section; `docs/mcp.md` §4 lists the 15
+  withheld operations but never mentions that a project's posts cannot be browsed. FR-027 is
+  satisfied (the gap is recorded in `research.md`), so this is a one-line docs omission.
+
+- NOTE F24 — The implementation is broader than `contracts/mcp-tools.md:68-78` in two harmless
+  ways, both from the F1 fix: the wait is surfaced for any error carrying `Retry-After` rather
+  than only `rate_limited`, and `structuredContent` (which the contract hedged as "where the
+  SDK carries it") is not emitted. Neither is a defect; recorded so the next reader of the
+  contract is not surprised.
 
 ## Coverage
 
+The first review swept all 33 FRs, 9 SCs and 7 constitution principles. This pass re-checked
+the 8 FRs and 4 SCs the first review marked partial, plus every obligation the remediated
+files touch; the rest are carried forward from that sweep unchanged.
+
 | Checked | Count | Satisfied | Partial | Absent | Contradicted |
 |---|---|---|---|---|---|
-| Functional requirements (FR-001…FR-033) | 33 | 25 | 8 | 0 | 0 |
-| Success criteria (SC-001…SC-009) | 9 | 5 | 4 | 0 | 0 |
+| Functional requirements (FR-001…FR-033) | 33 | 27 | 6 | 0 | 0 |
+| Success criteria (SC-001…SC-009) | 9 | 8 | 1 | 0 | 0 |
 | Constitution principles (I…VII) | 7 | 6 | 1 | 0 | 0 |
 
-Partial FRs: FR-006 (F6), FR-008 (F4), FR-009 (F8, F9), FR-015 (F1, F7), FR-018 (F5),
-FR-020 (F2, F3), FR-025 (F1), FR-028 (F1, F10).
+**Moved to satisfied by the remediation**: FR-008 (F4), FR-018 (F5), FR-020 (F2+F3),
+FR-021 (F2), FR-025 (F1 — the replay marker now reaches the client), SC-003 (F5),
+SC-006 (F6), SC-009 (F1+F4).
 
-Partial SCs: SC-001 (end-to-end with a real client is unrun — T056), SC-003 (F5),
-SC-006 (F6), SC-009 (F1, F4).
+**Still partial, with the finding that holds them there**: FR-006 (F16 — the confirmation
+sentence does not name the condition), FR-009 (F8, F9), FR-015 (F7 — the listing counts
+against the limit but is not refused by it; F1's half is closed), FR-028 (F10), FR-030 (F17 —
+the decisions entry describes a predicate the code no longer has; F12), FR-031 (F18, F19).
 
-Partial principle: VI (F12 — the dependency is justified in plan.md but has no decisions entry
-of its own). I, II, III, IV, V and VII hold: the protocol facts were read from the installed
-package rather than from memory; every claim except T056 is backed by a test that ran;
-`src/server/mcp/**` holds no `ProjectScope` for a tool call and is in the import-boundary test;
-`errorStatuses`/`codesForStatus` and the per-operation fixture table are each shared rather
-than copied; no provider or scheduler code was touched; and the secret scan now covers a
-listing, a call, and both with a tampered key.
+**Still partial SC**: SC-001 — "in a single conversation with an LLM client" is argued from
+in-process tests only; T056 is the manual pass and remains unchecked.
 
-Also checked, with nothing found: the 34 dispositions against the spec's lists (19 exposed =
-7 reads + 4 compose + 8 setup; 15 withheld, with the three ambiguous-publish recovery
-operations and all nine job operations among them — FR-019, FR-022, FR-023);
-`PUBLISHED_TOOL_NAMES` against the derivation and against the 19 exposed ids (FR-004);
-`dispositionProblems` rejects a missing disposition, an empty withheld reason, an empty
-`confirm.effect`, and a `when` without a `whenDescription`, and also refuses to expose a
-`permission: null` or multipart operation (FR-001, FR-003); the `error-surface.ts` extraction
-is a verbatim move, so `openapi.test.ts` passing unedited is a real neutrality proof (T017);
-the import-boundary additions (`src/server/mcp` in `pipeline`, `src/app/api/mcp` in `strict`);
-the bridge builds its own `Request` and reaches no DAL or repository for a tool call (FR-011,
-constitution III); no tool accepts a project identifier and no mechanism switches project
-(FR-016); unknown arguments are refused by name rather than stripped (FR-005, the spec's
-"invented project id" edge case); the confirmation check runs before any IO, so a refusal
-costs no rate limit and writes nothing (FR-020); no v1 operation, request or response shape
-changed, and no capability was added (FR-027); no database change, so `db:check` is
-unaffected; `mkdocs.yml` nav and both cross-references landed with the page (FR-031, FR-032);
-`docs/n8n.md` gained a trailing `## 11` with no heading renumbered; `docs/security.md` records
-MCP as no new credential or trust boundary (FR-033); and the generate tool's description
-carries the LLM-budget, auto-approve and validation-forces-review sentences (FR-026).
+**Still partial principle**: VI (F12 — the dependency is justified in plan.md but has no
+decisions entry of its own). I, II, III, IV, V and VII hold, and the remediation did not
+weaken any of them: the only protocol facts it relied on (`Retry-After` and
+`Idempotent-Replayed` have no header channel in a `CallToolResult`) come from the SDK's own
+types rather than memory (I); every claim above except T056 is backed by a test I watched run
+(II); the remediation added no scope, no repository access and no project identifier, and the
+isolation test it strengthened is the one that proves it (III); it added no second
+implementation of anything — the failure-list fix *removed* the divergence by unioning the
+operation's own responses into the shared derivation (IV); no provider or scheduler code was
+touched (V); and the secret scan over the MCP path, including the two new synthesised fields,
+is green (VII).
+
+**Re-checked with nothing found**: the `error-surface.ts` extraction is still neutral
+(`openapi.test.ts` green unedited); HTTP scope enforcement is unaffected by the shared fixture
+table (`scope-enforcement.test.ts` green); the drift test still binds the derived surface to
+the table in both directions after the disposition change (`mcp-surface.test.ts` green); the
+19 published tool names are unchanged by the remediation, so no client's saved instructions
+break (FR-004); the `confirm` argument is still excluded from the request body the bridge
+builds, because `argumentNamesFor` reads only the operation's own schemas
+(src/server/mcp/schema.ts:21-27); and the new F2 test restores the project's policy defaults in
+a `finally`, so it cannot leak state into the rest of the file.
 
 ## What I could not check
 
-- **The suite.** Per the constitution's "review: do not re-run the full suite", I read the
-  Phase 7 commit's claim (`7120059`: "runs lint/typecheck/test/build/db:check clean,
-  T049-T055") rather than re-running it, and there is no PR yet, so no CI run to read either.
-  Every finding above is derived from the code; none depends on a test outcome. The one runtime
-  probe I did run was Zod 4.6.5's `toJSONSchema` over the same shape `schema.ts` builds, to
-  confirm F3's `required` array.
+- **The full suite, lint, typecheck and build.** The constitution bars a re-review from
+  re-running them. The remediation commit `2696e94` does not itself claim a gate run — unlike
+  Phase 7's `7120059`, which claims "lint/typecheck/test/build/db:check clean" — and there is
+  still no PR, so there is no CI run to read. I ran the seven test files the remediation
+  touches or endangers (67 tests, all green) and verified by reading that every type the new
+  test code uses exists with the signature it assumes: `updateProject(projectId, patch)` and
+  `ProjectSettingsPatch`'s five required fields (src/server/dal/projects.ts:107-126),
+  `createKey`'s `rateLimitPerMinute` option (tests/helpers/api.ts:17-21). **A full
+  `pnpm lint && pnpm typecheck && pnpm test && pnpm build` has not been run on this code**;
+  that is the one thing a human should confirm, and CI on the PR will do it.
+- **A real MCP client end to end (T056).** Unchanged from the first review: nobody has pointed
+  a real client at `/api/mcp`. F1, F3 and F4 were all defects a real client would have
+  surfaced immediately, which is an argument for doing T056 now that they are fixed.
 - **`docs/research/mcp.md` against the official MCP specification.** This phase cannot fetch
-  the cited pages, so its **[spec]** citations are unverified here. I did verify the two
-  protocol facts the findings rest on directly against the installed package
-  (`server/index.js` registers `initialize` itself; `webStandardStreamableHttp` is the
-  transport in use).
-- **A real MCP client end to end (T056).** Still open and still correctly marked so: nobody has
-  pointed a real client at `/api/mcp`, so SC-001's "in a single conversation" is argued from
-  the in-process tests. F1, F3 and F4 are all defects a real client would surface immediately,
-  which is an argument for doing T056 after the remediation rather than before.
-- **The `Origin`-rejection choice.** `protocol.ts:17` refuses *any* `Origin` header, which is
-  stricter than research's "403 for a disallowed origin" and is reasoned in a comment, but I
-  cannot tell from here whether a browser-hosted MCP client anyone intends to use sends one.
-  No test covers it.
-- **Load and long-connection behaviour.** The accepted cost in the hosting decision (an MCP
-  connection sharing the web container with the UI) is unmeasured; the transport is stateless
-  per request, which makes it unlikely to matter, but nothing here measures it.
+  the cited pages. The two protocol facts this review rests on were verified against the
+  installed package rather than the specification text.
+- **The `Origin`-rejection choice** (src/server/mcp/protocol.ts:17 refuses *any* `Origin`
+  header). Unchanged and still uncovered by a test; I cannot tell from here whether a
+  browser-hosted client anyone intends to use sends one.
+- **Load and long-connection behaviour.** The hosting decision's accepted cost (an MCP
+  connection sharing the web container with the UI) is still unmeasured.
