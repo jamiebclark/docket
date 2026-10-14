@@ -56,6 +56,7 @@ const FIXTURES: Record<string, Fixture> = {
   addWeekSlots: { body: (p) => ({ accountId: p.account.id, localTime: "05:00" }) },
   updateSlot: { params: (p) => ({ slotId: p.slot.id }), body: () => ({ paused: true }) },
   deleteSlot: { params: (p) => ({ slotId: p.slot.id }) },
+  setAccountPostingInstructions: { params: (p) => ({ accountId: p.account.id }), body: () => ({ instructions: "Scope test" }) },
 };
 
 const KEYED = () => OPERATIONS.filter((op) => op.permission !== null);

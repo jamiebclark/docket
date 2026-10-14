@@ -23,6 +23,7 @@ const SETUP_FIXTURES: Record<string, Fixture> = {
   addWeekSlots: { body: (p) => ({ accountId: p.account.id, localTime: "07:00" }) },
   updateSlot: { params: (p) => ({ slotId: p.slot.id }), body: () => ({ paused: true }) },
   deleteSlot: { params: (p) => ({ slotId: p.slot.id }) },
+  setAccountPostingInstructions: { params: (p) => ({ accountId: p.account.id }), body: () => ({ instructions: "Nope" }) },
 };
 
 /** Every other keyed operation reuses a minimal body/params; these calls only need to reach the permission check. */

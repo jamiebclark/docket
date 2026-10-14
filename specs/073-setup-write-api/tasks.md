@@ -125,12 +125,12 @@ Single Next.js app at repository root: `src/`, `tests/`, `drizzle/`, `docs/`.
 
 ### Tests for User Story 4
 
-- [ ] T033 [US4] Integration tests for `PATCH /accounts/{accountId}` in `tests/integration/api/endpoints/accounts-write.test.ts`: happy path (200, `changed: true`, one audit row with `previous`/`next`), repeat with identical text (`changed: false`, no second row), over-length (400 quoting 2,000), explicit empty string clears and audits, unknown field (400), another-project account id vs. unknown id (byte-identical 404), missing-permission 403, idempotent replay
+- [X] T033 [US4] Integration tests for `PATCH /accounts/{accountId}` in `tests/integration/api/endpoints/accounts-write.test.ts`: happy path (200, `changed: true`, one audit row with `previous`/`next`), repeat with identical text (`changed: false`, no second row), over-length (400 quoting 2,000), explicit empty string clears and audits, unknown field (400), another-project account id vs. unknown id (byte-identical 404), missing-permission 403, idempotent replay
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] Add the `setAccountPostingInstructions` operation (`PATCH /accounts/{accountId}`, `resourceParams: ["accountId"]`) to `src/server/api/operations/accounts.ts` calling `services/accounts.setPostingInstructions` and mapping `{changed, instructions}` to `{accountId, postingInstructions, changed}`
-- [ ] T035 [US4] Register the new accounts operation in `src/server/api/operations/index.ts`
+- [X] T034 [US4] Add the `setAccountPostingInstructions` operation (`PATCH /accounts/{accountId}`, `resourceParams: ["accountId"]`) to `src/server/api/operations/accounts.ts` calling `services/accounts.setPostingInstructions` and mapping `{changed, instructions}` to `{accountId, postingInstructions, changed}`
+- [X] T035 [US4] Register the new accounts operation in `src/server/api/operations/index.ts`
 
 **Checkpoint**: Posting instructions are settable over HTTP, audited identically to the browser edit.
 
