@@ -40,7 +40,10 @@ const jobsHtml = async (e: Env, as: { id: string } = e.owner) => {
 const detailHtml = async (e: Env, seriesId: string, as: { id: string } = e.owner) => {
   actAs(as);
   return renderToStaticMarkup(
-    (await StandingSeriesDetailPage({ params: Promise.resolve({ projectSlug: e.project.slug, seriesId }) })) as never,
+    (await StandingSeriesDetailPage({
+      params: Promise.resolve({ projectSlug: e.project.slug, seriesId }),
+      searchParams: Promise.resolve({}),
+    })) as never,
   );
 };
 

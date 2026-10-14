@@ -225,6 +225,13 @@
       "when": 1791975426111,
       "tag": "0031_dated_series_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791980397133,
+      "tag": "0032_dated_series_audit_actions",
+      "breakpoints": true
     }
   ]
 }

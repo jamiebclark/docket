@@ -637,7 +637,10 @@ describe("secret scan (FR-020, SC-005)", () => {
     const renderSeriesDetail = async (u: { id: string }, seriesId: string) => {
       asUser(u);
       return renderToStaticMarkup(
-        (await StandingSeriesDetailPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, seriesId }) })) as never,
+        (await StandingSeriesDetailPage({
+          params: Promise.resolve({ projectSlug: genEnv.project.slug, seriesId }),
+          searchParams: Promise.resolve({}),
+        })) as never,
       );
     };
     const renderJobsPage = async (u: { id: string }) => {

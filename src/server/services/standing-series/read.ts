@@ -233,7 +233,11 @@ async function datedRowView(scope: ProjectScope, row: DatedRowRecord): Promise<D
   };
 }
 
-export async function getStandingSeries(scope: ProjectScope, seriesId: string): Promise<StandingSeriesDetail> {
+export async function getStandingSeries(
+  scope: ProjectScope,
+  seriesId: string,
+  opts: { rowsPage?: number } = {},
+): Promise<StandingSeriesDetail> {
   canView(scope);
   const row = await scope.standingSeries.get(seriesId);
   if (!row) throw new NotFoundError("Standing series not found");
@@ -246,14 +250,15 @@ export async function getStandingSeries(scope: ProjectScope, seriesId: string): 
   const runs = await Promise.all(runRows.map((r) => toRunView(scope, r)));
 
   let upcoming: UpcomingOccurrence[] = [];
-  let rows: { items: DatedRowView[]; total: number; page: number } = { items: [], total: 0, page: 1 };
+  const rowsPage = Math.max(1, opts.rowsPage ?? 1);
+  let rows: { items: DatedRowView[]; total: number; page: number } = { items: [], total: 0, page: rowsPage };
   if (row.occurrenceRule === "dated_list") {
     const [allRows, page] = await Promise.all([
       scope.datedRows.listForSeries(seriesId),
-      scope.datedRows.page(seriesId, { page: 1, pageSize: DATED_ROWS_PAGE_SIZE }),
+      scope.datedRows.page(seriesId, { page: rowsPage, pageSize: DATED_ROWS_PAGE_SIZE }),
     ]);
     upcoming = upcomingOccurrences(allRows, row.leadDays, scope.project.timezone, UPCOMING_LIMIT);
-    rows = { items: await Promise.all(page.rows.map((r) => datedRowView(scope, r))), total: page.total, page: 1 };
+    rows = { items: await Promise.all(page.rows.map((r) => datedRowView(scope, r))), total: page.total, page: rowsPage };
   }
 
   const lastImport =

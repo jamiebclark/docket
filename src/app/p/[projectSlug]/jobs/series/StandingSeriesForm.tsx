@@ -13,6 +13,7 @@ import { IMAGE_PROMPT_MAX } from "@/server/llm/image-generation";
 import { BRIEF_MAX, INSTRUCTIONS_MAX } from "@/lib/validation/generation";
 import { STANDING_SERIES_NAME_MAX } from "@/lib/validation/standing-series";
 import { CADENCE_COUNT_MAX, CADENCE_COUNT_MIN, type CadencePeriod } from "@/lib/series/cadence";
+import type { OccurrenceRule } from "@/lib/validation/standing-series";
 import {
   ACCOUNTS_HINT,
   groupLimitNotice,
@@ -24,7 +25,14 @@ import {
 } from "../../generate/generate-logic";
 import { PolicyPicker, effectivePair, isUnreviewedQueue, type PolicyChoice } from "../../generate/PolicyPicker";
 import type { VoiceOption } from "../../generate/GenerateForm";
-import { CADENCE_HINT, IMAGE_PROMPT_HINT, NO_PLACEHOLDERS_HINT, STANDING_SERIES_AUTHORISED_NOTE } from "./series-logic";
+import {
+  CADENCE_HINT,
+  DATED_INSTRUCTIONS_HINT,
+  IMAGE_PROMPT_HINT,
+  NO_PLACEHOLDERS_HINT,
+  STANDING_SERIES_AUTHORISED_NOTE,
+  ruleLabel,
+} from "./series-logic";
 import { createStandingSeriesAction, updateStandingSeriesAction } from "./actions";
 
 type MediaSource = "none" | "pool" | "generate";
@@ -35,8 +43,10 @@ export interface StandingSeriesFormValues {
   template: string;
   voiceProfileId: string;
   targetAccountIds: string[];
+  occurrenceRule: OccurrenceRule;
   cadenceCount: number;
   cadencePeriod: CadencePeriod;
+  leadDays: number;
   mediaSource: MediaSource;
   mediaTag: string | null;
   imagePrompt: string | null;
@@ -74,8 +84,10 @@ export function StandingSeriesForm(props: StandingSeriesFormProps) {
   const [template, setTemplate] = useState(init?.template ?? "");
   const [voiceProfileId, setVoiceProfileId] = useState(init?.voiceProfileId ?? profiles.find((p) => p.isDefault)?.id ?? profiles[0]?.id ?? "");
   const [chosen, setChosen] = useState<string[]>(init?.targetAccountIds ?? []);
+  const [occurrenceRule, setOccurrenceRule] = useState<OccurrenceRule>(init?.occurrenceRule ?? "cadence");
   const [cadenceCount, setCadenceCount] = useState(init?.cadenceCount ?? 1);
   const [cadencePeriod, setCadencePeriod] = useState<CadencePeriod>(init?.cadencePeriod ?? "week");
+  const [leadDays, setLeadDays] = useState(init?.leadDays ?? 0);
   const [mediaSource, setMediaSource] = useState<MediaSource>(init?.mediaSource ?? "none");
   const [mediaTag, setMediaTag] = useState(init?.mediaTag ?? "");
   const [imagePrompt, setImagePrompt] = useState(init?.imagePrompt ?? "");
@@ -110,7 +122,9 @@ export function StandingSeriesForm(props: StandingSeriesFormProps) {
         template,
         voiceProfileId,
         targetAccountIds: chosen,
-        cadence: { count: cadenceCount, period: cadencePeriod },
+        occurrenceRule,
+        cadence: occurrenceRule === "cadence" ? { count: cadenceCount, period: cadencePeriod } : null,
+        leadDays: occurrenceRule === "dated_list" ? leadDays : 0,
         media,
         approval: policy.approval,
         scheduling: policy.scheduling,
@@ -178,7 +192,7 @@ export function StandingSeriesForm(props: StandingSeriesFormProps) {
         required
         value={template}
         onChange={(e) => setTemplate(e.target.value)}
-        hint={NO_PLACEHOLDERS_HINT}
+        hint={occurrenceRule === "dated_list" ? DATED_INSTRUCTIONS_HINT : NO_PLACEHOLDERS_HINT}
         counter={counterLabel(template.length, INSTRUCTIONS_MAX)}
         error={fieldErrors.template}
       />
@@ -212,33 +226,75 @@ export function StandingSeriesForm(props: StandingSeriesFormProps) {
       </div>
 
       <fieldset className="flex flex-col gap-3">
-        <legend className="text-sm font-semibold">How often</legend>
-        <p className="-mt-1 text-xs text-muted-foreground">{CADENCE_HINT(timezone)}</p>
-        <div className="flex flex-wrap items-end gap-3">
+        <legend className="text-sm font-semibold">When it posts</legend>
+
+        {mode === "create" ? (
+          <SegmentedControl
+            name="occurrenceRule"
+            label="Occurrence"
+            layout="cards"
+            value={occurrenceRule}
+            onChange={(v) => setOccurrenceRule(v as OccurrenceRule)}
+            options={[
+              { value: "cadence", label: "Cadence", description: "A set number of posts per day, week or month." },
+              { value: "dated_list", label: "Dated list", description: "One post per row of a spreadsheet of dates, on its own date, every year." },
+            ]}
+            error={fieldErrors.occurrenceRule}
+          />
+        ) : (
+          <p className="text-sm">
+            <span className="font-medium">Occurrence: </span>
+            {ruleLabel(occurrenceRule === "cadence" ? { count: cadenceCount, period: cadencePeriod } : null)}
+            <br />
+            <span className="text-xs text-muted-foreground">
+              A series keeps the occurrence rule it was created with. To change it, create another series.
+            </span>
+          </p>
+        )}
+
+        {occurrenceRule === "cadence" ? (
+          <>
+            <p className="-mt-1 text-xs text-muted-foreground">{CADENCE_HINT(timezone)}</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field
+                id={`${uid}-count`}
+                label="Posts per period"
+                type="number"
+                min={CADENCE_COUNT_MIN}
+                max={CADENCE_COUNT_MAX}
+                value={cadenceCount}
+                onChange={(e) => setCadenceCount(Number(e.target.value) || CADENCE_COUNT_MIN)}
+                error={fieldErrors["cadence.count"]}
+                className="w-28"
+              />
+              <SegmentedControl
+                name="cadencePeriod"
+                label="Period"
+                value={cadencePeriod}
+                onChange={(v) => setCadencePeriod(v as CadencePeriod)}
+                options={[
+                  { value: "day", label: "Day" },
+                  { value: "week", label: "Week" },
+                  { value: "month", label: "Month" },
+                ]}
+                error={fieldErrors["cadence.period"]}
+              />
+            </div>
+          </>
+        ) : (
           <Field
-            id={`${uid}-count`}
-            label="Posts per period"
+            id={`${uid}-leadDays`}
+            label="Write each post this many days early"
             type="number"
-            min={CADENCE_COUNT_MIN}
-            max={CADENCE_COUNT_MAX}
-            value={cadenceCount}
-            onChange={(e) => setCadenceCount(Number(e.target.value) || CADENCE_COUNT_MIN)}
-            error={fieldErrors["cadence.count"]}
+            min={0}
+            max={30}
+            value={leadDays}
+            onChange={(e) => setLeadDays(Number(e.target.value) || 0)}
+            hint="0 means the post is written on the day itself. A lead time is the only protection against a worker that is down on the day."
+            error={fieldErrors.leadDays}
             className="w-28"
           />
-          <SegmentedControl
-            name="cadencePeriod"
-            label="Period"
-            value={cadencePeriod}
-            onChange={(v) => setCadencePeriod(v as CadencePeriod)}
-            options={[
-              { value: "day", label: "Day" },
-              { value: "week", label: "Week" },
-              { value: "month", label: "Month" },
-            ]}
-            error={fieldErrors["cadence.period"]}
-          />
-        </div>
+        )}
       </fieldset>
 
       <SegmentedControl

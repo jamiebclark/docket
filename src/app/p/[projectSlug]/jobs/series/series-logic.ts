@@ -116,8 +116,33 @@ export const STANDING_SERIES_AUTHORISED_NOTE =
 
 export const NO_PLACEHOLDERS_HINT = "Don't use {{placeholders}} — a standing series has no per-post data yet.";
 
+export const DATED_INSTRUCTIONS_HINT =
+  "Use {{ column name }} for any column of your list. The columns come from the file you import — import the list first, then add the placeholders.";
+
 export const IMAGE_PROMPT_HINT =
   "Docket adds an instruction never to depict a real, identifiable person. Nothing from the post text, your brand fields or the voice profile is sent to the image provider.";
+
+/** The Rows table's "Row" `Sub` line: the non-key fields as `name: value · name: value`, one line (ui.md §3.3). */
+export function rowSummary(fields: Record<string, string>, keyColumn: string | null): string {
+  return Object.entries(fields)
+    .filter(([name]) => name !== keyColumn)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(" · ");
+}
+
+/** The Rows table's "Next due" `Sub` line (ui.md §3.3). */
+export const LAST_OUTCOME_LABEL: Record<"produced" | "missed" | "skipped" | "failed" | "none", string> = {
+  produced: "Posted",
+  missed: "Missed",
+  skipped: "Skipped",
+  failed: "Failed",
+  none: "",
+};
+
+/** One Last-import problem line, with its line number when it has one (ui.md §3.2). */
+export function importProblemLine(problem: { line: number | null; message: string }): string {
+  return problem.line !== null ? `Line ${problem.line}: ${problem.message}` : problem.message;
+}
 
 export const CADENCE_HINT = (zone: string): string =>
   `Between 1 and 10 posts per period. A week starts Monday, a month on the 1st, in this project's time zone (${zone}).`;
