@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { UPLOAD_MIME_TYPES } from "@/lib/media/types";
 import { PINTEREST_DEFAULT_PUBLISH_LIMIT, pinterestCapabilities } from "./capabilities";
 
 describe("pinterest capabilities", () => {
@@ -30,5 +31,10 @@ describe("pinterest capabilities", () => {
 
   it("defaults to 100 publishes per 60 seconds", () => {
     expect(PINTEREST_DEFAULT_PUBLISH_LIMIT).toEqual({ count: 100, windowSeconds: 60 });
+  });
+
+  it("pinterest: formats accepts every uploadable type without converting it", () => {
+    expect(pinterestCapabilities.media.allowedMimeTypes).toEqual([...UPLOAD_MIME_TYPES]);
+    expect(pinterestCapabilities.media.outputMimeType).toBe("image/jpeg");
   });
 });

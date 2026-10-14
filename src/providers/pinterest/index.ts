@@ -1,9 +1,11 @@
 import type { SocialProvider, StepInfo, StepResult } from "../types";
-import { validateAgainstCapabilities } from "../validation";
+import { pinterestAccountDetails } from "./boards";
 import { PINTEREST_DEFAULT_PUBLISH_LIMIT, pinterestCapabilities } from "./capabilities";
 import { pinterestConnectGroup } from "./connect-group";
+import { pinterestPosting } from "./posting";
 import { refreshPinterest, needsRefresh } from "./refresh";
 import { pinterestAccountNotes, pinterestSettingsSchema, type PinterestSettings } from "./settings";
+import { validatePinterest } from "./validate";
 
 /** Pinterest never uses step state: one request either publishes the pin or it doesn't (data-model §1). */
 function stubStepFor(): StepInfo {
@@ -24,8 +26,10 @@ export const pinterestProvider: SocialProvider<PinterestSettings, unknown> = {
   settingsSchema: pinterestSettingsSchema,
   needsRefresh,
   refreshCredentials: ({ credentials, now, signal }) => refreshPinterest({ credentials, now, signal }),
-  validate: (content, capabilities) => validateAgainstCapabilities(content, capabilities),
+  validate: (content, capabilities) => validatePinterest(content, capabilities),
   stepFor: stubStepFor,
   advance: stubAdvance,
   accountNotes: (input) => pinterestAccountNotes(input),
+  posting: pinterestPosting,
+  accountDetails: pinterestAccountDetails,
 };
