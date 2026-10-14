@@ -50,12 +50,15 @@ describe("Dated series detail page (SC-011, US2 AS3, US6 AS1)", () => {
     expect(html).toContain("Ada Lovelace");
   });
 
-  it("renders no dated sections for a cadence series", async () => {
+  it("renders no dated sections for a cadence series, byte-identical on a second render", async () => {
     const e = await ready();
     const { seriesId } = await createStandingSeries(e.scope, e.create());
     const html = await detailHtml(e, seriesId);
     expect(html).not.toContain("Upcoming dates");
     expect(html).not.toContain("Rows (");
+    expect(html).not.toContain("Import a list");
+    const again = await detailHtml(e, seriesId);
+    expect(again).toBe(html);
   });
 
   it("shows rows, upcoming dates and import problems to an editor, with no list-changing control", async () => {

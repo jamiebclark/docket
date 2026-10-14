@@ -204,9 +204,9 @@ enforced on the server regardless of the interface.
 **Independent Test**: Call every list route as an editor, as a non-member and with another project's
 series id, and assert refusal in each case regardless of what the interface offered.
 
-- [ ] T060 [US6] Create `tests/integration/dated-series/authz.test.ts`: `importDatedList`/`addDatedRow`/`updateDatedRow`/`deleteDatedRow` refused for an editor, a non-member, and another project's series/row id, with the list unchanged each time; an editor able to read rows/upcoming/import-problems; another project's media asset not matching a row's reference and reported on import (US6 AS1–AS4, FR-049–FR-051, SC-009) (depends on T043, T044)
-- [ ] T061 [P] [US6] Extend `tests/integration/actions-authz.test.ts` with the four new dated-series actions (depends on T046)
-- [ ] T062 [P] [US6] Extend `ui.test.tsx`: an editor sees no control that changes the list, and a cadence series' page renders none of the dated sections and is byte-identical to today (SC-011's UI half) (depends on T049)
+- [X] T060 [US6] Create `tests/integration/dated-series/authz.test.ts`: `importDatedList`/`addDatedRow`/`updateDatedRow`/`deleteDatedRow` refused for an editor, a non-member, and another project's series/row id, with the list unchanged each time; an editor able to read rows/upcoming/import-problems; another project's media asset not matching a row's reference and reported on import (US6 AS1–AS4, FR-049–FR-051, SC-009) (depends on T043, T044)
+- [X] T061 [P] [US6] Extend `tests/integration/actions-authz.test.ts` with the four new dated-series actions (depends on T046)
+- [X] T062 [P] [US6] Extend `ui.test.tsx`: an editor sees no control that changes the list, and a cadence series' page renders none of the dated sections and is byte-identical to today (SC-011's UI half) (depends on T049)
 
 **Checkpoint**: US6 complete — SC-009 is covered. All six user stories are independently functional.
 
