@@ -66,6 +66,12 @@ The callback is always:
 For example, with `BETTER_AUTH_URL=https://docket.example.com` you register
 `https://docket.example.com/connect/callback` in the Pinterest app's redirect URI settings.
 
+**You cannot register it until Trial access is granted.** On a pending app, the Redirect URIs box and the app
+secret are both disabled, showing "Unavailable while trial access pending" (observed 2026-10-14). So the order
+is: request Trial → wait for approval → register the callback and copy the secret → set the environment
+variables → connect the account. Pinterest's own wording in that box is "Redirect URIs must use https, an
+app-specific scheme, or http with localhost".
+
 - Pinterest needs an **`https://` address on a public host**. Docket refuses to start the Pinterest login when
   `BETTER_AUTH_URL` is `http://` or `localhost`, and shows why on the Accounts page. Other providers are unaffected.
 - If you only have a local address, see [Local HTTPS for Threads](meta-setup.md#local-https-for-threads); the same
@@ -126,7 +132,12 @@ Standard access, and modelling the shared Trial daily cap as an enforced limit.
 Nothing here is owed until a real, Trial-approved Pinterest app and a connected account are available. All Pinterest
 behaviour is verified with mocks only.
 
-- **U1** — does Pinterest accept a non-https or localhost redirect URI?
+- ~~**U1** — does Pinterest accept a non-https or localhost redirect URI?~~ **Answered 2026-10-14**, from the
+  app's own Redirect URIs panel: "Redirect URIs must use **https**, an app-specific scheme, or **http with
+  localhost**." So Docket's requirement (https, and not localhost or a bare IP) is correct for a real
+  deployment and deliberately **stricter** than Pinterest: Pinterest would accept `http://localhost`, Docket
+  will not, because a callback on localhost cannot receive Pinterest's redirect for a server anyone else uses.
+  Loosening it is a decision, not a bug fix.
 - **U2** — the error body for 400, 401, 403, 404, 429 and 5xx.
 - **U3** — is 20 MB enforced? Any pixel bounds? Is an out-of-range aspect ratio refused or just cropped?
 - **U4** — how `title`, `description` and `alt_text` are counted.
