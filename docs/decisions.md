@@ -3411,3 +3411,24 @@ never applied anywhere, so no install carried its old form), and generating 0035
 Worth knowing for the future: the gap is that nothing tests an **upgrade** from a committed older
 schema. A test that commits through migration N and then applies the rest in one transaction would
 have caught this before release; it is not built yet.
+
+## Engagement inbox: Bluesky identity is settled, Meta identity is not, DMs are sequenced not cut (2026-10-15)
+
+`docs/research/engagement.md` records, from the installed `@atproto/api` generated types, that a
+Bluesky commenter carries a stable identifier (`did`), a handle and usually a display name — so the
+identity question that makes a "recognisable person" risky is already answered for Bluesky, with no
+human task needed. US2/US3 build on that directly.
+
+For Meta (Facebook Page comments, Instagram comments, Threads replies), every FR-001 question —
+read endpoint, required permission and whether it's inside Standard Access, commenter identity
+shape, identifier stability, reply capability, pagination, read rate limits — is **unverified**.
+`docs/research/meta.md` documents publishing only; nothing in it names a comment-read endpoint or a
+commenter identity shape. **Consequence:** no Meta engagement surface is built in this entry. US4 is
+blocked on a human task (a live Standard Access app, a real Page, a real Instagram Business account,
+a real Threads account, a second person to comment, and a browser), scheduled last in `tasks.md` so
+an unrunnable task placed early does not starve the implement loop. No code anywhere in this entry
+may display a Meta commenter identity field that isn't traceable to a confirmed verdict (FR-005).
+
+Direct messages are **not cut from the spec** — US5 stays specified — but no platform's DM facts
+exist for any platform in scope, so DM reading, drafting and sending are sequenced out of this entry
+entirely rather than built on a guess.
