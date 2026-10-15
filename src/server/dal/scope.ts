@@ -8,6 +8,16 @@ import { createActivityRepo, type ActivityRepo } from "./activity";
 import { createAttemptsRepo, type AttemptsRepo } from "./attempts";
 import { createAuditRepo, type AuditRepo } from "./audit";
 import { createConnectAttemptsRepo, type ConnectAttemptsRepo } from "./connect-attempts";
+import {
+  createEngagementAccountStatesRepo,
+  createEngagementDraftsRepo,
+  createEngagementItemsRepo,
+  createEngagementReplyClaimsRepo,
+  type EngagementAccountStatesRepo,
+  type EngagementDraftsRepo,
+  type EngagementItemsRepo,
+  type EngagementReplyClaimsRepo,
+} from "./engagement";
 import { createExternalClaimsRepo, type ExternalClaimsRepo } from "./external-claims";
 import {
   countRequest,
@@ -170,6 +180,10 @@ export interface ProjectScope {
   readonly idempotency: IdempotencyRepo;
   readonly webhooks: WebhooksRepo;
   readonly externalClaims: ExternalClaimsRepo;
+  readonly engagementItems: EngagementItemsRepo;
+  readonly engagementDrafts: EngagementDraftsRepo;
+  readonly engagementReplyClaims: EngagementReplyClaimsRepo;
+  readonly engagementAccountStates: EngagementAccountStatesRepo;
   readonly projectLlm: ProjectLlmRepo;
   readonly llmUsage: LlmUsageRepo;
   /** The caller's own reading position and mute setting; job-runner and API-key scopes throw `ForbiddenError`. */
@@ -222,6 +236,10 @@ export function createSchedulingRepos(exec: Database, projectId: string) {
     activity: createActivityRepo(exec, projectId),
     webhooks: createWebhooksRepo(exec, projectId),
     externalClaims: createExternalClaimsRepo(exec, projectId),
+    engagementItems: createEngagementItemsRepo(exec, projectId),
+    engagementDrafts: createEngagementDraftsRepo(exec, projectId),
+    engagementReplyClaims: createEngagementReplyClaimsRepo(exec, projectId),
+    engagementAccountStates: createEngagementAccountStatesRepo(exec, projectId),
   };
 }
 
@@ -252,10 +270,13 @@ function buildScope(exec: Database, data: ScopeData, actor: ScopeActor = { kind:
         ? (request) => keyCan(actor.permissions, request)
         : // The job runner acts on a series an owner/admin already configured to generate images
           // (standing_series:manage is owner/admin-only); it needs media:generate for that, regardless
-          // of the fixed editor role it otherwise runs as.
+          // of the fixed editor role it otherwise runs as. It never satisfies `engagement`, whatever
+          // the fixed editor role grants a real editor: approving a reply is a decision only a person
+          // makes, so the tick reaches engagement data through `createSchedulingRepos` instead (data-model.md §9).
           (request) =>
-            roles[data.membership.role].authorize(request as never).success ||
-            (actor.kind === "job_runner" && jobRunnerGrants(request)),
+            actor.kind === "job_runner"
+              ? !("engagement" in request) && (roles[data.membership.role].authorize(request as never).success || jobRunnerGrants(request))
+              : roles[data.membership.role].authorize(request as never).success,
     audit: createAuditRepo(exec, data.project.id),
     members: createMembersRepo(exec, data.project.id),
     uploads: createUploadsRepo(exec, data.project.id),

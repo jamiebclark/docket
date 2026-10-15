@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+/** A scripted inbound item for the mock provider's `engagement.read()` (tested with no platform credentials). */
+export const mockEngagementItemSchema = z.object({
+  kind: z.enum(["reply", "comment", "mention", "direct_message"]),
+  externalId: z.string().min(1),
+  text: z.string(),
+  authorDisplayName: z.string().nullable().default(null),
+  authorHandle: z.string().nullable().default(null),
+  authorExternalId: z.string().nullable().default(null),
+  identityStable: z.boolean().default(false),
+  saidAt: z.string().default(() => new Date(0).toISOString()),
+  parentExternalId: z.string().nullable().default(null),
+});
+export type MockEngagementItem = z.infer<typeof mockEngagementItemSchema>;
+
+export const mockEngagementSendBehaviours = ["sent", "duplicate", "ambiguous", "fatal_error", "credentials_invalid"] as const;
+
 export const mockBehaviours = [
   "succeed",
   "multi_step",
@@ -21,6 +37,11 @@ export const mockSettingsSchema = z.object({
   /** slow provider (respects ctx.signal) */
   delayMs: z.number().int().min(0).max(60000).default(0),
   refresh: z.enum(["succeed", "fail"]).default("succeed"),
+  /** The engagement surface is declared but unavailable, with a reason and no call ever made (FR-055). */
+  engagementUnavailable: z.boolean().default(false),
+  /** Items `engagement.read()` returns, as a single exhausted page, so ingest is testable with no credentials. */
+  engagementItems: z.array(mockEngagementItemSchema).default([]),
+  engagementSendBehaviour: z.enum(mockEngagementSendBehaviours).default("sent"),
 });
 
 export type MockSettings = z.infer<typeof mockSettingsSchema>;

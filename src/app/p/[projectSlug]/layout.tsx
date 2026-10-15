@@ -9,6 +9,7 @@ import { NotFoundError } from "@/server/dal";
 import { forProject } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { now } from "@/server/dal/clock";
+import { countInboxWaiting } from "@/server/services/engagement/inbox";
 import { countNeedsDecision } from "@/server/services/failures";
 import { listAccountsNeedingReauth } from "@/server/services/accounts";
 import { listManagers } from "@/server/services/members";
@@ -39,6 +40,8 @@ export default async function ProjectLayout({
   const reauth = await listAccountsNeedingReauth(scope);
   const reviewCount = await countReviewQueue(scope);
   const failuresCount = await countNeedsDecision(scope);
+  const canViewInbox = scope.can({ engagement: ["view"] });
+  const inboxCount = canViewInbox ? await countInboxWaiting(scope) : 0;
   const at = await now();
   const isOwner = scope.membership.role === "owner";
   const canReconnect = scope.can({ account: ["manage"] });
@@ -68,7 +71,13 @@ export default async function ProjectLayout({
         askNames={askManagers(managers, "or")}
       />
       <div className="flex flex-1 flex-col [--sticky-top:6.875rem] md:flex-row md:[--sticky-top:3.5rem]">
-        <LeftNav projectSlug={scope.project.slug} reviewCount={reviewCount} failuresCount={failuresCount} />
+        <LeftNav
+          projectSlug={scope.project.slug}
+          reviewCount={reviewCount}
+          failuresCount={failuresCount}
+          inboxCount={inboxCount}
+          canViewInbox={canViewInbox}
+        />
         <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
           <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>

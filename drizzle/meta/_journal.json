@@ -253,6 +253,13 @@
       "when": 1792033691810,
       "tag": "0035_fuzzy_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792069325452,
+      "tag": "0036_perfect_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

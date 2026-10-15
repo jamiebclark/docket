@@ -9,6 +9,7 @@ import { emptyWebhookCounts, runWebhookDeliveries, type WebhookCounts } from "./
 import { emptyPublishingCounts, runPublishing, type PublishingCounts } from "./publishing";
 import { emptyEmailCounts, runEmailDeliveries, type EmailCounts } from "./email";
 import { emptyStandingSeriesCounts, runStandingSeries, type StandingSeriesCounts } from "./standing-series";
+import { emptyEngagementReadCounts, runEngagementRead, type EngagementReadCounts } from "./engagement-read";
 
 export type { SchedulerConfig } from "./config";
 
@@ -25,6 +26,7 @@ export interface TickSummary {
   webhooks: SectionResult<WebhookCounts>;
   email: SectionResult<EmailCounts>;
   standingSeries: SectionResult<StandingSeriesCounts>;
+  engagementRead: SectionResult<EngagementReadCounts>;
 }
 
 /**
@@ -46,7 +48,7 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     }
   };
   // The sections run concurrently under the same deadline (D7); each handles its own failure.
-  const [publishing, tokenRefresh, generation, housekeeping, webhooks, email, standingSeries] = await Promise.all([
+  const [publishing, tokenRefresh, generation, housekeeping, webhooks, email, standingSeries, engagementRead] = await Promise.all([
     section("publishing", () => runPublishing({ config, tickId, startedAt }), emptyPublishingCounts()),
     section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0 }),
     section("generation jobs", () => runGenerationJobs({ config, tickId, startedAt }), emptyGenerationCounts()),
@@ -54,6 +56,7 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     section("webhooks", () => runWebhookDeliveries({ config, tickId, startedAt }), emptyWebhookCounts()),
     section("email", () => runEmailDeliveries({ config, tickId, startedAt }), emptyEmailCounts()),
     section("standing series", () => runStandingSeries({ config, tickId, startedAt }), emptyStandingSeriesCounts()),
+    section("engagement read", () => runEngagementRead({ config, tickId, startedAt }), emptyEngagementReadCounts()),
   ]);
 
   return {
@@ -67,5 +70,6 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     webhooks,
     email,
     standingSeries,
+    engagementRead,
   };
 }
