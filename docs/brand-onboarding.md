@@ -26,11 +26,17 @@ Two places this bites:
 
 - **Instagram must be a professional account linked to a Page**, or it never appears in Docket's
   chooser. See [meta-setup.md §4](meta-setup.md#4-app-roles).
-- **That link needs a business portfolio to exist first.** Without one, Meta's "Connect account"
-  dialog runs to its last step and its Continue button silently does nothing — no error, no
-  message, in both Facebook Settings and Meta Business Suite. Granting someone Facebook access to
-  the Page creates a portfolio, after which the same button works first time. If that dialog
-  hangs, this is why.
+- **If the "Connect account" dialog's last button seems to do nothing — no error, no message,
+  in either Facebook Settings or Meta Business Suite — look for a separate login window.** Meta
+  opens the Instagram sign-in in a popup. It hides behind the main window easily, and it is
+  invisible to browser automation entirely, which makes the button look broken when it is not.
+  Log in there and the link completes. Confirm it at **Business settings → Pages → the Page →
+  Connected assets**, which should then list the Instagram account.
+
+  An earlier version of this runbook blamed a missing business portfolio for this symptom. That
+  was wrong: Stencilvania hit the identical silent failure with a portfolio that already existed,
+  already owned the Page and was already its primary page. Create a portfolio because it is the
+  right home for a brand's assets, not as a fix for this.
 - **Threads only connects for accounts invited as a Threads Tester**, and the invite has to be
   accepted from inside Threads. Without it you get error 1349245. See
   [meta-setup.md § Threads: testers](meta-setup.md#threads-testers).
