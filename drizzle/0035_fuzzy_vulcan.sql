@@ -1,0 +1,4 @@
+ALTER TABLE "standing_series" DROP CONSTRAINT "standing_series_cadence_period_pair";--> statement-breakpoint
+ALTER TABLE "standing_series_runs" DROP CONSTRAINT "standing_series_runs_dated_has_no_plan";--> statement-breakpoint
+ALTER TABLE "standing_series" ADD CONSTRAINT "standing_series_cadence_period_pair" CHECK (("standing_series"."occurrence_rule" = 'cadence') = ("standing_series"."cadence_period" IS NOT NULL) AND "standing_series"."cadence_period"::text IS DISTINCT FROM 'date');--> statement-breakpoint
+ALTER TABLE "standing_series_runs" ADD CONSTRAINT "standing_series_runs_dated_has_no_plan" CHECK ("standing_series_runs"."period"::text <> 'date' OR "standing_series_runs"."plan" IS NULL);

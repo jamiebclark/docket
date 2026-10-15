@@ -4,6 +4,7 @@
 // in src/server/startup, which skips the migration this script already did (DOCKET_PREMIGRATED=1).
 import { pathToFileURL } from "node:url";
 import { formatEnvIssues } from "../src/server/env";
+import { describeMigrationFailure } from "../src/server/startup/migration-error";
 import { validateConfiguration } from "../src/server/startup/validate";
 
 const PG_URL = /^postgres(ql)?:\/\//;
@@ -50,8 +51,7 @@ export async function prestart({
     env.DOCKET_PREMIGRATED = "1";
     return true;
   } catch (e) {
-    const code = e && typeof e === "object" ? e.code : undefined;
-    error(`Docket: database migration failed${code ? ` (${code})` : ""}. Not starting.`);
+    error(`Docket: database migration failed: ${describeMigrationFailure(e)}. Not starting.`);
     return false;
   }
 }

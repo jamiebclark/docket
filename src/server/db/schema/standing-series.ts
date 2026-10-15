@@ -125,8 +125,12 @@ export const standingSeries = pgTable(
       sql`(${t.occurrenceRule} = 'cadence') = (${t.cadenceCount} IS NOT NULL)`,
     ),
     check(
+      // `::text` is load-bearing: 'date' is added to standing_series_period by a migration (0030), and
+      // drizzle runs every pending migration in ONE transaction, so comparing the enum column to the new
+      // label here fails with 55P04 "unsafe use of new value" on any database where the type predates it.
+      // Casting to text compares strings instead, which Postgres allows. See docs/decisions.md.
       "standing_series_cadence_period_pair",
-      sql`(${t.occurrenceRule} = 'cadence') = (${t.cadencePeriod} IS NOT NULL) AND ${t.cadencePeriod} IS DISTINCT FROM 'date'`,
+      sql`(${t.occurrenceRule} = 'cadence') = (${t.cadencePeriod} IS NOT NULL) AND ${t.cadencePeriod}::text IS DISTINCT FROM 'date'`,
     ),
     check(
       "standing_series_next_run_at_pair",
@@ -218,7 +222,8 @@ export const standingSeriesRuns = pgTable(
     check("standing_series_runs_single_post_has_no_plan", sql`${t.requestedCount} > 1 OR ${t.plan} IS NULL`),
     check("standing_series_runs_missed_nonneg", sql`${t.missedPeriods} >= 0`),
     check("standing_series_runs_plan_attempts_nonneg", sql`${t.planAttemptCount} >= 0`),
-    check("standing_series_runs_dated_has_no_plan", sql`${t.period} <> 'date' OR ${t.plan} IS NULL`),
+    // `::text` for the same reason as standing_series_cadence_period_pair above (55P04).
+    check("standing_series_runs_dated_has_no_plan", sql`${t.period}::text <> 'date' OR ${t.plan} IS NULL`),
     index("standing_series_runs_series_recent_idx").on(t.projectId, t.seriesId, t.openedAt.desc()),
     index("standing_series_runs_closed_idx").on(t.closedAt).where(sql`${t.closedAt} IS NOT NULL`),
   ],
