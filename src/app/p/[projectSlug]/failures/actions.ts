@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import * as posts from "@/server/services/posts";
+import { markReplyNotSent, markReplySent } from "@/server/services/failures";
 import { runAction } from "../run-action";
 
 /** Only `{ account, mode }` ever reaches the service; the object is built from scratch. */
@@ -23,4 +24,18 @@ export async function previewRetryAllAction(
 ): Promise<ActionResult<posts.RetryAllPreview>> {
   const body = input?.account ? { account: input.account } : {};
   return runAction(slug, (scope) => posts.previewRetryAll(scope, body));
+}
+
+/** It did arrive: the item is answered, nothing more is sent (contracts/services.md §5). */
+export async function markReplySentAction(slug: string, input: { draftId: string }): Promise<ActionResult<void>> {
+  const result = await runAction(slug, (scope) => markReplySent(scope, input?.draftId));
+  if (result.ok) refresh();
+  return result;
+}
+
+/** It did not: the ledger is released and the draft returns to review (contracts/services.md §5). */
+export async function markReplyNotSentAction(slug: string, input: { draftId: string }): Promise<ActionResult<void>> {
+  const result = await runAction(slug, (scope) => markReplyNotSent(scope, input?.draftId));
+  if (result.ok) refresh();
+  return result;
 }

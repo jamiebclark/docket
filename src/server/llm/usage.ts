@@ -14,7 +14,8 @@ export type UsagePurpose =
   | "generate.standing_series_post"
   | "voice.try"
   | "llm.check"
-  | "image.generate";
+  | "image.generate"
+  | "engagement.reply";
 
 export interface UsageRecorder {
   /** The provider, with recording. Delegates `generate`, returns its result unchanged. */

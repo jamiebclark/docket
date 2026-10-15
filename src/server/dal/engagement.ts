@@ -182,6 +182,8 @@ export interface EngagementDraftsRepo {
   listByItem(itemId: string): Promise<EngagementDraftRow[]>;
   listQueue(input: { limit: number; offset?: number }): Promise<EngagementDraftRow[]>;
   countQueue(): Promise<number>;
+  countSendState(state: EngagementDraftRow["sendState"]): Promise<number>;
+  listBySendState(state: EngagementDraftRow["sendState"]): Promise<EngagementDraftRow[]>;
   update(id: string, patch: Partial<Omit<EngagementDraftRow, "id" | "projectId" | "createdAt">>): Promise<void>;
   /** `review_state = 'discarded'` for every other `needs_review` draft on the same item. */
   discardSiblings(itemId: string, keepId: string): Promise<void>;
@@ -241,6 +243,20 @@ export function createEngagementDraftsRepo(exec: Database, projectId: string): E
         .from(engagementDrafts)
         .where(and(inProject, eq(engagementDrafts.reviewState, "needs_review")));
       return row?.n ?? 0;
+    },
+    async countSendState(state) {
+      const [row] = await exec
+        .select({ n: sql<number>`count(*)::int` })
+        .from(engagementDrafts)
+        .where(and(inProject, eq(engagementDrafts.sendState, state)));
+      return row?.n ?? 0;
+    },
+    async listBySendState(state) {
+      return exec
+        .select()
+        .from(engagementDrafts)
+        .where(and(inProject, eq(engagementDrafts.sendState, state)))
+        .orderBy(desc(engagementDrafts.updatedAt));
     },
     async update(id, patch) {
       await exec

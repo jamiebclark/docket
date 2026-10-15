@@ -16,9 +16,10 @@ import { Cell, DetailRow, Row, RowGroup, Sub, Table } from "@/components/ui/Tabl
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { countPosts } from "@/server/services/posts";
-import { listFailures, failuresQuerySchema, type FailureList, type FailureRow } from "@/server/services/failures";
+import { listFailures, listReplyFailures, failuresQuerySchema, type FailureList, type FailureRow, type ReplyFailureRow } from "@/server/services/failures";
 import { buttonStyles } from "@/components/ui/Button";
 import { ChoiceField } from "@/components/ui/ChoiceField";
+import { ReplyFailureActions } from "./ReplyFailureActions";
 
 export const metadata: Metadata = { title: "Failures" };
 export const dynamic = "force-dynamic";
@@ -100,6 +101,7 @@ export default async function FailuresPage({ params, searchParams }: Props) {
     if (error instanceof NotFoundError) notFound();
     list = null;
   }
+  const replyFailures: ReplyFailureRow[] = await listReplyFailures(scope);
   const tz = scope.project.timezone;
   const canSchedule = scope.can({ post: ["schedule"] });
   const tabs = [
@@ -130,6 +132,23 @@ export default async function FailuresPage({ params, searchParams }: Props) {
           {list.totals.ambiguous} need your decision · {list.totals.failed} failed
         </p>
       ) : null}
+
+      {replyFailures.length > 0 ? (
+        <div className="mt-6">
+          <Table caption="Replies needing a decision" columns={["Account", "Reply", "Actions"]}>
+            {replyFailures.map((row) => (
+              <Row key={row.draftId}>
+                <Cell header>{row.account.name}</Cell>
+                <Cell>{row.excerpt || "(no text)"}</Cell>
+                <Cell>
+                  <ReplyFailureActions slug={projectSlug} draftId={row.draftId} />
+                </Cell>
+              </Row>
+            ))}
+          </Table>
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap items-end gap-4">
         {noPosts ? null : query.target ? (
           <Link href={`/p/${projectSlug}/failures`} className="text-sm underline">

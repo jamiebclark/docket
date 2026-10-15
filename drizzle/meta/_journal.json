@@ -260,6 +260,13 @@
       "when": 1792069325452,
       "tag": "0036_perfect_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792073842430,
+      "tag": "0037_rich_moira_mactaggert",
+      "breakpoints": true
     }
   ]
 }

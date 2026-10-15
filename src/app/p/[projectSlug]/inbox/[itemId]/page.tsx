@@ -5,9 +5,12 @@ import { AnnounceProvider } from "@/components/ui/Announce";
 import { Badge } from "@/components/ui/Badge";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { countingRuleName } from "@/providers/text";
+import { findProvider } from "@/providers/registry";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { getInboxItem } from "@/server/services/engagement/inbox";
+import { ReplyPanel } from "./ReplyPanel";
 
 export const metadata: Metadata = { title: "Inbox item" };
 export const dynamic = "force-dynamic";
@@ -33,6 +36,9 @@ export default async function InboxItemPage({ params }: Props) {
     throw error;
   }
   const tz = scope.project.timezone;
+  const provider = findProvider(item.providerKey);
+  const textCaps = provider?.capabilities.text ?? { maxLength: 0, countingRule: "code_points" as const };
+  const canReply = scope.can({ engagement: ["reply"] });
 
   return (
     <AnnounceProvider focusFallbackId="page-title">
@@ -75,6 +81,18 @@ export default async function InboxItemPage({ params }: Props) {
             Can&apos;t reply: {item.replyable.reason}
           </p>
         ) : null}
+
+        <ReplyPanel
+          slug={projectSlug}
+          itemId={item.id}
+          drafts={item.drafts}
+          canReply={canReply}
+          canDismiss={canReply}
+          replyable={item.replyable.ok}
+          dismissed={item.state === "dismissed"}
+          countingRule={countingRuleName(textCaps.countingRule)}
+          maxLength={textCaps.maxLength}
+        />
 
         <p className="mt-6">
           <Link href={`/p/${projectSlug}/inbox`} className="text-sm underline">
