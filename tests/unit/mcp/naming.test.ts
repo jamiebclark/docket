@@ -14,13 +14,14 @@ describe("toolNameFor", () => {
 });
 
 describe("PUBLISHED_TOOL_NAMES", () => {
-  it("is the frozen nineteen", () => {
+  it("is the frozen twenty", () => {
     expect(PUBLISHED_TOOL_NAMES).toEqual([
       "docket_list_accounts",
       "docket_set_account_posting_instructions",
       "docket_list_media",
       "docket_get_media",
       "docket_create_post",
+      "docket_update_post",
       "docket_get_post",
       "docket_get_post_target",
       "docket_queue_post",
@@ -36,6 +37,6 @@ describe("PUBLISHED_TOOL_NAMES", () => {
       "docket_create_voice_profile",
       "docket_update_voice_profile",
     ]);
-    expect(PUBLISHED_TOOL_NAMES).toHaveLength(19);
+    expect(PUBLISHED_TOOL_NAMES).toHaveLength(20);
   });
 });

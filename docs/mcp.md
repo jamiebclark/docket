@@ -10,7 +10,7 @@ Same as for the public API: in the project, open **Settings → API keys → Cre
 
 Point your MCP client at `{{base}}/api/mcp` and give it the key as a bearer credential (`Authorization: Bearer dkt_…`), exactly as you would configure the header for the public API. There is no separate MCP credential and no browser session involved — a signed-in browser confers nothing to an MCP client, and listing tools requires the same valid key as calling one.
 
-## 3. The 19 exposed tools
+## 3. The 20 exposed tools
 
 The key decides the project: there is no project-selection tool, and no tool takes a project id. Running two brands means two configured servers with two keys — see section 6.
 
@@ -39,7 +39,7 @@ Four tools demand an explicit `confirm: true` argument because their effect cann
 | `docket_update_slot` | `manage_setup` | | Updates a slot. |
 | `docket_delete_slot` | `manage_setup` | **yes** | Deletes a slot — no undo. |
 
-Every write tool whose operation is idempotent (all twelve above) accepts an optional `idempotencyKey` string argument, which behaves exactly like the `Idempotency-Key` header does over HTTP: a replay with the same key and the same body returns the first result instead of acting twice; a replay with a different body is refused; two calls with the same key in flight at once get the in-flight conflict.
+Every write tool whose operation is idempotent (all thirteen above) accepts an optional `idempotencyKey` string argument, which behaves exactly like the `Idempotency-Key` header does over HTTP: a replay with the same key and the same body returns the first result instead of acting twice; a replay with a different body is refused; two calls with the same key in flight at once get the in-flight conflict.
 
 Each tool's description, generated from its operation rather than hand-written, states the project it acts on, the permission it needs, and the failures it can answer with — so a client can be asked what a tool does and get an answer that cannot drift from the code.
 
