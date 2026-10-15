@@ -12,8 +12,8 @@ describe("the MCP surface derivation (no drift)", () => {
     expect(dispositionProblems(OPERATIONS)).toEqual([]);
   });
 
-  it("derives exactly the 19 exposed operations as tools, no orphans, no un-toolled exposures", () => {
-    expect(EXPOSED).toHaveLength(19);
+  it("derives exactly the 20 exposed operations as tools, no orphans, no un-toolled exposures", () => {
+    expect(EXPOSED).toHaveLength(20);
     const exposedIds = new Set(EXPOSED.map((op) => op.id));
     const actuallyExposedIds = new Set(OPERATIONS.filter((op) => op.mcp.expose).map((op) => op.id));
     expect(exposedIds).toEqual(actuallyExposedIds);

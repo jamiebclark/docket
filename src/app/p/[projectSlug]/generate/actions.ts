@@ -32,10 +32,10 @@ export async function regenerateAction(
 export async function updatePostVariantsAction(
   slug: string,
   input: { postId: string; edits: { accountIds: string[]; text: string }[] },
-): Promise<ActionResult<{ problems: VariantUpdate["problems"] }>> {
+): Promise<ActionResult<{ problems: VariantUpdate["problems"]; skipped: VariantUpdate["skipped"] }>> {
   const result = await runAction(slug, async (scope) => {
-    const { problems } = await posts.updatePostVariants(scope, input?.postId, { edits: input?.edits });
-    return { problems };
+    const { problems, skipped } = await posts.updatePostVariants(scope, input?.postId, { edits: input?.edits });
+    return { problems, skipped };
   });
   if (result.ok) refresh();
   return result;

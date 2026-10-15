@@ -65,5 +65,25 @@ describe("updatePostVariants", () => {
     await atTime(new Date("2026-10-01T12:00:00Z"), () => posts.addToQueue(env.scope, draft.post.id));
     const res = await posts.updatePostVariants(env.scope, draft.post.id, { edits: [{ accountIds: [a.id], text: "changed" }] });
     expect(res.detail.targets[0]).toMatchObject({ status: "scheduled", overrideText: "keep" });
+    // and says so, rather than letting the caller report a save that did not happen
+    expect(res.skipped).toEqual([{ accountId: a.id, status: "scheduled" }]);
+  });
+
+  it("reports nothing skipped when the edit lands", async () => {
+    const { env, connect } = await setup();
+    const a = await connect("bluesky-like");
+    const draft = await posts.createDraft(env.scope, { baseText: "base", targets: [{ accountId: a.id }] });
+    const res = await posts.updatePostVariants(env.scope, draft.post.id, { edits: [{ accountIds: [a.id], text: "new" }] });
+    expect(res.skipped).toEqual([]);
+  });
+
+  it("does not report a skip when the scheduled target already has that text", async () => {
+    const { env, connect } = await setup();
+    const a = await connect("bluesky-like");
+    await (await import("../../../src/server/services/slots")).addSlot(env.scope, { accountId: a.id, weekday: 1, localTime: "09:00" });
+    const draft = await posts.createDraft(env.scope, { baseText: "base", targets: [{ accountId: a.id, overrideText: "same" }] });
+    await atTime(new Date("2026-10-01T12:00:00Z"), () => posts.addToQueue(env.scope, draft.post.id));
+    const res = await posts.updatePostVariants(env.scope, draft.post.id, { edits: [{ accountIds: [a.id], text: "same" }] });
+    expect(res.skipped).toEqual([]);
   });
 });
