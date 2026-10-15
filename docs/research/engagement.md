@@ -84,6 +84,17 @@ entry (US4 is blocked on the human task above); nothing in the scheduler,
 providers or UI reads or displays a Meta commenter identity. Recorded in
 `docs/decisions.md`.
 
+**Blocked, not skipped.** Building real Instagram comments, Threads replies
+and Facebook Page comments is blocked on `tasks.md`'s Phase 9 human task
+(T083, T084) — a live Meta app, a real Page, a real Instagram Business
+account, a real Threads account, a second person to comment, and a browser,
+none of which a pipeline phase has. Only after that task resolves may Phase
+6's blocked Meta-reading/sending work be turned into new tasks; every
+identity field any future Meta surface displays (display name, handle,
+identifier, profile link, and whether the identifier is stable across two
+comments) must trace to a confirmed verdict recorded there, not to this
+section's unverified rows (FR-005, FR-055).
+
 ## 3. Direct messages — unverified, every platform in scope
 
 No platform's DM facts exist anywhere in this repo: `docs/research/bluesky.md`
