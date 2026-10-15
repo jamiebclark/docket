@@ -24,7 +24,7 @@ describe("scripts/prestart.mjs", () => {
     expect(env.DOCKET_PREMIGRATED).toBe("1");
   });
 
-  it("returns false (caller exits 1) with a fixed message when migration fails", async () => {
+  it("returns false (caller exits 1) and says why, with credentials scrubbed", async () => {
     const errors: string[] = [];
     const ok = await prestart({
       env: e({ ...CORE, DATABASE_URL: URL_A }),
@@ -34,7 +34,11 @@ describe("scripts/prestart.mjs", () => {
       error: (m: string) => void errors.push(m),
     });
     expect(ok).toBe(false);
-    expect(errors.join()).toContain("migration failed. Not starting.");
+    // The reason is the point: printing only `error.code` left operators with a bare line for
+    // every failure that is not a Postgres error (docs/decisions.md, 2026-10-15).
+    expect(errors.join()).toBe(
+      "Docket: database migration failed: connect postgres://u:***@h failed. Not starting.",
+    );
     expect(errors.join()).not.toContain("hunter2");
   });
 

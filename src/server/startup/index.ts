@@ -3,6 +3,7 @@ import { bootstrapFirstUser } from "../dal/install";
 import { SetupUnavailableError } from "../dal/errors";
 import { formatEnvIssues } from "../env";
 import { parseLlmConfig } from "../llm/config";
+import { describeMigrationFailure } from "./migration-error";
 import { validateConfiguration } from "./validate";
 import { JOB_MIN_CALL_MS, JOB_PERSIST_RESERVE_MS } from "../scheduler/config";
 
@@ -53,8 +54,7 @@ export async function runStartup(overrides: Partial<StartupDeps> = {}): Promise<
       await deps.migrate(env.DATABASE_URL_DIRECT);
       deps.log("Docket: database migrations applied");
     } catch (error) {
-      const code = (error as { code?: string }).code;
-      console.error(`Docket: database migration failed${code ? ` (${code})` : ""}. Not starting.`);
+      console.error(`Docket: database migration failed: ${describeMigrationFailure(error)}. Not starting.`);
       return deps.exit(1);
     }
   }

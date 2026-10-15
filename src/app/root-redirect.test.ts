@@ -30,7 +30,7 @@ describe("decideAnonymousRedirect", () => {
     expect(decideAnonymousRedirect(true)).toBe("/setup");
   });
 
-  it("sends an anonymous visitor to /login once an account exists", () => {
-    expect(decideAnonymousRedirect(false)).toBe("/login");
+  it("does not redirect an anonymous visitor once an account exists ('/' shows the public page)", () => {
+    expect(decideAnonymousRedirect(false)).toBeNull();
   });
 });

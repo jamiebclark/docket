@@ -246,6 +246,13 @@
       "when": 1791995586505,
       "tag": "0034_fantastic_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792033691810,
+      "tag": "0035_fuzzy_vulcan",
+      "breakpoints": true
     }
   ]
 }

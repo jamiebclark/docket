@@ -39,7 +39,23 @@ describe("auth gate", () => {
     expect(loginRedirectFor("/p/acme/settings", "?tab=1", false)).toBe(
       "/login?next=%2Fp%2Facme%2Fsettings%3Ftab%3D1",
     );
-    expect(loginRedirectFor("/", "", false)).toBe("/login");
+    expect(loginRedirectFor("/p/acme", "", false)).toBe("/login?next=%2Fp%2Facme");
+    expect(loginRedirectFor("/activity", "", false)).toBe("/login?next=%2Factivity");
+  });
+
+  // Platform reviewers open these with no account; a redirect to /login is a documented refusal reason.
+  it("lets the public home page and the privacy policy through without a session", () => {
+    for (const p of ["/", "/privacy"]) {
+      expect(isPublicPath(p)).toBe(true);
+      expect(loginRedirectFor(p, "", false)).toBeNull();
+    }
+    expect(loginRedirectFor("/", "?utm_source=pinterest", false)).toBeNull();
+  });
+
+  it("does not open up anything under the privacy page", () => {
+    expect(isPublicPath("/privacy/other")).toBe(false);
+    expect(isPublicPath("/privacyx")).toBe(false);
+    expect(loginRedirectFor("/privacy/other", "", false)).toBe("/login?next=%2Fprivacy%2Fother");
   });
 
   it("lets a request with a session cookie through", () => {

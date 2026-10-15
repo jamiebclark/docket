@@ -3,6 +3,7 @@ import { llmEnvIssues, llmImageEnvIssues } from "../llm/config";
 import { parseLlmRates } from "../llm/rates";
 import { createSmtpMailer } from "../mail/smtp";
 import { providerEnvIssues } from "../provider-env";
+import { parsePublicSite } from "../public-site";
 import { listConnectGroups } from "../../providers/registry";
 
 export type ConfigValidation =
@@ -22,7 +23,8 @@ export function validateConfiguration(source: Record<string, string | undefined>
     ...llmEnvIssues(source),
     ...llmImageEnvIssues(source),
   ];
-  const warnings = parseLlmRates(source).problems;
+  // Public-page settings are cosmetic: a malformed one is ignored with a warning, never a refusal to start.
+  const warnings = [...parseLlmRates(source).problems, ...parsePublicSite(source).problems];
 
   const disabled: string[] = [];
   if (parsed.ok && !parsed.env.storage) disabled.push("media storage is off (S3_* not set)");

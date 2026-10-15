@@ -73,7 +73,7 @@ Do not submit for App Review. Standard Access covers everyone with a role from s
 
 Meta's documentation says Business apps have no Development/Live mode and use access levels only, but some dashboard
 pages still describe a mode toggle (**unverified** which one you will see). If your dashboard shows a toggle, people with
-app roles can connect in either mode. Going Live may ask for a privacy policy URL, an app icon and a category; Business
+app roles can connect in either mode. Going Live may ask for a privacy policy URL (use `<BETTER_AUTH_URL>/privacy`, which every installation serves without sign-in; see [privacy.md](privacy.md)), an app icon and a category; Business
 Verification is not needed while only people with roles connect.
 
 ## 6. App domains and valid OAuth redirect URIs
