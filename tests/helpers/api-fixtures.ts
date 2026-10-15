@@ -26,6 +26,7 @@ export const FIXTURES: Record<string, Fixture> = {
   },
   registerMediaFromUrl: { body: () => ({ url: "http://127.0.0.1:9/none.jpg" }) },
   createPost: { body: (p) => ({ text: "hi", accountIds: [p.account.id] }) },
+  updatePost: { params: (p) => ({ postId: p.post.id }), body: () => ({ text: "edited" }) },
   getPost: { params: (p) => ({ postId: p.post.id }) },
   getPostTarget: { params: (p) => ({ postId: p.post.id, targetId: p.targets[0]!.id }) },
   queuePost: { params: (p) => ({ postId: p.post.id }), body: () => ({}) },

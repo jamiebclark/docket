@@ -4,7 +4,7 @@ import type { ApiTarget } from "@/lib/api/schemas";
 import { atSchema, baseTextSchema, POST_MEDIA_MAX, POST_TYPES } from "@/lib/validation/scheduling";
 import { NotFoundError } from "../../dal/errors";
 import type { TargetResult as ServiceTargetResult } from "../../services/posts";
-import { addToQueue, createDraft, prepareForScheduling, scheduleAt, validatePost } from "../../services/posts";
+import { addToQueue, createDraft, prepareForScheduling, scheduleAt, updatePostText, validatePost } from "../../services/posts";
 import { assertPostTypesForAccounts } from "../../services/posts/content";
 import { loadApiPost } from "../../services/views/load";
 import { toIssue, toWarning } from "./issues";
@@ -25,6 +25,19 @@ const createBody = z.object({
       "Optional post type per account, for accounts whose provider offers a choice (Instagram: `video` = Feed video, `reel` = Reel). Absent = the provider's default.",
     ),
 });
+const updateBody = z
+  .object({
+    text: baseTextSchema.optional().describe("The post's shared text. Accounts with their own version keep it."),
+    overrides: z
+      .record(z.uuid(), baseTextSchema.nullable())
+      .optional()
+      .describe("Per-account text, keyed by account id. An account left out keeps its text; `null` drops back to the shared text."),
+    mediaIds: z.array(z.uuid()).max(POST_MEDIA_MAX).optional(),
+  })
+  .refine((b) => b.text !== undefined || b.overrides !== undefined || b.mediaIds !== undefined, {
+    error: "Pass at least one of text, overrides or mediaIds",
+  });
+
 const selectBody = z.object({ targetIds: z.array(z.uuid()).optional() });
 const scheduleBody = selectBody.extend({ at: atSchema });
 
@@ -88,6 +101,42 @@ export const postOperations = [
         return { targetId: t.id, accountId: t.accountId, ok: !list.some((i) => i.severity === "error"), issues: list };
       });
       return { status: 201, body: { post: await loadApiPost(scope, created.post.id), validation } };
+    },
+  }),
+  defineOperation({
+    id: "updatePost",
+    method: "PATCH",
+    path: "/posts/{postId}",
+    permission: "write_posts",
+    tag: "Posts",
+    summary: "Change a post's text",
+    description:
+      "Edits the text of a post that has not started publishing, including one that is already scheduled — the schedule, post types and posting options are left as they are. Only the keys you send change: an account missing from `overrides` keeps its text. Returns the post and its per-target validation, so an edit that breaks a platform limit is visible in the same response.",
+    params: postIdParams,
+    resourceParams: ["postId"],
+    body: { kind: "json", schema: updateBody },
+    responses: {
+      200: { description: "The updated post and its per-target validation", schema: z.object({ post: PostSchema, validation: z.array(TargetValidationSchema) }) },
+      400: { description: "Invalid request" },
+      404: { description: "The post, an account or an image does not exist in this project" },
+      409: { description: "Publishing has started, so the post can no longer be edited" },
+    },
+    idempotent: true,
+    mcp: { expose: true },
+    async run(scope, { params, body }) {
+      await updatePostText(scope, params.postId, {
+        ...(body.text !== undefined ? { baseText: body.text } : {}),
+        ...(body.overrides !== undefined ? { overrides: body.overrides } : {}),
+        ...(body.mediaIds !== undefined ? { mediaIds: body.mediaIds } : {}),
+      });
+      const issues = await validatePost(scope, params.postId);
+      const post = await loadApiPost(scope, params.postId);
+      const byTarget = new Map(issues.map((i) => [i.targetId, i.issues]));
+      const validation = post.targets.map((t) => {
+        const list = (byTarget.get(t.id) ?? []).map(toIssue);
+        return { targetId: t.id, accountId: t.accountId, ok: !list.some((i) => i.severity === "error"), issues: list };
+      });
+      return { status: 200, body: { post, validation } };
     },
   }),
   defineOperation({

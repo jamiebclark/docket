@@ -10,7 +10,7 @@ Same as for the public API: in the project, open **Settings → API keys → Cre
 
 Point your MCP client at `{{base}}/api/mcp` and give it the key as a bearer credential (`Authorization: Bearer dkt_…`), exactly as you would configure the header for the public API. There is no separate MCP credential and no browser session involved — a signed-in browser confers nothing to an MCP client, and listing tools requires the same valid key as calling one.
 
-## 3. The 19 exposed tools
+## 3. The 20 exposed tools
 
 The key decides the project: there is no project-selection tool, and no tool takes a project id. Running two brands means two configured servers with two keys — see section 6.
 
@@ -26,6 +26,7 @@ Four tools demand an explicit `confirm: true` argument because their effect cann
 | `docket_get_media` | `read` | | Reads one media item. |
 | `docket_list_upcoming_slots` | `read` | | Lists upcoming posting slots. |
 | `docket_create_post` | `write_posts` | | Creates a draft post. |
+| `docket_update_post` | `write_posts` | | Changes a post's text, including one already scheduled. Leaves the schedule, post types and posting options alone; an account left out of `overrides` keeps its text. Refuses once publishing has started. |
 | `docket_generate_post` | `generate` | conditional | Generates a post, spending the project's LLM budget. If a key holding `auto_approve` is used, the result skips review — unless generation fails validation, which still forces review. Requires `confirm: true` unless `schedulingPolicy` is explicitly `leave_as_draft` — an absent policy falls back to the project's default, which may queue, so only an explicit `leave_as_draft` call skips confirmation. |
 | `docket_queue_post` | `write_posts` | **yes** | Adds a post to the account's queue — it goes out at the next free slot. |
 | `docket_schedule_post` | `write_posts` | **yes** | Schedules a post at a specific time. |
@@ -38,7 +39,7 @@ Four tools demand an explicit `confirm: true` argument because their effect cann
 | `docket_update_slot` | `manage_setup` | | Updates a slot. |
 | `docket_delete_slot` | `manage_setup` | **yes** | Deletes a slot — no undo. |
 
-Every write tool whose operation is idempotent (all twelve above) accepts an optional `idempotencyKey` string argument, which behaves exactly like the `Idempotency-Key` header does over HTTP: a replay with the same key and the same body returns the first result instead of acting twice; a replay with a different body is refused; two calls with the same key in flight at once get the in-flight conflict.
+Every write tool whose operation is idempotent (all thirteen above) accepts an optional `idempotencyKey` string argument, which behaves exactly like the `Idempotency-Key` header does over HTTP: a replay with the same key and the same body returns the first result instead of acting twice; a replay with a different body is refused; two calls with the same key in flight at once get the in-flight conflict.
 
 Each tool's description, generated from its operation rather than hand-written, states the project it acts on, the permission it needs, and the failures it can answer with — so a client can be asked what a tool does and get an answer that cannot drift from the code.
 

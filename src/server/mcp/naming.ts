@@ -10,6 +10,7 @@ export const PUBLISHED_TOOL_NAMES: readonly string[] = [
   "docket_list_media",
   "docket_get_media",
   "docket_create_post",
+  "docket_update_post",
   "docket_get_post",
   "docket_get_post_target",
   "docket_queue_post",
