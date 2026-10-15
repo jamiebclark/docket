@@ -251,6 +251,21 @@ const bool = (def: boolean | (() => boolean)) =>
       return z.NEVER;
     });
 
+/** Decimal number; unset or empty means `def`. */
+const float = (min: number, max: number, def: number) =>
+  z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      if (v === undefined || v === "") return def;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < min || n > max) {
+        ctx.addIssue({ code: "custom", message: `must be a number from ${min} to ${max}` });
+        return z.NEVER;
+      }
+      return n;
+    });
+
 /** One of a fixed set of strings; unset or empty means `def`. */
 const oneOf = <const T extends string>(values: readonly T[], def: T) =>
   z
@@ -341,6 +356,13 @@ const base = z.object({
     GENERATION_TICK_MAX_ITEMS: int(1, 10, 2),
     STANDING_SERIES_TICK_MAX_SERIES: int(1, 10, 2),
     STANDING_SERIES_TICK_MAX_POSTS: int(1, 10, 2),
+    ENGAGEMENT_RETENTION_DAYS: int(1, 3650, 90),
+    ENGAGEMENT_READ_PAGE_SIZE: int(1, 100, 50),
+    ENGAGEMENT_READ_PAGES_PER_RUN: int(1, 10, 3),
+    ENGAGEMENT_READ_MIN_INTERVAL_SECONDS: int(10, 3600, 60),
+    ENGAGEMENT_SENDS_PER_TICK: int(1, 50, 5),
+    ENGAGEMENT_WRITE_RESERVE: float(0, 1, 0.25),
+    ENGAGEMENT_PRUNE_BATCH: int(1, 1000, 200),
     S3_BUCKET: z.string().optional(),
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),

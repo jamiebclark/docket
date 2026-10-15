@@ -41,6 +41,14 @@ export interface SchedulerConfig {
   emailPauseAfterFailures?: number;
   emailUnavailableRetryMs?: number;
   emailRetentionDays?: number;
+  /** Engagement inbox (077): reads and sends claimed per tick, write-budget reserve, retention. */
+  engagementRetentionDays?: number;
+  engagementReadPageSize?: number;
+  engagementReadPagesPerRun?: number;
+  engagementReadMinIntervalMs?: number;
+  engagementSendsPerTick?: number;
+  engagementWriteReserve?: number;
+  engagementPruneBatch?: number;
 }
 
 export const WEBHOOK_DEFAULTS = {
@@ -128,6 +136,31 @@ export function standingSeriesConfig(config: SchedulerConfig) {
   };
 }
 
+export const ENGAGEMENT_DEFAULTS = {
+  retentionDays: 90,
+  readPageSize: 50,
+  readPagesPerRun: 3,
+  readMinIntervalMs: 60_000,
+  sendsPerTick: 5,
+  writeReserve: 0.25,
+  pruneBatch: 200,
+} as const;
+
+/** The engagement inbox's settings with defaults filled in. */
+export function engagementConfig(config: SchedulerConfig) {
+  return {
+    retentionDays: config.engagementRetentionDays ?? ENGAGEMENT_DEFAULTS.retentionDays,
+    readPageSize: config.engagementReadPageSize ?? ENGAGEMENT_DEFAULTS.readPageSize,
+    readPagesPerRun: config.engagementReadPagesPerRun ?? ENGAGEMENT_DEFAULTS.readPagesPerRun,
+    readMinIntervalMs: config.engagementReadMinIntervalMs ?? ENGAGEMENT_DEFAULTS.readMinIntervalMs,
+    sendsPerTick: config.engagementSendsPerTick ?? ENGAGEMENT_DEFAULTS.sendsPerTick,
+    writeReserve: config.engagementWriteReserve ?? ENGAGEMENT_DEFAULTS.writeReserve,
+    pruneBatch: config.engagementPruneBatch ?? ENGAGEMENT_DEFAULTS.pruneBatch,
+    leaseMs: config.leaseMs,
+    timeBudgetMs: config.timeBudgetMs,
+  };
+}
+
 export const STANDING_SERIES_MAX_SERIES_DEFAULT = 2;
 export const STANDING_SERIES_MAX_POSTS_DEFAULT = 2;
 
@@ -151,6 +184,13 @@ type EnvLike = Pick<
   | "GENERATION_TICK_MAX_ITEMS"
   | "STANDING_SERIES_TICK_MAX_SERIES"
   | "STANDING_SERIES_TICK_MAX_POSTS"
+  | "ENGAGEMENT_RETENTION_DAYS"
+  | "ENGAGEMENT_READ_PAGE_SIZE"
+  | "ENGAGEMENT_READ_PAGES_PER_RUN"
+  | "ENGAGEMENT_READ_MIN_INTERVAL_SECONDS"
+  | "ENGAGEMENT_SENDS_PER_TICK"
+  | "ENGAGEMENT_WRITE_RESERVE"
+  | "ENGAGEMENT_PRUNE_BATCH"
 >;
 
 /** `overrides` is for tests. */
@@ -175,6 +215,13 @@ export function schedulerConfig(env: EnvLike, overrides: Partial<SchedulerConfig
     jobBackoffMaxMs: JOB_BACKOFF_MAX_MS,
     standingSeriesMaxSeries: env.STANDING_SERIES_TICK_MAX_SERIES,
     standingSeriesMaxPosts: env.STANDING_SERIES_TICK_MAX_POSTS,
+    engagementRetentionDays: env.ENGAGEMENT_RETENTION_DAYS,
+    engagementReadPageSize: env.ENGAGEMENT_READ_PAGE_SIZE,
+    engagementReadPagesPerRun: env.ENGAGEMENT_READ_PAGES_PER_RUN,
+    engagementReadMinIntervalMs: env.ENGAGEMENT_READ_MIN_INTERVAL_SECONDS * 1000,
+    engagementSendsPerTick: env.ENGAGEMENT_SENDS_PER_TICK,
+    engagementWriteReserve: env.ENGAGEMENT_WRITE_RESERVE,
+    engagementPruneBatch: env.ENGAGEMENT_PRUNE_BATCH,
     ...overrides,
   };
 }
