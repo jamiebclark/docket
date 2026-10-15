@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { findProvider } from "../../../providers/registry";
 import { countText, countingRuleName } from "../../../providers/text";
-import type { EngagementDraftRow } from "../../dal";
+import type { EngagementDraftRow, EngagementItemRow } from "../../dal";
 import { NotFoundError } from "../../dal/errors";
 import { requirePermission, type ProjectScope } from "../../dal/scope";
 import * as clock from "../../dal/clock";
@@ -26,6 +26,7 @@ export interface ReplyQueueRow {
   draft: EngagementDraftRow;
   itemId: string;
   itemText: string;
+  kind: EngagementItemRow["kind"];
   parentText: string | null;
   author: { displayName: string | null; handle: string | null };
   account: { id: string; displayName: string };
@@ -49,6 +50,7 @@ async function toReplyQueueRow(scope: ProjectScope, draft: EngagementDraftRow): 
     draft,
     itemId: item.id,
     itemText: item.text,
+    kind: item.kind,
     parentText,
     author: { displayName: item.authorDisplayName, handle: item.authorHandle },
     account: { id: draft.socialAccountId, displayName: account?.displayName ?? item.providerKey },

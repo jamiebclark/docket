@@ -170,9 +170,9 @@ description: "Task list template for feature implementation"
 
 **Independent Test**: with mocked HTTP, a DM from the mock provider arrives marked private, is never shown as a public comment, and the review row says the reply goes privately to one person (quickstart.md §6, FR-056).
 
-- [ ] T064 [P] [US5] `tests/integration/engagement/dm-presentation.test.ts` (new): a DM from the mock provider is marked Private on the inbox list row, the item view and the review row; the review row states the reply goes privately to one person; no platform in this entry declares `direct_message` (FR-056) — write first, confirm it fails
-- [ ] T065 [US5] Edit `src/app/p/[projectSlug]/inbox/` and `src/app/p/[projectSlug]/review/`: render the Private marker and the "sent privately to one person" copy wherever a `direct_message` item appears (FR-056, contracts/vocabulary.md §4) — depends on T056, T057, T064
-- [ ] T066 [US5] Record in `docs/research/engagement.md` that US5 is blocked for every platform in scope pending committed DM research, so no DM reading, drafting or sending is implemented anywhere (FR-056, constitution I) — depends on T024
+- [X] T064 [P] [US5] `tests/integration/engagement/dm-presentation.test.ts` (new): a DM from the mock provider is marked Private on the inbox list row, the item view and the review row; the review row states the reply goes privately to one person; no platform in this entry declares `direct_message` (FR-056) — write first, confirm it fails
+- [X] T065 [US5] Edit `src/app/p/[projectSlug]/inbox/` and `src/app/p/[projectSlug]/review/`: render the Private marker and the "sent privately to one person" copy wherever a `direct_message` item appears (FR-056, contracts/vocabulary.md §4) — depends on T056, T057, T064
+- [X] T066 [US5] Record in `docs/research/engagement.md` that US5 is blocked for every platform in scope pending committed DM research, so no DM reading, drafting or sending is implemented anywhere (FR-056, constitution I) — depends on T024
 
 **Checkpoint**: DMs are modelled and visually safe but inert everywhere except the mock provider, exactly as the spec requires.
 

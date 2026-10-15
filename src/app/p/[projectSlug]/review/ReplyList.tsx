@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useState, useTransition } from "react";
 import { ActionBar } from "@/components/ui/ActionBar";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { checkStyles } from "@/components/ui/controls";
 import { LiveRegion } from "@/components/ui/LiveRegion";
@@ -80,8 +81,12 @@ export function ReplyList({ slug, items, canApprove }: ReplyListProps) {
                   <h2 id={`${id}-title`} className="text-base font-semibold">
                     {row.author.displayName ?? row.author.handle ?? "Unknown author"}
                   </h2>
+                  {row.kind === "direct_message" ? <Badge tone="warning">Private</Badge> : null}
                 </div>
                 <p className="text-xs text-muted-foreground">{row.account.displayName}</p>
+                {row.kind === "direct_message" ? (
+                  <p className="text-xs text-muted-foreground">This reply will be sent privately to one person.</p>
+                ) : null}
                 <div className="rounded-md bg-muted p-3">
                   <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Comment</p>
                   <p className="mt-1 text-sm whitespace-pre-wrap">{row.itemText || "(no text)"}</p>

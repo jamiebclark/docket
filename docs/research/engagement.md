@@ -104,3 +104,10 @@ listing for a messaging endpoint or permission; found none recorded. Meta
 messaging permissions are outside the Standard Access set this entry assumes
 (unconfirmed — not tried live). US5 stays specified and unbuilt; no DM
 reading, drafting or sending is implemented anywhere in this entry.
+
+Phase 7 (`specs/077-engagement-inbox/tasks.md`) built only the seam: `direct_message`
+is modelled as a declared inbound kind and shown as Private wherever it appears
+(inbox list, item view, review row), exercised through the mock provider alone.
+Every platform above remains blocked for DMs until one of them commits a DM
+research section here with a confirmed verdict (constitution I); building real
+reading, drafting or sending for any platform is out of scope until then.
