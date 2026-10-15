@@ -34,8 +34,8 @@ async function seedApprovedDraft(scope: Awaited<ReturnType<typeof setup>>["scope
     authorExternalId: "ada-1",
     authorUrl: null,
     authorIdentityStable: true,
-    saidAt: new Date("2026-01-01T00:00:00Z"),
-    ingestedAt: new Date("2026-01-01T00:00:01Z"),
+    saidAt: new Date(),
+    ingestedAt: new Date(),
     parentExternalId: null,
   });
   const written = await writeReply(scope, itemId, "Thanks!");

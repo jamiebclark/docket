@@ -57,7 +57,7 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
     publishingPromise,
     section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0 }),
     section("generation jobs", () => runGenerationJobs({ config, tickId, startedAt }), emptyGenerationCounts()),
-    section("housekeeping", () => runHousekeeping(), emptyHousekeepingCounts()),
+    section("housekeeping", () => runHousekeeping(config), emptyHousekeepingCounts()),
     section("webhooks", () => runWebhookDeliveries({ config, tickId, startedAt }), emptyWebhookCounts()),
     section("email", () => runEmailDeliveries({ config, tickId, startedAt }), emptyEmailCounts()),
     section("standing series", () => runStandingSeries({ config, tickId, startedAt }), emptyStandingSeriesCounts()),

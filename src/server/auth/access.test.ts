@@ -20,6 +20,7 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     webhook: ["manage"],
     llm_credential: ["manage"],
     standing_series: ["manage"],
+    engagement: ["view", "reply"],
   },
   admin: {
     project: ["view", "update"],
@@ -36,6 +37,7 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     webhook: ["manage"],
     llm_credential: ["manage"],
     standing_series: ["manage"],
+    engagement: ["view", "reply"],
   },
   editor: {
     project: ["view"],
@@ -46,6 +48,7 @@ const allowed: Record<Role, { [R in Resource]?: readonly string[] }> = {
     post: ["view", "edit", "schedule", "delete"],
     voice: ["view"],
     generation: ["run"],
+    engagement: ["view", "reply"],
   },
 };
 

@@ -9,9 +9,10 @@ import { poolTolerantOfDrops } from "../../setup/test-databases";
 // research.md §2: Drizzle applies every pending migration inside ONE transaction. An existing
 // install migrates from whatever it is already on, never from scratch, so this is the test that
 // would have caught 0031 and is the one that keeps this entry honest: migrate a scratch database
-// to the migration immediately before 0036, commit, then apply every remaining migration
-// (including 0036) inside a single transaction the way Drizzle does, and assert it does not fail
-// with 55P04/42P17.
+// to the migration immediately before this entry's migrations (0036, 0037), commit, then apply
+// every remaining migration (including 0036 and 0037) inside a single transaction the way Drizzle
+// applies any upgrade, and assert it does not fail with 55P04/42P17.
+const ENTRY_MIGRATION_TAGS = ["0036", "0037"];
 
 const DB = `docket_mig0036_${process.pid}_test`;
 const q = (n: string) => `"${n}"`;
@@ -41,17 +42,19 @@ afterAll(async () => {
 });
 
 describe("0036 applies on top of an already-migrated install, not just a fresh one", () => {
-  it("migrates to 0035, commits, then applies 0036 in one transaction with no 55P04/42P17", async () => {
+  it("migrates to 0035, commits, then applies 0036 and 0037 in one transaction with no 55P04/42P17", async () => {
     const journalPath = join(folder, "meta", "_journal.json");
     const journal = JSON.parse(await readFile(journalPath, "utf8")) as { entries: { idx: number; tag: string }[] };
-    const upTo0035 = journal.entries.filter((e) => !e.tag.startsWith("0036"));
-    expect(upTo0035.length, "expected 0036 to be the newest migration").toBe(journal.entries.length - 1);
+    const upTo0035 = journal.entries.filter((e) => !ENTRY_MIGRATION_TAGS.some((tag) => e.tag.startsWith(tag)));
+    expect(upTo0035.length, "expected 0036/0037 to be the newest migrations").toBe(
+      journal.entries.length - ENTRY_MIGRATION_TAGS.length,
+    );
 
     await writeFile(journalPath, JSON.stringify({ ...journal, entries: upTo0035 }));
     await runMigrations(urlFor(DB), folder); // commits: the install is now "already on 0035"
 
-    // Restore the full journal, so the next call sees 0036 as the only pending migration and
-    // applies it the way Drizzle applies any upgrade: in one transaction.
+    // Restore the full journal, so the next call sees 0036 and 0037 as the only pending migrations
+    // and applies them the way Drizzle applies any upgrade: in one transaction.
     await writeFile(journalPath, JSON.stringify(journal));
     await expect(runMigrations(urlFor(DB), folder)).resolves.toBeUndefined();
 

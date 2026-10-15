@@ -9,7 +9,7 @@ export const mockEngagementItemSchema = z.object({
   authorHandle: z.string().nullable().default(null),
   authorExternalId: z.string().nullable().default(null),
   identityStable: z.boolean().default(false),
-  saidAt: z.string().default(() => new Date(0).toISOString()),
+  saidAt: z.string().default(() => new Date().toISOString()),
   parentExternalId: z.string().nullable().default(null),
 });
 export type MockEngagementItem = z.infer<typeof mockEngagementItemSchema>;

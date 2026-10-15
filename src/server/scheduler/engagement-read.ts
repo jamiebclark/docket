@@ -170,11 +170,15 @@ async function processAccount(
   }
 
   const now = await clock.now();
+  const retentionHorizon = new Date(now.getTime() - ctx.cfg.retentionDays * 86_400_000);
   let inserted = 0;
   let newestSaidAt: Date | null = state.lastItemAt;
   await repos.transaction(async (tx) => {
     for (const page of pages) {
       for (const item of page.items) {
+        // Anything a retention pass would have already removed is never stored, so a cursor
+        // restart cannot resurrect and re-notify what retention pruned (data-model.md §10).
+        if (item.saidAt < retentionHorizon) continue;
         const result = await tx.engagementItems.insertIfAbsent({
           socialAccountId: account.id,
           providerKey: account.providerKey,

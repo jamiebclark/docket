@@ -70,10 +70,19 @@ describe("engagement item immutability (FR-009, FR-010)", () => {
     const itemRows = await testDb()
       .select()
       .from(engagementItems)
-      .where(and(eq(engagementItems.socialAccountId, socialAccountId), eq(engagementItems.externalId, "ext-1")));
+      .where(
+        and(
+          eq(engagementItems.projectId, project.id),
+          eq(engagementItems.socialAccountId, socialAccountId),
+          eq(engagementItems.externalId, "ext-1"),
+        ),
+      );
     expect(itemRows).toHaveLength(1);
 
-    const draftRows = await testDb().select().from(engagementDrafts).where(eq(engagementDrafts.engagementItemId, first.id));
+    const draftRows = await testDb()
+      .select()
+      .from(engagementDrafts)
+      .where(and(eq(engagementDrafts.projectId, project.id), eq(engagementDrafts.engagementItemId, first.id)));
     expect(draftRows).toHaveLength(0);
   });
 });

@@ -1,5 +1,5 @@
-import { and, desc, eq, sql } from "drizzle-orm";
-import type { Database } from "../db/client";
+import { and, desc, eq, inArray, isNotNull, lt, notExists, or, sql } from "drizzle-orm";
+import { getDb, type Database } from "../db/client";
 import {
   engagementAccountStates,
   engagementDrafts,
@@ -59,6 +59,8 @@ export interface EngagementItemsRepo {
   countWaiting(): Promise<number>;
   /** How many items newer than this one share the same `parent_external_id` (the "newer comments" edge case). */
   countNewerOnSameParent(parentExternalId: string, saidAt: Date): Promise<number>;
+  /** Account removal (FR-059): a soft delete does not cascade, so this is explicit. Drafts go with their items. */
+  deleteForAccount(socialAccountId: string): Promise<void>;
 }
 
 export function createEngagementItemsRepo(exec: Database, projectId: string): EngagementItemsRepo {
@@ -160,6 +162,9 @@ export function createEngagementItemsRepo(exec: Database, projectId: string): En
         .from(engagementItems)
         .where(and(inProject, eq(engagementItems.parentExternalId, parentExternalId), sql`${engagementItems.saidAt} > ${saidAt}`));
       return row?.n ?? 0;
+    },
+    async deleteForAccount(socialAccountId) {
+      await exec.delete(engagementItems).where(and(inProject, eq(engagementItems.socialAccountId, socialAccountId)));
     },
   };
 }
@@ -286,6 +291,8 @@ export interface EngagementAccountStatesRepo {
   get(socialAccountId: string): Promise<EngagementAccountStateRow | null>;
   setAutoDraft(socialAccountId: string, on: boolean): Promise<void>;
   update(socialAccountId: string, patch: Partial<Omit<EngagementAccountStateRow, "socialAccountId" | "projectId" | "createdAt">>): Promise<void>;
+  /** Account removal (FR-059): a soft delete does not cascade, so this is explicit. */
+  deleteForAccount(socialAccountId: string): Promise<void>;
 }
 
 export function createEngagementAccountStatesRepo(exec: Database, projectId: string): EngagementAccountStatesRepo {
@@ -314,6 +321,9 @@ export function createEngagementAccountStatesRepo(exec: Database, projectId: str
         .set(patch as Record<string, unknown>)
         .where(and(inProject, eq(engagementAccountStates.socialAccountId, socialAccountId)));
     },
+    async deleteForAccount(socialAccountId) {
+      await exec.delete(engagementAccountStates).where(and(inProject, eq(engagementAccountStates.socialAccountId, socialAccountId)));
+    },
   };
 }
 
@@ -340,6 +350,8 @@ export interface EngagementReplyClaimsRepo {
   latest(socialAccountId: string, itemExternalId: string): Promise<EngagementReplyClaimRow | null>;
   /** Claims in `[since, now]` for one account — what the write-budget reserve counts (research.md §8). */
   countInWindow(socialAccountId: string, since: Date): Promise<number>;
+  /** Account removal (FR-059): a soft delete does not cascade, so this is explicit — the one place the ledger is deleted. */
+  deleteForAccount(socialAccountId: string): Promise<void>;
 }
 
 export function createEngagementReplyClaimsRepo(exec: Database, projectId: string): EngagementReplyClaimsRepo {
@@ -376,5 +388,39 @@ export function createEngagementReplyClaimsRepo(exec: Database, projectId: strin
         );
       return row?.n ?? 0;
     },
+    async deleteForAccount(socialAccountId) {
+      await exec.delete(engagementReplyClaims).where(and(inProject, eq(engagementReplyClaims.socialAccountId, socialAccountId)));
+    },
   };
+}
+
+/**
+ * Deletes items (and, by cascade, their drafts) that are either withdrawn, regardless of age, or
+ * past `before` with no `needs_review` draft and no unresolved `ambiguous` send (data-model.md §10).
+ * One bounded batch, cross-project — the ledger is never touched.
+ */
+export async function pruneEngagementItemsBefore(before: Date, limit: number): Promise<number> {
+  const db = getDb();
+  const blocked = notExists(
+    db
+      .select({ one: sql`1` })
+      .from(engagementDrafts)
+      .where(
+        and(
+          eq(engagementDrafts.engagementItemId, engagementItems.id),
+          or(eq(engagementDrafts.reviewState, "needs_review"), eq(engagementDrafts.sendState, "ambiguous")),
+        ),
+      ),
+  );
+  const ids = await db
+    .select({ id: engagementItems.id })
+    .from(engagementItems)
+    .where(or(isNotNull(engagementItems.withdrawnAt), and(lt(engagementItems.saidAt, before), blocked)))
+    .limit(limit);
+  if (ids.length === 0) return 0;
+  const gone = await db
+    .delete(engagementItems)
+    .where(inArray(engagementItems.id, ids.map((r) => r.id)))
+    .returning({ id: engagementItems.id });
+  return gone.length;
 }

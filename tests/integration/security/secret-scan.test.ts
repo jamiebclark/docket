@@ -47,6 +47,12 @@ import ApiKeysPage from "../../../src/app/p/[projectSlug]/settings/api-keys/page
 import MembersPage from "../../../src/app/p/[projectSlug]/settings/members/page";
 import WebhooksPage from "../../../src/app/p/[projectSlug]/settings/webhooks/page";
 import FailuresPage from "../../../src/app/p/[projectSlug]/failures/page";
+import InboxPage from "../../../src/app/p/[projectSlug]/inbox/page";
+import InboxItemPage from "../../../src/app/p/[projectSlug]/inbox/[itemId]/page";
+import ReviewPage from "../../../src/app/p/[projectSlug]/review/page";
+import { requestDraft, writeReply } from "../../../src/server/services/engagement/draft";
+import { approveReply } from "../../../src/server/services/engagement/review";
+import { listInbox } from "../../../src/server/services/engagement/inbox";
 import { POST as composeCheck } from "../../../src/app/p/[projectSlug]/compose/check/route";
 import { GET as authGet, POST as authPost } from "../../../src/app/api/auth/[...all]/route";
 import { GET as health } from "../../../src/app/api/health/route";
@@ -79,6 +85,7 @@ import * as connect from "../../../src/server/services/connect";
 import { generateSingle } from "../../../src/server/services/generation/single";
 import { createJob } from "../../../src/server/services/jobs";
 import * as posts from "../../../src/server/services/posts";
+import * as projectsService from "../../../src/server/services/projects";
 import * as setup from "../../../src/server/services/setup";
 import * as slots from "../../../src/server/services/slots";
 import * as invitations from "../../../src/server/services/invitations";
@@ -88,7 +95,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { api } from "../../helpers/api";
 import { POST as mcpPost } from "../../../src/app/api/mcp/route";
 import { closeDb, testDb } from "../../helpers/db";
-import { addMember, csvBuilder } from "../../helpers/factories";
+import { addMember, csvBuilder, createVoiceProfile } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
@@ -421,6 +428,54 @@ describe("secret scan (FR-020, SC-005)", () => {
     const currentHeaders = [...current.headers.entries()].map(([k, v]) => `${k}: ${v}`).join("\n");
     pieces.push({ place: "GET /api/auth/get-session (signed in)", text: `${current.status}\n${currentHeaders}\n${JSON.stringify(currentBody)}` });
 
+    // Engagement (077): inbound items through the mock provider, a person-authored draft left pending,
+    // a model-authored draft (through the real prompt-building path) approved and sent to an ambiguous
+    // outcome, and a direct message — all rendered below on the inbox, item, review and failures pages
+    // (FR-062, SC-013).
+    await projectsService.updateSettings(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      scope as any,
+      {
+        name: env.project.name,
+        slug: env.project.slug,
+        timezone: env.project.timezone,
+        defaultApprovalPolicy: "review_required",
+        defaultSchedulingPolicy: "leave_as_draft",
+        confirmUnreviewedQueue: false,
+        tagline: "Fresh bread daily",
+        description: "A neighbourhood bakery.",
+        websiteUrl: "https://scan.example",
+      },
+    );
+    await createVoiceProfile(env.project.id, { content: { voiceAndTone: "Warm and plain." } });
+    await accounts.connectMock(scope, {
+      displayName: "Scan Inbox",
+      settings: {
+        engagementSendBehaviour: "ambiguous",
+        engagementItems: [
+          { kind: "reply", externalId: "scan-eng-1", text: "Love this bakery!", authorHandle: "ada", authorDisplayName: "Ada" },
+          { kind: "reply", externalId: "scan-eng-2", text: "Great post!", authorHandle: "bea", authorDisplayName: "Bea" },
+          { kind: "direct_message", externalId: "scan-eng-dm", text: "Can you ship internationally?", authorHandle: "cam" },
+        ],
+      },
+    });
+    await runTick({ config: { engagementReadMinIntervalMs: 0 } });
+    const engagementList = await listInbox(scope);
+    const item1 = engagementList.items.find((i) => i.externalId === "scan-eng-1")!;
+    const item2 = engagementList.items.find((i) => i.externalId === "scan-eng-2")!;
+    const written1 = await writeReply(scope, item1.id, "Thanks so much for the kind words!");
+    if (!written1.ok) throw new Error("unreachable");
+    pieces.push({ place: "service result: engagement draft (person)", text: JSON.stringify(written1) });
+
+    setLlmForTests(createFakeLlm([{ ok: { text: "Thanks for stopping by!" } }]));
+    const drafted2 = await requestDraft(scope, item2.id);
+    setLlmForTests(null);
+    if (!drafted2.ok) throw new Error("unreachable");
+    pieces.push({ place: "service result: engagement draft (model)", text: JSON.stringify(drafted2) });
+    const approved2 = await approveReply(scope, drafted2.draftId);
+    expect(approved2.ok).toBe(true);
+    await runTick({ config: { engagementReadMinIntervalMs: 0 } }); // engagement-send: item2 -> ambiguous
+
     // Rendered pages.
     const params = { params: Promise.resolve({ projectSlug: slug }) };
     const pages: [string, () => Promise<unknown>][] = [
@@ -429,6 +484,9 @@ describe("secret scan (FR-020, SC-005)", () => {
       ["page: webhooks", () => WebhooksPage(params)],
       ["page: members", () => MembersPage(params)],
       ["page: failures", () => FailuresPage({ ...params, searchParams: Promise.resolve({}) })],
+      ["page: inbox", () => InboxPage({ ...params, searchParams: Promise.resolve({}) })],
+      ["page: inbox item", () => InboxItemPage({ params: Promise.resolve({ projectSlug: slug, itemId: item1.id }) })],
+      ["page: review", () => ReviewPage({ ...params, searchParams: Promise.resolve({}) })],
     ];
     for (const [place, render] of pages) {
       pieces.push({ place, text: renderToStaticMarkup((await render()) as never) });

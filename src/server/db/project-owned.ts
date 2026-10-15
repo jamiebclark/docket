@@ -49,6 +49,10 @@ export const projectOwnedTables = [
   { table: "notification_event_marks", scopeColumn: "project_id" },
   { table: "notification_preferences", scopeColumn: "project_id" },
   { table: "email_project_state", scopeColumn: "project_id" },
+  { table: "engagement_items", scopeColumn: "project_id" },
+  { table: "engagement_drafts", scopeColumn: "project_id" },
+  { table: "engagement_reply_claims", scopeColumn: "project_id" },
+  { table: "engagement_account_states", scopeColumn: "project_id" },
 ] as const satisfies readonly ProjectOwnedTable[];
 
 export const notProjectOwned = [
