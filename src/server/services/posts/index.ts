@@ -337,6 +337,47 @@ export async function updatePost(scope: ProjectScope, postId: string, patchInput
   return updated;
 }
 
+const textPatchSchema = z
+  .object({
+    baseText: baseTextSchema.optional(),
+    /** Per-account text, keyed by account id. An account not listed keeps the text it has. */
+    overrides: z.record(uuid, baseTextSchema.nullable()).optional(),
+    mediaIds: z.array(uuid).max(POST_MEDIA_MAX, { error: "Too many images" }).optional(),
+  })
+  .refine((b) => b.baseText !== undefined || b.overrides !== undefined || b.mediaIds !== undefined, {
+    error: "Pass at least one of baseText, overrides or mediaIds",
+  });
+
+/**
+ * Changes a post's text in place and leaves everything else alone.
+ *
+ * `updatePost` takes the whole desired target set: a target missing from it is cancelled, and a target
+ * given without `overrideText` loses the text it had. That makes it wrong for a partial edit, so this
+ * reads the live targets first and re-sends each one — with its new text where `overrides` names its
+ * account, and the stored text everywhere else. Post type, posting fields and schedule are untouched.
+ *
+ * Unlike `updatePostVariants` this does not skip scheduled targets: editing the text of an already
+ * scheduled post is the point. `updatePost` still refuses once publishing has started.
+ */
+export async function updatePostText(scope: ProjectScope, postId: string, input: unknown): Promise<PostDetail> {
+  const id = uuid.parse(postId);
+  const patch = textPatchSchema.parse(input);
+  need(scope, { post: ["edit"] });
+  const live = (await scope.targets.listForPost(id)).filter((t) => t.status !== "cancelled");
+  const unknownAccount = Object.keys(patch.overrides ?? {}).find(
+    (accountId) => !live.some((t) => t.socialAccountId === accountId),
+  );
+  if (unknownAccount) throw new NotFoundError();
+  return updatePost(scope, id, {
+    ...(patch.baseText !== undefined ? { baseText: patch.baseText } : {}),
+    ...(patch.mediaIds !== undefined ? { mediaIds: patch.mediaIds } : {}),
+    targets: live.map((t) => ({
+      accountId: t.socialAccountId,
+      overrideText: patch.overrides?.[t.socialAccountId] !== undefined ? patch.overrides[t.socialAccountId] : t.overrideText,
+    })),
+  });
+}
+
 const variantEditsSchema = z.object({
   edits: z
     .array(z.object({ accountIds: z.array(z.uuid()).min(1).max(50), text: baseTextSchema }))
@@ -347,21 +388,34 @@ const variantEditsSchema = z.object({
 /**
  * Sets the text of every live (draft) target of the listed accounts, through `updatePost`. Scheduled targets
  * keep their text. The returned problems are the blocking issues left on those targets.
+ *
+ * `skipped` names the accounts whose text was asked for but not changed because the target had moved past
+ * draft. The caller must say so: silently reporting a save that did not happen is how an edit gets lost.
+ * To edit a scheduled post's text on purpose, use `updatePostText`.
  */
 export async function updatePostVariants(
   scope: ProjectScope,
   postId: string,
   input: unknown,
-): Promise<{ detail: PostDetail; problems: { accountIds: string[]; targetId: string; issues: ValidationIssue[] }[] }> {
+): Promise<{
+  detail: PostDetail;
+  problems: { accountIds: string[]; targetId: string; issues: ValidationIssue[] }[];
+  skipped: { accountId: string; status: string }[];
+}> {
   const id = uuid.parse(postId);
   const { edits } = variantEditsSchema.parse(input);
   need(scope, { post: ["edit"] });
   const edit = new Map<string, { text: string; accountIds: string[] }>();
   for (const e of edits) for (const accountId of e.accountIds) edit.set(accountId, e);
   const current = (await scope.targets.listForPost(id)).filter((t) => t.status !== "cancelled");
+  const skipped: { accountId: string; status: string }[] = [];
   const detail = await updatePost(scope, id, {
     targets: current.map((t) => {
-      const text = t.status === "draft" ? edit.get(t.socialAccountId)?.text : undefined;
+      const wanted = edit.get(t.socialAccountId);
+      if (wanted && t.status !== "draft" && wanted.text !== (t.overrideText ?? "")) {
+        skipped.push({ accountId: t.socialAccountId, status: t.status });
+      }
+      const text = t.status === "draft" ? wanted?.text : undefined;
       return { accountId: t.socialAccountId, overrideText: text ?? t.overrideText };
     }),
   });
@@ -373,7 +427,7 @@ export async function updatePostVariants(
     const edited = accountId ? edit.get(accountId) : undefined;
     if (edited && issues.length > 0) problems.push({ accountIds: edited.accountIds, targetId: r.targetId, issues });
   }
-  return { detail, problems };
+  return { detail, problems, skipped };
 }
 
 export async function setReviewState(scope: ProjectScope, postId: string, state: unknown): Promise<void> {

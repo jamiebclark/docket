@@ -123,11 +123,15 @@ export function SegmentedControl({
           );
         })}
       </div>
-      {error ? (
-        <p id={errorId} aria-live="polite" className={errorStyles}>
-          {error}
-        </p>
-      ) : null}
+      {/*
+        Always rendered, like `Field`: the live region has to exist before the error text lands in it,
+        and `errorStyles` reserves the line so the control keeps its height either way. Rendering it
+        only on error also made this shorter than a `Field` beside it, which is what tipped the two
+        out of line in an `items-end` row.
+      */}
+      <p id={errorId} aria-live="polite" className={errorStyles}>
+        {error ?? ""}
+      </p>
     </fieldset>
   );
 }

@@ -66,7 +66,18 @@ export function VariantEditor({ slug, postId, cards, mediaIds, canEdit, reviewin
         edits: editsFor(live),
       });
       if (!r.ok) return setMessage(`Error: ${r.message}`);
-      setMessage(r.data.problems.length > 0 ? "Saved. Some versions still have problems." : "Saved.");
+      // A target past draft keeps its text, so saying "Saved" alone would claim an edit that did not happen.
+      const skipped = r.data.skipped.length;
+      setMessage(
+        [
+          skipped > 0
+            ? `Saved, but ${skipped === 1 ? "one version was" : `${skipped} versions were`} left alone: already scheduled. Edit those from the post itself.`
+            : "Saved.",
+          r.data.problems.length > 0 ? "Some versions still have problems." : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
       router.refresh();
     });
   }
