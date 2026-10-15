@@ -3378,3 +3378,35 @@ Pages, which fails the domain test).
   refusal to start — these are cosmetic.
 - **`PINTEREST_DOMAIN_VERIFY`** emits `<meta name="p:domain_verify">` so the operator can claim the website on the
   business account that owns the app.
+
+## Migrations: never compare a column to an enum label added in the same batch (2026-10-15)
+
+A deployment at migration 0029 could not start: `prestart` reported "database migration failed" and
+nothing else, over and over, while a fresh install of the same image worked perfectly.
+
+The cause is a Postgres rule meeting a Drizzle behaviour. `drizzle-orm/pg-core/dialect.js` wraps
+**every pending migration in a single transaction** — not one transaction per file — and Postgres
+refuses to use an enum label added by `ALTER TYPE ... ADD VALUE` until the adding transaction has
+committed (`55P04 unsafe use of new value`). Migration 0030 adds `'date'` to
+`standing_series_period`; 0031 then used that label in two CHECK constraints. Splitting them across
+files looks like it should work and does not, because they share a transaction.
+
+A fresh database is exempt: Postgres permits using a new label when the type was *created* in the
+same transaction, which 0029 does when everything replays from empty. So CI — which only ever
+migrates from scratch — stayed green while every existing install broke on upgrade. The bug is
+invisible to the one path CI tests.
+
+**The rule:** a migration must never compare a column to an enum label introduced by `ADD VALUE`
+unless the comparison casts the column to text first — `"col"::text <> 'label'`. Measured against
+Postgres 17: the bare comparison fails with 55P04, both `::text` and listing only pre-existing
+labels succeed. `::text` is preferred; an `IN ('day','week','month')` list silently needs editing
+every time a label is added.
+
+Fixed by casting in `src/server/db/schema/standing-series.ts`, correcting 0031 in place (it had
+never applied anywhere, so no install carried its old form), and generating 0035 so installs that
+*had* applied the original — fresh ones, including CI — are moved to the cast form too.
+`tests/integration/db/enum-value-in-batch.test.ts` guards both the migrations and the schema source.
+
+Worth knowing for the future: the gap is that nothing tests an **upgrade** from a committed older
+schema. A test that commits through migration N and then applies the rest in one transaction would
+have caught this before release; it is not built yet.
