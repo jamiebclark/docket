@@ -285,30 +285,30 @@ composer does.
 **Purpose**: The remaining spec edge cases, the governance records, and the SC-009 "nothing else
 changed" proof.
 
-- [ ] T050 [P] Add the remaining edge-case tests to `tests/integration/instagram/stories.test.ts`: the
+- [X] T050 [P] Add the remaining edge-case tests to `tests/integration/instagram/stories.test.ts`: the
   publishing allowance exhausted (deferred, not failed, never published twice), the run-time quota full
   (`retryable_error`, `notBefore = +1 h`), container reported `PUBLISHED` (ends `ambiguous`, never
   retried), container expiry (recreated and republished within `MAX_RECREATIONS`, fails past the cap),
   media Instagram cannot process (`fatal_error` with Instagram's detail, no token leaked), and killed
   mid-run (state survives, next tick resumes at the right step, never recreates a finished container)
   (spec Edge Cases; quickstart.md Scenario 4).
-- [ ] T051 [P] Add the "media stops being a single asset" edge case: a second image added to a story
+- [X] T051 [P] Add the "media stops being a single asset" edge case: a second image added to a story
   target publishes as a carousel, `TargetCheck.postType` reads `carousel`, and `chosen_post_type` stays
   `story` in the database (FR-024; quickstart.md Scenario 4).
-- [ ] T052 [P] Add the "9:16 image accepted for a Story, refused for a feed post" case across
+- [X] T052 [P] Add the "9:16 image accepted for a Story, refused for a feed post" case across
   `src/providers/instagram/validate.test.ts` and the generated limits rows, using the same asset with
   `chosenPostType: "story"` then `"image"` (FR-016, SC-007; quickstart.md Scenario 1 step 4).
-- [ ] T053 [P] Add the SC-009 regression proof: a test asserting two `MediaConstraints` differing only
+- [X] T053 [P] Add the SC-009 regression proof: a test asserting two `MediaConstraints` differing only
   in aspect bounds share one `constraintsHash` (K8), and that a Story and a feed post resolve to the
   same variant row for the same asset (quickstart.md Scenario 5).
-- [ ] T054 [P] Add the `docs/decisions.md` entry `## 078 - Instagram Stories (2026-10-16)` covering D1,
+- [X] T054 [P] Add the `docs/decisions.md` entry `## 078 - Instagram Stories (2026-10-16)` covering D1,
   D2, D3 (citing entry 072's "No hard aspect range" precedent for K12), K1, K5/K6, K8, K11, K16, and the
   constitution amendment (contracts/records.md N4; FR-029).
-- [ ] T055 Amend `.specify/memory/constitution.md`'s Engineering Constraints line so stories are out of
+- [X] T055 Amend `.specify/memory/constitution.md`'s Engineering Constraints line so stories are out of
   scope except Instagram Stories (078); Facebook Page Stories stay out of scope. Commit as
   `docs(constitution):` with a version bump 1.4.0 -> 1.5.0 and "Last Amended" set to 2026-10-16
   (contracts/records.md N6).
-- [ ] T056 Run `pnpm lint && pnpm typecheck && pnpm test` and confirm the full suite is green, including
+- [X] T056 Run `pnpm lint && pnpm typecheck && pnpm test` and confirm the full suite is green, including
   `tests/integration/docs/limits-inventory.test.ts` and `tests/integration/docs/provider-guide.test.ts`
   (quickstart.md "Expected outcome").
 
