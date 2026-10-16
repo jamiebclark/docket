@@ -9,10 +9,13 @@ import { poolTolerantOfDrops } from "../../setup/test-databases";
 // research.md §2: Drizzle applies every pending migration inside ONE transaction. An existing
 // install migrates from whatever it is already on, never from scratch, so this is the test that
 // would have caught 0031 and is the one that keeps this entry honest: migrate a scratch database
-// to the migration immediately before this entry's migrations (0036, 0037), commit, then apply
-// every remaining migration (including 0036 and 0037) inside a single transaction the way Drizzle
+// to the migration immediately before this entry's migrations (0036-0039), commit, then apply
+// every remaining migration (including 0036-0039) inside a single transaction the way Drizzle
 // applies any upgrade, and assert it does not fail with 55P04/42P17.
-const ENTRY_MIGRATION_TAGS = ["0036", "0037"];
+// Every migration this entry adds, including the ones its review remediation added later.
+// Leaving a later tag out of this list silently moves it into the "already migrated" half, where
+// it runs before the table it alters exists.
+const ENTRY_MIGRATION_TAGS = ["0036", "0037", "0038", "0039"];
 
 const DB = `docket_mig0036_${process.pid}_test`;
 const q = (n: string) => `"${n}"`;
@@ -42,11 +45,11 @@ afterAll(async () => {
 });
 
 describe("0036 applies on top of an already-migrated install, not just a fresh one", () => {
-  it("migrates to 0035, commits, then applies 0036 and 0037 in one transaction with no 55P04/42P17", async () => {
+  it("migrates to 0035, commits, then applies 0036-0039 in one transaction with no 55P04/42P17", async () => {
     const journalPath = join(folder, "meta", "_journal.json");
     const journal = JSON.parse(await readFile(journalPath, "utf8")) as { entries: { idx: number; tag: string }[] };
     const upTo0035 = journal.entries.filter((e) => !ENTRY_MIGRATION_TAGS.some((tag) => e.tag.startsWith(tag)));
-    expect(upTo0035.length, "expected 0036/0037 to be the newest migrations").toBe(
+    expect(upTo0035.length, "expected 0036-0039 to be the newest migrations").toBe(
       journal.entries.length - ENTRY_MIGRATION_TAGS.length,
     );
 
