@@ -275,6 +275,7 @@ Gaps found when each provider's declared limits were read against `docs/research
 - **Instagram publish limit** is 50 per 24 h, not 100: Meta's documents contradict each other, and 50 is the safer reading and the `content_publishing_limit` value. Docket still reads the run-time quota too. Meta's cap of 400 containers per 24 h is modelled separately as the `creation allowance`.
 - **Meta error codes 80001 and 80002** are already in the rate-limited set.
 - **Bluesky alt text** has no documented maximum, so none is declared.
+- **Facebook alt text** is sent as `alt_text_custom` on each `/photos` request (single image and every carousel item), and like Bluesky's it declares no maximum: the photos reference states none (`docs/research/meta.md`, "Alt text", limit UNVERIFIED). It was stored but never sent until 2026-10-15, which made every Facebook image publish without a description.
 - **Facebook text length and image count** are UNVERIFIED: Meta documents neither (checked 2026-10-07). They are enforced as declared and are the only UNVERIFIED rows.
 - **Bluesky login rate** is not a capability; it is met by never logging in at publish time (FR-019).
 - **Publish-time re-validation** was missing before G15 (research F15) and is now in the engine.
