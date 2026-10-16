@@ -54,3 +54,5 @@ specs/*/.pipeline/
 
 # local HTTPS certificates (pnpm dev:https)
 certificates/
+
+.docket.env
