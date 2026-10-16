@@ -111,3 +111,22 @@ is modelled as a declared inbound kind and shown as Private wherever it appears
 Every platform above remains blocked for DMs until one of them commits a DM
 research section here with a confirmed verdict (constitution I); building real
 reading, drafting or sending for any platform is out of scope until then.
+
+## Phase 9 human task (T083, T084) — unachievable by the implement pipeline
+
+T083 and T084 need a second person to comment, a live Meta Business app on
+Standard Access, a real Facebook Page, a real Instagram Business account, a
+real Threads account, and a browser session to read the comment back through
+each platform's API. The implement pipeline runs headless, with no browser,
+no live Meta app credentials and no second person to act as commenter — none
+of the resources T083 names are available to it. Per `tasks.md`'s own
+instruction for this task ("if the window to run this closes before anyone
+does, mark this task ... as unachievable and state why, rather than leaving
+it silently open"), this is recorded here as unachievable by this pipeline
+run. T084 depends on T083 and is unachievable for the same reason until a
+person with those resources runs T083 live and records confirmed verdicts
+above.
+
+This does not block anything already built: Phases 1–8 and the §2 table
+above already treat Meta identity as unverified and gate US4's real Meta
+surfaces on this task, exactly as the spec requires.
