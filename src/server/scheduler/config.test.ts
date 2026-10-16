@@ -123,8 +123,8 @@ describe("engagement env vars", () => {
 });
 
 describe("engagement time share", () => {
-  it("defaults to half the tick budget, so engagement cannot work to the tick deadline", () => {
-    expect(engagementConfig(base).timeBudgetMs).toBe(10_000);
+  it("defaults to a share of the tick budget, so engagement cannot work to the tick deadline", () => {
+    expect(engagementConfig(base).timeBudgetMs).toBe(16_000);
   });
 
   it("honours an explicit share", () => {

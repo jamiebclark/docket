@@ -144,7 +144,7 @@ export const ENGAGEMENT_DEFAULTS = {
   readMinIntervalMs: 60_000,
   sendsPerTick: 5,
   writeReserve: 0.25,
-  timeShare: 0.5,
+  timeShare: 0.8,
   pruneBatch: 200,
 } as const;
 
