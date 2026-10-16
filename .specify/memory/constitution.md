@@ -77,7 +77,8 @@ Env vars are validated at startup with Zod and documented in `.env.example`.
   empty and error states. Server components by default; client components only
   for interactivity. Follow the `docket-ui` skill for UI work.
 - Out of scope until a spec says otherwise: video, stories, reels, analytics,
-  inbox/comments, other platforms, billing, public sign-up, Netlify.
+  other platforms, billing, public sign-up, Netlify. Inbox/comments shipped in
+  077 (Bluesky only); see `docs/engagement.md`.
 
 ## Development Workflow
 
@@ -143,4 +144,4 @@ on product behaviour; `docs/research/` wins on external facts. Amendments are
 made by editing this file in a `docs(constitution):` commit with a version
 bump.
 
-**Version**: 1.4.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
+**Version**: 1.5.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-15

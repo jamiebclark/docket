@@ -9,10 +9,22 @@ export const ACTIVITY_KINDS = [
   "target_resolved",
   "account_needs_reauth",
   "account_connect_failed",
+  "engagement_received",
+  "engagement_replied",
+  "engagement_ambiguous",
 ] as const;
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 
-export const ACTIVITY_OUTCOMES = ["published", "failed", "ambiguous", "retrying", "resolved", "needs_reauth", "connect_failed"] as const;
+export const ACTIVITY_OUTCOMES = [
+  "published",
+  "failed",
+  "ambiguous",
+  "retrying",
+  "resolved",
+  "needs_reauth",
+  "connect_failed",
+  "engagement",
+] as const;
 export type ActivityOutcome = (typeof ACTIVITY_OUTCOMES)[number];
 
 export const KIND_OUTCOME: Record<ActivityKind, ActivityOutcome> = {
@@ -23,6 +35,9 @@ export const KIND_OUTCOME: Record<ActivityKind, ActivityOutcome> = {
   target_resolved: "resolved",
   account_needs_reauth: "needs_reauth",
   account_connect_failed: "connect_failed",
+  engagement_received: "engagement",
+  engagement_replied: "published",
+  engagement_ambiguous: "ambiguous",
 };
 
 export const OUTCOME_LABEL: Record<ActivityOutcome, string> = {
@@ -33,6 +48,7 @@ export const OUTCOME_LABEL: Record<ActivityOutcome, string> = {
   resolved: "Resolved",
   needs_reauth: "Needs reconnecting",
   connect_failed: "Connect failed",
+  engagement: "New replies",
 };
 
 export type ActivityTone = "success" | "danger" | "warning" | "info" | "neutral";
@@ -45,6 +61,7 @@ export const OUTCOME_TONE: Record<ActivityOutcome, ActivityTone> = {
   resolved: "neutral",
   needs_reauth: "danger",
   connect_failed: "danger",
+  engagement: "info",
 };
 
 export const SUCCESS_OUTCOMES: readonly ActivityOutcome[] = ["published"];

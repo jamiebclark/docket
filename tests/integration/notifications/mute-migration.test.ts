@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
@@ -129,6 +129,16 @@ describe("0021 per-kind and per-platform notification preferences migration", ()
     const after = (await pool.query(`select project_id, user_id, seen_seq, seen_at from notification_states order by user_id`)).rows;
     expect(after).toEqual(before.map((r) => ({ project_id: r.project_id, user_id: r.user_id, seen_seq: r.seen_seq, seen_at: r.seen_at })));
     expect(await marksBefore()).toEqual(marksBeforeRows);
+
+    // The DAL's queries are built from the current, ever-growing attention vocabulary (e.g.
+    // ATTENTION_MEMBER_OUTCOMES), not from migration 0021's. Catching this scratch database up to
+    // every later migration — applied raw, since drizzle's own tracking table never saw 0021 run —
+    // keeps the later tests in this file exercising real `unreadCount`/`setSwitches` queries against
+    // a schema that actually has every label those queries can name.
+    const files = (await readdir(folder))
+      .filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) > 21)
+      .sort();
+    for (const file of files) await pool.query(await readFile(join(folder, file), "utf8"));
   });
 
   it("turns every muted row into all four kinds off", async () => {

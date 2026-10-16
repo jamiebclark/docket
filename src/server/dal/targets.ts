@@ -95,6 +95,8 @@ export interface TargetsRepo {
   effectiveContent(targetId: string): Promise<EffectiveContent | null>;
   /** Targets of the account still in play (`draft`, `scheduled`, `publishing`), ordered by id. */
   listOpenForAccount(accountId: string): Promise<TargetRecord[]>;
+  /** The target of this account whose own publish `external_id` matches — engagement ingest's parent resolution. */
+  getByExternalId(accountId: string, externalId: string): Promise<TargetRecord | null>;
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -321,6 +323,20 @@ export function createTargetsRepo(db: Database, projectId: string): TargetsRepo 
           ),
         )
         .orderBy(asc(postTargets.id));
+    },
+    async getByExternalId(accountId, externalId) {
+      const [row] = await db
+        .select()
+        .from(postTargets)
+        .where(
+          and(
+            eq(postTargets.projectId, projectId),
+            eq(postTargets.socialAccountId, accountId),
+            eq(postTargets.externalId, externalId),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
     },
     async effectiveContent(targetId) {
       const [head] = await db

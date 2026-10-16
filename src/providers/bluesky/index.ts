@@ -1,5 +1,6 @@
 import type { SocialProvider, StepResult } from "../types";
 import { BLUESKY_VIDEO_ALLOWANCE, blueskyCapabilities } from "./capabilities";
+import { blueskyEngagement } from "./engagement";
 import { advance } from "./publish";
 import { connectAccount, needsRefresh, refreshCredentials } from "./session";
 import { BLUESKY_DEFAULT_PUBLISH_LIMITS, DEFAULT_PDS_URL, blueskySettingsSchema, type BlueskySettings, type BlueskyState } from "./settings";
@@ -39,4 +40,5 @@ export const blueskyProvider: SocialProvider<BlueskySettings, BlueskyState> = {
   validate: validateBluesky,
   stepFor: (state, _settings, content) => stepForContent(state, content),
   advance: (ctx) => advance(ctx) as Promise<StepResult>,
+  engagement: blueskyEngagement,
 };

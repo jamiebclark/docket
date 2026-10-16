@@ -68,6 +68,13 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
           and a record of which member did what in each project.
         </li>
         <li>
+          <strong>Inbound comments, mentions and replies, for connected accounts where this is supported
+          (currently Bluesky only):</strong> the comment&apos;s text, who said it (the identifier the platform
+          gives), and when, so a member can see it in context and reply to it. Kept for 90 days by default (an
+          operator can change this), then deleted along with any reply drafted for it, unless a reply is still
+          waiting for a decision.
+        </li>
+        <li>
           <strong>Sign-in details for members of this installation:</strong> name, email address and a password
           hash; for each signed-in session, the IP address and browser it was opened from. Cookies are used only to
           keep you signed in and to remember the last project you opened.
@@ -130,7 +137,8 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
       <>
         <p>
           Disconnecting a social account in Docket deletes its stored credentials from this installation. Deleting a
-          project or a post deletes its content. The operator can also delete the database outright; nothing survives
+          project or a post deletes its content. Removing a connected account from a project deletes its inbound
+          comments and message data too. The operator can also delete the database outright; nothing survives
           elsewhere, because nothing was sent elsewhere.
         </p>
         <p>

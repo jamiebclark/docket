@@ -291,6 +291,22 @@ export function claimRefreshAccounts(opts: ClaimRefreshOptions): Promise<Claimed
   });
 }
 
+/** Targets of the account whose `publish_started_at` is later than `since` (the engagement write-budget reserve, research.md §8). */
+export async function writesStartedSince(projectId: string, accountId: string, since: Date): Promise<Date[]> {
+  const started = await getDb()
+    .select({ at: postTargets.publishStartedAt })
+    .from(postTargets)
+    .where(
+      and(
+        eq(postTargets.projectId, projectId),
+        eq(postTargets.socialAccountId, accountId),
+        isNotNull(postTargets.publishStartedAt),
+        gt(postTargets.publishStartedAt, since),
+      ),
+    );
+  return started.map((s) => s.at!);
+}
+
 /** Repositories pinned to one project with no membership (FR-008). */
 export function forSchedulerProject(projectId: string) {
   const build = (exec: Database) => ({ projectId, ...createSchedulingRepos(exec, projectId) });

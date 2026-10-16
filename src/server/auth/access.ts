@@ -15,6 +15,7 @@ export const statements = {
   webhook: ["manage"],
   llm_credential: ["manage"],
   standing_series: ["manage"],
+  engagement: ["view", "reply"],
 } as const;
 
 export const ac = createAccessControl(statements);
@@ -34,6 +35,7 @@ export const owner = ac.newRole({
   webhook: ["manage"],
   llm_credential: ["manage"],
   standing_series: ["manage"],
+  engagement: ["view", "reply"],
 });
 
 export const admin = ac.newRole({
@@ -51,6 +53,7 @@ export const admin = ac.newRole({
   webhook: ["manage"],
   llm_credential: ["manage"],
   standing_series: ["manage"],
+  engagement: ["view", "reply"],
 });
 
 export const editor = ac.newRole({
@@ -62,6 +65,7 @@ export const editor = ac.newRole({
   post: ["view", "edit", "schedule", "delete"],
   voice: ["view"],
   generation: ["run"],
+  engagement: ["view", "reply"],
 });
 
 export const roles = { owner, admin, editor } as const;

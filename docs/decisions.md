@@ -3411,3 +3411,100 @@ never applied anywhere, so no install carried its old form), and generating 0035
 Worth knowing for the future: the gap is that nothing tests an **upgrade** from a committed older
 schema. A test that commits through migration N and then applies the rest in one transaction would
 have caught this before release; it is not built yet.
+
+## Engagement inbox: Bluesky identity is settled, Meta identity is not, DMs are sequenced not cut (2026-10-15)
+
+`docs/research/engagement.md` records, from the installed `@atproto/api` generated types, that a
+Bluesky commenter carries a stable identifier (`did`), a handle and usually a display name — so the
+identity question that makes a "recognisable person" risky is already answered for Bluesky, with no
+human task needed. US2/US3 build on that directly.
+
+For Meta (Facebook Page comments, Instagram comments, Threads replies), every FR-001 question —
+read endpoint, required permission and whether it's inside Standard Access, commenter identity
+shape, identifier stability, reply capability, pagination, read rate limits — is **unverified**.
+`docs/research/meta.md` documents publishing only; nothing in it names a comment-read endpoint or a
+commenter identity shape. **Consequence:** no Meta engagement surface is built in this entry. US4 is
+blocked on a human task (a live Standard Access app, a real Page, a real Instagram Business account,
+a real Threads account, a second person to comment, and a browser), scheduled last in `tasks.md` so
+an unrunnable task placed early does not starve the implement loop. No code anywhere in this entry
+may display a Meta commenter identity field that isn't traceable to a confirmed verdict (FR-005).
+
+Direct messages are **not cut from the spec** — US5 stays specified — but no platform's DM facts
+exist for any platform in scope, so DM reading, drafting and sending are sequenced out of this entry
+entirely rather than built on a guess.
+
+## Engagement inbox: the send ledger is an insert-only claim, not a mutable status (2026-10-15)
+
+A send recorded "durably at the moment of the send" (so a crash between sending and recording cannot
+double-send) and an ambiguous send that a person can later unstick both need to be true at once. An
+insert-only row that also carries the outcome cannot do both: making it mutable would contradict
+"never updated, never deleted" and lose the history of a released attempt. The ledger
+(`engagement_reply_claims`) is instead a **claim written before the provider call, in its own
+committed transaction**, keyed `(project_id, social_account_id, item_external_id, generation)`.
+Generation 1 is the first attempt; a concurrent second attempt collides on the key and is refused by
+the record, not by timing. The *outcome* lives on the draft row, never on the ledger. A higher
+generation may only be inserted with a stated reason — `definite_failure` (the platform refused
+definitively, nothing was sent) or `member_decision` (a person on Failures records that an ambiguous
+attempt never arrived) — enforced by a CHECK. Keying on the platform's identifier rather than the
+item row is what lets retention delete an inbound item without losing the fact that it was already
+answered.
+
+## Engagement inbox: one notification per read batch, not per item (2026-10-15)
+
+New inbound items raise attention through the existing activity-event mechanism, but a per-item event
+would have to carry something identifying the item — and the message would be tempting to fill with
+the commenter's own words, which the activity log cannot carry (it feeds notification emails that
+leave the installation). A batch is also the unit a person actually acts on ("I have looked at the
+inbox"), and a popular post would otherwise bury every publishing failure under hundreds of events
+and peg the unread count at its cap. So exactly one `engagement_received` event is written per account
+per read run, `details: { items: n }`, counting only newly inserted rows in the same transaction as
+the insert — a re-read contributes nothing and names no third party.
+
+## Engagement inbox: the reply prompt sits beside the post generator, not inside it (2026-10-15)
+
+Drafting a reply reuses everything *below* the prompt (`resolveLlmForProject`, the credit hold,
+`createUsageRecorder` under a new `engagement.reply` purpose, the voice profile and brand, and the
+provider's own text-counting rule) and nothing of the prompt itself. `services/generation/core.ts` is
+post-shaped at both ends — variant groups, media, a brief, and a `variants`-keyed output — and
+threading a reply through it as a synthetic single-group post would distort the prompt, the output
+schema and the retry-correction loop for every existing caller. Generation already has five call
+sites over one shared core; a sixth artifact with its own prompt (`services/engagement/prompt.ts`) is
+the established pattern, and the constitution's "exactly one implementation" list names slot
+allocation, approval policy and publishing, not prompt text.
+
+## Engagement inbox: the write-budget reserve keeps publishing served first (2026-10-15)
+
+FR-042 requires publishing to never wait on a reply. The engagement-send scheduler section therefore
+runs only after the publishing section resolves in the same tick, and a reply may be sent only while
+the account's writes already started in the current window stay under
+`floor(budget.count × (1 − ENGAGEMENT_WRITE_RESERVE))`, with `ENGAGEMENT_WRITE_RESERVE` defaulting to
+0.25 and `budget` the stricter of the provider's declared engagement write budget and the account's
+own publish limit. A per-run cap (`ENGAGEMENT_SENDS_PER_TICK`, default 5) stops a burst from consuming
+the tick's time budget. On Bluesky the reserve floor is roughly 416 writes an hour kept for
+publishing — orders of magnitude above normal use, invisible until a burst makes it decisive. A reply
+held back by any of the three rules is left `waiting` with a reason, never sent, never failed.
+
+## Engagement inbox: retention is a horizon on both deletion and ingest (2026-10-15)
+
+Inbound items older than `ENGAGEMENT_RETENTION_DAYS` (default 90, operator-configurable) are deleted
+with their drafts in the existing bounded housekeeping pass, provided no draft awaits a decision and
+no send is unresolved; an item the platform reports deleted is eligible on the next pass regardless of
+age; the claim ledger is never pruned. Ingest additionally ignores any item older than the retention
+horizon, so a cursor restart cannot resurrect and re-notify something retention has already removed —
+making the horizon a rule on ingest as well as a deletion rule is what keeps retention from fighting
+the cursor.
+
+## Engagement inbox: three points re-examined after the design settled (2026-10-15)
+
+1. **Sending happens in the tick, not in the HTTP request that approves it.** FR-028 forbids a send
+   nobody approved, but does not require the send to happen inside the approving request, and FR-043
+   explicitly anticipates "waiting for a later run". Sending in the tick is what gives it a lease, a
+   claim ledger and the publishing-first reserve; the approving member is still recorded on the draft
+   and the activity event.
+2. **One new `activity_outcome` label forces the attention index to be rebuilt without naming it.**
+   Executed against Postgres 17.11: a partial index predicate can neither cast an enum to text
+   (`42P17`, the cast is not `IMMUTABLE`) nor name a label added in the same transaction (`55P04`). The
+   predicate is inverted to name only pre-existing labels; the planner still chooses the index for the
+   unread-count query (research.md §2).
+3. **The inbox is its own screen; only the decision lives in Review.** Straight from the spec's stated
+   assumptions, and it keeps the Review queue doing the one job it already does well.

@@ -185,4 +185,27 @@ describe("fresh start on turning a switch back on (US3, FR-004, FR-008)", () => 
     await recordEvent(project.id, "target_failed");
     expect(await count(u.id)).toBe(1);
   });
+
+  it("engagement: a never-touched switch is on with no stored position, and every pre-existing switch keeps its exact meaning (FR-047, FR-051)", async () => {
+    const { project, u } = await fixture();
+    expect(await repoOf(project.id, u.id).preferences()).toMatchObject({});
+    await recordEvent(project.id, "engagement_received");
+    expect(await count(u.id)).toBe(1);
+
+    await recordEvent(project.id, "target_failed");
+    await recordEvent(project.id, "target_ambiguous");
+    await recordEvent(project.id, "account_needs_reauth");
+    expect(await count(u.id)).toBe(4);
+
+    await repoOf(project.id, u.id).setSwitches({ switches: [{ axis: "kind", key: "engagement" }], on: false });
+    expect(await count(u.id)).toBe(3); // the engagement event no longer counts while its switch is off
+    for (let i = 0; i < 5; i++) await recordEvent(project.id, "engagement_received");
+    expect(await count(u.id)).toBe(3);
+
+    await repoOf(project.id, u.id).setSwitches({ switches: [{ axis: "kind", key: "engagement" }], on: true });
+    expect(await count(u.id)).toBe(3); // fresh start: the backlog accumulated while off does not count
+
+    await recordEvent(project.id, "engagement_received");
+    expect(await count(u.id)).toBe(4);
+  });
 });

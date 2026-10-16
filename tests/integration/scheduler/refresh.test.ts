@@ -95,7 +95,13 @@ describe("token refresh", () => {
     await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { token: "old-secret-token" }), soon());
     scripted.set(account.id, { ok: false, reason: "PDS unreachable", transient: true });
 
-    const first = await runTick({ config: { refreshMaxAccounts: 1000 } });
+    // Pin the budget: this asserts what refresh does with a transient failure, not whether the
+    // tick had time to reach it. Left at the default it races every other section for one
+    // wall clock and reports zero refreshes under CI contention - see ENGAGEMENT_TIME_SHARE
+    // and SCHEDULER_TICK_BUDGET_SECONDS for the capacity side of this, which is a separate
+    // concern with its own tests.
+    const tickConfig = { refreshMaxAccounts: 1000, timeBudgetMs: 120_000 };
+    const first = await runTick({ config: tickConfig });
     expect(first.tokenRefresh.counts.deferred).toBeGreaterThanOrEqual(1);
     const after = await repos.accounts.get(account.id);
     expect(after).toMatchObject({ status: "active" });
@@ -103,7 +109,7 @@ describe("token refresh", () => {
     expect(after!.lastError).not.toContain("old-secret-token");
 
     scripted.delete(account.id);
-    const second = await runTick({ config: { refreshMaxAccounts: 1000 } });
+    const second = await runTick({ config: tickConfig });
     expect(second.tokenRefresh.counts.refreshed).toBeGreaterThanOrEqual(1);
     expect(await repos.accounts.get(account.id)).toMatchObject({ status: "active", lastError: null });
   });

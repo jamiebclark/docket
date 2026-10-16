@@ -11,7 +11,15 @@ describe("activityDetailsSchema", () => {
 
   it("rejects extra keys, so nothing free-form can be stored", () => {
     for (const kind of ACTIVITY_KINDS) {
-      const minimal = { target_retry_scheduled: { attempt: 1, nextAttemptAt: "2030-01-01T00:00:00Z" }, target_resolved: { action: "retry_now" }, account_needs_reauth: { reason: "renewal_refused" }, account_connect_failed: { via: "oauth", code: "too_many" } }[kind as string] ?? {};
+      const minimal = {
+        target_retry_scheduled: { attempt: 1, nextAttemptAt: "2030-01-01T00:00:00Z" },
+        target_resolved: { action: "retry_now" },
+        account_needs_reauth: { reason: "renewal_refused" },
+        account_connect_failed: { via: "oauth", code: "too_many" },
+        engagement_received: { items: 1 },
+        engagement_replied: { itemKind: "reply" },
+        engagement_ambiguous: { reason: "timeout" },
+      }[kind as string] ?? {};
       expect(activityDetailsSchema(kind).safeParse({ ...minimal, token: "secret" }).success).toBe(false);
     }
   });
@@ -24,5 +32,12 @@ describe("activityDetailsSchema", () => {
     expect(activityDetailsSchema("target_resolved").safeParse({ action: "nope" }).success).toBe(false);
     expect(activityDetailsSchema("account_connect_failed").safeParse({ via: "oauth", code: "bogus" }).success).toBe(false);
     expect(activityDetailsSchema("account_needs_reauth").safeParse({ reason: "credentials_invalid", backfilled: true }).success).toBe(true);
+  });
+
+  it("engagement_received.items is a positive integer", () => {
+    expect(activityDetailsSchema("engagement_received").safeParse({ items: 1 }).success).toBe(true);
+    expect(activityDetailsSchema("engagement_received").safeParse({ items: 0 }).success).toBe(false);
+    expect(activityDetailsSchema("engagement_received").safeParse({ items: -1 }).success).toBe(false);
+    expect(activityDetailsSchema("engagement_received").safeParse({ items: 1.5 }).success).toBe(false);
   });
 });

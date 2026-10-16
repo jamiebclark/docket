@@ -33,6 +33,7 @@ const KIND_FOR_OUTCOME = {
   ambiguous: "target_ambiguous",
   needs_reauth: "account_needs_reauth",
   connect_failed: "account_connect_failed",
+  engagement: "engagement_received",
 } as const;
 
 async function seedOneOfEachKind(projectId: string, actorUserId: string) {
@@ -65,19 +66,19 @@ describe("per-kind preferences (US1, FR-003)", () => {
     const events = await seedOneOfEachKind(a.id, u.id);
     await recordEvent(b.id, "target_failed", { message: "Bravo broke." });
 
-    expect(await count(u.id)).toBe(5); // 4 in Alpha, 1 in Bravo
-    expect(await count(other.id)).toBe(3); // Alpha only (connect_failed counts for its actor alone); not a member of Bravo
+    expect(await count(u.id)).toBe(6); // 5 in Alpha, 1 in Bravo
+    expect(await count(other.id)).toBe(4); // Alpha only (connect_failed counts for its actor alone); not a member of Bravo
 
     await repoOf(a.id, u.id).setSwitches({ switches: [{ axis: "kind", key: "failed" }], on: false });
 
-    expect(await count(u.id)).toBe(4); // 3 remaining in Alpha, 1 in Bravo
-    expect(await count(other.id)).toBe(3); // this person's switch does not touch another member's count
+    expect(await count(u.id)).toBe(5); // 4 remaining in Alpha, 1 in Bravo
+    expect(await count(other.id)).toBe(4); // this person's switch does not touch another member's count
 
     const panel = await recentPanel(await setOf(u.id), new Date());
     expect(panel.items.map((i) => i.message)).not.toContain(events.failed!.message);
-    expect(panel.items).toHaveLength(4);
+    expect(panel.items).toHaveLength(5);
 
-    expect((await projectUnread(await forProject({ user: { id: u.id } }, a.slug))).count).toBe(3);
+    expect((await projectUnread(await forProject({ user: { id: u.id } }, a.slug))).count).toBe(4);
 
     const activity = await listMyActivity(await setOf(u.id), {});
     expect(activity.rows.map((r) => r.message)).toContain(events.failed!.message);
@@ -86,7 +87,7 @@ describe("per-kind preferences (US1, FR-003)", () => {
   it("a person with no preference row behaves exactly like today's unmuted project", async () => {
     const { a, u } = await fixture();
     await seedOneOfEachKind(a.id, u.id);
-    expect(await count(u.id)).toBe(4);
+    expect(await count(u.id)).toBe(5);
   });
 
   it("turning every kind off makes the project contribute nothing and read as off in words", async () => {
@@ -115,7 +116,7 @@ describe("per-kind preferences (US1, FR-003)", () => {
 });
 
 describe("anti-drift: the database's count equals mayNotify's count for the same events (Q4)", () => {
-  it("agrees over every combination of the four kind switches", async () => {
+  it("agrees over every combination of the kind switches", async () => {
     for (let mask = 0; mask < 1 << ATTENTION_KINDS.length; mask++) {
       const project = await createProject({ name: `Combo ${mask}` });
       const u = await createUser();

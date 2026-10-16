@@ -44,6 +44,11 @@ software, who have no access to it.
 - **A record of what was published**: which post went to which account, when, whether it succeeded and the
   identifier the platform returned, so a failure can be explained and a duplicate avoided, and a record of which
   member did what in each project.
+- **Inbound comments, mentions and replies, for connected accounts where this is supported (currently Bluesky
+  only)**: the comment's text, who said it (the identifier the platform gives), and when, so a member can see it in
+  context and reply to it. Kept for 90 days by default (an operator can change this), then deleted along with any
+  reply drafted for it, unless a reply is still waiting for a decision. See [engagement.md](engagement.md) for what
+  a drafted reply's prompt carries about the comment.
 - **Sign-in details for members of the installation**: name, email address and a password hash (handled by
   Better Auth); for each signed-in session, the IP address and browser it was opened from. Cookies are used only
   to keep you signed in and to remember the last project you opened.
@@ -73,8 +78,9 @@ software, who have no access to it.
 ## Deleting your data and revoking access
 
 Disconnecting a social account in Docket deletes its stored credentials from the installation. Deleting a project
-or a post deletes its content. The operator can also delete the database outright; nothing survives elsewhere,
-because nothing was sent elsewhere.
+or a post deletes its content. Removing a connected account from a project deletes its inbound comments and
+message data too. The operator can also delete the database outright; nothing survives elsewhere, because nothing
+was sent elsewhere.
 
 You can also revoke Docket's access from the platform's side, in its settings for connected apps. That takes
 effect immediately: the next publish attempt fails and the account is shown as needing to be reconnected.

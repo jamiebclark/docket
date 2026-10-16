@@ -9,8 +9,10 @@ import { pruneSettledOccurrencesBefore } from "../dal/standing-series-dated";
 import { listExpiredUploads, markUploadExpired } from "../dal/uploads-housekeeping";
 import { listCollectableVideoVersions, reposForProject } from "../dal/video-housekeeping";
 import { getEnv } from "../env";
+import { pruneEngagementItems } from "../services/engagement/retention";
 import { wantedVideoKeys } from "../services/video-versions";
 import { getStorage } from "../storage";
+import type { SchedulerConfig } from "./config";
 
 export const HOUSEKEEPING_BATCH = 500;
 export const ALLOWANCE_PRUNE_BATCH = 1000;
@@ -36,6 +38,7 @@ export interface HousekeepingCounts {
   orphanHoldsPruned: number;
   standingSeriesRunsPruned: number;
   standingSeriesOccurrencesPruned: number;
+  engagementItemsPruned: number;
 }
 
 export function emptyHousekeepingCounts(): HousekeepingCounts {
@@ -47,6 +50,7 @@ export function emptyHousekeepingCounts(): HousekeepingCounts {
     orphanHoldsPruned: 0,
     standingSeriesRunsPruned: 0,
     standingSeriesOccurrencesPruned: 0,
+    engagementItemsPruned: 0,
   };
 }
 
@@ -143,7 +147,7 @@ export async function pruneSettledOccurrences(at = new Date()): Promise<number> 
 }
 
 /** Deletes at most one batch per table, so a tick never stalls on a large backlog. */
-export async function runHousekeeping(): Promise<HousekeepingCounts> {
+export async function runHousekeeping(config: SchedulerConfig): Promise<HousekeepingCounts> {
   const idempotencyPurged = await crossProject("housekeeping: purge expired idempotency keys", () =>
     purgeExpiredIdempotencyKeys(HOUSEKEEPING_BATCH),
   );
@@ -153,6 +157,7 @@ export async function runHousekeeping(): Promise<HousekeepingCounts> {
   const orphanHoldsPruned = await pruneOrphanHolds();
   const standingSeriesRunsPruned = await pruneClosedStandingSeriesRuns(await now());
   const standingSeriesOccurrencesPruned = await pruneSettledOccurrences(await now());
+  const engagementItemsPruned = await pruneEngagementItems(config, await now());
   return {
     idempotencyPurged,
     uploadsExpired,
@@ -161,5 +166,6 @@ export async function runHousekeeping(): Promise<HousekeepingCounts> {
     orphanHoldsPruned,
     standingSeriesRunsPruned,
     standingSeriesOccurrencesPruned,
+    engagementItemsPruned,
   };
 }
