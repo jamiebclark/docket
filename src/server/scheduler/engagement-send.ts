@@ -122,7 +122,7 @@ async function processClaim(
   }
 
   const latest = await repos.engagementReplyClaims.latest(account.id, item.externalId);
-  if (latest && latest.releaseReason === null) {
+  if (latest && latest.releasedAt === null) {
     if (latest.draftId === draft.id) {
       // A crash between the ledger claim and the record: never a second send (FR-039, SC-004).
       counts.ambiguous++;
@@ -145,8 +145,6 @@ async function processClaim(
     return;
   }
   const generation = latest ? latest.generation + 1 : 1;
-  const releaseReason: "definite_failure" | "member_decision" | null =
-    generation === 1 ? null : latest?.releaseReason === "member_decision" ? "member_decision" : "definite_failure";
   try {
     await repos.engagementReplyClaims.insert({
       socialAccountId: account.id,
@@ -156,8 +154,6 @@ async function processClaim(
       engagementItemId: item.id,
       approvedByUserId: draft.reviewedByUserId,
       claimedAt: now,
-      releaseReason,
-      releasedByUserId: releaseReason === "member_decision" ? draft.reviewedByUserId : null,
     });
   } catch {
     counts.alreadyAnswered++;
@@ -189,7 +185,7 @@ async function processClaim(
     signal,
   });
 
-  await recordOutcome(result, { account, provider: account.providerKey, draft, item, repos, counts, secrets, now, sentThisRun: ctx.sentThisRun, token });
+  await recordOutcome(result, { account, provider: account.providerKey, draft, item, repos, counts, secrets, now, sentThisRun: ctx.sentThisRun, token, generation });
 }
 
 async function recordOutcome(
@@ -205,9 +201,10 @@ async function recordOutcome(
     now: Date;
     sentThisRun: Map<string, number>;
     token: string;
+    generation: number;
   },
 ): Promise<void> {
-  const { account, draft, item, repos, counts, secrets, now, sentThisRun, token } = input;
+  const { account, draft, item, repos, counts, secrets, now, sentThisRun, token, generation } = input;
   const release = (patch: Record<string, unknown>) => repos.engagementDrafts.update(draft.id, { ...patch, sendLeaseUntil: null, sendLeaseOwner: null }, token);
 
   switch (result.kind) {
@@ -259,19 +256,16 @@ async function recordOutcome(
     }
     case "fatal_error": {
       counts.failed++;
-      const latest = await repos.engagementReplyClaims.latest(account.id, item.externalId);
-      await repos.engagementReplyClaims.insert({
-        socialAccountId: account.id,
-        itemExternalId: item.externalId,
-        generation: (latest?.generation ?? 1) + 1,
-        draftId: draft.id,
-        engagementItemId: item.id,
-        approvedByUserId: null,
-        claimedAt: now,
-        releaseReason: "definite_failure",
-        releasedByUserId: null,
+      await repos.engagementReplyClaims.release(account.id, item.externalId, generation, "definite_failure", null, now);
+      // A definite failure never retries on its own; leaving it `approved` would permanently block
+      // the item behind `engagement_drafts_one_live_answer_uq` (review F9). Rejecting it frees the
+      // item for a fresh draft while keeping the failure's reason on the record.
+      await release({
+        reviewState: "rejected",
+        rejectionReason: redact(result.error, secrets).slice(0, 500),
+        sendState: "none",
+        lastError: redact(result.error, secrets),
       });
-      await release({ sendState: "failed", lastError: redact(result.error, secrets) });
       if (result.flagAccount) {
         const ciphertext = await repos.accounts.getCredentialsCiphertext(account.id);
         await markInvalidEmitting(repos, account.id, { expectedCiphertext: ciphertext, reason: redact(result.error, secrets) }).catch(() => undefined);
@@ -282,35 +276,13 @@ async function recordOutcome(
       counts.credentialsInvalid++;
       const ciphertext = await repos.accounts.getCredentialsCiphertext(account.id);
       await markInvalidEmitting(repos, account.id, { expectedCiphertext: ciphertext, reason: redact(result.error, secrets) }).catch(() => undefined);
-      const latest = await repos.engagementReplyClaims.latest(account.id, item.externalId);
-      await repos.engagementReplyClaims.insert({
-        socialAccountId: account.id,
-        itemExternalId: item.externalId,
-        generation: (latest?.generation ?? 1) + 1,
-        draftId: draft.id,
-        engagementItemId: item.id,
-        approvedByUserId: null,
-        claimedAt: now,
-        releaseReason: "definite_failure",
-        releasedByUserId: null,
-      });
+      await repos.engagementReplyClaims.release(account.id, item.externalId, generation, "definite_failure", null, now);
       await release({ sendState: "waiting", lastError: redact(result.error, secrets) });
       return;
     }
     case "retryable_error": {
       counts.failed++;
-      const latest = await repos.engagementReplyClaims.latest(account.id, item.externalId);
-      await repos.engagementReplyClaims.insert({
-        socialAccountId: account.id,
-        itemExternalId: item.externalId,
-        generation: (latest?.generation ?? 1) + 1,
-        draftId: draft.id,
-        engagementItemId: item.id,
-        approvedByUserId: null,
-        claimedAt: now,
-        releaseReason: "definite_failure",
-        releasedByUserId: null,
-      });
+      await repos.engagementReplyClaims.release(account.id, item.externalId, generation, "definite_failure", null, now);
       await release({ sendState: "waiting", sendNotBefore: result.retryAt ?? null, lastError: redact(result.error, secrets) });
       return;
     }

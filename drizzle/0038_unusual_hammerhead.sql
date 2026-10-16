@@ -1,0 +1,3 @@
+ALTER TABLE "engagement_reply_claims" DROP CONSTRAINT "engagement_reply_claims_generation_release_pair";--> statement-breakpoint
+ALTER TABLE "engagement_reply_claims" ADD COLUMN "released_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "engagement_reply_claims" ADD CONSTRAINT "engagement_reply_claims_release_pair" CHECK (("engagement_reply_claims"."released_at" IS NULL) = ("engagement_reply_claims"."release_reason" IS NULL));

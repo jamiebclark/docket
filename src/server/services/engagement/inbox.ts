@@ -65,7 +65,7 @@ async function replyableVerdict(scope: ProjectScope, item: EngagementItemRow, dr
   if (!provider?.engagement?.declaration.canReply) return { ok: false, reason: "This platform cannot be replied to through Docket." };
   if (item.text.trim() === "" && drafts.length === 0) return { ok: false, reason: "The item has no text to reply to." };
   const claim = await scope.engagementReplyClaims.latest(item.socialAccountId, item.externalId);
-  if (claim && claim.releaseReason === null) return { ok: false, reason: "A reply is already in progress for this item." };
+  if (claim && claim.releasedAt === null) return { ok: false, reason: "A reply is already in progress for this item." };
   return { ok: true };
 }
 

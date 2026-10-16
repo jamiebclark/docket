@@ -365,19 +365,27 @@ export interface NewEngagementReplyClaim {
   engagementItemId: string | null;
   approvedByUserId: string | null;
   claimedAt: Date;
-  releaseReason?: "definite_failure" | "member_decision" | null;
-  releasedByUserId?: string | null;
 }
 
 /**
- * The send ledger (data-model.md §4): insert-only, never updated, never deleted by any code path
- * (research.md §3). A unique-violation on insert means a concurrent attempt already claimed this
- * generation — the whole of FR-039.
+ * The send ledger (data-model.md §4): never deleted by any code path (research.md §3), and the
+ * only write after insert is `release`, which turns a live claim into a released one. A
+ * unique-violation on insert means a concurrent attempt already claimed this generation — the
+ * whole of FR-039.
  */
 export interface EngagementReplyClaimsRepo {
   insert(input: NewEngagementReplyClaim): Promise<void>;
   /** The highest-generation row for this item, or null if never claimed. */
   latest(socialAccountId: string, itemExternalId: string): Promise<EngagementReplyClaimRow | null>;
+  /** Marks a still-live claim released, so the item can be claimed again at the next generation. */
+  release(
+    socialAccountId: string,
+    itemExternalId: string,
+    generation: number,
+    reason: "definite_failure" | "member_decision",
+    releasedByUserId: string | null,
+    releasedAt: Date,
+  ): Promise<void>;
   /** Claims in `[since, now]` for one account — what the write-budget reserve counts (research.md §8). */
   countInWindow(socialAccountId: string, since: Date): Promise<number>;
   /** Account removal (FR-059): a soft delete does not cascade, so this is explicit — the one place the ledger is deleted. */
@@ -404,6 +412,19 @@ export function createEngagementReplyClaimsRepo(exec: Database, projectId: strin
         .orderBy(desc(engagementReplyClaims.generation))
         .limit(1);
       return row ?? null;
+    },
+    async release(socialAccountId, itemExternalId, generation, reason, releasedByUserId, releasedAt) {
+      await exec
+        .update(engagementReplyClaims)
+        .set({ releasedAt, releaseReason: reason, releasedByUserId })
+        .where(
+          and(
+            inProject,
+            eq(engagementReplyClaims.socialAccountId, socialAccountId),
+            eq(engagementReplyClaims.itemExternalId, itemExternalId),
+            eq(engagementReplyClaims.generation, generation),
+          ),
+        );
     },
     async countInWindow(socialAccountId, since) {
       const [row] = await exec

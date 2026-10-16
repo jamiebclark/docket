@@ -160,6 +160,9 @@ async function processAccount(
       // Anything a retention pass would have already removed is never stored, so a cursor
       // restart cannot resurrect and re-notify what retention pruned (data-model.md §10).
       if (item.saidAt < retentionHorizon) continue;
+      // The parent of a reply/mention may be the brand's own post (data-model.md §2); resolved
+      // once at ingest, since `post_targets.external_id` can change owner-side after the fact.
+      const parentTarget = item.parentExternalId ? await repos.targets.getByExternalId(account.id, item.parentExternalId) : null;
       const insertResult = await repos.engagementItems.insertIfAbsent({
         socialAccountId: account.id,
         providerKey: account.providerKey,
@@ -176,6 +179,8 @@ async function processAccount(
         saidAt: item.saidAt,
         ingestedAt: nowLoop,
         parentExternalId: item.parentExternalId,
+        parentPostId: parentTarget?.postId ?? null,
+        parentPostTargetId: parentTarget?.id ?? null,
         providerData: item.data ?? {},
       });
       if (insertResult.inserted) {

@@ -3,6 +3,7 @@ import { writeReply } from "../../../src/server/services/engagement/draft";
 import { approveReply } from "../../../src/server/services/engagement/review";
 import { markReplyNotSent, markReplySent } from "../../../src/server/services/failures";
 import { forProject } from "../../../src/server/dal/scope";
+import { updateAccountSettings } from "../../../src/server/services/accounts";
 import { runTick } from "../../../src/server/scheduler";
 import { runEngagementSend } from "../../../src/server/scheduler/engagement-send";
 import { schedulerConfig } from "../../../src/server/scheduler/config";
@@ -125,7 +126,6 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
       engagementItemId: itemId,
       approvedByUserId: null,
       claimedAt: new Date(),
-      releaseReason: null,
     });
     const tick = await runTick({ config: NO_WAIT });
     expect(tick.engagementSend.counts.ambiguous).toBe(1);
@@ -146,5 +146,38 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
     const draft = await scope.engagementDrafts.get(draftId);
     expect(draft?.sendState).toBe("sent");
     expect(draft?.sendLeaseOwner).toBeNull();
+  });
+
+  it("a live claim stays distinguishable from a released one past generation 1 (F3): release, re-approve, send, then a second approval is refused already_answered", async () => {
+    const { scope, account } = await setup({ engagementSendBehaviour: "fatal_error" });
+    const { draftId: firstDraftId, itemId } = await seedApprovedDraft(scope, account.id, "ext-regen");
+    const tick = await runTick({ config: NO_WAIT });
+    expect(tick.engagementSend.counts.failed).toBe(1);
+    const firstDraft = await scope.engagementDrafts.get(firstDraftId);
+    expect(firstDraft).toMatchObject({ reviewState: "rejected", sendState: "none" });
+    const released = await scope.engagementReplyClaims.latest(account.id, "ext-regen");
+    expect(released?.generation).toBe(1);
+    expect(released?.releasedAt).not.toBeNull();
+
+    // Re-approving a second draft on the same item must not be refused by the released generation-1 claim.
+    const second = await writeReply(scope, itemId, "Second try!");
+    if (!second.ok) throw new Error("unreachable");
+    const approvedSecond = await approveReply(scope, second.draftId);
+    expect(approvedSecond).toMatchObject({ ok: true });
+
+    await updateAccountSettings(scope, account.id, { engagementSendBehaviour: "sent" });
+    const resend = await runTick({ config: NO_WAIT });
+    expect(resend.engagementSend.counts.sent).toBe(1);
+    const secondDraft = await scope.engagementDrafts.get(second.draftId);
+    expect(secondDraft?.sendState).toBe("sent");
+    const liveGen2 = await scope.engagementReplyClaims.latest(account.id, "ext-regen");
+    expect(liveGen2?.generation).toBe(2);
+    expect(liveGen2?.releasedAt).toBeNull();
+
+    // A third draft's approval is refused: generation 2's claim is live, not released.
+    const third = await writeReply(scope, itemId, "Third try!");
+    if (!third.ok) throw new Error("unreachable");
+    const approvedThird = await approveReply(scope, third.draftId);
+    expect(approvedThird).toMatchObject({ ok: false, code: "already_answered" });
   });
 });

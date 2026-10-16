@@ -258,17 +258,9 @@ export async function markReplyNotSent(scope: ProjectScope, draftId: string): Pr
   const now = await clock.now();
   if (item) {
     const latest = await scope.engagementReplyClaims.latest(draft.socialAccountId, item.externalId);
-    await scope.engagementReplyClaims.insert({
-      socialAccountId: draft.socialAccountId,
-      itemExternalId: item.externalId,
-      generation: (latest?.generation ?? 1) + 1,
-      draftId: draft.id,
-      engagementItemId: item.id,
-      approvedByUserId: null,
-      claimedAt: now,
-      releaseReason: "member_decision",
-      releasedByUserId: scope.membership.userId,
-    });
+    if (latest && latest.releasedAt === null) {
+      await scope.engagementReplyClaims.release(draft.socialAccountId, item.externalId, latest.generation, "member_decision", scope.membership.userId, now);
+    }
   }
   await scope.engagementDrafts.update(draftId, { reviewState: "needs_review", sendState: "none", sentText: null, sentAt: null, reviewedAt: null, reviewedByUserId: null });
 }

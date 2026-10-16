@@ -109,7 +109,7 @@ export async function approveReply(scope: ProjectScope, draftId: string): Promis
         return { ok: false, code: "edited_upstream", message: "The original changed; look at it again before approving." };
       }
       const claim = await tx.engagementReplyClaims.latest(draft.socialAccountId, item.externalId);
-      if (claim && claim.releaseReason === null) {
+      if (claim && claim.releasedAt === null) {
         return { ok: false, code: "already_answered", message: "A reply is already in progress for this item." };
       }
       const now = await clock.now();

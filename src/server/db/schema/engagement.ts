@@ -155,9 +155,12 @@ export const engagementDrafts = pgTable(
 export type EngagementDraftRow = typeof engagementDrafts.$inferSelect;
 
 /**
- * The send ledger (data-model.md §4), insert-only, in the shape of `external_item_claims`. Keyed on
- * the platform's own identifier so it survives retention deleting the item (research.md §3).
- * `draft_id`/`engagement_item_id` are deliberately not foreign keys, so the ledger outlives both.
+ * The send ledger (data-model.md §4), in the shape of `external_item_claims`. A row is inserted
+ * live (`released_at`/`release_reason` both null) and later released in place — this is the one
+ * permitted post-insert write, since a live claim must stay distinguishable from a released one at
+ * every generation, not just generation 1. Keyed on the platform's own identifier so it survives
+ * retention deleting the item (research.md §3). `draft_id`/`engagement_item_id` are deliberately not
+ * foreign keys, so the ledger outlives both.
  */
 export const engagementReplyClaims = pgTable(
   "engagement_reply_claims",
@@ -174,6 +177,7 @@ export const engagementReplyClaims = pgTable(
     engagementItemId: uuid("engagement_item_id"),
     approvedByUserId: uuid("approved_by_user_id").references(() => user.id, { onDelete: "set null" }),
     claimedAt: timestamp("claimed_at", { withTimezone: true }).defaultNow().notNull(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
     releaseReason: text("release_reason"),
     releasedByUserId: uuid("released_by_user_id").references(() => user.id, { onDelete: "set null" }),
   },
@@ -181,7 +185,7 @@ export const engagementReplyClaims = pgTable(
     primaryKey({ columns: [t.projectId, t.socialAccountId, t.itemExternalId, t.generation] }),
     index("engagement_reply_claims_window_idx").on(t.projectId, t.socialAccountId, t.claimedAt),
     check("engagement_reply_claims_generation_min", sql`${t.generation} >= 1`),
-    check("engagement_reply_claims_generation_release_pair", sql`(${t.generation} = 1) = (${t.releaseReason} IS NULL)`),
+    check("engagement_reply_claims_release_pair", sql`(${t.releasedAt} IS NULL) = (${t.releaseReason} IS NULL)`),
     check(
       "engagement_reply_claims_release_reason_enum",
       sql`${t.releaseReason} IS NULL OR ${t.releaseReason} IN ('definite_failure', 'member_decision')`,

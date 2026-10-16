@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { forProject } from "../../../src/server/dal/scope";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
@@ -6,7 +7,7 @@ import { getInboxItem, listInbox } from "../../../src/server/services/engagement
 import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { createProjectWithMembers } from "../../helpers/factories";
+import { createPostInReview, createProjectWithMembers } from "../../helpers/factories";
 
 afterAll(async () => {
   await closeDb();
@@ -24,10 +25,19 @@ async function setupWithItems(items: Record<string, unknown>[]) {
 
 describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () => {
   it("lands items from the tick exactly once, with author, text, time, account and parent", async () => {
-    const { scope, account } = await setupWithItems([
-      { kind: "reply", externalId: "a-1", text: "Nice post!", authorHandle: "ada.bsky.social", authorExternalId: "did:plc:ada", saidAt: AT.toISOString(), parentExternalId: "post-1" },
-      { kind: "mention", externalId: "a-2", text: "@brand hi", authorHandle: "bea.bsky.social", authorExternalId: "did:plc:bea" },
-    ]);
+    const ctx = await createProjectWithMembers();
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    const account = await accounts.connectMock(scope, {
+      displayName: "Mock",
+      settings: {
+        engagementItems: [
+          { kind: "reply", externalId: "a-1", text: "Nice post!", authorHandle: "ada.bsky.social", authorExternalId: "did:plc:ada", saidAt: AT.toISOString(), parentExternalId: "post-1" },
+          { kind: "mention", externalId: "a-2", text: "@brand hi", authorHandle: "bea.bsky.social", authorExternalId: "did:plc:bea" },
+        ],
+      },
+    });
+    const { targets } = await createPostInReview(ctx.project.id, { accountIds: [account.id], baseText: "Our own post" });
+    await forSchedulerProject(ctx.project.id).targets.update(targets[0]!.id, { status: "published", externalId: "post-1", publishedAt: AT });
 
     const tick = await atTime(AT, () => runTick({ config: NO_WAIT }));
     expect(tick.engagementRead.ok).toBe(true);
@@ -38,7 +48,7 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     expect(reply.text).toBe("Nice post!");
     expect(reply.author.handle).toBe("ada.bsky.social");
     expect(reply.socialAccount.id).toBe(account.id);
-    expect(reply.parent).toMatchObject({ kind: "external_reference", externalId: "post-1" });
+    expect(reply.parent).toMatchObject({ kind: "docket_post", text: "Our own post" });
 
     // A second tick re-reads the same fixture: nothing new is stored or notified.
     const second = await atTime(new Date(AT.getTime() + 1000), () => runTick({ config: NO_WAIT }));
