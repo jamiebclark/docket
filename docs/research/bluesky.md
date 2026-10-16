@@ -5,11 +5,11 @@ Checked 2026-10-07 (limits re-verified; other sections checked 2026-10-02). Sour
 ## Lexicon limits
 - `app.bsky.feed.post` `text`: **maxGraphemes 300**, **maxLength 3000** (bytes).
   `langs` ≤ 3 entries.
-  https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/post.json
+  https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/feed/post.json
 - `app.bsky.embed.images`: **max 4 images**; image blob accept `image/*`,
   **maxSize 2,000,000 bytes** (not 2 MiB). `alt` is a **required** string
   (may be empty). Optional `aspectRatio {width,height}`.
-  https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/images.json
+  https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/images.json
   (docs.bsky.app still says 1,000,000 — the lexicon wins.)
 
 ## Auth and client
@@ -55,8 +55,8 @@ Checked 2026-10-07 against the raw lexicon files on GitHub (fetch tool
 summarises, so values are as reported).
 | Limit | Verified value | Source |
 |---|---|---|
-| Text | `maxGraphemes` **300**, `maxLength` **3000** (UTF-8 bytes). Both apply. | https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/post.json |
-| Images per post | `images` array `maxLength` **4** | https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/images.json |
+| Text | `maxGraphemes` **300**, `maxLength` **3000** (UTF-8 bytes). Both apply. | https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/feed/post.json |
+| Images per post | `images` array `maxLength` **4** | https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/images.json |
 | Image bytes | blob `maxSize` **2,000,000**, `accept` `image/*` | same |
 | Alt text | `alt` is a required string described only as "Alt text description of the image, for accessibility."; **no maximum length in the lexicon** (no `maxLength` or `maxGraphemes`). The client may impose its own; none found officially. | same |
 | Tags | `tags` array max 8, each max 640 bytes / 64 graphemes (not used by Docket) | post.json |

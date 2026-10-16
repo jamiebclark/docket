@@ -6,25 +6,25 @@ Nothing was run against a live account; every flow below is from published lexic
 
 ## Embed record (`app.bsky.embed.video`)
 - Required: `video` (blob). Optional: `captions`, `alt`, `aspectRatio`, `presentation`.
-  https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/video.json
+  https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/video.json
 - `video` blob: `accept: ["video/mp4"]`, **maxSize 300,000,000 bytes** (lexicon text: "May be up to 300mb, formerly
   limited to 100mb"). Same URL.
   Changed 2026-10-07: the `@atproto/api` changelog records 0.20.39 "Increase video embed size limits from 100MB to 300MB".
   https://github.com/bluesky-social/atproto/blob/main/packages/api/CHANGELOG.md
 - `aspectRatio`: `app.bsky.embed.defs#aspectRatio` `{ width, height }`, both integers, **minimum 1**; "may be
   approximate". Optional in the lexicon, but the official tutorial says to compute it (ffprobe or native APIs).
-  https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/defs.json
+  https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/defs.json
   https://github.com/bluesky-social/bsky-docs/blob/main/docs/tutorials/video.mdx
 - `alt`: plain string, no length constraint now (0.20.41 removed `maxGraphemes`/`maxLength` from video `alt`).
   Docket's `maxAltTextLength` for images does not carry over. https://github.com/bluesky-social/atproto/blob/main/packages/api/CHANGELOG.md
 - `captions`: array of `{ lang (BCP-47 "language" format), file (blob, accept text/vtt, maxSize 20,000 bytes) }`,
   **maxLength 20**. Captions are uploaded as blobs with `com.atproto.repo.uploadBlob` (UNVERIFIED: the tutorial excerpt
   I could read does not show the caption upload; this follows from the lexicon type `blob`).
-  https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/video.json
+  https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/video.json
 - `presentation`: hint, known values `default`, `gif`. Same URL.
 - `app.bsky.feed.post` `embed` is a union of `images`, `video`, `gallery`, `external`, `record`, `recordWithMedia`
   (so a post has one video **or** images, not both; `gallery` is new on `main`, not researched).
-  https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/post.json
+  https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/feed/post.json
   Post text rules (300 graphemes / 3000 bytes) are in `bluesky.md`.
 - Embed JSON per the tutorial: `{ $type: "app.bsky.embed.video", video: <blobRef>, aspectRatio: { width, height } }`.
   https://github.com/bluesky-social/bsky-docs/blob/main/docs/tutorials/video.mdx
@@ -52,7 +52,7 @@ https://github.com/bluesky-social/social-app/blob/main/src/lib/constants.ts
    with query `did` (user DID) and `name` (file name); headers `Authorization: Bearer <service token>`,
    `Content-Type: video/mp4`, `Content-Length`. Body is the raw MP4. Response: `{ jobStatus }`.
    https://github.com/bluesky-social/bsky-docs/blob/main/docs/tutorials/video.mdx
-   https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/video/uploadVideo.json (input `video/mp4`;
+   https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/video/uploadVideo.json (input `video/mp4`;
    the lexicon declares no query params, the tutorial does).
 3. **Upload (multipart, newer).** Lexicons added in `@atproto/api` 0.20.40 and used by the official client:
    - `app.bsky.video.startUpload` (JSON in: `sizeBytes` exact, `mimeType`, optional `name`, advisory `durationMs`,
@@ -71,13 +71,13 @@ https://github.com/bluesky-social/social-app/blob/main/src/lib/constants.ts
    deprecation note).
 4. **Poll the job.** `app.bsky.video.getJobStatus?jobId=...` (query, on the video service). Poll until the response's
    `jobStatus.blob` is present (tutorial wording), or `state` is `JOB_STATE_FAILED`.
-   https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/video/getJobStatus.json
+   https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/video/getJobStatus.json
 5. **Create the post** with `com.atproto.repo.createRecord` (`app.bsky.feed.post`), `embed` as above, using the blob
    from `jobStatus.blob` exactly as returned.
 
 ### Job status (`app.bsky.video.defs#jobStatus`)
 Fields: `jobId`, `did`, `state`, `progress` (0-100, within the current state), `blob`, `error`, `failureCode`, `message`.
-https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/video/defs.json
+https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/video/defs.json
 - `state` known values, in order: `JOB_STATE_CREATED`, `JOB_STATE_ENCODING`, `JOB_STATE_ENCODED`, `JOB_STATE_SCANNING`,
   `JOB_STATE_SCANNED`, `JOB_STATE_UPLOADING`, `JOB_STATE_UPLOADED`, `JOB_STATE_COMPLETED`, `JOB_STATE_FAILED`.
   "All values not listed as a known value indicate that the job is in process" -> treat unknown states as still running,
@@ -93,7 +93,7 @@ https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/video/defs
 Query on the video service, authenticated. Output: `canUpload` (bool, required), `remainingDailyVideos`,
 `remainingDailyBytes`, `message`, `error`. If `canUpload` is false the official client shows `message` or "You have
 temporarily reached the limit for video uploads. Please try again later."
-https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/video/getUploadLimits.json
+https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/video/getUploadLimits.json
 https://github.com/bluesky-social/social-app/blob/main/src/lib/media/video/upload.shared.ts
 
 ## Limits
