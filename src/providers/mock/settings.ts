@@ -46,6 +46,8 @@ export const mockSettingsSchema = z.object({
   engagementSendBehaviour: z.enum(mockEngagementSendBehaviours).default("sent"),
   /** Forces `engagement.read()` to return this stop result instead of a page (default: page normally). */
   engagementReadBehaviour: z.enum(mockEngagementReadBehaviours).default("page"),
+  /** Serves pages normally through this many pages, then returns `engagementReadBehaviour` instead — so a run can insert items on one page and stop on the next. */
+  engagementReadFailAfterPages: z.number().int().min(1).max(100).optional(),
 });
 
 export type MockSettings = z.infer<typeof mockSettingsSchema>;

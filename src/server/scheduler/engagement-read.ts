@@ -210,6 +210,25 @@ async function processAccount(
   }
 
   if (stop) {
+    // Never advance the cursor or backfill flag on a failed/stopped read (FR-014), but anything
+    // already inserted this run must still be committed and notified — it is idempotent to insert
+    // again, so a silent loss here is permanent (review F25).
+    if (inserted > 0) {
+      const stopNow = await clock.now();
+      await repos.transaction(async (tx) => {
+        await tx.engagementAccountStates.update(account.id, { lastItemAt: newestSaidAt }, token);
+        await tx.activity.insert({
+          kind: "engagement_received",
+          occurredAt: stopNow,
+          socialAccountId: account.id,
+          providerKey: account.providerKey,
+          message: `${inserted} new ${inserted === 1 ? "item" : "items"}`,
+          details: { items: inserted },
+        });
+      });
+      counts.itemsInserted += inserted;
+      counts.accountsWithNewItems++;
+    }
     await handleStop(stop, { account, state, token, repos, ctx, secrets });
     return;
   }

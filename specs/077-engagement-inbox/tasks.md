@@ -299,3 +299,16 @@ BLOCKERs first; nothing here is optional for the merge.
 - [X] T096 Write the five ingest cases T027 claims and never delivered — expired credentials with the cursor unmoved, a 500-item backlog over successive ticks, two overlapping ticks with the lease held, a kill mid-read resuming, a rejected cursor restarting and stamping `gap_at` — and make the "no engagement declaration" case connect an account on a provider without `engagement` instead of asserting an empty inbox (depends on T086) — review F11 (MAJOR), tests/integration/engagement/ingest.test.ts:26, tests/integration/engagement/ingest.test.ts:64
 - [X] T097 Resolve `auto_draft`: either build the opt-in pre-draft path (an account control, a tick pass that skips projects on a credit hold, with the scope question settled given the job runner is denied `engagement`) or remove the column, the repo method, the service function and the `autoDraft` account-view field and record the cut in the spec's Decisions — review F12 (MAJOR), src/server/services/engagement/inbox.ts:172, src/server/db/schema/engagement.ts:174
 - [X] T098 Render the item's full draft history on the inbox item page — each draft with its origin, requester and time, and for an approved one its send state (`waiting` with its reason, `sent` with the text, time, approver and link, `failed`/`ambiguous` with the reason) — so a waiting reply is shown as waiting and a sent reply appears in the thread — review F13 (MAJOR), src/app/p/[projectSlug]/inbox/[itemId]/ReplyPanel.tsx:41, src/server/services/failures.ts:219
+
+---
+
+## Phase 11: Review remediation (round 2)
+
+**Source**: `specs/077-engagement-inbox/review.md` (re-review of the Phase 10 remediation). Each task
+carries its finding id and the location the review cited, because the implement pass that picks it up
+has no access to the review's reasoning. Both are MAJOR; the review's MINOR findings (F27–F29) and its
+carried-forward MINORs (F30) are deliberately **not** tasks — they do not block the merge and belong to
+a hardening entry.
+
+- [X] T099 Stop losing the `engagement_received` event when a read stores items and then fails: on the `stop` path, commit the account state and write the activity event for whatever `inserted` landed before handing off to `handleStop` (or move the inserts back inside a transaction that also carries the event), and increment `counts.itemsInserted`. Add an ingest case whose fixture serves one full page then a stop result **in the same run**, asserting the items are present *and* exactly one `engagement_received` event exists — review F25 (MAJOR), src/server/scheduler/engagement-read.ts:212, src/server/scheduler/engagement-read.ts:236, src/server/scheduler/engagement-read.ts:166
+- [X] T100 Render a second `needs_review` draft in the item page's draft history — origin, requester and time, plus the note that approving one discards the other — instead of returning `null` for it, and gate the "Draft history" heading on there being at least one entry that actually renders, so the section is never emitted empty. Extend the F13 test to two concurrent `needs_review` drafts on one item — review F26 (MAJOR), src/app/p/[projectSlug]/inbox/[itemId]/ReplyPanel.tsx:50, src/app/p/[projectSlug]/inbox/[itemId]/ReplyPanel.tsx:245

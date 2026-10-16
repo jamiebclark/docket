@@ -214,4 +214,21 @@ describe("approveReply / rejectReply (FR-028–FR-036, SC-003)", () => {
     });
     expect(sentDraft.sentAt).toEqual(sentAt);
   });
+
+  it("two concurrent needs_review drafts on one item both resolve in the draft history (review F26)", async () => {
+    const env = await postsEnv();
+    const scope = await env.as(env.owner);
+    const account = await env.account({});
+    const itemId = await seedItem(scope, account.id);
+
+    const older = await writeReply(scope, itemId, "Older still-pending draft");
+    if (!older.ok) throw new Error("unreachable");
+    const newer = await writeReply(scope, itemId, "Newer still-pending draft");
+    if (!newer.ok) throw new Error("unreachable");
+
+    const item = await getInboxItem(scope, itemId);
+    const pending = item.drafts.filter((d) => d.reviewState === "needs_review");
+    expect(pending).toHaveLength(2);
+    expect(pending.map((d) => d.id).sort()).toEqual([older.draftId, newer.draftId].sort());
+  });
 });

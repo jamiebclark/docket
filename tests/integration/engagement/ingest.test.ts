@@ -147,6 +147,47 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     expect(view?.status).toBe("needs_reauth");
   });
 
+  it("commits items inserted on an earlier page and notifies once, even when a later page in the same run stops the read (review F25)", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    await accounts.connectMock(scope, {
+      displayName: "Mock",
+      settings: {
+        engagementItems: [
+          { kind: "reply", externalId: "stop-1", text: "first", saidAt: AT.toISOString() },
+          { kind: "reply", externalId: "stop-2", text: "second", saidAt: new Date(AT.getTime() + 1000).toISOString() },
+          { kind: "reply", externalId: "stop-3", text: "third", saidAt: new Date(AT.getTime() + 2000).toISOString() },
+        ],
+        engagementReadBehaviour: "rate_limited",
+        engagementReadFailAfterPages: 1,
+      },
+    });
+    const account = (await accounts.listAccounts(scope))[0]!;
+    // The account state row is only created lazily on the first claim, so claim (and release) once
+    // before forcing a stable "older" direction across both pages this run — otherwise the second
+    // provider call reuses the unrelated "newest" cursor, restarting the page count at zero.
+    await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] });
+    await forSchedulerProject(ctx.project.id).engagementAccountStates.update(account.id, { backfilling: true, readLeaseUntil: null, readLeaseOwner: null });
+
+    const tick = await atTime(AT, () => runTick({ config: { ...NO_WAIT, engagementReadPageSize: 2, engagementReadPagesPerRun: 3 } }));
+    expect(tick.engagementRead.ok).toBe(true);
+    expect(tick.engagementRead.counts.itemsInserted).toBe(2);
+
+    const list = await listInbox(scope);
+    expect(list.items.map((i) => i.externalId).sort()).toEqual(["stop-1", "stop-2"]);
+
+    const feed = await scope.activity.list({
+      windows: [{ projectId: scope.project.id, from: null, to: null }],
+      outcomes: null,
+      platform: null,
+      accountId: null,
+      cursor: null,
+      direction: "older",
+      limit: 10,
+    });
+    expect(feed.filter((e) => e.kind === "engagement_received")).toHaveLength(1);
+  });
+
   it("catches up a 500-item backlog over successive ticks with nothing skipped or duplicated", async () => {
     const items = Array.from({ length: 500 }, (_, i) => ({
       kind: "reply" as const,

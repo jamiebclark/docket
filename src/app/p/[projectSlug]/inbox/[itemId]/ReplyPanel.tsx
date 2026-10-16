@@ -47,7 +47,17 @@ function DraftHistoryEntry({ draft, tz }: { draft: DraftView; tz: string }) {
     );
   }
 
-  if (draft.reviewState !== "approved") return null; // needs_review is rendered by the action area below.
+  if (draft.reviewState === "needs_review") {
+    return (
+      <div className="rounded-lg border border-border p-3">
+        {requested}
+        <p className="mt-1 text-sm whitespace-pre-wrap">{draft.text}</p>
+        <p className="mt-2 text-sm text-muted-foreground">Awaiting review. Approving one draft discards the other.</p>
+      </div>
+    );
+  }
+
+  if (draft.reviewState !== "approved") return null;
 
   const approver = draft.reviewedByName ?? "someone no longer on the project";
   return (
@@ -242,12 +252,21 @@ export function ReplyPanel({
         )
       ) : null}
 
-      {drafts.some((d) => d.id !== pending1?.id) ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Draft history</p>
-          {drafts.filter((d) => d.id !== pending1?.id).map((d) => <DraftHistoryEntry key={d.id} draft={d} tz={tz} />)}
-        </div>
-      ) : null}
+      {(() => {
+        const history = drafts
+          .filter((d) => d.id !== pending1?.id)
+          .map((d) => ({ draft: d, node: DraftHistoryEntry({ draft: d, tz }) }))
+          .filter((h) => h.node !== null);
+        if (history.length === 0) return null;
+        return (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Draft history</p>
+            {history.map((h) => (
+              <div key={h.draft.id}>{h.node}</div>
+            ))}
+          </div>
+        );
+      })()}
 
       {canDismiss && !dismissed ? (
         <div>

@@ -33,19 +33,24 @@ export const mockEngagement: EngagementSupport<MockSettings> = {
     if (settings.engagementUnavailable) {
       return { kind: "unavailable", reason: "Mock engagement is set to unavailable for this account." };
     }
-    switch (settings.engagementReadBehaviour) {
-      case "retryable_error":
-        return { kind: "retryable_error", error: "Mock retryable read failure." };
-      case "rate_limited":
-        return { kind: "rate_limited", error: "Mock read rate limited." };
-      case "credentials_invalid":
-        return { kind: "credentials_invalid", error: "Mock read credentials invalid." };
-      case "cursor_lost":
-        return { kind: "cursor_lost", error: "Mock cursor lost." };
-      case "fatal_error":
-        return { kind: "fatal_error", error: "Mock fatal read failure." };
-      case "page":
-        break;
+    const offset = ctx.cursor ? Number(ctx.cursor) : 0;
+    const pagesServed = ctx.limit > 0 ? offset / ctx.limit : 0;
+    const shouldFailNow = settings.engagementReadFailAfterPages === undefined || pagesServed >= settings.engagementReadFailAfterPages;
+    if (shouldFailNow) {
+      switch (settings.engagementReadBehaviour) {
+        case "retryable_error":
+          return { kind: "retryable_error", error: "Mock retryable read failure." };
+        case "rate_limited":
+          return { kind: "rate_limited", error: "Mock read rate limited." };
+        case "credentials_invalid":
+          return { kind: "credentials_invalid", error: "Mock read credentials invalid." };
+        case "cursor_lost":
+          return { kind: "cursor_lost", error: "Mock cursor lost." };
+        case "fatal_error":
+          return { kind: "fatal_error", error: "Mock fatal read failure." };
+        case "page":
+          break;
+      }
     }
     const allItems = settings.engagementItems.map((item) => ({
       kind: item.kind,
@@ -64,7 +69,6 @@ export const mockEngagement: EngagementSupport<MockSettings> = {
     }));
     // Paged `ctx.limit` at a time, in fixture order, so a multi-page backlog and the cursor and
     // backfill machinery are exercisable with no platform credentials.
-    const offset = ctx.cursor ? Number(ctx.cursor) : 0;
     const page = allItems.slice(offset, offset + ctx.limit);
     const nextOffset = offset + page.length;
     const exhausted = nextOffset >= allItems.length;
