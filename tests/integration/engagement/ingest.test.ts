@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { claimDueEngagementReads } from "../../../src/server/dal/engagement-read-claims";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { forProject } from "../../../src/server/dal/scope";
 import { runTick } from "../../../src/server/scheduler";
@@ -7,6 +8,7 @@ import { getInboxItem, listInbox } from "../../../src/server/services/engagement
 import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
+import { createMockAccount } from "../../helpers/scheduling";
 import { createPostInReview, createProjectWithMembers } from "../../helpers/factories";
 
 afterAll(async () => {
@@ -72,7 +74,10 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
   it("a provider with no engagement declaration has no accounts in the inbox", async () => {
     const ctx = await createProjectWithMembers();
     const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
-    // No account at all is connected; the inbox for this project stays empty.
+    // tiktok declares no `engagement` member; connecting one must not surface it in the inbox.
+    await createMockAccount(ctx.project.id, {}, { providerKey: "tiktok" });
+    const tick = await atTime(AT, () => runTick({ config: NO_WAIT }));
+    expect(tick.engagementRead.ok).toBe(true);
     const list = await listInbox(scope);
     expect(list.items).toHaveLength(0);
   });
@@ -125,5 +130,102 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     expect(second.engagementRead.ok).toBe(true);
     item = await getInboxItem(scope, itemId);
     expect(item.withdrawnAt).not.toBeNull();
+  });
+
+  it("flags the account via credentials_invalid and leaves the cursor unmoved", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    const account = await accounts.connectMock(scope, { displayName: "Mock", settings: { engagementReadBehaviour: "credentials_invalid" } });
+
+    const tick = await atTime(AT, () => runTick({ config: NO_WAIT }));
+    expect(tick.engagementRead.ok).toBe(true);
+    const list = await listInbox(scope);
+    expect(list.items).toHaveLength(0);
+    const state = await scope.engagementAccountStates.get(account.id);
+    expect(state?.cursor).toBeNull();
+    const view = (await accounts.listAccounts(scope)).find((a) => a.id === account.id);
+    expect(view?.status).toBe("needs_reauth");
+  });
+
+  it("catches up a 500-item backlog over successive ticks with nothing skipped or duplicated", async () => {
+    const items = Array.from({ length: 500 }, (_, i) => ({
+      kind: "reply" as const,
+      externalId: `bulk-${i}`,
+      text: `item ${i}`,
+      saidAt: new Date(AT.getTime() + i * 1000).toISOString(),
+    }));
+    const { scope } = await setupWithItems(items);
+
+    let soFar = await listInbox(scope);
+    for (let tick = 0; tick < 10 && soFar.total < 500; tick++) {
+      const result = await atTime(new Date(AT.getTime() + tick * 10_000), () => runTick({ config: NO_WAIT }));
+      expect(result.engagementRead.ok).toBe(true);
+      soFar = await listInbox(scope);
+    }
+    // The account's own externalId space is 500 wide, so the project's own total can never exceed
+    // it even if some other account was claimed in the same (cross-project) scheduler tick.
+    expect(soFar.total).toBe(500);
+  });
+
+  it("a tick finds the read lease already held by another and moves on", async () => {
+    const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "lease-1", text: "hi" }]);
+    const held = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 60_000, minIntervalMs: 0, providerKeys: ["mock"] });
+    expect(held.map((c) => c.account.id)).toContain(account.id);
+
+    const tick = await atTime(AT, () => runTick({ config: NO_WAIT }));
+    expect(tick.engagementRead.ok).toBe(true);
+    expect(tick.engagementRead.counts.claimed).toBe(0);
+    const list = await listInbox(scope);
+    expect(list.items).toHaveLength(0);
+  });
+
+  it("resumes from the last committed cursor after a tick is killed mid-read", async () => {
+    const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "kill-1", text: "hi", saidAt: AT.toISOString() }]);
+    // Simulate a kill: claim the lease but never commit or release it.
+    const killed = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] });
+    expect(killed.map((c) => c.account.id)).toContain(account.id);
+
+    // Once the dangling lease has expired, the next tick reclaims the account and reads normally,
+    // with no re-notification of anything the killed run never committed.
+    const after = new Date(AT.getTime() + 1500);
+    const tick = await atTime(after, () => runTick({ config: NO_WAIT }));
+    expect(tick.engagementRead.ok).toBe(true);
+    const list = await listInbox(scope);
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]!.externalId).toBe("kill-1");
+  });
+
+  it("a rejected cursor restarts from the newest page, stamps gap_at, and the re-read overlap stores nothing new", async () => {
+    const { scope, account } = await setupWithItems([
+      { kind: "reply", externalId: "gap-1", text: "first", saidAt: AT.toISOString() },
+      { kind: "reply", externalId: "gap-2", text: "second", saidAt: new Date(AT.getTime() + 1000).toISOString() },
+    ]);
+    await atTime(AT, () => runTick({ config: NO_WAIT }));
+    expect((await listInbox(scope)).items).toHaveLength(2);
+
+    await accounts.updateAccountSettings(scope, account.id, { engagementReadBehaviour: "cursor_lost" });
+    const lostAt = new Date(AT.getTime() + 60_000);
+    const lost = await atTime(lostAt, () => runTick({ config: NO_WAIT }));
+    expect(lost.engagementRead.ok).toBe(true);
+    const state = await scope.engagementAccountStates.get(account.id);
+    expect(state?.gapAt).not.toBeNull();
+    expect(state?.cursor).toBeNull();
+    expect(state?.backfilling).toBe(false);
+
+    // Back to normal, with one genuinely new item alongside the two already stored.
+    await accounts.updateAccountSettings(scope, account.id, {
+      engagementReadBehaviour: "page",
+      engagementItems: [
+        { kind: "reply", externalId: "gap-1", text: "first", saidAt: AT.toISOString() },
+        { kind: "reply", externalId: "gap-2", text: "second", saidAt: new Date(AT.getTime() + 1000).toISOString() },
+        { kind: "reply", externalId: "gap-3", text: "third", saidAt: new Date(AT.getTime() + 2000).toISOString() },
+      ],
+    });
+    const restartAt = new Date(lostAt.getTime() + 60_000);
+    const restart = await atTime(restartAt, () => runTick({ config: NO_WAIT }));
+    expect(restart.engagementRead.ok).toBe(true);
+    // Scoped to this project: the overlap (gap-1, gap-2) stores nothing new, only gap-3 lands.
+    const after = await listInbox(scope);
+    expect(after.items.map((i) => i.externalId).sort()).toEqual(["gap-1", "gap-2", "gap-3"]);
   });
 });

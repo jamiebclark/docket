@@ -304,7 +304,6 @@ export interface EngagementAccountStatesRepo {
   /** Creates the row the first time this account is claimed (data-model.md §5); a no-op after. */
   ensure(socialAccountId: string): Promise<void>;
   get(socialAccountId: string): Promise<EngagementAccountStateRow | null>;
-  setAutoDraft(socialAccountId: string, on: boolean): Promise<void>;
   /**
    * `expectedLeaseOwner`, when given, conditions the write on `read_lease_owner` still matching —
    * so a worker whose lease already expired and was reclaimed by another tick cannot clobber that
@@ -332,12 +331,6 @@ export function createEngagementAccountStatesRepo(exec: Database, projectId: str
         .where(and(inProject, eq(engagementAccountStates.socialAccountId, socialAccountId)))
         .limit(1);
       return row ?? null;
-    },
-    async setAutoDraft(socialAccountId, on) {
-      await exec
-        .update(engagementAccountStates)
-        .set({ autoDraft: on })
-        .where(and(inProject, eq(engagementAccountStates.socialAccountId, socialAccountId)));
     },
     async update(socialAccountId, patch, expectedLeaseOwner) {
       await exec

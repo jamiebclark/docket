@@ -92,6 +92,7 @@ export default async function InboxItemPage({ params }: Props) {
           dismissed={item.state !== "waiting"}
           countingRule={countingRuleName(textCaps.countingRule)}
           maxLength={textCaps.maxLength}
+          tz={tz}
         />
 
         <p className="mt-6">

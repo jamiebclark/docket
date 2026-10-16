@@ -214,7 +214,6 @@ export const engagementAccountStates = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    autoDraft: boolean("auto_draft").default(false).notNull(),
     cursor: text("cursor"),
     providerState: jsonb("provider_state").default({}).notNull(),
     backfilling: boolean("backfilling").default(false).notNull(),

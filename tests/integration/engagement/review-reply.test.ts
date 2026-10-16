@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { writeReply } from "../../../src/server/services/engagement/draft";
+import { getInboxItem } from "../../../src/server/services/engagement/inbox";
 import { approveReply, dismissItems, rejectReply } from "../../../src/server/services/engagement/review";
 import * as projectsService from "../../../src/server/services/projects";
 import { closeDb } from "../../helpers/db";
@@ -172,5 +173,45 @@ describe("approveReply / rejectReply (FR-028–FR-036, SC-003)", () => {
     expect(draft).toMatchObject({ reviewState: "rejected", rejectionReason: "Not on brand" });
     const again = await rejectReply(scope, written.draftId);
     expect(again).toMatchObject({ ok: false, code: "already_decided" });
+  });
+
+  it("the item page's draft history resolves the requester and approver, and shows a sent reply after approval (review F13)", async () => {
+    const env = await postsEnv();
+    const scope = await env.as(env.owner);
+    const account = await env.account({});
+    const itemId = await seedItem(scope, account.id);
+
+    const rejectedDraft = await writeReply(scope, itemId, "First attempt");
+    if (!rejectedDraft.ok) throw new Error("unreachable");
+    await rejectReply(scope, rejectedDraft.draftId, "Too casual");
+
+    const written = await writeReply(scope, itemId, "Thanks for the kind words!");
+    if (!written.ok) throw new Error("unreachable");
+    await approveReply(scope, written.draftId);
+
+    const waiting = await getInboxItem(scope, itemId);
+    const rejected = waiting.drafts.find((d) => d.id === rejectedDraft.draftId)!;
+    expect(rejected).toMatchObject({ reviewState: "rejected", rejectionReason: "Too casual", requestedByName: env.owner.name });
+    const approved = waiting.drafts.find((d) => d.id === written.draftId)!;
+    expect(approved).toMatchObject({ reviewState: "approved", sendState: "waiting", requestedByName: env.owner.name, reviewedByName: env.owner.name });
+
+    const sentAt = new Date("2026-01-02T00:00:00Z");
+    await scope.engagementDrafts.update(written.draftId, {
+      sendState: "sent",
+      sentText: "Thanks for the kind words!",
+      sentAt,
+      externalReplyId: "ext-reply-1",
+      externalReplyUrl: "https://mock.invalid/reply",
+    });
+
+    const sent = await getInboxItem(scope, itemId);
+    const sentDraft = sent.drafts.find((d) => d.id === written.draftId)!;
+    expect(sentDraft).toMatchObject({
+      sendState: "sent",
+      sentText: "Thanks for the kind words!",
+      externalReplyUrl: "https://mock.invalid/reply",
+      reviewedByName: env.owner.name,
+    });
+    expect(sentDraft.sentAt).toEqual(sentAt);
   });
 });

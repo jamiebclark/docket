@@ -47,7 +47,6 @@ export async function decide<T, R>(
 | `countInboxWaiting(scope)` | `engagement: ["view"]` | `0` without the permission — never computed, so FR-037 holds for the nav badge |
 | `getInboxItem(scope, id)` | `engagement: ["view"]` | `NotFoundError` outside the project; the thread (parent, item, drafts, what was sent and who approved it) |
 | `listEngagementAccounts(scope)` | `engagement: ["view"]` | Only accounts whose provider declares `engagement`. A declared-but-`unavailable` surface is returned marked unavailable with its reason and docs link; everything else is simply absent (FR-053) |
-| `setAutoDraft(scope, accountId, on)` | `account: ["manage"]` | The per-account pre-draft switch, off by default (FR-022) |
 
 `replyable` is false, with a reason, when: the item is withdrawn; the author is unreachable; the item
 has no text *and* no draft exists; the provider cannot reply; the account is disconnected or
@@ -78,8 +77,8 @@ requestDraft(scope, itemId): Promise<
 - Refusals: no voice profile → `no_voice` pointing at the voice screen; no LLM credential →
   `not_configured`; item with no text → `no_text`; withdrawn item or unreplyable account →
   `not_replyable` (FR-027).
-- **Pre-drafting** (`auto_draft` on) calls exactly this function from the tick with the job-runner
-  scope, and skips every project under a credit hold without spending anything.
+- There is no pre-drafting: drafting is on request only (spec Decisions, "Drafting is on request
+  only; the opt-in per-account auto-draft is cut").
 
 ```ts
 writeReply(scope, itemId, text)   // origin: "person", no model call (FR-026)

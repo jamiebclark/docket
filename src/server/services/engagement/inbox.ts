@@ -18,6 +18,48 @@ export interface ReplyableVerdict {
   reason?: string;
 }
 
+/** A draft with its requester/approver resolved to a name, for the item page's full draft history. */
+export interface DraftView {
+  id: string;
+  text: string;
+  origin: EngagementDraftRow["origin"];
+  requestedByName: string | null;
+  createdAt: Date;
+  reviewState: EngagementDraftRow["reviewState"];
+  reviewedAt: Date | null;
+  reviewedByName: string | null;
+  rejectionReason: string | null;
+  sendState: EngagementDraftRow["sendState"];
+  sendWaitReason: string | null;
+  sentText: string | null;
+  sentAt: Date | null;
+  externalReplyUrl: string | null;
+  lastError: string | null;
+}
+
+async function resolveDraftViews(scope: ProjectScope, drafts: EngagementDraftRow[]): Promise<DraftView[]> {
+  if (drafts.length === 0) return [];
+  const members = await scope.members.list();
+  const nameOf = (userId: string | null) => (userId ? members.find((m) => m.userId === userId)?.name ?? null : null);
+  return drafts.map((d) => ({
+    id: d.id,
+    text: d.text,
+    origin: d.origin,
+    requestedByName: nameOf(d.requestedByUserId),
+    createdAt: d.createdAt,
+    reviewState: d.reviewState,
+    reviewedAt: d.reviewedAt,
+    reviewedByName: nameOf(d.reviewedByUserId),
+    rejectionReason: d.rejectionReason,
+    sendState: d.sendState,
+    sendWaitReason: d.sendWaitReason,
+    sentText: d.sentText,
+    sentAt: d.sentAt,
+    externalReplyUrl: d.externalReplyUrl,
+    lastError: d.lastError,
+  }));
+}
+
 export interface InboxItemView {
   id: string;
   providerKey: string;
@@ -40,7 +82,7 @@ export interface InboxItemView {
   newerOnSameParent: number;
   withdrawnAt: Date | null;
   editedUpstreamAt: Date | null;
-  drafts: EngagementDraftRow[];
+  drafts: DraftView[];
   replyable: ReplyableVerdict;
 }
 
@@ -70,12 +112,13 @@ async function replyableVerdict(scope: ProjectScope, item: EngagementItemRow, dr
 }
 
 async function toView(scope: ProjectScope, item: EngagementItemRow): Promise<InboxItemView> {
-  const [account, drafts, parent, newerOnSameParent] = await Promise.all([
+  const [account, draftRows, parent, newerOnSameParent] = await Promise.all([
     scope.accounts.get(item.socialAccountId),
     scope.engagementDrafts.listByItem(item.id),
     resolveParent(scope, item),
     item.parentExternalId ? scope.engagementItems.countNewerOnSameParent(item.parentExternalId, item.saidAt) : Promise.resolve(0),
   ]);
+  const [drafts, replyable] = await Promise.all([resolveDraftViews(scope, draftRows), replyableVerdict(scope, item, draftRows)]);
   return {
     id: item.id,
     providerKey: item.providerKey,
@@ -99,7 +142,7 @@ async function toView(scope: ProjectScope, item: EngagementItemRow): Promise<Inb
     withdrawnAt: item.withdrawnAt,
     editedUpstreamAt: item.editedUpstreamAt,
     drafts,
-    replyable: await replyableVerdict(scope, item, drafts),
+    replyable,
   };
 }
 
@@ -143,7 +186,6 @@ export interface EngagementAccountView {
   displayName: string;
   providerKey: string;
   providerDisplayName: string;
-  autoDraft: boolean;
   unavailable: { reason: string; docsPath?: string } | null;
 }
 
@@ -156,21 +198,13 @@ export async function listEngagementAccounts(scope: ProjectScope): Promise<Engag
     if (account.removedAt) continue;
     const provider = findProvider(account.providerKey);
     if (!provider?.engagement) continue;
-    const state = await scope.engagementAccountStates.get(account.id);
     out.push({
       id: account.id,
       displayName: account.displayName,
       providerKey: account.providerKey,
       providerDisplayName: provider.displayName,
-      autoDraft: state?.autoDraft ?? false,
       unavailable: provider.engagement.declaration.unavailable ?? null,
     });
   }
   return out;
-}
-
-export async function setAutoDraft(scope: ProjectScope, accountId: string, on: boolean): Promise<void> {
-  requirePermission(scope, { account: ["manage"] });
-  await scope.engagementAccountStates.ensure(accountId);
-  await scope.engagementAccountStates.setAutoDraft(accountId, on);
 }

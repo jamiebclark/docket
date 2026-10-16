@@ -4,15 +4,83 @@ import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button, ButtonGroup } from "@/components/ui/Button";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { TextareaField } from "@/components/ui/TextareaField";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { countGraphemes } from "@/providers/text";
-import type { EngagementDraftRow } from "@/server/dal";
+import type { DraftView } from "@/server/services/engagement/inbox";
 import { dismissItemAction, editDraftAction, requestDraftAction, writeReplyAction } from "../actions";
 
 /** Only `graphemes` and `code_points` are counted live; every declared provider in this entry uses `graphemes`. */
 function liveCount(text: string, countingRule: string): number {
   return countingRule === "code_points" ? [...text].length : countGraphemes(text);
+}
+
+/** One draft's place in the item's history: what it was, who acted on it and when, and — for an
+ * approved one — where its send stands. Rendered for every draft, not only the live one, so an
+ * answered item still shows what was sent (review F13). */
+function DraftHistoryEntry({ draft, tz }: { draft: DraftView; tz: string }) {
+  const requested = (
+    <p className="text-xs text-muted-foreground">
+      {draft.origin === "model" ? "Drafted" : "Written"} by {draft.requestedByName ?? "someone no longer on the project"} ·{" "}
+      <LocalTime value={draft.createdAt} timeZone={tz} />
+    </p>
+  );
+
+  if (draft.reviewState === "rejected") {
+    return (
+      <div className="rounded-lg border border-border p-3">
+        {requested}
+        <p className="mt-1 text-sm whitespace-pre-wrap">{draft.text}</p>
+        <p className="mt-2 text-sm text-danger">Rejected{draft.rejectionReason ? `: ${draft.rejectionReason}` : "."}</p>
+      </div>
+    );
+  }
+
+  if (draft.reviewState === "discarded") {
+    return (
+      <div className="rounded-lg border border-border p-3 opacity-70">
+        {requested}
+        <p className="mt-1 text-sm whitespace-pre-wrap">{draft.text}</p>
+        <p className="mt-2 text-xs text-muted-foreground">Discarded in favour of a later draft.</p>
+      </div>
+    );
+  }
+
+  if (draft.reviewState !== "approved") return null; // needs_review is rendered by the action area below.
+
+  const approver = draft.reviewedByName ?? "someone no longer on the project";
+  return (
+    <div className="rounded-lg border border-border p-3">
+      {requested}
+      <p className="mt-1 text-sm whitespace-pre-wrap">{draft.sendState === "sent" ? draft.sentText : draft.text}</p>
+      {draft.sendState === "sent" ? (
+        <p className="mt-2 text-sm text-success">
+          Sent by {approver} <LocalTime value={draft.sentAt!} timeZone={tz} />
+          {draft.externalReplyUrl ? (
+            <>
+              {" "}
+              ·{" "}
+              <a href={draft.externalReplyUrl} target="_blank" rel="noreferrer" className="underline">
+                View
+              </a>
+            </>
+          ) : null}
+        </p>
+      ) : draft.sendState === "waiting" || draft.sendState === "sending" ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Approved by {approver} · Waiting to send{draft.sendWaitReason ? `: ${draft.sendWaitReason}` : "."}
+        </p>
+      ) : draft.sendState === "failed" || draft.sendState === "ambiguous" ? (
+        <p className="mt-2 text-sm text-danger">
+          {draft.sendState === "ambiguous" ? "Send outcome unknown" : "Send failed"}
+          {draft.lastError ? `: ${draft.lastError}` : "."} Needs a decision — see Failures.
+        </p>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">Approved by {approver}.</p>
+      )}
+    </div>
+  );
 }
 
 export function ReplyPanel({
@@ -25,16 +93,18 @@ export function ReplyPanel({
   dismissed,
   countingRule,
   maxLength,
+  tz,
 }: {
   slug: string;
   itemId: string;
-  drafts: EngagementDraftRow[];
+  drafts: DraftView[];
   canReply: boolean;
   canDismiss: boolean;
   replyable: boolean;
   dismissed: boolean;
   countingRule: string;
   maxLength: number;
+  tz: string;
 }) {
   const router = useRouter();
   const uid = useId();
@@ -170,6 +240,13 @@ export function ReplyPanel({
             </Button>
           </ButtonGroup>
         )
+      ) : null}
+
+      {drafts.some((d) => d.id !== pending1?.id) ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Draft history</p>
+          {drafts.filter((d) => d.id !== pending1?.id).map((d) => <DraftHistoryEntry key={d.id} draft={d} tz={tz} />)}
+        </div>
       ) : null}
 
       {canDismiss && !dismissed ? (

@@ -171,7 +171,6 @@ attempt collides here and is refused by the record, not by timing (FR-039).
 |---|---|---|
 | `social_account_id` | uuid pk | → `social_accounts.id` cascade |
 | `project_id` | uuid not null | → `projects.id` cascade |
-| `auto_draft` | boolean not null default **false** | FR-022 |
 | `cursor` | text | the platform's own cursor, ≤ 500 |
 | `provider_state` | jsonb not null default `{}` | provider-owned, ≤ 2,000 bytes (e.g. a backfill cursor) |
 | `backfilling` | boolean not null default false | a catch-up is in progress (§7) |
