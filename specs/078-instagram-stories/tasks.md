@@ -248,16 +248,16 @@ for a Story target through the API, with no UI involved, and check that each dro
 
 ### Tests for User Story 3
 
-- [ ] T044 [P] [US3] Add a case to `tests/integration/api/post-type.test.ts` reading an Instagram
+- [X] T044 [P] [US3] Add a case to `tests/integration/api/post-type.test.ts` reading an Instagram
   account's capabilities and asserting `story` is among the post types with the Story option's label
   and description (contracts/compose-and-api.md A4; user story 3 scenario 1).
-- [ ] T045 [P] [US3] Add a case reading a story target's per-target validation issues through the API
+- [X] T045 [P] [US3] Add a case reading a story target's per-target validation issues through the API
   and asserting the same three notices with their severities (contracts/compose-and-api.md A2, A4;
   user story 3 scenario 2).
-- [ ] T046 [P] [US3] Add a case reading a story target's requirements summary through the API and
+- [X] T046 [P] [US3] Add a case reading a story target's requirements summary through the API and
   asserting it reports the Story's own image and video limits, not the feed's or the Reel's (contracts/
   compose-and-api.md A3; user story 3 scenario 3).
-- [ ] T047 [US3] Add the refusal case to `tests/integration/api/post-type.test.ts`:
+- [X] T047 [US3] Add the refusal case to `tests/integration/api/post-type.test.ts`:
   `postTypes: { <facebookAccountId>: "story" }` returns `400` naming the types Facebook does offer
   (contracts/compose-and-api.md A4; FR-005, FR-006, SC-008; user story 3 scenario 4).
 
@@ -268,9 +268,9 @@ No new production code: `postTypeRefusal`, `offeredPostTypes`, `requirementsOf` 
 API (constitution IV) and were completed in Phase 2 / User Story 1. This story is proved by the tests
 above alone.
 
-- [ ] T048 [US3] Update `docs/accounts.md`'s Instagram section: a Story can be scheduled for a single
+- [X] T048 [US3] Update `docs/accounts.md`'s Instagram section: a Story can be scheduled for a single
   image or video, and what it does not carry (contracts/records.md N5).
-- [ ] T049 [US3] Add the "Instagram Stories (078)" entry to `docs/feature-map.md`: image and video
+- [X] T049 [US3] Add the "Instagram Stories (078)" entry to `docs/feature-map.md`: image and video
   Stories, chosen per post in the composer, no caption/link/stickers, no cropping by Docket; verified
   with mocks only; not yet owned — Facebook Page Stories, stickers and links, reading a Story back,
   multi-asset Stories (contracts/records.md N5).
