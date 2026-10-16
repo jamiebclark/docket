@@ -4,6 +4,9 @@ import { approveReply } from "../../../src/server/services/engagement/review";
 import { markReplyNotSent, markReplySent } from "../../../src/server/services/failures";
 import { forProject } from "../../../src/server/dal/scope";
 import { runTick } from "../../../src/server/scheduler";
+import { runEngagementSend } from "../../../src/server/scheduler/engagement-send";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import * as accounts from "../../../src/server/services/accounts";
 import { fakeSession } from "../../helpers/auth";
 import { closeDb } from "../../helpers/db";
@@ -129,5 +132,19 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
     expect(tick.engagementSend.counts.sent).toBe(0);
     const draft = await scope.engagementDrafts.get(draftId);
     expect(draft?.sendState).toBe("ambiguous");
+  });
+
+  it("two overlapping ticks claiming one approved draft send exactly once (F2, FR-039, FR-040, SC-004)", async () => {
+    const { scope, account } = await setup({ engagementSendBehaviour: "sent", delayMs: 300 });
+    const { draftId } = await seedApprovedDraft(scope, account.id, "ext-overlap");
+    const config = schedulerConfig(getEnv(), NO_WAIT);
+    const [a, b] = await Promise.all([
+      runEngagementSend({ config, tickId: "tick-a", startedAt: new Date() }),
+      runEngagementSend({ config, tickId: "tick-b", startedAt: new Date() }),
+    ]);
+    expect(a.sent + b.sent).toBe(1);
+    const draft = await scope.engagementDrafts.get(draftId);
+    expect(draft?.sendState).toBe("sent");
+    expect(draft?.sendLeaseOwner).toBeNull();
   });
 });

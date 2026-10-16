@@ -11,10 +11,12 @@ export const mockEngagementItemSchema = z.object({
   identityStable: z.boolean().default(false),
   saidAt: z.string().default(() => new Date().toISOString()),
   parentExternalId: z.string().nullable().default(null),
+  upstream: z.enum(["withdrawn", "edited"]).optional(),
 });
 export type MockEngagementItem = z.infer<typeof mockEngagementItemSchema>;
 
 export const mockEngagementSendBehaviours = ["sent", "duplicate", "ambiguous", "fatal_error", "credentials_invalid"] as const;
+export const mockEngagementReadBehaviours = ["page", "retryable_error", "rate_limited", "credentials_invalid", "cursor_lost", "fatal_error"] as const;
 
 export const mockBehaviours = [
   "succeed",
@@ -39,9 +41,11 @@ export const mockSettingsSchema = z.object({
   refresh: z.enum(["succeed", "fail"]).default("succeed"),
   /** The engagement surface is declared but unavailable, with a reason and no call ever made (FR-055). */
   engagementUnavailable: z.boolean().default(false),
-  /** Items `engagement.read()` returns, as a single exhausted page, so ingest is testable with no credentials. */
+  /** Items `engagement.read()` returns, paged `ctx.limit` at a time in array order, so the cursor and backfill machinery is exercisable with no credentials. */
   engagementItems: z.array(mockEngagementItemSchema).default([]),
   engagementSendBehaviour: z.enum(mockEngagementSendBehaviours).default("sent"),
+  /** Forces `engagement.read()` to return this stop result instead of a page (default: page normally). */
+  engagementReadBehaviour: z.enum(mockEngagementReadBehaviours).default("page"),
 });
 
 export type MockSettings = z.infer<typeof mockSettingsSchema>;

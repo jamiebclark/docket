@@ -59,12 +59,16 @@ async function processClaim(
   claim: ClaimedEngagementDraft,
   ctx: { config: SchedulerConfig; cfg: ReturnType<typeof engagementConfig>; counts: EngagementSendCounts; sentThisRun: Map<string, number> },
 ): Promise<void> {
-  const { draft } = claim;
+  const { draft, token } = claim;
   const { counts } = ctx;
   const repos = forSchedulerProject(draft.projectId);
 
   const back = (patch: { sendState: "waiting" | "ambiguous" | "failed"; sendWaitReason?: string | null; lastError?: string | null; sendNotBefore?: Date | null }) =>
-    repos.engagementDrafts.update(draft.id, { ...patch, sendLeaseUntil: null, sendLeaseOwner: null, sendWaitReason: patch.sendWaitReason ?? null, lastError: patch.lastError ?? null });
+    repos.engagementDrafts.update(
+      draft.id,
+      { ...patch, sendLeaseUntil: null, sendLeaseOwner: null, sendWaitReason: patch.sendWaitReason ?? null, lastError: patch.lastError ?? null },
+      token,
+    );
 
   const account = await repos.accounts.get(draft.socialAccountId);
   const provider = account ? findProvider(account.providerKey) : null;
@@ -116,7 +120,7 @@ async function processClaim(
       // A crash between the ledger claim and the record: never a second send (FR-039, SC-004).
       counts.ambiguous++;
       await repos.transaction(async (tx) => {
-        await tx.engagementDrafts.update(draft.id, { sendState: "ambiguous", lastError: "Interrupted before the result was recorded." });
+        await tx.engagementDrafts.update(draft.id, { sendState: "ambiguous", lastError: "Interrupted before the result was recorded." }, token);
         await tx.activity.insert({
           kind: "engagement_ambiguous",
           occurredAt: now,
@@ -126,7 +130,7 @@ async function processClaim(
           details: { reason: "timeout" },
         });
       });
-      await back({ sendState: "ambiguous" });
+      await repos.engagementDrafts.update(draft.id, { sendLeaseUntil: null, sendLeaseOwner: null }, token);
       return;
     }
     counts.alreadyAnswered++;
@@ -178,7 +182,7 @@ async function processClaim(
     signal,
   });
 
-  await recordOutcome(result, { account, provider: account.providerKey, draft, item, repos, counts, secrets, now, sentThisRun: ctx.sentThisRun });
+  await recordOutcome(result, { account, provider: account.providerKey, draft, item, repos, counts, secrets, now, sentThisRun: ctx.sentThisRun, token });
 }
 
 async function recordOutcome(
@@ -193,10 +197,11 @@ async function recordOutcome(
     secrets: readonly string[];
     now: Date;
     sentThisRun: Map<string, number>;
+    token: string;
   },
 ): Promise<void> {
-  const { account, draft, item, repos, counts, secrets, now, sentThisRun } = input;
-  const release = (patch: Record<string, unknown>) => repos.engagementDrafts.update(draft.id, { ...patch, sendLeaseUntil: null, sendLeaseOwner: null });
+  const { account, draft, item, repos, counts, secrets, now, sentThisRun, token } = input;
+  const release = (patch: Record<string, unknown>) => repos.engagementDrafts.update(draft.id, { ...patch, sendLeaseUntil: null, sendLeaseOwner: null }, token);
 
   switch (result.kind) {
     case "sent":
@@ -204,15 +209,19 @@ async function recordOutcome(
       counts[result.kind === "sent" ? "sent" : "duplicate"]++;
       sentThisRun.set(account.id, (sentThisRun.get(account.id) ?? 0) + 1);
       await repos.transaction(async (tx) => {
-        await tx.engagementDrafts.update(draft.id, {
-          sendState: "sent",
-          sentText: draft.text,
-          sentAt: now,
-          externalReplyId: result.kind === "sent" ? result.externalId : result.externalId ?? "",
-          externalReplyUrl: result.kind === "sent" ? (result.url ?? null) : null,
-          sendLeaseUntil: null,
-          sendLeaseOwner: null,
-        });
+        await tx.engagementDrafts.update(
+          draft.id,
+          {
+            sendState: "sent",
+            sentText: draft.text,
+            sentAt: now,
+            externalReplyId: result.kind === "sent" ? result.externalId : result.externalId ?? "",
+            externalReplyUrl: result.kind === "sent" ? (result.url ?? null) : null,
+            sendLeaseUntil: null,
+            sendLeaseOwner: null,
+          },
+          token,
+        );
         await tx.engagementItems.markAnswered(item.id, now);
         await tx.activity.insert({
           kind: "engagement_replied",
@@ -228,7 +237,7 @@ async function recordOutcome(
     case "ambiguous": {
       counts.ambiguous++;
       await repos.transaction(async (tx) => {
-        await tx.engagementDrafts.update(draft.id, { sendState: "ambiguous", lastError: redact(result.error, secrets) });
+        await tx.engagementDrafts.update(draft.id, { sendState: "ambiguous", lastError: redact(result.error, secrets) }, token);
         await tx.activity.insert({
           kind: "engagement_ambiguous",
           occurredAt: now,

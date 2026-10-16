@@ -189,7 +189,16 @@ export interface EngagementDraftsRepo {
   countQueue(): Promise<number>;
   countSendState(state: EngagementDraftRow["sendState"]): Promise<number>;
   listBySendState(state: EngagementDraftRow["sendState"]): Promise<EngagementDraftRow[]>;
-  update(id: string, patch: Partial<Omit<EngagementDraftRow, "id" | "projectId" | "createdAt">>): Promise<void>;
+  /**
+   * `expectedLeaseOwner`, when given, conditions the write on `send_lease_owner` still matching —
+   * so a tick whose send lease already expired and was reclaimed by another tick cannot record its
+   * own stale outcome over the one that reclaimed it (FR-039, FR-040, SC-004).
+   */
+  update(
+    id: string,
+    patch: Partial<Omit<EngagementDraftRow, "id" | "projectId" | "createdAt">>,
+    expectedLeaseOwner?: string,
+  ): Promise<void>;
   /** `review_state = 'discarded'` for every other `needs_review` draft on the same item. */
   discardSiblings(itemId: string, keepId: string): Promise<void>;
 }
@@ -263,11 +272,17 @@ export function createEngagementDraftsRepo(exec: Database, projectId: string): E
         .where(and(inProject, eq(engagementDrafts.sendState, state)))
         .orderBy(desc(engagementDrafts.updatedAt));
     },
-    async update(id, patch) {
+    async update(id, patch, expectedLeaseOwner) {
       await exec
         .update(engagementDrafts)
         .set(patch as Record<string, unknown>)
-        .where(and(inProject, eq(engagementDrafts.id, id)));
+        .where(
+          and(
+            inProject,
+            eq(engagementDrafts.id, id),
+            ...(expectedLeaseOwner ? [eq(engagementDrafts.sendLeaseOwner, expectedLeaseOwner)] : []),
+          ),
+        );
     },
     async discardSiblings(itemId, keepId) {
       await exec
@@ -290,7 +305,16 @@ export interface EngagementAccountStatesRepo {
   ensure(socialAccountId: string): Promise<void>;
   get(socialAccountId: string): Promise<EngagementAccountStateRow | null>;
   setAutoDraft(socialAccountId: string, on: boolean): Promise<void>;
-  update(socialAccountId: string, patch: Partial<Omit<EngagementAccountStateRow, "socialAccountId" | "projectId" | "createdAt">>): Promise<void>;
+  /**
+   * `expectedLeaseOwner`, when given, conditions the write on `read_lease_owner` still matching —
+   * so a worker whose lease already expired and was reclaimed by another tick cannot clobber that
+   * tick's progress with its own stale result (data-model.md §5, FR-007).
+   */
+  update(
+    socialAccountId: string,
+    patch: Partial<Omit<EngagementAccountStateRow, "socialAccountId" | "projectId" | "createdAt">>,
+    expectedLeaseOwner?: string,
+  ): Promise<void>;
   /** Account removal (FR-059): a soft delete does not cascade, so this is explicit. */
   deleteForAccount(socialAccountId: string): Promise<void>;
 }
@@ -315,11 +339,17 @@ export function createEngagementAccountStatesRepo(exec: Database, projectId: str
         .set({ autoDraft: on })
         .where(and(inProject, eq(engagementAccountStates.socialAccountId, socialAccountId)));
     },
-    async update(socialAccountId, patch) {
+    async update(socialAccountId, patch, expectedLeaseOwner) {
       await exec
         .update(engagementAccountStates)
         .set(patch as Record<string, unknown>)
-        .where(and(inProject, eq(engagementAccountStates.socialAccountId, socialAccountId)));
+        .where(
+          and(
+            inProject,
+            eq(engagementAccountStates.socialAccountId, socialAccountId),
+            ...(expectedLeaseOwner ? [eq(engagementAccountStates.readLeaseOwner, expectedLeaseOwner)] : []),
+          ),
+        );
     },
     async deleteForAccount(socialAccountId) {
       await exec.delete(engagementAccountStates).where(and(inProject, eq(engagementAccountStates.socialAccountId, socialAccountId)));

@@ -74,12 +74,12 @@ async function processAccount(
   claim: ClaimedEngagementAccount,
   ctx: { config: SchedulerConfig; cfg: ReturnType<typeof engagementConfig>; deadline: number; counts: EngagementReadCounts },
 ): Promise<void> {
-  const { account, state } = claim;
+  const { account, state, token } = claim;
   const { counts } = ctx;
   const repos = forSchedulerProject(account.projectId);
 
   const release = (patch: Parameters<typeof repos.engagementAccountStates.update>[1]) =>
-    repos.engagementAccountStates.update(account.id, { ...patch, readLeaseUntil: null, readLeaseOwner: null });
+    repos.engagementAccountStates.update(account.id, { ...patch, readLeaseUntil: null, readLeaseOwner: null }, token);
 
   const provider = findProvider(account.providerKey);
   if (!provider?.engagement) {
@@ -120,21 +120,26 @@ async function processAccount(
 
   const parsedProviderState = engagement.stateSchema.safeParse(state.providerState ?? {});
   const providerState = (parsedProviderState.success ? parsedProviderState.data : {}) as Record<string, unknown>;
+  // The persisted cursor only ever paginates older history (the backfill direction): the newest
+  // direction has no "since" parameter on any provider, so it always restarts from `cursor: null`
+  // and stops as soon as it sees an item already stored — that overlap *is* the new-items boundary.
   let backfilling = state.backfilling;
-  let newestCursor = state.cursor;
-  let backfillCursor = typeof providerState.backfillCursor === "string" ? providerState.backfillCursor : null;
-
-  const pages: { items: readonly import("../../providers/types").InboundItemDraft[] }[] = [];
+  let backfillCursor = state.cursor;
+  let freshCursor: string | null = null;
   let pagesRead = 0;
   let stop: EngagementReadResult | null = null;
+  let inserted = 0;
+  let newestSaidAt: Date | null = state.lastItemAt;
+  const now0 = await clock.now();
+  const retentionHorizon = new Date(now0.getTime() - ctx.cfg.retentionDays * 86_400_000);
 
   while (true) {
-    const now = await clock.now();
-    if (!shouldReadAnotherPage({ pagesReadSoFar: pagesRead, policy: { pagesPerRun: ctx.cfg.readPagesPerRun, pageSize: ctx.cfg.readPageSize }, remainingBudgetMs: ctx.deadline - now.getTime(), providerTimeoutMs: ctx.config.providerTimeoutMs })) {
+    const nowLoop = await clock.now();
+    if (!shouldReadAnotherPage({ pagesReadSoFar: pagesRead, policy: { pagesPerRun: ctx.cfg.readPagesPerRun, pageSize: ctx.cfg.readPageSize }, remainingBudgetMs: ctx.deadline - nowLoop.getTime(), providerTimeoutMs: ctx.config.providerTimeoutMs })) {
       break;
     }
     const direction = directionFor(backfilling);
-    const cursor = direction === "older" ? backfillCursor : newestCursor;
+    const cursor = direction === "older" ? backfillCursor : freshCursor;
     const signal = AbortSignal.timeout(ctx.config.providerTimeoutMs);
     const result = await engagement.read({
       account: { id: account.id, externalId: account.externalAccountId, displayName: account.displayName, settings, credentials },
@@ -142,7 +147,7 @@ async function processAccount(
       providerState,
       direction,
       limit: ctx.cfg.readPageSize,
-      now,
+      now: nowLoop,
       signal,
     });
     if (result.kind !== "page") {
@@ -150,10 +155,42 @@ async function processAccount(
       break;
     }
     pagesRead++;
-    pages.push({ items: result.items });
+    let anyAlreadyStored = false;
+    for (const item of result.items) {
+      // Anything a retention pass would have already removed is never stored, so a cursor
+      // restart cannot resurrect and re-notify what retention pruned (data-model.md §10).
+      if (item.saidAt < retentionHorizon) continue;
+      const insertResult = await repos.engagementItems.insertIfAbsent({
+        socialAccountId: account.id,
+        providerKey: account.providerKey,
+        kind: item.kind,
+        externalId: item.externalId,
+        text: item.text,
+        textTruncated: item.textTruncated ?? false,
+        authorDisplayName: item.author.displayName,
+        authorHandle: item.author.handle,
+        authorExternalId: item.author.externalId,
+        authorUrl: item.author.url,
+        authorIdentityStable: item.author.identityStable,
+        authorReachable: item.author.reachable ?? true,
+        saidAt: item.saidAt,
+        ingestedAt: nowLoop,
+        parentExternalId: item.parentExternalId,
+        providerData: item.data ?? {},
+      });
+      if (insertResult.inserted) {
+        inserted++;
+        if (!newestSaidAt || item.saidAt > newestSaidAt) newestSaidAt = item.saidAt;
+      } else {
+        anyAlreadyStored = true;
+      }
+      // The provider's upstream signal (FR-011, FR-061) applies to the already-stored row — the
+      // item itself is immutable past ingest, so this is the one allowed post-ingest mutation.
+      if (item.upstream === "withdrawn") await repos.engagementItems.markWithdrawn(insertResult.id, nowLoop);
+      else if (item.upstream === "edited") await repos.engagementItems.markEditedUpstream(insertResult.id, nowLoop);
+    }
     if (direction === "older") backfillCursor = result.cursor;
-    else newestCursor = result.cursor;
-    const anyAlreadyStored = false; // determined when inserting, below; conservative default keeps backfilling going
+    else freshCursor = result.cursor;
     backfilling = nextBackfillState({
       wasBackfilling: backfilling,
       pageItemCount: result.items.length,
@@ -162,58 +199,33 @@ async function processAccount(
       exhausted: result.exhausted,
     });
     if (result.exhausted) break;
+    // The newest direction only ever reads forward until it meets what it already has; once it
+    // does, there is nothing further back worth reading again this run.
+    if (direction === "newest" && anyAlreadyStored) break;
   }
 
   if (stop) {
-    await handleStop(stop, { account, state, repos, ctx, secrets });
+    await handleStop(stop, { account, state, token, repos, ctx, secrets });
     return;
   }
 
   const now = await clock.now();
-  const retentionHorizon = new Date(now.getTime() - ctx.cfg.retentionDays * 86_400_000);
-  let inserted = 0;
-  let newestSaidAt: Date | null = state.lastItemAt;
   await repos.transaction(async (tx) => {
-    for (const page of pages) {
-      for (const item of page.items) {
-        // Anything a retention pass would have already removed is never stored, so a cursor
-        // restart cannot resurrect and re-notify what retention pruned (data-model.md §10).
-        if (item.saidAt < retentionHorizon) continue;
-        const result = await tx.engagementItems.insertIfAbsent({
-          socialAccountId: account.id,
-          providerKey: account.providerKey,
-          kind: item.kind,
-          externalId: item.externalId,
-          text: item.text,
-          textTruncated: item.textTruncated ?? false,
-          authorDisplayName: item.author.displayName,
-          authorHandle: item.author.handle,
-          authorExternalId: item.author.externalId,
-          authorUrl: item.author.url,
-          authorIdentityStable: item.author.identityStable,
-          authorReachable: item.author.reachable ?? true,
-          saidAt: item.saidAt,
-          ingestedAt: now,
-          parentExternalId: item.parentExternalId,
-          providerData: item.data ?? {},
-        });
-        if (result.inserted) {
-          inserted++;
-          if (!newestSaidAt || item.saidAt > newestSaidAt) newestSaidAt = item.saidAt;
-        }
-      }
-    }
-    await tx.engagementAccountStates.update(account.id, {
-      cursor: newestCursor,
-      providerState: { ...providerState, ...(backfillCursor ? { backfillCursor } : {}) },
-      backfilling,
-      readLeaseUntil: null,
-      readLeaseOwner: null,
-      lastReadAt: now,
-      lastItemAt: newestSaidAt,
-      consecutiveFailures: 0,
-      lastError: null,
-    });
+    await tx.engagementAccountStates.update(
+      account.id,
+      {
+        cursor: backfillCursor,
+        providerState,
+        backfilling,
+        readLeaseUntil: null,
+        readLeaseOwner: null,
+        lastReadAt: now,
+        lastItemAt: newestSaidAt,
+        consecutiveFailures: 0,
+        lastError: null,
+      },
+      token,
+    );
     if (inserted > 0) {
       await tx.activity.insert({
         kind: "engagement_received",
@@ -234,15 +246,16 @@ async function handleStop(
   input: {
     account: ClaimedEngagementAccount["account"];
     state: ClaimedEngagementAccount["state"];
+    token: string;
     repos: ReturnType<typeof forSchedulerProject>;
     ctx: { config: SchedulerConfig; counts: EngagementReadCounts };
     secrets: readonly string[];
   },
 ): Promise<void> {
-  const { account, state, repos, ctx, secrets } = input;
+  const { account, state, token, repos, ctx, secrets } = input;
   const now = await clock.now();
   const release = (patch: Parameters<typeof repos.engagementAccountStates.update>[1]) =>
-    repos.engagementAccountStates.update(account.id, { ...patch, readLeaseUntil: null, readLeaseOwner: null });
+    repos.engagementAccountStates.update(account.id, { ...patch, readLeaseUntil: null, readLeaseOwner: null }, token);
 
   switch (result.kind) {
     case "retryable_error":

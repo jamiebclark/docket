@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { engagementDrafts, type EngagementDraftRow } from "../db/schema";
 import { crossProject } from "./scope";
@@ -30,6 +30,7 @@ export function claimDueEngagementSends(opts: { now: Date; limit: number; leaseM
             eq(engagementDrafts.reviewState, "approved"),
             sql`${engagementDrafts.sendState} IN ('waiting', 'sending')`,
             sql`(${engagementDrafts.sendNotBefore} IS NULL OR ${engagementDrafts.sendNotBefore} <= ${now})`,
+            or(isNull(engagementDrafts.sendLeaseUntil), lte(engagementDrafts.sendLeaseUntil, now)),
           ),
         )
         .orderBy(asc(sql`${engagementDrafts.sendNotBefore} IS NULL`), asc(engagementDrafts.sendNotBefore), asc(engagementDrafts.id))

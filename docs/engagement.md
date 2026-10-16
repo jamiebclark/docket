@@ -51,9 +51,12 @@ field — only the comment's text goes to the model.
 Inbound items are kept for 90 days by default (an operator can change this), after which they are
 deleted along with any reply drafted for them — unless a draft is still waiting for a decision, or a
 send attempt is stuck in an unresolved state, in which case the item is kept until that is resolved. An
-item the platform reports as deleted is removed on the next pass regardless of its age. The record of
-what was actually sent is never deleted, so a reply is never sent twice even after the item it answered
-is gone.
+item a provider explicitly reports as deleted or edited upstream is marked as such and, if withdrawn,
+removed on the next retention pass regardless of its age. Bluesky does not yet carry this signal — how
+a deleted or edited reply presents itself on a later read is unverified (`docs/research/engagement.md`),
+so no Bluesky item is ever auto-withdrawn today; the path is exercised through the mock provider only.
+The record of what was actually sent is never deleted, so a reply is never sent twice even after the
+item it answered is gone.
 
 Disconnecting an account leaves its items readable but stops drafting and sending; reconnecting makes
 them sendable again. Removing an account from a project, or deleting the project, deletes its
