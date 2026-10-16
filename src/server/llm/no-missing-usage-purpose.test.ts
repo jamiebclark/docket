@@ -17,6 +17,7 @@ const USAGE_PURPOSES: readonly UsagePurpose[] = [
   "voice.try",
   "llm.check",
   "image.generate",
+  "engagement.reply",
 ];
 
 // Only label literals shaped like a usage purpose ("word.word") are in scope — a form field's

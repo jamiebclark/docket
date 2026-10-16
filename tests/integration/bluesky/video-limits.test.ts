@@ -92,7 +92,13 @@ describe("the 25-a-day allowance", () => {
     await testDb().insert(allowanceUses).values({ projectId: project.id, socialAccountId: current.target.socialAccountId, units: 25, createdAt: at(-HOUR) });
     const counts = await current.tick(at(0));
     expect(counts).toMatchObject({ claimed: 1, deferred: 1 });
-    expect(current.pds.requests.filter((r) => !new URL(r.url).pathname.includes("createSession"))).toHaveLength(0);
+    // The scheduler's engagement-read section sweeps every active Bluesky account in the same
+    // tick, independent of this target's publish attempt; filter its traffic out before counting.
+    expect(
+      current.pds.requests.filter(
+        (r) => !new URL(r.url).pathname.includes("createSession") && !new URL(r.url).pathname.includes("notification.listNotifications"),
+      ),
+    ).toHaveLength(0);
     const row = await current.row();
     expect(row.lastError).toContain("Waiting for Bluesky's daily video upload allowance");
     expect(row.attemptCount).toBe(0);

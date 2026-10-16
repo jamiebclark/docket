@@ -253,6 +253,34 @@
       "when": 1792033691810,
       "tag": "0035_fuzzy_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792069325452,
+      "tag": "0036_perfect_hellfire_club",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792073842430,
+      "tag": "0037_rich_moira_mactaggert",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792121826127,
+      "tag": "0038_unusual_hammerhead",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792123069443,
+      "tag": "0039_fluffy_hellion",
+      "breakpoints": true
     }
   ]
 }

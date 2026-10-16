@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ENGAGEMENT_ITEM_KINDS } from "../../providers/types";
 import type { ActivityKind } from "./outcomes";
 
 // Strict per-kind `details` shapes. No free-form keys: tokens, credentials and platform payloads have nowhere to go.
@@ -47,6 +48,9 @@ const schemas = {
     backfilled: z.literal(true).optional(),
   }),
   account_connect_failed: z.strictObject({ via: z.enum(["oauth", "paste", "credentials"]), code: z.enum(CONNECT_FAIL_CODES) }),
+  engagement_received: z.strictObject({ items: z.number().int().min(1) }),
+  engagement_replied: z.strictObject({ url: url.nullish(), itemKind: z.enum(ENGAGEMENT_ITEM_KINDS) }),
+  engagement_ambiguous: z.strictObject({ reason: z.enum(["timeout", "unreadable_response"]) }),
 } satisfies Record<ActivityKind, z.ZodType>;
 
 export type ActivityDetails<K extends ActivityKind = ActivityKind> = { [P in K]: z.infer<(typeof schemas)[P]> }[K];

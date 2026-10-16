@@ -8,7 +8,7 @@ import { projects } from "./projects";
 export const activityEventKind = pgEnum("activity_event_kind", ACTIVITY_KINDS);
 export const activityOutcome = pgEnum("activity_outcome", ACTIVITY_OUTCOMES);
 
-const kindOutcomePairs = ACTIVITY_KINDS.map((k) => `(kind = '${k}' AND outcome = '${KIND_OUTCOME[k]}')`).join(" OR ");
+const kindOutcomePairs = ACTIVITY_KINDS.map((k) => `(kind::text = '${k}' AND outcome::text = '${KIND_OUTCOME[k]}')`).join(" OR ");
 
 /**
  * One row per publish outcome worth showing. Append-only: the DAL exposes insert, list and summary only (FR-008).
@@ -55,6 +55,10 @@ export const activityEvents = pgTable(
     ),
     check("activity_events_needs_reauth_account", sql`${t.kind} <> 'account_needs_reauth' OR ${t.socialAccountId} IS NOT NULL`),
     check(
+      "activity_events_engagement_kinds",
+      sql`${t.kind}::text NOT LIKE 'engagement\_%' OR (${t.socialAccountId} IS NOT NULL AND ${t.providerKey} IS NOT NULL AND ${t.postTargetId} IS NULL)`,
+    ),
+    check(
       "activity_events_provider_keys",
       sql`cardinality(${t.providerKeys}) >= 1 AND (${t.providerKey} IS NULL OR ${t.providerKeys} = ARRAY[${t.providerKey}])`,
     ),
@@ -67,10 +71,13 @@ export const activityEvents = pgTable(
     index("activity_events_project_target_idx")
       .on(t.projectId, t.postTargetId)
       .where(sql`${t.postTargetId} IS NOT NULL`),
-    // Unread counting (022). The outcome lists are literals so the planner can match the partial predicate.
+    // Unread counting (022, inverted for 077). The predicate names only labels that existed before the
+    // batch that added `engagement` (research.md §1-§2): an enum-to-text cast is not IMMUTABLE, so it
+    // can never appear in an index predicate, new label or not. Inverting lets membership (today
+    // {failed, ambiguous, needs_reauth} plus engagement) follow with no mention of the new label.
     index("activity_events_attention_seq_idx")
       .on(t.projectId, t.seq)
-      .where(sql`${t.outcome} IN ('failed', 'ambiguous', 'needs_reauth')`),
+      .where(sql`${t.outcome} <> ALL (ARRAY['published', 'retrying', 'resolved', 'connect_failed']::activity_outcome[])`),
     index("activity_events_connect_failed_actor_idx")
       .on(t.projectId, t.actorUserId, t.seq)
       .where(sql`${t.outcome} = 'connect_failed'`),

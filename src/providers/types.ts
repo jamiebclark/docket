@@ -483,6 +483,107 @@ export interface ConsentDeclaration<Values = unknown> {
   declaration(values: Values | null): string;
 }
 
+export const ENGAGEMENT_ITEM_KINDS = ["reply", "comment", "mention", "direct_message"] as const;
+export type EngagementItemKind = (typeof ENGAGEMENT_ITEM_KINDS)[number];
+
+export interface EngagementDeclaration {
+  /** Inbound kinds this provider can read. Empty is not allowed — omit `engagement` instead. */
+  reads: readonly EngagementItemKind[];
+  /** Whether an inbound item can be answered on this platform. */
+  canReply: boolean;
+  /** The per-account write allowance a reply spends, for the publishing-first reserve (FR-042). */
+  writeBudget?: PublishLimit;
+  /**
+   * Set when a surface is known to need a permission the install cannot hold (FR-055).
+   * Declared surfaces still appear, marked unavailable with this reason and a link — and no call
+   * is ever made for them.
+   */
+  unavailable?: { reason: string; docsPath?: string };
+}
+
+export interface InboundItemDraft {
+  kind: EngagementItemKind;
+  /** 1–200 chars, trimmed, stable for this item on this platform. */
+  externalId: string;
+  /** "" when the item carries no text; never a placeholder. */
+  text: string;
+  textTruncated?: boolean;
+  author: {
+    /** null means the platform supplied none (FR-016). */
+    displayName: string | null;
+    handle: string | null;
+    externalId: string | null;
+    url: string | null;
+    /** false whenever the provider cannot promise the same person twice (FR-017). */
+    identityStable: boolean;
+    /** default true. */
+    reachable?: boolean;
+  };
+  saidAt: Date;
+  parentExternalId: string | null;
+  /** Validated against `itemDataSchema`; must contain no credential or token (FR-062). */
+  data?: unknown;
+  /** The platform reported the original gone or changed (FR-011). */
+  upstream?: "withdrawn" | "edited";
+}
+
+export interface EngagementReadContext<Settings = unknown> {
+  account: { id: string; externalId: string; displayName: string; settings: Settings; credentials: unknown };
+  /** null = read the newest page. */
+  cursor: string | null;
+  /** Parsed through `stateSchema`; `{}` on the first read. */
+  providerState: unknown;
+  /** Which direction this call is paging. */
+  direction: "newest" | "older";
+  limit: number;
+  now: Date;
+  signal: AbortSignal;
+}
+
+export type EngagementReadResult =
+  | {
+      kind: "page";
+      items: readonly InboundItemDraft[];
+      cursor: string | null;
+      providerState?: unknown;
+      /** true means the platform has nothing older; the scheduler then clears the backfill flag. */
+      exhausted: boolean;
+      summary?: AttemptSummary;
+    }
+  | { kind: "retryable_error"; error: string; retryAt?: Date }
+  | { kind: "fatal_error"; error: string }
+  | { kind: "credentials_invalid"; error: string }
+  | { kind: "rate_limited"; error: string; retryAt?: Date }
+  | { kind: "cursor_lost"; error: string }
+  | { kind: "unavailable"; reason: string; docsPath?: string };
+
+export interface EngagementSendContext<Settings = unknown> {
+  account: { id: string; externalId: string; settings: Settings; credentials: unknown };
+  item: { kind: EngagementItemKind; externalId: string; parentExternalId: string | null; data: unknown };
+  text: string;
+  now: Date;
+  signal: AbortSignal;
+}
+
+export type EngagementSendResult =
+  | { kind: "sent"; externalId: string; url?: string; summary?: AttemptSummary }
+  /** the platform says it is already answered. */
+  | { kind: "duplicate"; externalId?: string }
+  | { kind: "retryable_error"; error: string; retryAt?: Date }
+  | { kind: "fatal_error"; error: string; flagAccount?: boolean }
+  | { kind: "credentials_invalid"; error: string }
+  | { kind: "ambiguous"; error: string };
+
+export interface EngagementSupport<Settings = unknown> {
+  declaration: EngagementDeclaration;
+  /** Provider-owned shape of `engagement_items.provider_data`; the generic layer never reads it. */
+  itemDataSchema: z.ZodType;
+  /** Provider-owned shape of `engagement_account_states.provider_state`. */
+  stateSchema: z.ZodType;
+  read(ctx: EngagementReadContext<Settings>): Promise<EngagementReadResult>;
+  send(ctx: EngagementSendContext<Settings>): Promise<EngagementSendResult>;
+}
+
 export interface SocialProvider<Settings = unknown, State = unknown> {
   /** Lowercase `[a-z0-9-]+`, unique, stored in `social_accounts.provider_key`. */
   key: string;
@@ -518,4 +619,5 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   posting?: PostingDeclaration;
   accountDetails?: AccountDetailsReader<Settings>;
   consent?: ConsentDeclaration;
+  engagement?: EngagementSupport<Settings>;
 }

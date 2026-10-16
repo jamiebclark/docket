@@ -65,7 +65,7 @@ export const notificationPreferences = pgTable(
     check("notification_preferences_seq_nonneg", sql`${t.onFromSeq} IS NULL OR ${t.onFromSeq} >= 0`),
     check(
       "notification_preferences_kind_key",
-      sql`${t.axis} <> 'kind' OR ${t.switchKey} IN ('failed', 'ambiguous', 'needs_reauth', 'connect_failed')`,
+      sql`${t.axis} <> 'kind' OR ${t.switchKey} IN ('failed', 'ambiguous', 'needs_reauth', 'connect_failed', 'engagement')`,
     ),
     check("notification_preferences_key_format", sql`${t.switchKey} ~ '^[a-z0-9_-]{1,40}$'`),
   ],

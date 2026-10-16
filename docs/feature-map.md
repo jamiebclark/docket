@@ -67,6 +67,18 @@ spec is written.
   Verified with mocks only until the live checks in `docs/meta-setup.md` are done. Not yet owned by any spec: Facebook Page
   Stories, stickers and links, reading a Story back, and multi-asset Stories.
 
+- **Engagement inbox (077).** A project-scoped **Inbox** screen shows replies and mentions from connected accounts
+  (Bluesky only — see `docs/engagement.md`), each with its parent shown alongside it. A member can request a
+  drafted reply (spent under `engagement.reply`, the same credit hold and voice profile as post generation), write
+  one by hand, or dismiss the item. Approving a reply happens on the Review page's "Replies" section (no bulk
+  approve, a bulk dismiss) through the same extracted decision core posts use, and the reply is sent by the next
+  scheduler tick once publishing for that tick has resolved, never on a timer and never under `auto_approve`. An
+  ambiguous send surfaces on Failures' "Replies needing a decision" section. Items are kept 90 days by default,
+  then pruned with their drafts unless one is still awaiting a decision. Facebook Page comments, Instagram
+  comments and Threads replies are specified but not built, blocked on a human research spike into Meta's comment
+  identity model; direct messages are modelled (and marked Private wherever they appear) but not read, drafted or
+  sent on any real platform yet.
+
 ## Scheduling and composing (not built)
 
 ### One idea, one image, several projects

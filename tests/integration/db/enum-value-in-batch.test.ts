@@ -44,4 +44,53 @@ describe("enum labels added mid-batch are never compared as enums", () => {
     expect(schema).toContain("${t.cadencePeriod}::text IS DISTINCT FROM 'date'");
     expect(schema).toContain("${t.period}::text <> 'date'");
   });
+
+  // 077: a second hazard, found the same way — an enum-to-text cast is not IMMUTABLE, so it can never
+  // appear in an index predicate, and neither can a label a migration adds in its own batch (42P17 /
+  // 55P04, research.md §1). A partial index may name only labels that existed before the batch.
+  it("no migration puts an enum cast or a freshly added label inside an index predicate", () => {
+    const addedByFile = new Map<string, string[]>();
+    for (const file of files) {
+      const labels = [...sql(file).matchAll(/ALTER TYPE .* ADD VALUE '([^']+)'/g)].map((m) => m[1]!);
+      if (labels.length > 0) addedByFile.set(file, labels);
+    }
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      const freshLabels = addedByFile.get(file) ?? [];
+      for (const statement of sql(file).split("--> statement-breakpoint")) {
+        if (!/CREATE (UNIQUE )?INDEX/.test(statement)) continue;
+        const whereIdx = statement.search(/\bWHERE\b/);
+        if (whereIdx === -1) continue;
+        const predicate = statement.slice(whereIdx);
+        if (predicate.includes("::text")) offenders.push(`${file}: cast in index predicate: ${predicate.trim().slice(0, 160)}`);
+        for (const label of freshLabels) {
+          if (predicate.includes(`'${label}'`)) offenders.push(`${file}: freshly added label '${label}' in index predicate`);
+        }
+      }
+    }
+    expect(offenders, "an index predicate may name only labels that existed before this migration's batch, with no ::text cast").toEqual([]);
+  });
+
+  it("every pair in the regenerated activity_events_kind_outcome CHECK is compared ::text", () => {
+    for (const file of files) {
+      const content = sql(file);
+      if (!content.includes("activity_events_kind_outcome")) continue;
+      const statement = content
+        .split("--> statement-breakpoint")
+        .find((s) => s.includes("activity_events_kind_outcome") && /ADD CONSTRAINT/.test(s));
+      if (!statement) continue;
+      const pairs = [...statement.matchAll(/\(kind(::text)?\s*=\s*'[^']+'\s*AND\s*outcome(::text)?\s*=\s*'[^']+'\)/g)];
+      expect(pairs.length, `${file}: expected at least one kind/outcome pair`).toBeGreaterThan(0);
+      for (const pair of pairs) {
+        expect(pair[0], `${file}: ${pair[0]}`).toMatch(/kind::text\s*=\s*'[^']+'\s*AND\s*outcome::text\s*=\s*'[^']+'/);
+      }
+    }
+  });
+
+  it("the schema's kindOutcomePairs generator and the attention index both keep the discipline", () => {
+    const schema = readFileSync("src/server/db/schema/activity.ts", "utf8");
+    expect(schema).toContain("kind::text = '${k}' AND outcome::text = '${KIND_OUTCOME[k]}'");
+    expect(schema).toContain("outcome} <> ALL (ARRAY['published', 'retrying', 'resolved', 'connect_failed']::activity_outcome[])");
+  });
 });

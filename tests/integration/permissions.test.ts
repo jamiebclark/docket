@@ -1,11 +1,12 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { ForbiddenError } from "../../src/server/dal/errors";
-import { forProject, requirePermission } from "../../src/server/dal/scope";
+import { forApiKey, forJobRunner, forProject, requirePermission } from "../../src/server/dal/scope";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import { member, membershipAuditLog } from "../../src/server/db/schema";
 import * as invitations from "../../src/server/services/invitations";
 import * as members from "../../src/server/services/members";
+import { ALL_PERMISSIONS, createKey } from "../helpers/api";
 import { fakeSession } from "../helpers/auth";
 import { closeDb, testDb } from "../helpers/db";
 import { createProjectWithMembers } from "../helpers/factories";
@@ -94,5 +95,25 @@ describe("permission matrix (FR-021)", () => {
     const editorScope = await scopeOf(ctx.editor.id);
     expect(() => requirePermission(editorScope, { voice: ["manage"] })).toThrow(ForbiddenError);
     expect(() => requirePermission(editorScope, { generation: ["auto_approve"] })).toThrow(ForbiddenError);
+  });
+
+  it("engagement: a member holds it, but no API key permission and no job-runner scope ever does (FR-030, data-model.md §9)", async () => {
+    const ctx = await createProjectWithMembers();
+    const scopeOf = (userId: string) => forProject(fakeSession(userId), ctx.project.slug);
+    for (const who of [ctx.owner, ctx.admin, ctx.editor]) {
+      const scope = await scopeOf(who.id);
+      expect(() => requirePermission(scope, { engagement: ["view"] })).not.toThrow();
+      expect(() => requirePermission(scope, { engagement: ["reply"] })).not.toThrow();
+    }
+    const ownerScope = await scopeOf(ctx.owner.id);
+    for (const permission of ALL_PERMISSIONS) {
+      const { secret } = await createKey(ownerScope, [permission]);
+      const { scope: apiScope } = await forApiKey(secret);
+      expect(() => requirePermission(apiScope, { engagement: ["view"] })).toThrow(ForbiddenError);
+      expect(() => requirePermission(apiScope, { engagement: ["reply"] })).toThrow(ForbiddenError);
+    }
+    const jobRunnerScope = await forJobRunner(ctx.project.id, null);
+    expect(() => requirePermission(jobRunnerScope, { engagement: ["view"] })).toThrow(ForbiddenError);
+    expect(() => requirePermission(jobRunnerScope, { engagement: ["reply"] })).toThrow(ForbiddenError);
   });
 });

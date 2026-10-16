@@ -11,6 +11,8 @@ import type { ProjectScope, SchedulingPolicy } from "../dal/scope";
 import type { TargetRecord } from "../dal/targets";
 import { prepareVariants } from "./media-variants";
 import { syncVideoVersions } from "./video-versions";
+import { countReplyQueue } from "./engagement/review";
+import { decide, serialized, type Decidable } from "./review/decide";
 import { applyDerivedStatus, gate, lockPost, queueTargetsInTx, type TargetResult } from "./posts";
 import { variantGroupsForPost } from "./posts/variant-groups";
 import { loadTargetContent, validateTargetContent } from "./posts/validate";
@@ -117,10 +119,10 @@ export async function listReviewQueue(
   return { items, total, page, pageSize: REVIEW_QUEUE_PAGE_SIZE };
 }
 
-/** How many posts wait for review (the navigation badge). */
+/** How many posts and replies wait for review (the navigation badge, FR-031). */
 export async function countReviewQueue(scope: ProjectScope): Promise<number> {
-  if (!scope.can({ post: ["view"] })) return 0;
-  return (await scope.posts.listReviewQueue(1)).total;
+  const posts = scope.can({ post: ["view"] }) ? (await scope.posts.listReviewQueue(1)).total : 0;
+  return posts + (await countReplyQueue(scope));
 }
 
 export type ApproveResult =
@@ -133,23 +135,18 @@ const alreadyReviewed = (post: PostRecord): { ok: false; code: "already_reviewed
   message: post.reviewState === "rejected" ? "This post was rejected." : "This post was already approved.",
 });
 
-/**
- * Same-process decisions on one post wait their turn here instead of each parking a pooled connection on the
- * row lock: the winner still needs the pool (`clock.now`) inside its transaction, so a burst of duplicate
- * clicks could otherwise exhaust it. The row lock stays the arbiter across processes.
- */
-const decisions = new Map<string, Promise<unknown>>();
-async function serialized<T>(postId: string, run: () => Promise<T>): Promise<T> {
-  const previous = decisions.get(postId) ?? Promise.resolve();
-  const current = previous.then(run, run);
-  const tail = current.catch(() => undefined);
-  decisions.set(postId, tail);
-  try {
-    return await current;
-  } finally {
-    if (decisions.get(postId) === tail) decisions.delete(postId);
-  }
-}
+const postDecidable: Decidable<PostRecord> = {
+  async lock(tx, id) {
+    try {
+      return await lockPost(tx, id);
+    } catch (error) {
+      if (error instanceof NotFoundError) return null;
+      throw error;
+    }
+  },
+  isUndecided: (post) => post.reviewState === "needs_review",
+  decidedMessage: (post) => alreadyReviewed(post).message,
+};
 
 export async function approvePost(scope: ProjectScope, postId: string, input?: unknown): Promise<ApproveResult> {
   const id = z.uuid().parse(postId);
@@ -175,11 +172,8 @@ async function approveSerialized(
   } catch {
     // Reported per target by the gate.
   }
-  return scope.transaction(async (tx): Promise<ApproveResult> => {
+  const decided = await decide(scope, id, postDecidable, async (tx, post): Promise<ApproveResult> => {
     need(tx, { post: ["edit", "schedule"] });
-    const post = await lockPost(tx, id);
-    if (post.reviewState !== "needs_review") return alreadyReviewed(post);
-
     const targets = await tx.targets.listForPost(id);
     const draft = targets.filter((t) => t.status === "draft");
     if (edits && edits.length > 0) {
@@ -221,6 +215,8 @@ async function approveSerialized(
     await applyDerivedStatus(tx, id);
     return { ok: true, queued };
   });
+  if (decided.ok === false && decided.code === "already_decided") return { ok: false, code: "already_reviewed", message: decided.message };
+  return decided;
 }
 
 export async function rejectPost(
@@ -231,10 +227,8 @@ export async function rejectPost(
   const id = z.uuid().parse(postId);
   const { reason } = rejectSchema.parse(input ?? {});
   need(scope, { post: ["edit"] });
-  return scope.transaction(async (tx) => {
+  const decided = await decide(scope, id, postDecidable, async (tx) => {
     need(tx, { post: ["edit"] });
-    const post = await lockPost(tx, id);
-    if (post.reviewState !== "needs_review") return alreadyReviewed(post);
     await tx.posts.update(id, {
       reviewState: "rejected",
       rejectionReason: reason?.trim() ? reason.trim() : null,
@@ -244,6 +238,8 @@ export async function rejectPost(
     await applyDerivedStatus(tx, id);
     return { ok: true as const };
   });
+  if (decided.ok === false) return { ok: false, code: "already_reviewed", message: decided.message };
+  return decided;
 }
 
 export interface BulkApproveResult {

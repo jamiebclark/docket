@@ -277,7 +277,10 @@ Everything above must be drivable over HTTP. The UI, the jobs, and the API all c
 
 ## Out of scope for now
 
-Video, stories and reels, analytics, comment or inbox management, other platforms, billing, public sign-up, Netlify.
+Video, stories and reels, analytics, other platforms, billing, public sign-up, Netlify.
+
+Comment and inbox management shipped in 077: reading comments, mentions and replies and sending an
+approved reply, for Bluesky. See `docs/engagement.md`.
 
 ## Owner answers (2026-10-02)
 

@@ -41,6 +41,15 @@ export interface SchedulerConfig {
   emailPauseAfterFailures?: number;
   emailUnavailableRetryMs?: number;
   emailRetentionDays?: number;
+  /** Engagement inbox (077): reads and sends claimed per tick, write-budget reserve, retention. */
+  engagementRetentionDays?: number;
+  engagementReadPageSize?: number;
+  engagementReadPagesPerRun?: number;
+  engagementReadMinIntervalMs?: number;
+  engagementSendsPerTick?: number;
+  engagementWriteReserve?: number;
+  engagementTimeShare?: number;
+  engagementPruneBatch?: number;
 }
 
 export const WEBHOOK_DEFAULTS = {
@@ -128,6 +137,36 @@ export function standingSeriesConfig(config: SchedulerConfig) {
   };
 }
 
+export const ENGAGEMENT_DEFAULTS = {
+  retentionDays: 90,
+  readPageSize: 50,
+  readPagesPerRun: 3,
+  readMinIntervalMs: 60_000,
+  sendsPerTick: 5,
+  writeReserve: 0.25,
+  timeShare: 0.8,
+  pruneBatch: 200,
+} as const;
+
+/** The engagement inbox's settings with defaults filled in. */
+export function engagementConfig(config: SchedulerConfig) {
+  return {
+    retentionDays: config.engagementRetentionDays ?? ENGAGEMENT_DEFAULTS.retentionDays,
+    readPageSize: config.engagementReadPageSize ?? ENGAGEMENT_DEFAULTS.readPageSize,
+    readPagesPerRun: config.engagementReadPagesPerRun ?? ENGAGEMENT_DEFAULTS.readPagesPerRun,
+    readMinIntervalMs: config.engagementReadMinIntervalMs ?? ENGAGEMENT_DEFAULTS.readMinIntervalMs,
+    sendsPerTick: config.engagementSendsPerTick ?? ENGAGEMENT_DEFAULTS.sendsPerTick,
+    writeReserve: config.engagementWriteReserve ?? ENGAGEMENT_DEFAULTS.writeReserve,
+    pruneBatch: config.engagementPruneBatch ?? ENGAGEMENT_DEFAULTS.pruneBatch,
+    leaseMs: config.leaseMs,
+    // Engagement takes a share of the tick, never all of it. Every section computes its deadline
+    // from the same startedAt and they run concurrently, so a section that works to the very end
+    // of the budget starves the ones that predate it: token refresh skips an account silently,
+    // counting nothing, once now plus providerTimeoutMs passes the deadline.
+    timeBudgetMs: Math.floor(config.timeBudgetMs * (config.engagementTimeShare ?? ENGAGEMENT_DEFAULTS.timeShare)),
+  };
+}
+
 export const STANDING_SERIES_MAX_SERIES_DEFAULT = 2;
 export const STANDING_SERIES_MAX_POSTS_DEFAULT = 2;
 
@@ -151,6 +190,14 @@ type EnvLike = Pick<
   | "GENERATION_TICK_MAX_ITEMS"
   | "STANDING_SERIES_TICK_MAX_SERIES"
   | "STANDING_SERIES_TICK_MAX_POSTS"
+  | "ENGAGEMENT_RETENTION_DAYS"
+  | "ENGAGEMENT_READ_PAGE_SIZE"
+  | "ENGAGEMENT_READ_PAGES_PER_RUN"
+  | "ENGAGEMENT_READ_MIN_INTERVAL_SECONDS"
+  | "ENGAGEMENT_SENDS_PER_TICK"
+  | "ENGAGEMENT_WRITE_RESERVE"
+  | "ENGAGEMENT_TIME_SHARE"
+  | "ENGAGEMENT_PRUNE_BATCH"
 >;
 
 /** `overrides` is for tests. */
@@ -175,6 +222,14 @@ export function schedulerConfig(env: EnvLike, overrides: Partial<SchedulerConfig
     jobBackoffMaxMs: JOB_BACKOFF_MAX_MS,
     standingSeriesMaxSeries: env.STANDING_SERIES_TICK_MAX_SERIES,
     standingSeriesMaxPosts: env.STANDING_SERIES_TICK_MAX_POSTS,
+    engagementRetentionDays: env.ENGAGEMENT_RETENTION_DAYS,
+    engagementReadPageSize: env.ENGAGEMENT_READ_PAGE_SIZE,
+    engagementReadPagesPerRun: env.ENGAGEMENT_READ_PAGES_PER_RUN,
+    engagementReadMinIntervalMs: env.ENGAGEMENT_READ_MIN_INTERVAL_SECONDS * 1000,
+    engagementSendsPerTick: env.ENGAGEMENT_SENDS_PER_TICK,
+    engagementWriteReserve: env.ENGAGEMENT_WRITE_RESERVE,
+    engagementTimeShare: env.ENGAGEMENT_TIME_SHARE,
+    engagementPruneBatch: env.ENGAGEMENT_PRUNE_BATCH,
     ...overrides,
   };
 }

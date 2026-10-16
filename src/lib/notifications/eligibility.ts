@@ -5,7 +5,7 @@ import { ATTENTION_MEMBER_OUTCOMES, CONNECT_FAILED } from "./attention";
 
 export const OFF_SEQ = 9223372036854775807n; // bigint max; "off" (Q3)
 export type SwitchAxis = "kind" | "platform";
-export const ATTENTION_KINDS = ["failed", "ambiguous", "needs_reauth", "connect_failed"] as const;
+export const ATTENTION_KINDS = ["failed", "ambiguous", "needs_reauth", "connect_failed", "engagement"] as const;
 
 export interface PreferenceRow {
   axis: SwitchAxis;

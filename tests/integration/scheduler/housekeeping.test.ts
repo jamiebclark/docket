@@ -2,8 +2,10 @@ import { afterAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { apiIdempotencyKeys, standingSeriesOccurrences } from "../../../src/server/db/schema";
 import { runTick } from "../../../src/server/scheduler";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
 import { runHousekeeping, STANDING_SERIES_RUN_RETENTION_DAYS } from "../../../src/server/scheduler/housekeeping";
 import { createStandingSeries } from "../../../src/server/services/standing-series/manage";
+import { getEnv } from "../../../src/server/env";
 import { createKey } from "../../helpers/api";
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
@@ -11,6 +13,8 @@ import { postsEnv } from "../../helpers/posts-env";
 import { standingSeriesEnv } from "../../helpers/standing-series-env";
 
 afterAll(closeDb);
+
+const config = () => schedulerConfig(getEnv());
 
 describe("housekeeping", () => {
   it("purges idempotency rows past their retention, across projects, and keeps live ones", async () => {
@@ -24,7 +28,7 @@ describe("housekeeping", () => {
     const rows = () => testDb().select().from(apiIdempotencyKeys).where(eq(apiIdempotencyKeys.projectId, env.project.id));
     expect(await rows()).toHaveLength(2);
     // "old" is 8 days old and "recent" 2 days old at this point.
-    await atTime(new Date(Date.now() + 8 * 24 * 3600_000), () => runHousekeeping());
+    await atTime(new Date(Date.now() + 8 * 24 * 3600_000), () => runHousekeeping(config()));
     expect((await rows()).map((r) => r.idemKey)).toEqual(["recent"]);
   });
 
@@ -51,7 +55,7 @@ describe("housekeeping", () => {
       config: {},
     });
 
-    await runHousekeeping();
+    await runHousekeeping(config());
     expect(await e.scope.standingSeriesRuns.get(oldRun.id)).toBeNull();
     expect(await e.scope.standingSeriesRuns.get(openRun.id)).not.toBeNull();
   });
@@ -95,7 +99,7 @@ describe("housekeeping", () => {
       .set({ recordedAt: old })
       .where(and(eq(standingSeriesOccurrences.projectId, e.project.id), eq(standingSeriesOccurrences.id, pending.id)));
 
-    await runHousekeeping();
+    await runHousekeeping(config());
     expect(await e.scope.datedOccurrences.get(settledOld.id)).toBeNull();
     expect(await e.scope.datedOccurrences.get(pending.id)).not.toBeNull();
   });

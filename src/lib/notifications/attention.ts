@@ -1,7 +1,7 @@
 // What counts as a problem worth telling someone about. Pure, so the server count and the client agree.
 
 /** Outcomes every member of the project is told about. */
-export const ATTENTION_MEMBER_OUTCOMES = ["failed", "ambiguous", "needs_reauth"] as const;
+export const ATTENTION_MEMBER_OUTCOMES = ["failed", "ambiguous", "needs_reauth", "engagement"] as const;
 
 /** Counts only for the person who attempted the connection. */
 export const CONNECT_FAILED = "connect_failed";

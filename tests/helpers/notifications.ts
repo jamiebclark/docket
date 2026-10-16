@@ -16,6 +16,9 @@ const DETAILS: Record<ActivityKind, NewActivityEvent["details"]> = {
   target_resolved: { action: "marked_published" },
   account_needs_reauth: { reason: "renewal_refused" },
   account_connect_failed: { via: "oauth", code: "platform_error" },
+  engagement_received: { items: 1 },
+  engagement_replied: { itemKind: "reply" },
+  engagement_ambiguous: { reason: "timeout" },
 };
 
 /** One activity event of `kind` in a project, with valid per-kind details. */
