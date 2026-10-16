@@ -148,6 +148,12 @@ describe("validateInstagram story", () => {
     expect(codes(story("", [img({ width: 1080, height: 1920, altText: "" })]))).not.toContain("story_will_crop");
   });
 
+  it("accepts a 9:16 image for a Story but refuses the same asset for a feed post (FR-016, SC-007)", () => {
+    const asset = img({ width: 1080, height: 1920, altText: "" });
+    expect(codes(story("", [asset]))).not.toContain("aspect_ratio_out_of_range");
+    expect(codes(run("x", [asset]))).toContain("aspect_ratio_out_of_range");
+  });
+
   it("is silent when dimensions are unknown, never guessing", () => {
     expect(codes(story("", [img({ width: null, height: null, altText: "" })]))).not.toContain("story_will_crop");
   });

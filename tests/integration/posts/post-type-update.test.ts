@@ -43,8 +43,8 @@ describe("post type on update", () => {
   it("refuses a value the provider does not offer", async () => {
     const { env, account, draft, stored } = await setup();
     await expect(
-      posts.updatePost(env.scope, draft.post.id, { targets: [{ accountId: account.id, postType: "story" }] }),
-    ).rejects.toThrow(/video, reel/);
+      posts.updatePost(env.scope, draft.post.id, { targets: [{ accountId: account.id, postType: "carousel" }] }),
+    ).rejects.toThrow(/image, story, video, reel/);
     expect(await stored()).toBe("reel");
   });
 

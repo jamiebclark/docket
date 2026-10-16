@@ -1,7 +1,9 @@
 // US1/US2: an image or video Story publishes through the real scheduler, with no caption and no description.
 // Mocked Graph only; the DB clock is pinned with `atTime`, never slept.
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { allowanceUses } from "../../../src/server/db/schema/scheduler";
 import { postTargets } from "../../../src/server/db/schema/posts";
 import { createSchedulingRepos } from "../../../src/server/dal/scope";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
@@ -100,6 +102,90 @@ describe("a video Story through the real scheduler", () => {
     expect(creates()).toHaveLength(1);
     expect(publishes()).toHaveLength(1);
     expect((await row())).toMatchObject({ status: "published", externalId: "ig_story_1" });
+  });
+});
+
+describe("Story edge cases through the real scheduler", () => {
+  it("a full daily container allowance defers the create (not failed), and creates once the window clears", async () => {
+    const DAY = 86_400_000;
+    const base = await instagramVideoSetup(storage, "x", ["image"], { postType: "story" });
+    await testDb().insert(allowanceUses).values([{ projectId: base.projectId, socialAccountId: base.accountId, units: 400, createdAt: new Date(T0 - 3600 * 1000) }]);
+    graph.on("POST", media, () => ({ kind: "ok", body: { id: "s1" } }));
+    graph.on("GET", "/v26.0/s1", finished);
+    graph.on("GET", quota, quotaOk);
+    graph.on("POST", publish, { kind: "ok", body: { id: "ig_story_1" } });
+    expect(await tickAt(0)).toMatchObject({ claimed: 1, deferred: 1 });
+    expect(creates()).toHaveLength(0);
+    expect((await base.row())).toMatchObject({ status: "scheduled" });
+    const resumeAt = -3600 + DAY / 1000 + 2;
+    expect(await tickAt(resumeAt)).toMatchObject({ claimed: 1, continued: 1 });
+    expect(creates()).toHaveLength(1);
+    await tickAt(resumeAt + 10);
+    await tickAt(resumeAt + 11);
+    expect(await tickAt(resumeAt + 12)).toMatchObject({ claimed: 1, done: 1 });
+    expect(publishes()).toHaveLength(1);
+    expect((await base.row())).toMatchObject({ status: "published", externalId: "ig_story_1" });
+  });
+
+  it("a full platform quota retries in about an hour without a publish request", async () => {
+    script([finished]);
+    const base = await instagramVideoSetup(storage, "x", ["image"], { postType: "story" });
+    graph.on("GET", quota, { kind: "ok", body: { data: [{ quota_usage: 100, config: { quota_total: 100 } }] } });
+    await tickAt(0);
+    await tickAt(10); // FINISHED
+    expect(await tickAt(11)).toMatchObject({ claimed: 1, retried: 1 });
+    const r = await base.row();
+    const wait = r.nextAttemptAt!.getTime() - (T0 + 11_000);
+    expect(wait).toBeGreaterThanOrEqual(3_600_000);
+    expect(wait).toBeLessThan(3_600_000 + 60_000);
+    expect(publishes()).toHaveLength(0);
+  });
+
+  it("a container reported PUBLISHED ends ambiguous and is never retried", async () => {
+    script({ kind: "ok", body: { status_code: "PUBLISHED" } });
+    const base = await instagramVideoSetup(storage, "x", ["image"], { postType: "story" });
+    await tickAt(0);
+    expect(await tickAt(10)).toMatchObject({ claimed: 1, ambiguous: 1 });
+    expect((await base.row()).status).toBe("ambiguous");
+    expect(publishes()).toHaveLength(0);
+    expect(await tickAt(1000)).toMatchObject({ claimed: 0 });
+  });
+
+  it("EXPIRED rebuilds the container up to twice, then fails", async () => {
+    let n = 0;
+    graph.on("POST", media, () => ({ kind: "ok", body: { id: `s${++n}` } }));
+    for (const id of ["s1", "s2", "s3"]) graph.on("GET", `/v26.0/${id}`, { kind: "ok", body: { status_code: "EXPIRED" } });
+    const base = await instagramVideoSetup(storage, "x", ["image"], { postType: "story" });
+    let s = 0;
+    for (let round = 0; round < 2; round++) {
+      await tickAt(s);
+      s += 11;
+      expect(await tickAt(s)).toMatchObject({ claimed: 1, continued: 1 });
+      s += 1;
+    }
+    await tickAt(s);
+    s += 11;
+    expect(await tickAt(s)).toMatchObject({ claimed: 1, failed: 1 });
+    expect(creates()).toHaveLength(3);
+    expect((await base.row()).lastError).toContain("tried 3 times");
+    expect(publishes()).toHaveLength(0);
+  });
+
+  it("a create_container killed mid-flight is retried: one retry unit of allowance and exactly one publish", async () => {
+    script([inProgress, finished]);
+    const base = await instagramVideoSetup(storage, "killed", ["image"], { postType: "story" });
+    const past = new Date(T0 - 60_000);
+    await testDb()
+      .update(postTargets)
+      .set({ status: "publishing", leaseOwner: randomUUID(), leaseUntil: past, inFlightStep: "create_container", inFlightMayPublish: false, firstStepAt: past })
+      .where(and(eq(postTargets.projectId, base.projectId), eq(postTargets.id, base.targetId)));
+    expect(await tickAt(0)).toMatchObject({ recovered: 1, ambiguous: 0 });
+    for (let s = 11; s <= 200 && (await base.row()).status !== "published"; s += 11) await tickAt(s);
+    expect(await base.row()).toMatchObject({ status: "published", externalId: "ig_story_1" });
+    expect(creates()).toHaveLength(1);
+    expect(publishes()).toHaveLength(1);
+    const units = (await testDb().select().from(allowanceUses).where(eq(allowanceUses.projectId, base.projectId))).map((u) => u.units);
+    expect(units).toEqual([1]);
   });
 });
 

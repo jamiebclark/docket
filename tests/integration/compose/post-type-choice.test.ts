@@ -132,4 +132,24 @@ describe("per-target post type choice", () => {
     expect((await posts.getPost(t.env.scope, draft.post.id)).targets[0]!.chosenPostType).toBe("reel");
     expect((await t.check(t.instagram.id, [a.id], undefined, draft.post.id)).postTypeChoice).toMatchObject({ selected: "reel" });
   });
+
+  it("a second image added to a story target publishes as a carousel, while the stored choice stays story (FR-024)", async () => {
+    const t = await setup();
+    const [a, b] = [await t.image(), await t.image()];
+    const draft = await posts.createDraft(t.env.scope, {
+      baseText: "Hello",
+      mediaIds: [a.id],
+      targets: [{ accountId: t.instagram.id, postType: "story" }],
+    });
+    const reopened = await posts.getPost(t.env.scope, draft.post.id);
+    expect(reopened.targets[0]!.chosenPostType).toBe("story");
+
+    const single = await t.check(t.instagram.id, [a.id], undefined, draft.post.id);
+    expect(single.postType).toBe("story");
+
+    const carousel = await t.check(t.instagram.id, [a.id, b.id], undefined, draft.post.id);
+    expect(carousel.postType).toBe("carousel");
+    expect(carousel.postTypeChoice).toBeNull();
+    expect((await posts.getPost(t.env.scope, draft.post.id)).targets[0]!.chosenPostType).toBe("story");
+  });
 });

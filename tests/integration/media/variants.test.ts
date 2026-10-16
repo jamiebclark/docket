@@ -148,4 +148,21 @@ describe("variant service", () => {
     const r = await resolvePublishMedia(t.scope, p2.targets[0]!.id, insta);
     expect(r).toEqual({ ok: false, error: "Image 1 is no longer available." });
   });
+
+  it("a Story and a feed post resolve to the same variant row for the same asset (SC-009)", async () => {
+    const { instagramCapabilities } = await import("../../../src/providers/instagram/capabilities");
+    const t = await setup();
+    const realIg = await createMockAccount(t.project.id, {}, { providerKey: "instagram" });
+    const a = await t.asset(2000, 1600);
+    const { post } = await t.post([a.id], [realIg.id]);
+    await prepareVariants(t.scope, post.id);
+    expect(await t.repos.media.listVariants(a.id)).toHaveLength(1);
+
+    const feed = await adaptedMediaFor(t.repos, instagramCapabilities, "Instagram", [a]);
+    const story = await adaptedMediaFor(t.repos, instagramCapabilities, "Instagram", [a], { postType: "story" });
+    expect(feed.issues.map((i) => i.code)).not.toContain("variant_failed");
+    expect(story.issues.map((i) => i.code)).not.toContain("variant_failed");
+    expect(story.media[0]!.url).toBe(feed.media[0]!.url);
+    expect(await t.repos.media.listVariants(a.id)).toHaveLength(1);
+  });
 });

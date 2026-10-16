@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { MediaConstraints } from "../../providers/media";
 import type { VideoRecipe } from "../../providers/video-plan";
-import { videoRecipeKey } from "./hash";
+import { constraintsHash, videoRecipeKey } from "./hash";
 
 const recipe: VideoRecipe = {
   mode: "encode",
@@ -15,6 +16,26 @@ const recipe: VideoRecipe = {
   audio: { sampleRate: 48_000, channels: 2, bitrate: 128_000 },
   indexAtFront: true,
 };
+
+describe("constraintsHash", () => {
+  const base: MediaConstraints = {
+    acceptedMimeTypes: ["image/jpeg"],
+    outputMimeType: "image/jpeg",
+    maxBytes: 8_000_000,
+    minWidth: 320,
+    maxWidth: 1440,
+  };
+
+  it("is unaffected by aspect bounds (SC-009): a Story and a feed post share one hash", () => {
+    const feed: MediaConstraints = { ...base, minAspectRatio: 0.8, maxAspectRatio: 1.91 };
+    const story: MediaConstraints = { ...base, minAspectRatio: undefined, maxAspectRatio: undefined };
+    expect(constraintsHash(story)).toBe(constraintsHash(feed));
+  });
+
+  it("changes with a bound that is actually hashed, like maxWidth", () => {
+    expect(constraintsHash({ ...base, maxWidth: 1920 })).not.toBe(constraintsHash(base));
+  });
+});
 
 describe("videoRecipeKey", () => {
   it("is 64 hex characters", () => {
