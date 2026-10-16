@@ -250,7 +250,7 @@ export async function adaptedMediaFor(
   /** `preview`: no variant exists yet (an unsaved composition), so the planned output stands in for it. */
   opts: { preview?: boolean; postType?: PostType; videoEdits?: ReadonlyMap<string, VideoEdit> } = {},
 ): Promise<{ media: MediaItem[]; issues: ValidationIssue[] }> {
-  const c = mediaConstraintsOf(caps);
+  const c = mediaConstraintsOf(caps, opts.postType);
   const hash = constraintsHash(c);
   const media: MediaItem[] = [];
   const issues: ValidationIssue[] = [];
@@ -305,14 +305,14 @@ export async function resolvePublishMedia(
   if (gone >= 0) return { ok: false, error: `Image ${gone + 1} is no longer available.` };
 
   const storage = getStorage();
-  const c = mediaConstraintsOf(provider.capabilities);
-  const hash = constraintsHash(c);
-  const media: MediaItem[] = [];
   const postType = resolvePostType(
     provider.capabilities,
     ids.map((id) => itemOf(rows.get(id)!)),
     target.chosenPostType ?? null,
   );
+  const c = mediaConstraintsOf(provider.capabilities, postType);
+  const hash = constraintsHash(c);
+  const media: MediaItem[] = [];
   const videoEdits = await repos.posts.listVideoEdits(target.postId);
   for (const [i, id] of ids.entries()) {
     const asset = rows.get(id)!;

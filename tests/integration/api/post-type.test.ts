@@ -39,11 +39,20 @@ describe("createPost postTypes", () => {
     expect(post.json.targets[0].postType).toBe("reel");
   });
 
-  it("refuses story, naming what Instagram offers", async () => {
-    const { instagram, create } = await setup();
+  it("accepts story and reports it on the post and the target", async () => {
+    const { key, instagram, create } = await setup();
     const r = await create({ postTypes: { [instagram.id]: "story" } });
+    expect(r.status).toBe(201);
+    expect(r.json.post.targets[0].postType).toBe("story");
+    const target = await api("GET", `/posts/${r.json.post.id}/targets/${r.json.post.targets[0].id}`, { key });
+    expect(target.json.postType).toBe("story");
+  });
+
+  it("refuses an unoffered value, naming what Instagram offers", async () => {
+    const { instagram, create } = await setup();
+    const r = await create({ postTypes: { [instagram.id]: "carousel" } });
     expect(r.status).toBe(400);
-    expect(r.text).toContain("video, reel");
+    expect(r.text).toContain("image, story, video, reel");
     expect(r.text).toContain(instagram.id);
   });
 

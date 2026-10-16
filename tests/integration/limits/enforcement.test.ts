@@ -190,10 +190,10 @@ describe("media planner rows: each provider's own constraints adapt or refuse an
   for (const provider of providers) {
     for (const row of plannerRows(provider, assert)) {
       it(row.title, () => {
-        row.check(planWith(provider, row.asset), mediaConstraintsOf(provider.capabilities));
+        row.check(planWith(provider, row.asset, row.postType), mediaConstraintsOf(provider.capabilities, row.postType));
         if (row.inside) {
           // Just inside the limit, the same rule does not fire.
-          const inside = planWith(provider, row.inside);
+          const inside = planWith(provider, row.inside, row.postType);
           if (["formats", "bytes per file", "max width", "max height"].includes(row.category)) expect(inside).toEqual({ kind: "original" });
           else expect(inside.kind).not.toBe("refuse");
         }

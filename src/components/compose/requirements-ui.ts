@@ -87,6 +87,8 @@ export function detailRows(r: RequirementsSummary): DetailRow[] {
     rows.push({ term: "Width", detail: rangeText(image.width) });
     rows.push({ term: "Height", detail: rangeText(image.height) });
     rows.push({ term: "Aspect ratio", detail: rangeText(image.aspectRatio) });
+    if (image.recommendedAspectRatio) rows.push({ term: "Recommended shape", detail: image.recommendedAspectRatio.label });
+    for (const note of image.notes) rows.push({ term: "Note", detail: note });
     rows.push({
       term: "Alt text",
       detail: image.maxAltTextLength === null ? NO_LIMIT_DOCUMENTED : `up to ${number(image.maxAltTextLength)} characters`,

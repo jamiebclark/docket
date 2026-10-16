@@ -126,13 +126,17 @@ too small, counts, mixing, silence) is still refused. Add a row for every declar
 
 Three optional hooks let one provider publish the same content as more than one post type. Each is inert for a provider that declares nothing.
 
-- **G19, `postTypeChoices`** (on `capabilities`). A list of `PostTypeChoice`: a `shape` (today only `single_video`), at least two `options`
-  (`PostTypeOption`: `type`, `label`, `description`) and a `default` that is one of them. The composer shows one control per target from this
-  declaration, the choice is stored in `post_targets.chosen_post_type`, and `resolvePostType(caps, items, chosen)` in `src/providers/post-type.ts`
-  is the single resolver: total, never throws, and it ignores `chosen` for a shape with no declared choice. `ValidateInput.postType` and
-  `StepContent.postType` carry the resolved type; absent means "resolve with no choice".
-- **G20, `byPostType`** (on `capabilities.video`). Per-type overrides (`VideoLimitOverrides`: any video bound except `byPostType` itself, plus `notes`
-  shown in the summary) merged over the base block by `videoLimitsFor(caps, type)` in `src/providers/validation.ts`.
+- **G19, `postTypeChoices`** (on `capabilities`). A list of `PostTypeChoice`: a `shape` (`single_image` or `single_video`, one choice per shape),
+  at least two `options` (`PostTypeOption`: `type`, `label`, `description`) and a `default` that is one of them. The composer shows one control
+  per target from this declaration, the choice is stored in `post_targets.chosen_post_type`, and `resolvePostType(caps, items, chosen)` in
+  `src/providers/post-type.ts` is the single resolver: total, never throws, and it ignores `chosen` for a shape with no declared choice.
+  `ValidateInput.postType` and `StepContent.postType` carry the resolved type; absent means "resolve with no choice".
+- **G20, `byPostType`** (on `capabilities.video`, and the same idea on `capabilities.media`). Per-type overrides merged over the base block:
+  on video, `VideoLimitOverrides` (any video bound except `byPostType` itself, plus `notes` shown in the summary) merged by
+  `videoLimitsFor(caps, type)`; on media, `ImageLimitOverrides` (`minAspectRatio`, `maxAspectRatio`, `recommendedAspectRatio`, `notes` - a `null`
+  bound *removes* the base bound for that type, rather than tightening it) merged by `imageLimitsFor(caps, type)`, both in
+  `src/providers/validation.ts`. `mediaConstraintsOf(caps, postType?)` in `src/providers/media.ts` takes the resolved type so the media planner
+  checks the right merged bounds; called with no type it is byte-for-byte what a provider without per-type image limits already returned.
 - **G21, `minFrameRate`** (on `capabilities.video`). A lower bound, inclusive. A video whose frame rate is unknown is not refused on it; one below
   it fails with `video_frame_rate_too_low`. `too_many_items` is the matching code for a post with more items than the type allows.
 - **Mixed media.** `ValidateInput.kinds` lists each item as `"image"` or `"video"` in post order; absent means all images.

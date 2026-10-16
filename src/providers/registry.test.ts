@@ -100,6 +100,24 @@ describe("provider registry", () => {
     expect(() => assertVideoCapabilities(video({ minFrameRate: 90, maxFrameRate: 60 }))).toThrow(/minFrameRate/);
     expect(() => assertVideoCapabilities(video({ minFrameRate: 23, byPostType: { reel: { minDurationSeconds: 3 } } }))).not.toThrow();
   });
+  it("declares Instagram's single_image choice and its byPostType image overrides", () => {
+    const caps = getProvider("instagram").capabilities;
+    const choice = caps.postTypeChoices?.find((c) => c.shape === "single_image");
+    expect(choice?.default).toBe("image");
+    expect(choice?.options.map((o) => o.type)).toEqual(["image", "story"]);
+    for (const o of choice!.options) expect(caps.postTypes).toContain(o.type);
+    expect(() => mediaConstraintsOf(caps)).not.toThrow();
+    const videoChoice = caps.postTypeChoices?.find((c) => c.shape === "single_video");
+    expect(videoChoice?.options.map((o) => o.type)).toEqual(["video", "reel", "story"]);
+  });
+  it("rejects an inconsistent media.byPostType declaration", () => {
+    const base = getProvider("instagram").capabilities;
+    const media = (byPostType: Record<string, unknown>) => ({ ...base, media: { ...base.media, byPostType } }) as typeof base;
+    expect(() => mediaConstraintsOf(media({ nope: {} }))).toThrow(/not a post type/);
+    expect(() => mediaConstraintsOf(media({ story: { minAspectRatio: 2, maxAspectRatio: 1 } }))).toThrow(/Inconsistent media constraints/);
+    expect(() => mediaConstraintsOf(media({ story: { minAspectRatio: 0.5, maxAspectRatio: 2, recommendedAspectRatio: 3 } }))).toThrow(/recommendedAspectRatio/);
+    expect(() => mediaConstraintsOf(media({ story: { minAspectRatio: null, maxAspectRatio: null, recommendedAspectRatio: 9 / 16 } }))).not.toThrow();
+  });
   it("rejects a malformed creation allowance", () => {
     const ok = { key: "x", creationAllowance: { count: 50, windowSeconds: 86_400, name: "A" } };
     expect(() => assertCreationAllowance(ok)).not.toThrow();

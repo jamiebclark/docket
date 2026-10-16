@@ -21,6 +21,11 @@ export function reelContainerParams(item: Pick<MediaItem, "url">, text: string, 
   };
 }
 
+/** A Story's container: no caption, no alt text, no description - just the asset (R1). */
+export function storyContainerParams(item: Pick<MediaItem, "url">, kind: "image" | "video"): Record<string, string> {
+  return kind === "video" ? { media_type: "STORIES", video_url: item.url } : { media_type: "STORIES", image_url: item.url };
+}
+
 /** A carousel item container: no alt text on a video, no caption on either. */
 export function itemParams(kind: "image" | "video", item: Pick<MediaItem, "url" | "altText">): Record<string, string> {
   if (kind === "video") {

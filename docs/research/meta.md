@@ -69,6 +69,28 @@ and https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/
   Changed 2026-10-07: was "100 API-published posts per rolling 24 h" stated as fact.
 - No text-only posts; media required. Media must be at a public URL.
 
+### Stories
+Source: https://developers.facebook.com/docs/instagram-platform/content-publishing#stories
+and https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+Checked 2026-10-16.
+- Container creation is the same two-call shape as a feed post, with
+  `media_type=STORIES` and `image_url` (image) or `video_url` (video) instead
+  of a feed container's params: `POST /{ig-id}/media` then
+  `POST /{ig-id}/media_publish` (`creation_id`).
+- No `caption`, no `alt_text`, no stickers or interactive elements - the
+  endpoint accepts none of them for a `STORIES` container.
+- Image Stories otherwise follow the same general image handling as a feed
+  image (JPEG, 8 MB, 320-1440 px). No hard aspect range is documented for a
+  Story; **9:16 is recommended** to avoid Instagram cropping the image or
+  showing blank space around it. Docket never crops or pads on its own, so a
+  non-9:16 Story image is sent unchanged and a notice says so.
+- A published Story counts toward the same `content_publishing_limit` quota
+  as every other container Docket creates for the account.
+- `media_product_type` (read back on a published container) is documented to
+  distinguish `FEED` / `REELS` / `STORY`, but its exact Story-published value
+  is **NEEDS RESEARCH** - UNVERIFIED (K17). Nothing in Docket reads this field
+  today, so no behaviour depends on the answer.
+
 ## Threads
 Get started: https://developers.facebook.com/docs/threads/get-started
 - Separate Threads app ID + secret (Threads use case in the Meta app dashboard).

@@ -1,5 +1,6 @@
 import { MIME_LABEL } from "@/lib/media/types";
-import type { ProviderCapabilities, ValidationIssue, VideoCapabilities } from "./types";
+import type { PostType, ProviderCapabilities, ValidationIssue, VideoCapabilities } from "./types";
+import { imageLimitsFor } from "./validation";
 
 /** Bump when the variant generator's output changes, so cached variants are rebuilt. */
 export const VARIANT_PIPELINE_VERSION = 1;
@@ -126,10 +127,39 @@ export function assertVideoCapabilities(caps: ProviderCapabilities): void {
   }
 }
 
+/** The recommended shape, when present, must be positive, finite and inside the merged range. */
+function assertImageRecommendedAspectRatio(where: string, min: number | undefined, max: number | undefined, r: number | undefined): void {
+  if (r === undefined) return;
+  if (!(Number.isFinite(r) && r > 0)) {
+    throw new Error(`Inconsistent media constraints: ${where} recommendedAspectRatio (${r}) must be positive and finite.`);
+  }
+  if ((min !== undefined && r < min - 1e-9) || (max !== undefined && r > max + 1e-9)) {
+    throw new Error(`Inconsistent media constraints: ${where} recommendedAspectRatio (${r}) lies outside the aspect range.`);
+  }
+}
+
+function assertImageByPostType(caps: ProviderCapabilities): void {
+  for (const key of Object.keys(caps.media.byPostType ?? {})) {
+    if (!(POST_TYPE_KEYS as readonly string[]).includes(key)) {
+      throw new Error(`Inconsistent media constraints: byPostType key "${key}" is not a post type.`);
+    }
+    const type = key as PostType;
+    const merged = imageLimitsFor(caps, type);
+    assertRange("AspectRatio", merged.minAspectRatio, merged.maxAspectRatio);
+    assertImageRecommendedAspectRatio(
+      `byPostType.${key}`,
+      merged.minAspectRatio,
+      merged.maxAspectRatio,
+      caps.media.byPostType?.[type]?.recommendedAspectRatio,
+    );
+  }
+}
+
 /** Pure; throws on an inconsistent declaration so a bad provider fails at registry load. */
-export function mediaConstraintsOf(caps: ProviderCapabilities): MediaConstraints {
+export function mediaConstraintsOf(caps: ProviderCapabilities, postType?: PostType): MediaConstraints {
   assertVideoCapabilities(caps);
-  const m = caps.media;
+  assertImageByPostType(caps);
+  const m = postType === undefined ? caps.media : imageLimitsFor(caps, postType);
   const output = m.outputMimeType ?? m.allowedMimeTypes[0];
   if (m.maxImages > 0) {
     if (m.allowedMimeTypes.length === 0) {

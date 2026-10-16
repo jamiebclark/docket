@@ -50,7 +50,7 @@ describe("instagramStepFor", () => {
   });
 });
 
-const v = (kinds: ("image" | "video")[], postType?: "video" | "reel") => ({ text: "x", mediaCount: kinds.length, kinds, postType });
+const v = (kinds: ("image" | "video")[], postType?: "video" | "reel" | "story") => ({ text: "x", mediaCount: kinds.length, kinds, postType });
 
 describe("video plans", () => {
   it("derives the plan from kinds and post type", () => {
@@ -98,5 +98,29 @@ describe("video plans", () => {
     for (const bad of [{}, "x", 5, [], { v: 1, mediaType: "REELS" }]) {
       expect(instagramStepFor(bad, v(["video"], "reel")).name).toBe("create_container");
     }
+  });
+});
+
+describe("story plans", () => {
+  it("a single image with postType story plans a STORIES container", () => {
+    expect(planOf({ mediaCount: 1, kinds: ["image"], postType: "story" })).toEqual({ mediaType: "STORIES" });
+  });
+
+  it("a single video with postType story plans a STORIES container", () => {
+    expect(planOf({ mediaCount: 1, kinds: ["video"], postType: "story" })).toEqual({ mediaType: "STORIES" });
+  });
+
+  it("an image Story: create_container → check_status → check_quota → publish", () => {
+    const plan = { mediaType: "STORIES" as const };
+    expect(instagramStepFor(null, v(["image"], "story"))).toEqual(create("create_container", 1));
+    expect(instagramStepFor(initialState(plan), v(["image"], "story"))).toEqual(create("create_container", 1));
+    expect(instagramStepFor({ ...initialState(plan), container: "s1", createdAt: "2026-01-01T00:00:00Z" }, v(["image"], "story")).name).toBe("check_status");
+    expect(instagramStepFor({ ...initialState(plan), container: "s1", ready: true, quotaChecked: true }, v(["image"], "story"))).toEqual(step("publish", true));
+  });
+
+  it("switching an image from Feed post to Story restarts at the first create step", () => {
+    const feed = st(1, { container: "c", ready: true });
+    expect(instagramStepFor(feed, v(["image"])).name).toBe("check_quota");
+    expect(instagramStepFor(feed, v(["image"], "story")).name).toBe("create_container");
   });
 });
