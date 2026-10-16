@@ -48,6 +48,7 @@ export interface SchedulerConfig {
   engagementReadMinIntervalMs?: number;
   engagementSendsPerTick?: number;
   engagementWriteReserve?: number;
+  engagementTimeShare?: number;
   engagementPruneBatch?: number;
 }
 
@@ -143,6 +144,7 @@ export const ENGAGEMENT_DEFAULTS = {
   readMinIntervalMs: 60_000,
   sendsPerTick: 5,
   writeReserve: 0.25,
+  timeShare: 0.5,
   pruneBatch: 200,
 } as const;
 
@@ -157,7 +159,11 @@ export function engagementConfig(config: SchedulerConfig) {
     writeReserve: config.engagementWriteReserve ?? ENGAGEMENT_DEFAULTS.writeReserve,
     pruneBatch: config.engagementPruneBatch ?? ENGAGEMENT_DEFAULTS.pruneBatch,
     leaseMs: config.leaseMs,
-    timeBudgetMs: config.timeBudgetMs,
+    // Engagement takes a share of the tick, never all of it. Every section computes its deadline
+    // from the same startedAt and they run concurrently, so a section that works to the very end
+    // of the budget starves the ones that predate it: token refresh skips an account silently,
+    // counting nothing, once now plus providerTimeoutMs passes the deadline.
+    timeBudgetMs: Math.floor(config.timeBudgetMs * (config.engagementTimeShare ?? ENGAGEMENT_DEFAULTS.timeShare)),
   };
 }
 
@@ -190,6 +196,7 @@ type EnvLike = Pick<
   | "ENGAGEMENT_READ_MIN_INTERVAL_SECONDS"
   | "ENGAGEMENT_SENDS_PER_TICK"
   | "ENGAGEMENT_WRITE_RESERVE"
+  | "ENGAGEMENT_TIME_SHARE"
   | "ENGAGEMENT_PRUNE_BATCH"
 >;
 
@@ -221,6 +228,7 @@ export function schedulerConfig(env: EnvLike, overrides: Partial<SchedulerConfig
     engagementReadMinIntervalMs: env.ENGAGEMENT_READ_MIN_INTERVAL_SECONDS * 1000,
     engagementSendsPerTick: env.ENGAGEMENT_SENDS_PER_TICK,
     engagementWriteReserve: env.ENGAGEMENT_WRITE_RESERVE,
+    engagementTimeShare: env.ENGAGEMENT_TIME_SHARE,
     engagementPruneBatch: env.ENGAGEMENT_PRUNE_BATCH,
     ...overrides,
   };

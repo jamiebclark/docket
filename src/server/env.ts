@@ -362,6 +362,7 @@ const base = z.object({
     ENGAGEMENT_READ_MIN_INTERVAL_SECONDS: int(10, 3600, 60),
     ENGAGEMENT_SENDS_PER_TICK: int(1, 50, 5),
     ENGAGEMENT_WRITE_RESERVE: float(0, 1, 0.25),
+    ENGAGEMENT_TIME_SHARE: float(0, 1, 0.5),
     ENGAGEMENT_PRUNE_BATCH: int(1, 1000, 200),
     S3_BUCKET: z.string().optional(),
     S3_ACCESS_KEY_ID: z.string().optional(),
