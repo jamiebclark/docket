@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { forProject } from "../../../src/server/dal/scope";
 import { runTick } from "../../../src/server/scheduler";
 import * as accounts from "../../../src/server/services/accounts";
-import { listInbox } from "../../../src/server/services/engagement/inbox";
+import { getInboxItem, listInbox } from "../../../src/server/services/engagement/inbox";
 import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
@@ -81,5 +81,39 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     });
     const event = feed.find((e) => e.kind === "engagement_received");
     expect(event).toBeDefined();
+  });
+
+  it("stamps edited_upstream_at when the provider reports the item was edited on a later read (US2 AS8)", async () => {
+    const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "up-1", text: "Nice post!", saidAt: AT.toISOString() }]);
+    await atTime(AT, () => runTick({ config: NO_WAIT }));
+    const firstList = await listInbox(scope);
+    const itemId = firstList.items.find((i) => i.externalId === "up-1")!.id;
+    let item = await getInboxItem(scope, itemId);
+    expect(item.editedUpstreamAt).toBeNull();
+
+    await accounts.updateAccountSettings(scope, account.id, {
+      engagementItems: [{ kind: "reply", externalId: "up-1", text: "Nice post!", saidAt: AT.toISOString(), upstream: "edited" }],
+    });
+    const second = await atTime(new Date(AT.getTime() + 1000), () => runTick({ config: NO_WAIT }));
+    expect(second.engagementRead.ok).toBe(true);
+    item = await getInboxItem(scope, itemId);
+    expect(item.editedUpstreamAt).not.toBeNull();
+  });
+
+  it("stamps withdrawn_at when the provider reports the item was withdrawn on a later read (US2 AS8)", async () => {
+    const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "wd-1", text: "Nice post!", saidAt: AT.toISOString() }]);
+    await atTime(AT, () => runTick({ config: NO_WAIT }));
+    const firstList = await listInbox(scope);
+    const itemId = firstList.items.find((i) => i.externalId === "wd-1")!.id;
+    let item = await getInboxItem(scope, itemId);
+    expect(item.withdrawnAt).toBeNull();
+
+    await accounts.updateAccountSettings(scope, account.id, {
+      engagementItems: [{ kind: "reply", externalId: "wd-1", text: "Nice post!", saidAt: AT.toISOString(), upstream: "withdrawn" }],
+    });
+    const second = await atTime(new Date(AT.getTime() + 1000), () => runTick({ config: NO_WAIT }));
+    expect(second.engagementRead.ok).toBe(true);
+    item = await getInboxItem(scope, itemId);
+    expect(item.withdrawnAt).not.toBeNull();
   });
 });

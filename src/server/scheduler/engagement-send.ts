@@ -1,5 +1,6 @@
 // scheduler/engagement-send: sending an approved reply (contracts/services.md §5, FR-038–FR-045).
 import { findProvider } from "../../providers/registry";
+import { countText } from "../../providers/text";
 import type { EngagementItemKind, EngagementSendResult } from "../../providers/types";
 import { claimDueEngagementSends, type ClaimedEngagementDraft } from "../dal/engagement-claims";
 import * as clock from "../dal/clock";
@@ -86,6 +87,12 @@ async function processClaim(
   if (item.editedUpstreamAt && !draft.acknowledgedEditAt) {
     counts.waitingGate++;
     await back({ sendState: "waiting", lastError: "The original changed; it needs another look before sending." });
+    return;
+  }
+  const caps = provider.capabilities.text;
+  if (countText(draft.text, caps.countingRule) > caps.maxLength) {
+    counts.waitingGate++;
+    await back({ sendState: "waiting", lastError: "This reply is over the platform's text limit." });
     return;
   }
 

@@ -89,7 +89,7 @@ export default async function InboxItemPage({ params }: Props) {
           canReply={canReply}
           canDismiss={canReply}
           replyable={item.replyable.ok}
-          dismissed={item.state === "dismissed"}
+          dismissed={item.state !== "waiting"}
           countingRule={countingRuleName(textCaps.countingRule)}
           maxLength={textCaps.maxLength}
         />

@@ -98,6 +98,12 @@ export async function approveReply(scope: ProjectScope, draftId: string): Promis
       if (draft.text.trim() === "") return { ok: false, code: "empty_text", message: "An empty reply cannot be approved." };
       const item = await tx.engagementItems.get(draft.engagementItemId);
       if (!item) throw new NotFoundError();
+      const account = await tx.accounts.get(draft.socialAccountId);
+      const provider = account ? findProvider(account.providerKey) : null;
+      const caps = provider?.capabilities.text ?? { maxLength: 0, countingRule: "code_points" as const };
+      if (countText(draft.text, caps.countingRule) > caps.maxLength) {
+        return { ok: false, code: "over_limit", message: "This reply is over the platform's text limit." };
+      }
       if (item.withdrawnAt) return { ok: false, code: "withdrawn", message: "The original was withdrawn." };
       if (item.editedUpstreamAt && !draft.acknowledgedEditAt) {
         return { ok: false, code: "edited_upstream", message: "The original changed; look at it again before approving." };
@@ -144,7 +150,7 @@ export async function dismissItems(scope: ProjectScope, itemIds: string[]): Prom
   let dismissed = 0;
   for (const id of [...new Set(ids)]) {
     const item = await scope.engagementItems.get(id);
-    if (!item || item.state === "dismissed") continue;
+    if (!item || item.state !== "waiting") continue;
     await scope.engagementItems.markDismissed(id, now, scope.membership.userId);
     for (const draft of await scope.engagementDrafts.listByItem(id)) {
       if (draft.reviewState === "needs_review") await scope.engagementDrafts.update(draft.id, { reviewState: "discarded" });

@@ -113,7 +113,7 @@ export function ReplyList({ slug, items, canApprove }: ReplyListProps) {
                 />
                 {canApprove ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button onClick={() => approve(row)} pending={pending} pendingLabel="Approving…">
+                    <Button onClick={() => approve(row)} pending={pending} pendingLabel="Approving…" disabled={over}>
                       Approve
                     </Button>
                     <RejectReplyDialog slug={slug} draftId={row.draft.id} text={row.draft.text} />

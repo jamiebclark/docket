@@ -43,8 +43,9 @@ requested, costs nothing.
 
 The draft prompt carries the project's voice profile, the brand's tagline and description, the
 account's own posting instructions, the brand's own earlier post when it is known, and the comment's
-text, bounded to a stated length. It never carries the commenter's name, handle or any other identity
-field — only the comment's text goes to the model.
+text, bounded to a stated length. It also carries the commenter's display name or handle, so the
+reply can address them by name, but nothing else about them — no identifier, no URL, no platform
+internals go to the model.
 
 ## Retention and deletion
 

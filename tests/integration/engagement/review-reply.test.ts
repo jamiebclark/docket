@@ -123,6 +123,30 @@ describe("approveReply / rejectReply (FR-028–FR-036, SC-003)", () => {
     expect(draft?.reviewState).toBe("discarded");
   });
 
+  it("an answered item is refused dismissal", async () => {
+    const env = await postsEnv();
+    const scope = await env.as(env.owner);
+    const account = await env.account({});
+    const itemId = await seedItem(scope, account.id);
+    await scope.engagementItems.markAnswered(itemId, new Date());
+    const result = await dismissItems(scope, [itemId]);
+    expect(result.dismissed).toBe(0);
+    const item = await scope.engagementItems.get(itemId);
+    expect(item?.state).toBe("answered");
+  });
+
+  it("a reply over the platform's text limit is refused approval", async () => {
+    const env = await postsEnv();
+    const scope = await env.as(env.owner);
+    const account = await env.account({});
+    const itemId = await seedItem(scope, account.id);
+    const written = await writeReply(scope, itemId, "x");
+    if (!written.ok) throw new Error("unreachable");
+    await scope.engagementDrafts.update(written.draftId, { text: "x".repeat(501) });
+    const result = await approveReply(scope, written.draftId);
+    expect(result).toMatchObject({ ok: false, code: "over_limit" });
+  });
+
   it("empty text approved is refused", async () => {
     const env = await postsEnv();
     const scope = await env.as(env.owner);
