@@ -468,3 +468,43 @@ https://developers.facebook.com/docs/threads/troubleshooting
 - Instagram publish limit is 100 / 86400 in code; official references say 50. Use 50 or read the runtime quota.
 - Facebook `maxBytesPerFile` 8 MB is under the documented 10 MB; text length and image count have no official basis.
 - Instagram caption hashtag (30) and mention (20) limits are documented but not validated by Docket.
+
+## App Review is NOT needed for comment/reply scopes on your own accounts
+
+Checked 2026-10-14, while scoping a reply-and-mention feature for Stencilvania.
+
+Every Meta permission has two access levels, and the default one already covers
+Docket's case:
+
+- **Standard Access** — https://developers.facebook.com/docs/graph-api/overview/access-levels
+  "Business, Consumer, and Gaming apps are automatically approved for Standard
+  Access for all permissions and features available to their app type." No App
+  Review. The catch: "Permissions with Standard Access can only be requested
+  from app users who have a role on the requesting app."
+- **Advanced Access** — "must be approved on an individual permission and
+  feature basis through the App Review process", and since February 2023 may
+  require a verified business. This is what you need to reach users who are
+  *not* role-holders.
+
+So an unpublished app in Development mode can use `instagram_manage_comments`,
+`pages_read_engagement` and `threads_manage_replies` **against accounts whose
+owner holds a role on the app** without any review. That is exactly the shape
+Docket already uses for Threads: the app stays in development and the brand
+account is added as a Threads Tester
+(https://developers.facebook.com/docs/development/release — "If your app will
+only be used by people who have a role on the app itself you do not need to
+complete any of these processes").
+
+App Review becomes necessary only if Docket is ever offered to people who are
+not role-holders on the Meta app — a multi-tenant install, not a personal one.
+
+**One thing still to verify empirically before building**: comments on your
+posts are written by third parties, and Meta trims public user data at Standard
+Access in places. Confirm with Graph API Explorer that commenter id/username
+actually come back on your own media before designing around them. Start the
+work with that spike.
+
+Threads scopes seen in the docs: `threads_basic`, `threads_content_publish`,
+`threads_manage_replies`, `threads_delete`, `threads_location_tagging`
+(https://developers.facebook.com/docs/threads/overview). Docket currently
+requests only the first two (`src/providers/threads/connect-group.ts`).
