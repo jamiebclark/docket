@@ -401,3 +401,18 @@ Once Phase 2 is done, US1, US2 and US3 can proceed in parallel: US1 and US2 touc
 (`validate.ts`, `steps.ts`, `publish.ts`, `stories.test.ts`) for different kinds (image vs. video) and
 should be sequenced or coordinated by file; US3 touches only tests and docs and has no file overlap
 with either.
+
+---
+
+## Phase 7: Review remediation
+
+- [X] T057 Make `prepareVariants` plan each asset per (provider, resolved target post type) instead of
+  the provider's base `media` block, so a Story image outside Instagram's feed aspect range is built
+  rather than silently skipped: resolve each target's type the way `resolvePublishMedia` already does
+  (`src/server/services/media-variants.ts:313`) and pass it to `mediaConstraintsOf`; the shared
+  `constraintsHash` means the `pairs` map still collapses to one build per asset, so no file is
+  duplicated. Then change the K8 integration test to use a 9:16 PNG (1080x1920), which fails today
+  with `variant_failed: Image 1 could not be adapted for Instagram.`, keeping an in-range asset as a
+  second case; and correct the K8 paragraph in `docs/decisions.md`, which currently claims the
+  `constraintsHash` change alone prevents this failure — review F1 (MAJOR),
+  src/server/services/media-variants.ts:190

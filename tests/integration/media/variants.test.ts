@@ -149,7 +149,7 @@ describe("variant service", () => {
     expect(r).toEqual({ ok: false, error: "Image 1 is no longer available." });
   });
 
-  it("a Story and a feed post resolve to the same variant row for the same asset (SC-009)", async () => {
+  it("a Story and a feed post resolve to the same variant row for the same in-range asset (SC-009)", async () => {
     const { instagramCapabilities } = await import("../../../src/providers/instagram/capabilities");
     const t = await setup();
     const realIg = await createMockAccount(t.project.id, {}, { providerKey: "instagram" });
@@ -164,5 +164,22 @@ describe("variant service", () => {
     expect(story.issues.map((i) => i.code)).not.toContain("variant_failed");
     expect(story.media[0]!.url).toBe(feed.media[0]!.url);
     expect(await t.repos.media.listVariants(a.id)).toHaveLength(1);
+  });
+
+  it("builds a variant for a 9:16 Story image outside the feed's aspect range (SC-009, K8)", async () => {
+    const { instagramCapabilities } = await import("../../../src/providers/instagram/capabilities");
+    const t = await setup();
+    const realIg = await createMockAccount(t.project.id, {}, { providerKey: "instagram" });
+    const a = await t.asset(1080, 1920);
+    const { post, targets } = await t.post([a.id], [realIg.id]);
+    await t.repos.targets.update(targets[0]!.id, { chosenPostType: "story" });
+    await prepareVariants(t.scope, post.id);
+    expect(await t.repos.media.listVariants(a.id)).toHaveLength(1);
+
+    const feed = await adaptedMediaFor(t.repos, instagramCapabilities, "Instagram", [a]);
+    const story = await adaptedMediaFor(t.repos, instagramCapabilities, "Instagram", [a], { postType: "story" });
+    expect(feed.issues.map((i) => i.code)).toContain("aspect_ratio_out_of_range");
+    expect(story.issues.map((i) => i.code)).not.toContain("variant_failed");
+    expect(story.media[0]).toMatchObject({ mimeType: "image/jpeg" });
   });
 });

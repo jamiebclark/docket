@@ -171,12 +171,7 @@ export async function prepareVariants(
   const targets = (await scope.targets.listForPost(postId)).filter(
     (t) => t.status !== "cancelled" && (!wanted || wanted.has(t.id)),
   );
-  const providers = new Map<string, SocialProvider>();
-  for (const t of targets) {
-    const account = await scope.accounts.get(t.socialAccountId);
-    const provider = account && findProvider(account.providerKey);
-    if (provider) providers.set(provider.key, provider);
-  }
+  const items = assets.map((a) => itemOf(a));
 
   interface Pair {
     asset: MediaRow;
@@ -186,8 +181,12 @@ export async function prepareVariants(
     plan: Derive;
   }
   const pairs = new Map<string, Pair>();
-  for (const provider of providers.values()) {
-    const c = mediaConstraintsOf(provider.capabilities);
+  for (const t of targets) {
+    const account = await scope.accounts.get(t.socialAccountId);
+    const provider = account && findProvider(account.providerKey);
+    if (!provider) continue;
+    const postType = resolvePostType(provider.capabilities, items, t.chosenPostType ?? null);
+    const c = mediaConstraintsOf(provider.capabilities, postType);
     const hash = constraintsHash(c);
     for (const [i, asset] of assets.entries()) {
       const plan = planFor(asset, c, i, provider.displayName);

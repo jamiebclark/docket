@@ -3452,19 +3452,23 @@ External facts come from `docs/research/meta.md` and `docs/research/meta-video.m
   summary reporting "no limit checked" plus the note. *Rejected*: a boolean "is a story" flag threaded
   through the planner and validator, which would duplicate the range logic the video block already has
   and give no record of what, specifically, a story relaxes.
-- **K8 — the aspect bounds leave `constraintsHash`, so a Story and a feed post share one variant.**
-  `minAspectRatio`/`maxAspectRatio` are read by `planImage` only to refuse; they never change the
-  derived file's type, size or dimensions, so hashing them would give byte-identical output two
-  identities and `prepareVariants` — which groups by provider, not by target post type — would never
-  build the Story's copy, surfacing `variant_failed` when scheduling a Story whose image needs
-  conversion or compression. *Consequence, accepted*: every existing cached image variant hashes
-  differently once and is rebuilt lazily — `resolvePublishMedia` rebuilds a missing one at publish time,
-  so no scheduled post can fail because of the change. A test (`src/server/media/hash.test.ts`) asserts
-  two constraint sets differing only in aspect share one hash, and an integration test
-  (`tests/integration/media/variants.test.ts`) asserts a Story and a feed post resolve to the same
-  variant row for the same asset. *Rejected*: making `prepareVariants` post-type aware (duplicates every
-  adapted file for identical bytes); bumping `VARIANT_PIPELINE_VERSION` instead (same rebuild, with no
-  record of why).
+- **K8 — the aspect bounds leave `constraintsHash`, and `prepareVariants` resolves each target's post
+  type before planning, so a Story and a feed post share one variant and a 9:16 Story image is actually
+  built.** `minAspectRatio`/`maxAspectRatio` are read by `planImage` only to refuse; they never change
+  the derived file's type, size or dimensions, so hashing them would give byte-identical output two
+  identities for no reason. `prepareVariants` resolves each target's post type the same way
+  `resolvePublishMedia` does and plans with `mediaConstraintsOf(caps, postType)`, so a Story image
+  outside the feed's aspect range is planned under the Story's (unbounded) range and a variant is
+  actually built — the shared hash means this still collapses to one build per asset, not two.
+  *Consequence, accepted*: every existing cached image variant hashes differently once and is rebuilt
+  lazily — `resolvePublishMedia` rebuilds a missing one at publish time, so no scheduled post can fail
+  because of the change. A test (`src/server/media/hash.test.ts`) asserts two constraint sets differing
+  only in aspect share one hash, and integration tests (`tests/integration/media/variants.test.ts`)
+  assert a Story and a feed post resolve to the same variant row for an in-range asset, and that a 9:16
+  Story image — refused outright for the feed — is built and schedulable as a Story. *Rejected*: leaving
+  `prepareVariants` post-type-blind (the shared hash alone does not help an asset the feed's bounds
+  refuse before any build); bumping `VARIANT_PIPELINE_VERSION` instead (same rebuild, with no record of
+  why).
 - **K11 — a story target drops the feed's aspect error and both alt-text issues.**
   `validateInstagram` keys its aspect check on `imageLimitsFor(caps, type)`, so with no bounds declared
   the check cannot fire; it also filters `missing_alt_text` and `alt_text_too_long` for a story, since a
