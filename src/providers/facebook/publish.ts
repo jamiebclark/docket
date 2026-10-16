@@ -81,8 +81,10 @@ export async function advanceFacebook(ctx: PublishContext, app?: MetaApp): Promi
     Object.assign(params, pageVideoParams(media[0]!, text));
   } else if (name === "publish_photo") {
     path = `/${page}/photos`;
-    params.url = media[0]!.url;
+    const item = media[0]!;
+    params.url = item.url;
     if (text.length > 0) params.caption = text;
+    if (item.altText.trim().length > 0) params.alt_text_custom = item.altText;
   } else if (name.startsWith("upload_photo_")) {
     upload = Number(name.slice("upload_photo_".length));
     const item = media[upload - 1];
@@ -90,6 +92,8 @@ export async function advanceFacebook(ctx: PublishContext, app?: MetaApp): Promi
     path = `/${page}/photos`;
     params.url = item.url;
     params.published = "false";
+    // Each photo carries its own description, so a carousel is not described by its first image alone.
+    if (item.altText.trim().length > 0) params.alt_text_custom = item.altText;
   } else if (media.length >= 2) {
     if (text.length > 0) params.message = text;
     params.attached_media = JSON.stringify(photoIds.map((id) => ({ media_fbid: id })));

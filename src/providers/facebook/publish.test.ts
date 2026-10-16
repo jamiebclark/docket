@@ -31,8 +31,9 @@ function videoCtx(text: string): PublishContext {
   };
 }
 
-function ctx(text: string, mediaCount: number, state: unknown = null, stepName?: string): PublishContext {
-  const media = Array.from({ length: mediaCount }, (_, i) => img(i + 1));
+/** `alt` is given the 1-based photo number, so a carousel can carry a different description per image. */
+function ctx(text: string, mediaCount: number, state: unknown = null, stepName?: string, alt?: (n: number) => string): PublishContext {
+  const media = Array.from({ length: mediaCount }, (_, i) => ({ ...img(i + 1), ...(alt ? { altText: alt(i + 1) } : {}) }));
   const step = stepName ? { name: stepName, mayPublish: !stepName.startsWith("upload_") } : facebookStepFor(state, { text, mediaCount });
   return {
     target: { id: "t1", scheduledAt: now, attempt: 1 },
@@ -104,6 +105,48 @@ describe("Facebook publish success paths", () => {
     expect(reqs[3]!.params.message).toBe("trip");
     expect(JSON.parse(reqs[3]!.params.attached_media!)).toEqual([{ media_fbid: "ph1" }, { media_fbid: "ph2" }, { media_fbid: "ph3" }]);
     expect(paths()).toEqual([`/${PAGE}/photos`, `/${PAGE}/photos`, `/${PAGE}/photos`, `/${PAGE}/feed`]);
+  });
+
+  it("describes a single photo with alt_text_custom", async () => {
+    graph.fallback({ kind: "ok", body: { id: "photo1" } });
+    await advanceFacebook(ctx("look", 1, null, undefined, () => "A carved pumpkin, lit from inside."));
+    expect(graph.requests[0]!.params).toMatchObject({
+      url: "https://media.test/1.jpg",
+      caption: "look",
+      alt_text_custom: "A carved pumpkin, lit from inside.",
+    });
+  });
+
+  it("omits alt_text_custom when the image has no description", async () => {
+    graph.fallback({ kind: "ok", body: { id: "photo1" } });
+    await advanceFacebook(ctx("look", 1));
+    expect(graph.requests[0]!.params).not.toHaveProperty("alt_text_custom");
+  });
+
+  it("omits alt_text_custom when the description is only whitespace", async () => {
+    graph.fallback({ kind: "ok", body: { id: "photo1" } });
+    await advanceFacebook(ctx("look", 1, null, undefined, () => "   \n  "));
+    expect(graph.requests[0]!.params).not.toHaveProperty("alt_text_custom");
+  });
+
+  it("gives every carousel photo its own alt_text_custom, not the first one's", async () => {
+    let n = 0;
+    graph.on("POST", `/v26.0/${PAGE}/photos`, () => ({ kind: "ok", body: { id: `ph${++n}` } }));
+    graph.on("POST", `/v26.0/${PAGE}/feed`, { kind: "ok", body: { id: `${PAGE}_77` } });
+    const describe3 = (i: number) => `photo ${i} description`;
+    let state: unknown = null;
+    for (let i = 1; i <= 3; i++) {
+      const r = await advanceFacebook(ctx("trip", 3, state, undefined, describe3));
+      state = (r as { state: unknown }).state;
+    }
+    expect(graph.requests.slice(0, 3).map((r) => r.params.alt_text_custom)).toEqual([
+      "photo 1 description",
+      "photo 2 description",
+      "photo 3 description",
+    ]);
+    // the feed post that ties them together carries no image of its own
+    await advanceFacebook(ctx("trip", 3, state, undefined, describe3));
+    expect(graph.requests[3]!.params).not.toHaveProperty("alt_text_custom");
   });
 
   it("never sends scheduled_publish_time or published=false on a publishing request", async () => {
