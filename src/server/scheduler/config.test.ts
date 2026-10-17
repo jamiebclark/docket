@@ -3,6 +3,8 @@ import { parseEnv } from "../env";
 import {
   ENGAGEMENT_DEFAULTS,
   engagementConfig,
+  INSIGHTS_DEFAULTS,
+  insightsConfig,
   STANDING_SERIES_MAX_POSTS_DEFAULT,
   STANDING_SERIES_MAX_SERIES_DEFAULT,
   standingSeriesConfig,
@@ -133,5 +135,105 @@ describe("engagement time share", () => {
 
   it("never exceeds the tick budget itself", () => {
     expect(engagementConfig({ ...base, engagementTimeShare: 1 }).timeBudgetMs).toBeLessThanOrEqual(base.timeBudgetMs);
+  });
+});
+
+describe("insightsConfig", () => {
+  it("defaults every field when not set", () => {
+    const cfg = insightsConfig(base);
+    expect(cfg.readPageSize).toBe(INSIGHTS_DEFAULTS.readPageSize);
+    expect(cfg.targetsPerRun).toBe(INSIGHTS_DEFAULTS.targetsPerRun);
+    expect(cfg.accountsPerRun).toBe(INSIGHTS_DEFAULTS.accountsPerRun);
+    expect(cfg.pollMinIntervalMs).toBe(INSIGHTS_DEFAULTS.pollMinIntervalMs);
+    expect(cfg.accountPollIntervalMs).toBe(INSIGHTS_DEFAULTS.accountPollIntervalMs);
+    expect(cfg.readReserve).toBe(INSIGHTS_DEFAULTS.readReserve);
+    expect(cfg.retentionDays).toBe(INSIGHTS_DEFAULTS.retentionDays);
+    expect(cfg.pruneBatch).toBe(INSIGHTS_DEFAULTS.pruneBatch);
+  });
+
+  it("honours overrides", () => {
+    const cfg = insightsConfig({
+      ...base,
+      insightsReadPageSize: 10,
+      insightsTargetsPerRun: 100,
+      insightsAccountsPerRun: 40,
+      insightsPollMinIntervalMs: 1_800_000,
+      insightsAccountPollIntervalMs: 43_200_000,
+      insightsReadReserve: 0.75,
+      insightsRetentionDays: 200,
+      insightsPruneBatch: 500,
+    });
+    expect(cfg.readPageSize).toBe(10);
+    expect(cfg.targetsPerRun).toBe(100);
+    expect(cfg.accountsPerRun).toBe(40);
+    expect(cfg.pollMinIntervalMs).toBe(1_800_000);
+    expect(cfg.accountPollIntervalMs).toBe(43_200_000);
+    expect(cfg.readReserve).toBe(0.75);
+    expect(cfg.retentionDays).toBe(200);
+    expect(cfg.pruneBatch).toBe(500);
+  });
+
+  it("forwards the lease unchanged but only a share of the tick budget", () => {
+    const cfg = insightsConfig(base);
+    expect(cfg.leaseMs).toBe(base.leaseMs);
+    // Deliberately not the whole budget, and below engagement's share: see INSIGHTS_TIME_SHARE in config.ts.
+    expect(cfg.timeBudgetMs).toBeLessThan(base.timeBudgetMs);
+  });
+});
+
+describe("insights env vars", () => {
+  const key = "a".repeat(64);
+  const baseEnv = {
+    DATABASE_URL: "postgres://u:pw@localhost:5432/docket",
+    BETTER_AUTH_SECRET: "s".repeat(32),
+    BETTER_AUTH_URL: "http://localhost:3000",
+    CREDENTIALS_ENCRYPTION_KEY: key,
+  };
+
+  it("parses with documented defaults", () => {
+    const r = parseEnv(baseEnv);
+    if (!r.ok) throw new Error(JSON.stringify(r.issues));
+    expect(r.env.INSIGHTS_READ_PAGE_SIZE).toBe(25);
+    expect(r.env.INSIGHTS_TARGETS_PER_RUN).toBe(50);
+    expect(r.env.INSIGHTS_ACCOUNTS_PER_RUN).toBe(20);
+    expect(r.env.INSIGHTS_POLL_MIN_INTERVAL_SECONDS).toBe(900);
+    expect(r.env.INSIGHTS_ACCOUNT_POLL_INTERVAL_SECONDS).toBe(21600);
+    expect(r.env.INSIGHTS_TIME_SHARE).toBe(0.3);
+    expect(r.env.INSIGHTS_READ_RESERVE).toBe(0.5);
+    expect(r.env.INSIGHTS_RETENTION_DAYS).toBe(400);
+    expect(r.env.INSIGHTS_PRUNE_BATCH).toBe(200);
+  });
+
+  it("rejects out-of-range values", () => {
+    const cases: [string, string][] = [
+      ["INSIGHTS_READ_PAGE_SIZE", "101"],
+      ["INSIGHTS_TARGETS_PER_RUN", "0"],
+      ["INSIGHTS_ACCOUNTS_PER_RUN", "0"],
+      ["INSIGHTS_POLL_MIN_INTERVAL_SECONDS", "59"],
+      ["INSIGHTS_ACCOUNT_POLL_INTERVAL_SECONDS", "299"],
+      ["INSIGHTS_TIME_SHARE", "1.5"],
+      ["INSIGHTS_READ_RESERVE", "-0.1"],
+      ["INSIGHTS_RETENTION_DAYS", "0"],
+      ["INSIGHTS_PRUNE_BATCH", "0"],
+    ];
+    for (const [name, value] of cases) {
+      const r = parseEnv({ ...baseEnv, [name]: value });
+      expect(r.ok, `${name}=${value} should be rejected`).toBe(false);
+      if (!r.ok) expect(r.issues.map((i) => i.name)).toContain(name);
+    }
+  });
+});
+
+describe("insights time share", () => {
+  it("defaults to a share of the tick budget, so insights cannot work to the tick deadline", () => {
+    expect(insightsConfig(base).timeBudgetMs).toBe(6_000);
+  });
+
+  it("honours an explicit share", () => {
+    expect(insightsConfig({ ...base, insightsTimeShare: 0.5 }).timeBudgetMs).toBe(10_000);
+  });
+
+  it("never exceeds the tick budget itself", () => {
+    expect(insightsConfig({ ...base, insightsTimeShare: 1 }).timeBudgetMs).toBeLessThanOrEqual(base.timeBudgetMs);
   });
 });
