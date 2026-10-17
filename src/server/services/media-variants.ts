@@ -171,12 +171,7 @@ export async function prepareVariants(
   const targets = (await scope.targets.listForPost(postId)).filter(
     (t) => t.status !== "cancelled" && (!wanted || wanted.has(t.id)),
   );
-  const providers = new Map<string, SocialProvider>();
-  for (const t of targets) {
-    const account = await scope.accounts.get(t.socialAccountId);
-    const provider = account && findProvider(account.providerKey);
-    if (provider) providers.set(provider.key, provider);
-  }
+  const items = assets.map((a) => itemOf(a));
 
   interface Pair {
     asset: MediaRow;
@@ -186,8 +181,12 @@ export async function prepareVariants(
     plan: Derive;
   }
   const pairs = new Map<string, Pair>();
-  for (const provider of providers.values()) {
-    const c = mediaConstraintsOf(provider.capabilities);
+  for (const t of targets) {
+    const account = await scope.accounts.get(t.socialAccountId);
+    const provider = account && findProvider(account.providerKey);
+    if (!provider) continue;
+    const postType = resolvePostType(provider.capabilities, items, t.chosenPostType ?? null);
+    const c = mediaConstraintsOf(provider.capabilities, postType);
     const hash = constraintsHash(c);
     for (const [i, asset] of assets.entries()) {
       const plan = planFor(asset, c, i, provider.displayName);
@@ -250,7 +249,7 @@ export async function adaptedMediaFor(
   /** `preview`: no variant exists yet (an unsaved composition), so the planned output stands in for it. */
   opts: { preview?: boolean; postType?: PostType; videoEdits?: ReadonlyMap<string, VideoEdit> } = {},
 ): Promise<{ media: MediaItem[]; issues: ValidationIssue[] }> {
-  const c = mediaConstraintsOf(caps);
+  const c = mediaConstraintsOf(caps, opts.postType);
   const hash = constraintsHash(c);
   const media: MediaItem[] = [];
   const issues: ValidationIssue[] = [];
@@ -305,14 +304,14 @@ export async function resolvePublishMedia(
   if (gone >= 0) return { ok: false, error: `Image ${gone + 1} is no longer available.` };
 
   const storage = getStorage();
-  const c = mediaConstraintsOf(provider.capabilities);
-  const hash = constraintsHash(c);
-  const media: MediaItem[] = [];
   const postType = resolvePostType(
     provider.capabilities,
     ids.map((id) => itemOf(rows.get(id)!)),
     target.chosenPostType ?? null,
   );
+  const c = mediaConstraintsOf(provider.capabilities, postType);
+  const hash = constraintsHash(c);
+  const media: MediaItem[] = [];
   const videoEdits = await repos.posts.listVideoEdits(target.postId);
   for (const [i, id] of ids.entries()) {
     const asset = rows.get(id)!;

@@ -62,6 +62,10 @@ spec is written.
   `ON CONFLICT DO NOTHING`, so each caller gets the days it won and neither sees a conflict error. Not yet owned by any
   spec: clearing a time from the whole week, copying one day's slots to the others, a gutter of clickable half-hour rows
   down the left of the grid, and the same bulk add through the public API.
+- **Instagram Stories (078).** A single image or video, chosen per post in the composer or through the public API, posted as
+  a Story instead of a feed post, feed video or Reel: no caption, no link and no stickers, and no cropping by Docket.
+  Verified with mocks only until the live checks in `docs/meta-setup.md` are done. Not yet owned by any spec: Facebook Page
+  Stories, stickers and links, reading a Story back, and multi-asset Stories.
 
 - **Engagement inbox (077).** A project-scoped **Inbox** screen shows replies and mentions from connected accounts
   (Bluesky only — see `docs/engagement.md`), each with its parent shown alongside it. A member can request a

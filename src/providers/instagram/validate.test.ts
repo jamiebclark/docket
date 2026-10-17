@@ -110,3 +110,101 @@ describe("validateInstagram video", () => {
     expect(run("hello", [])[0]?.message).toBe("Instagram posts need at least one image or video.");
   });
 });
+
+describe("validateInstagram story", () => {
+  const story = (text: string, media: MediaItem[]) => validateInstagram({ text, media, postType: "story" }, caps);
+
+  it("drops the text and reports it", () => {
+    const issues = story("hello", [img({ altText: "" })]);
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "info", code: "story_text_dropped", field: "text", message: expect.stringContaining("no caption") }),
+    );
+  });
+
+  it("says nothing about text when there is none", () => {
+    expect(codes(story("", [img({ altText: "" })]))).not.toContain("story_text_dropped");
+    expect(codes(story("   ", [img({ altText: "" })]))).not.toContain("story_text_dropped");
+  });
+
+  it("drops the description and reports it", () => {
+    const issues = story("", [img({ altText: "a dog" })]);
+    expect(issues).toContainEqual(
+      expect.objectContaining({ severity: "info", code: "story_alt_text_dropped", field: "media.0" }),
+    );
+  });
+
+  it("says nothing about the description when there is none", () => {
+    expect(codes(story("", [img({ altText: "" })]))).not.toContain("story_alt_text_dropped");
+  });
+
+  it("names the shape that will be cropped, for a 1:1 asset", () => {
+    const issues = story("", [img({ width: 1080, height: 1080, altText: "" })]);
+    const crop = issues.find((i) => i.code === "story_will_crop");
+    expect(crop?.message).toContain("1:1");
+    expect(crop?.message).toContain("9:16");
+  });
+
+  it("is silent for a 9:16 asset", () => {
+    expect(codes(story("", [img({ width: 1080, height: 1920, altText: "" })]))).not.toContain("story_will_crop");
+  });
+
+  it("accepts a 9:16 image for a Story but refuses the same asset for a feed post (FR-016, SC-007)", () => {
+    const asset = img({ width: 1080, height: 1920, altText: "" });
+    expect(codes(story("", [asset]))).not.toContain("aspect_ratio_out_of_range");
+    expect(codes(run("x", [asset]))).toContain("aspect_ratio_out_of_range");
+  });
+
+  it("is silent when dimensions are unknown, never guessing", () => {
+    expect(codes(story("", [img({ width: null, height: null, altText: "" })]))).not.toContain("story_will_crop");
+  });
+
+  it("never raises aspect_ratio_out_of_range, missing_alt_text or alt_text_too_long for a story", () => {
+    const issues = story("", [img({ width: 1080, height: 1080, altText: "" })]);
+    expect(codes(issues)).not.toContain("aspect_ratio_out_of_range");
+    expect(codes(issues)).not.toContain("missing_alt_text");
+    const long = story("", [img({ altText: "a".repeat(1001) })]);
+    expect(codes(long)).not.toContain("alt_text_too_long");
+  });
+});
+
+describe("validateInstagram story video", () => {
+  const vid = (facts: Partial<VideoFacts> = {}, over: Partial<MediaItem> = {}): MediaItem => ({
+    url: "https://m.test/a.mp4",
+    mimeType: "video/mp4",
+    kind: "video",
+    width: 1080,
+    height: 1920,
+    bytes: 1_000_000,
+    altText: "",
+    video: { container: "mp4", videoCodec: "h264", audioCodec: "aac", durationSeconds: 10, frameRate: 30, ...facts },
+    ...over,
+  });
+  const storyV = (media: MediaItem[]) => validateInstagram({ text: "", media, postType: "story" }, caps);
+
+  it("reports a 90s video as cut to 1 minute, never 15 minutes", () => {
+    const issue = storyV([vid({ durationSeconds: 90 })]).find((i) => i.code === "video_too_long");
+    expect(issue?.message).toContain("1 minute");
+    expect(issue?.message).not.toContain("15 minutes");
+    expect(issue?.message).toContain("for an Instagram Story.");
+  });
+
+  it("refuses a 2s video quoting 3 seconds", () => {
+    const issue = storyV([vid({ durationSeconds: 2 })]).find((i) => i.code === "video_too_short");
+    expect(issue?.message).toContain("3 seconds");
+  });
+
+  it("refuses a video over 100 MB quoting 100 MB, never 300 MB", () => {
+    const issue = storyV([vid({}, { bytes: 150_000_000 })]).find((i) => i.code === "video_too_large");
+    expect(issue?.message).toContain("100 MB");
+    expect(issue?.message).not.toContain("300 MB");
+  });
+
+  it("refuses a shape outside 0.1:1 to 10:1", () => {
+    const issue = storyV([vid({}, { width: 1, height: 20 })]).find((i) => i.code === "video_aspect_out_of_range");
+    expect(issue?.message).toContain("1:10");
+  });
+
+  it("accepts a shape within 0.1:1 to 10:1 even when outside the feed range", () => {
+    expect(codes(storyV([vid({}, { width: 1080, height: 1080 })]))).not.toContain("video_aspect_out_of_range");
+  });
+});

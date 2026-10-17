@@ -133,6 +133,9 @@ and Instagram**, sign in with Facebook, and pick the Pages and linked Instagram 
   Facebook password, removed the app, or lost their role on the Page or the app.
 - **Media must be public.** Facebook and Instagram both fetch each image from its URL, so the media bucket must be
   publicly readable ([storage.md](storage.md)).
+- **A single image or video on Instagram can be scheduled as a Story** instead of a feed post, feed video or Reel. A
+  Story carries no caption, no link and no stickers, is shown for 24 hours, and is not cropped by Docket even when its
+  shape is not the recommended 9:16.
 - **Removing access:** removing an account in Docket deletes its stored tokens. To revoke the app entirely, the
   connecting person opens Facebook Settings → Business Integrations (or Apps and Websites) and removes it.
 

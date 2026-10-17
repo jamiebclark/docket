@@ -43,8 +43,8 @@ export function RequirementsSummary({ providerName, requirements }: { providerNa
       <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)} className="mt-1">
         <summary className="font-medium text-foreground">What {providerName} accepts</summary>
         <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5">
-          {detailRows(requirements).map((row) => (
-            <div key={row.term} className="contents">
+          {detailRows(requirements).map((row, i) => (
+            <div key={`${row.term}-${i}`} className="contents">
               <dt className="font-medium">{row.term}</dt>
               <dd>{row.detail}</dd>
             </div>

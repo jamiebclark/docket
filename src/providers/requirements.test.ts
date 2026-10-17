@@ -243,10 +243,26 @@ describe("label helpers", () => {
     it("keeps one Instagram and one Facebook post type per shown type", () => {
       for (const key of ["instagram", "facebook"]) {
         const caps = findProvider(key)!.capabilities;
-        for (const type of caps.postTypeChoices!.flatMap((c) => c.options.map((o) => o.type))) {
+        const options = caps.postTypeChoices!.find((c) => c.shape === "single_video")!.options;
+        for (const type of options.map((o) => o.type)) {
           expect(requirementsOf(caps, { uploadTypes, postType: type }).video.postType?.value, `${key} ${type}`).toBe(type);
         }
       }
+    });
+
+    it("reports the image note and recommended shape for a story target", () => {
+      const story = requirementsOf(ig, { uploadTypes, postType: "story" });
+      expect(story.image.aspectRatio).toEqual({ min: null, max: null });
+      expect(story.image.recommendedAspectRatio).toEqual({ value: 9 / 16, label: "9:16" });
+      expect(story.image.notes).toEqual([
+        "9:16 is recommended. Instagram crops any other shape or shows blank space; Docket sends the image unchanged.",
+      ]);
+    });
+
+    it("has no recommended shape or notes for the feed image default", () => {
+      const image = requirementsOf(ig, { uploadTypes });
+      expect(image.image.recommendedAspectRatio).toBeNull();
+      expect(image.image.notes).toEqual([]);
     });
 
     it("leaves providers without choices or per-type limits unchanged", () => {

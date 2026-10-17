@@ -13,8 +13,6 @@ export function constraintsHash(c: MediaConstraints): string {
     c.maxWidth ?? null,
     c.minHeight ?? null,
     c.maxHeight ?? null,
-    c.minAspectRatio ?? null,
-    c.maxAspectRatio ?? null,
   ]);
   return createHash("sha256").update(canonical).digest("hex");
 }

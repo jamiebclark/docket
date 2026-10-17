@@ -2,7 +2,7 @@ import { MIME_LABEL } from "@/lib/media/types";
 import { countingRuleName, countingUnit } from "./text";
 import { choiceFor, postTypeLabel, resolvePostType } from "./post-type";
 import type { PostType, ProviderCapabilities } from "./types";
-import { videoLimitsFor } from "./validation";
+import { imageLimitsFor, videoLimitsFor } from "./validation";
 import {
   CONTAINER_LABEL,
   audioCodecLabel,
@@ -45,6 +45,8 @@ export interface RequirementsSummary {
     width: Range;
     height: Range;
     aspectRatio: Range;
+    recommendedAspectRatio: Labelled<number> | null;
+    notes: string[];
     maxAltTextLength: number | null;
   };
   video: {
@@ -147,6 +149,9 @@ export function requirementsOf(
   ctx: { uploadTypes: readonly string[]; postType?: PostType; notes?: readonly string[] },
 ): RequirementsSummary {
   const m = caps.media;
+  const imageType = ctx.postType ?? "image";
+  const img = imageLimitsFor(caps, imageType);
+  const imageOverride = caps.media.byPostType?.[imageType];
   const shown = shownTypeOf(caps, ctx.postType);
   const v = videoLimitsFor(caps, shown);
   const hasChoice = (caps.postTypeChoices?.length ?? 0) > 0;
@@ -170,11 +175,16 @@ export function requirementsOf(
       formats: m.allowedMimeTypes.map(labelled),
       convertedTo: accepts && output ? labelled(output) : null,
       convertedFrom: accepts ? ctx.uploadTypes.filter((t) => !m.allowedMimeTypes.includes(t)).map(labelled) : [],
-      maxBytesPerFile: { value: m.maxBytesPerFile, label: bytesLabel(m.maxBytesPerFile) },
-      width: range(m.minWidth, m.maxWidth, px),
-      height: range(m.minHeight, m.maxHeight, px),
-      aspectRatio: range(m.minAspectRatio, m.maxAspectRatio, aspectLabel),
-      maxAltTextLength: m.maxAltTextLength ?? null,
+      maxBytesPerFile: { value: img.maxBytesPerFile, label: bytesLabel(img.maxBytesPerFile) },
+      width: range(img.minWidth, img.maxWidth, px),
+      height: range(img.minHeight, img.maxHeight, px),
+      aspectRatio: range(img.minAspectRatio, img.maxAspectRatio, aspectLabel),
+      recommendedAspectRatio:
+        imageOverride?.recommendedAspectRatio !== undefined
+          ? { value: imageOverride.recommendedAspectRatio, label: aspectLabel(imageOverride.recommendedAspectRatio) }
+          : null,
+      notes: [...(imageOverride?.notes ?? [])],
+      maxAltTextLength: img.maxAltTextLength ?? null,
     },
     video: {
       maxVideos: v.maxVideos,

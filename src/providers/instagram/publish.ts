@@ -5,7 +5,7 @@ import { readPageToken } from "../meta/credentials";
 import { classifyGraphError, graphStepError, graphSummary, scrub } from "../meta/errors";
 import type { AttemptSummary, PublishContext, StepResult } from "../types";
 import { QUOTA_RETRY_MS, readQuota } from "./quota";
-import { IMAGE_STATUS_FIELDS, itemParams, reelContainerParams, VIDEO_STATUS_FIELDS } from "./requests";
+import { IMAGE_STATUS_FIELDS, itemParams, reelContainerParams, storyContainerParams, VIDEO_STATUS_FIELDS } from "./requests";
 import {
   checkIntervalMs,
   FIRST_CHECK_DELAY_MS,
@@ -109,6 +109,8 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
       if (plan.mediaType === "REELS") {
         Object.assign(params, reelContainerParams(item, text, plan.shareToFeed === true));
         request.shareToFeed = plan.shareToFeed === true;
+      } else if (plan.mediaType === "STORIES") {
+        Object.assign(params, storyContainerParams(item, kinds[0] === "video" ? "video" : "image"));
       } else if (name !== "create_container") {
         Object.assign(params, itemParams(kinds[index - 1]!, item));
         request.itemIndex = index;
@@ -208,12 +210,13 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
 
   // --- check_status -------------------------------------------------------------------------
   if (name === "check_status") {
-    const outcome = await call("GET", `/${container}`, { fields: hasVideo ? VIDEO_STATUS_FIELDS : IMAGE_STATUS_FIELDS });
+    const readsStatusDetail = hasVideo || plan.mediaType === "STORIES";
+    const outcome = await call("GET", `/${container}`, { fields: readsStatusDetail ? VIDEO_STATUS_FIELDS : IMAGE_STATUS_FIELDS });
     const failed = failure(outcome, { containerId: container });
     if (failed) return failed;
     if (outcome.kind !== "ok") return fatal("Unexpected Instagram response.");
     const code = (outcome.body as { status_code?: unknown } | null)?.status_code;
-    const detail = hasVideo ? scrub(statusDetail(outcome.body), [token]) : "";
+    const detail = readsStatusDetail ? scrub(statusDetail(outcome.body), [token]) : "";
     const summary = (statusCode: string) =>
       summarize(
         name,
@@ -243,6 +246,13 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
         };
       }
       case "ERROR": {
+        if (plan.mediaType === "STORIES") {
+          const why = detail ? `: ${detail.replace(/\.+$/, "")}` : "";
+          return fatal(
+            `Instagram could not process the Story's media${why}. Check the asset's format, size and shape; nothing was published.`,
+            summary("ERROR"),
+          );
+        }
         if (!hasVideo) return fatal("Instagram could not process the media (status ERROR).", summary("ERROR"));
         const why = detail ? `: ${detail.replace(/\.+$/, "")}` : "";
         const what = plan.mediaType === "REELS" ? "the video" : "the carousel";

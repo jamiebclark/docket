@@ -3508,3 +3508,88 @@ the cursor.
    unread-count query (research.md §2).
 3. **The inbox is its own screen; only the decision lives in Review.** Straight from the spec's stated
    assumptions, and it keeps the Review queue doing the one job it already does well.
+
+## 078 — Instagram Stories (2026-10-16)
+
+Judgement calls from `specs/078-instagram-stories/spec.md` and its plan (`research.md`, K1–K20).
+External facts come from `docs/research/meta.md` and `docs/research/meta-video.md` (checked
+2026-10-16). All Story behaviour is verified with mocks only.
+
+### Spec decisions
+
+- **D1 — the post's text is dropped, not refused.** A Story target ignores the post's shared text; the
+  person is told so by a non-blocking notice, and a post with a Story target is *not* required to be
+  text-free. *Rejected*: refusing a Story whose post carries text, which would make it impossible to
+  schedule the same content as a captioned Facebook post and a wordless Instagram Story together — the
+  normal case for one post fanned out to several accounts.
+- **D2 — the asset's description is dropped, with the same notice treatment.** Alt text is never sent
+  on a Story; Docket attaches a description to every asset for other uses, so something is always being
+  dropped, and a non-blocking notice names it. *Rejected*: refusing a Story because its (correct, useful
+  elsewhere) asset has a description, which would be perverse.
+- **D3 — a non-9:16 image is passed through to Instagram's own cropping, neither refused nor
+  letterboxed.** The platform documents 9:16 only as a recommendation and states no hard aspect range
+  for an image Story, so refusing would be wrong on the facts; letterboxing would mean Docket inventing
+  a crop or a fill colour on the person's behalf, which its image handling has never done. This follows
+  the precedent Pinterest's "No hard aspect range" set for the same shape of problem (entry 072, K12):
+  declare no bound, warn instead of refuse. Applies to the image only — a Story video keeps the
+  documented 0.1:1–10:1 hard range (FR-020, FR-022).
+- **K1 — `PostShape` gains `single_image`, and `resolvePostType` consults a declared choice for it,
+  exactly as `single_video` already does.** This is the plug-in boundary working as designed, not being
+  bypassed: it is the one place every caller (composer, API, gate, engine, formatter) already asks what
+  a target publishes as, so widening it is the only change that reaches `chosen_post_type` and
+  `postTypeRefusal` without a provider-specific branch in shared code (constitution IV). A provider that
+  declares no `single_image` choice is unaffected — `choiceFor` returns null and the default stays
+  `image`.
+- **K5/K6 — per-post-type image limits are a declaration (`media.byPostType`), not a flag.** A new
+  `ImageLimitOverrides` type (`minAspectRatio`/`maxAspectRatio`, `null` to remove a bound;
+  `recommendedAspectRatio`; `notes`) sits beside the video block's existing `byPostType`, merged by
+  `imageLimitsFor(caps, type)`. Instagram's own `media.byPostType.story` (`minAspectRatio: null`,
+  `maxAspectRatio: null`, `recommendedAspectRatio: 9/16`) is the single declaration that drives the
+  planner no longer refusing a 9:16 image, nothing reshaping it, the shape notice, and the requirements
+  summary reporting "no limit checked" plus the note. *Rejected*: a boolean "is a story" flag threaded
+  through the planner and validator, which would duplicate the range logic the video block already has
+  and give no record of what, specifically, a story relaxes.
+- **K8 — the aspect bounds leave `constraintsHash`, and `prepareVariants` resolves each target's post
+  type before planning, so a Story and a feed post share one variant and a 9:16 Story image is actually
+  built.** `minAspectRatio`/`maxAspectRatio` are read by `planImage` only to refuse; they never change
+  the derived file's type, size or dimensions, so hashing them would give byte-identical output two
+  identities for no reason. `prepareVariants` resolves each target's post type the same way
+  `resolvePublishMedia` does and plans with `mediaConstraintsOf(caps, postType)`, so a Story image
+  outside the feed's aspect range is planned under the Story's (unbounded) range and a variant is
+  actually built — the shared hash means this still collapses to one build per asset, not two.
+  *Consequence, accepted*: every existing cached image variant hashes differently once and is rebuilt
+  lazily — `resolvePublishMedia` rebuilds a missing one at publish time, so no scheduled post can fail
+  because of the change. A test (`src/server/media/hash.test.ts`) asserts two constraint sets differing
+  only in aspect share one hash, and integration tests (`tests/integration/media/variants.test.ts`)
+  assert a Story and a feed post resolve to the same variant row for an in-range asset, and that a 9:16
+  Story image — refused outright for the feed — is built and schedulable as a Story. *Rejected*: leaving
+  `prepareVariants` post-type-blind (the shared hash alone does not help an asset the feed's bounds
+  refuse before any build); bumping `VARIANT_PIPELINE_VERSION` instead (same rebuild, with no record of
+  why).
+- **K11 — a story target drops the feed's aspect error and both alt-text issues.**
+  `validateInstagram` keys its aspect check on `imageLimitsFor(caps, type)`, so with no bounds declared
+  the check cannot fire; it also filters `missing_alt_text` and `alt_text_too_long` for a story, since a
+  Story can carry no description at all, so asking for one is noise and refusing one for an otherwise-
+  correct description would be perverse. Derived from the fact that the description is never sent
+  (D2), not stated directly by the spec, so recorded here as a judgement call.
+- **K16 — a `STORIES` container reads `status_code,status` and names the Story in its ERROR message.**
+  Images today read `status_code` alone and fail with a generic "status ERROR" message. The spec's edge
+  case requires a Story to fail with what Instagram said and to point at the asset, so a `STORIES`
+  container reads the same `VIDEO_STATUS_FIELDS` a video container does and fails with "Instagram could
+  not process the Story's media{: detail}. Check the asset's format, size and shape; nothing was
+  published." Feed images are untouched.
+- **The constitution amendment.** The Engineering Constraints line blanket-excluded "stories" until a
+  spec said otherwise; this spec is that exception. `.specify/memory/constitution.md` now reads
+  "stories (except Instagram Stories, 078 — Facebook Page Stories stay out of scope)" rather than
+  dropping "stories" outright, so Facebook Page Stories — unresearched, unverified — stay excluded by
+  the same sentence that lets Instagram's in.
+
+### Implementation outcome
+
+Image and video Stories compose, validate with their own notices, schedule and publish against a
+mocked Graph, end to end through the real scheduler (`tests/integration/instagram/stories.test.ts`),
+including the daily container allowance, the platform quota, `PUBLISHED`-as-ambiguous, container
+expiry and recreation, and a create step killed mid-flight. The API surfaces everything the composer
+does (capabilities, validation issues, requirements summary) with no UI involved. Not built, and owned
+by no spec: Facebook Page Stories, stickers and links on a Story, reading a Story back, and multi-asset
+Stories (`docs/feature-map.md`).

@@ -25,8 +25,11 @@ export function resolvePostType(
   switch (shapeOf(items)) {
     case "none":
       return "text";
-    case "single_image":
-      return "image";
+    case "single_image": {
+      const choice = choiceFor(caps, items);
+      if (!choice) return "image";
+      return chosen !== null && choice.options.some((o) => o.type === chosen) ? chosen : choice.default;
+    }
     case "multiple":
       return "carousel";
     case "single_video": {

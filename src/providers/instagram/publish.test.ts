@@ -21,7 +21,7 @@ const createdAgo = (ms: number) => new Date(now.getTime() - ms).toISOString();
 
 const vid = (n: number): MediaItem => ({ url: `https://media.test/${n}.mp4`, mimeType: "video/mp4", width: 720, height: 1280, bytes: 1000, altText: "", kind: "video" });
 
-function ctx(opts: { text?: string; media?: MediaItem[]; state?: unknown; at?: Date; postType?: "video" | "reel" }): PublishContext {
+function ctx(opts: { text?: string; media?: MediaItem[]; state?: unknown; at?: Date; postType?: "video" | "reel" | "story" }): PublishContext {
   const media = opts.media ?? [img(1)];
   const text = opts.text ?? "caption";
   const state = opts.state ?? null;
@@ -317,6 +317,49 @@ describe("video (Reels and Feed video)", () => {
   it("a post type switched mid-publish fails the step check", async () => {
     const c = ctx({ media: [vid(1)], postType: "video", state: reelState(true, { ready: true, quotaChecked: true }) });
     expect(await advanceInstagram({ ...c, postType: "reel" })).toMatchObject({ kind: "fatal_error", error: "The post changed while publishing." });
+  });
+});
+
+describe("Story", () => {
+  const storyState = (patch: Partial<InstagramState> = {}): InstagramState => ({ ...initialState({ mediaType: "STORIES" }), ...patch });
+
+  it("creates an image Story with exactly media_type and image_url, no caption or alt_text", async () => {
+    graph.on("POST", p(`/${IG}/media`), { kind: "ok", body: { id: "s1" } });
+    const r = await advanceInstagram(ctx({ media: [img(1, "a dog")], postType: "story" }));
+    expect(graph.requests[0]!.params).toEqual({ media_type: "STORIES", image_url: "https://media.test/1.jpg", access_token: "[redacted]" });
+    expect(r).toMatchObject({ kind: "continue", state: { mediaType: "STORIES", container: "s1" } });
+    expect(r.kind === "continue" && r.notBefore).toEqual(new Date(now.getTime() + 10_000));
+  });
+
+  it("creates a video Story with exactly media_type and video_url", async () => {
+    graph.on("POST", p(`/${IG}/media`), { kind: "ok", body: { id: "s1" } });
+    const r = await advanceInstagram(ctx({ media: [vid(1)], postType: "story" }));
+    expect(graph.requests[0]!.params).toEqual({ media_type: "STORIES", video_url: "https://media.test/1.mp4", access_token: "[redacted]" });
+    expect(r.kind === "continue" && r.notBefore).toEqual(new Date(now.getTime() + 60_000));
+  });
+
+  it("polls status_code,status and finishes ready on FINISHED", async () => {
+    graph.on("GET", p("/s1"), { kind: "ok", body: { status_code: "FINISHED" } });
+    const r = await advanceInstagram(ctx({ media: [img(1)], postType: "story", state: storyState({ container: "s1", createdAt: createdAgo(30_000) }) }));
+    expect(graph.requests[0]!.params.fields).toBe("status_code,status");
+    expect(r).toMatchObject({ kind: "continue", state: { ready: true } });
+  });
+
+  it("checks quota and publishes, recording the returned id", async () => {
+    graph.on("GET", p(`/${IG}/content_publishing_limit`), { kind: "ok", body: { data: [{ quota_usage: 1, config: { quota_total: 100, quota_duration: 86400 } }] } });
+    const quota = await advanceInstagram(ctx({ media: [img(1)], postType: "story", state: storyState({ container: "s1", ready: true, createdAt: createdAgo(60_000) }) }));
+    expect(quota).toMatchObject({ kind: "continue", state: { quotaChecked: true } });
+
+    graph.reset();
+    graph.on("POST", p(`/${IG}/media_publish`), { kind: "ok", body: { id: "m-story-1" } });
+    const published = await advanceInstagram(ctx({ media: [img(1)], postType: "story", state: storyState({ container: "s1", ready: true, quotaChecked: true, createdAt: createdAgo(60_000) }) }));
+    expect(published).toMatchObject({ kind: "done", externalId: "m-story-1" });
+  });
+
+  it("ERROR names the Story's media and never published", async () => {
+    graph.on("GET", p("/s1"), { kind: "ok", body: { status_code: "ERROR" } });
+    const r = await advanceInstagram(ctx({ media: [img(1)], postType: "story", state: storyState({ container: "s1", createdAt: createdAgo(30_000) }) }));
+    expect(r).toMatchObject({ kind: "fatal_error", error: expect.stringContaining("Instagram could not process the Story's media") });
   });
 });
 

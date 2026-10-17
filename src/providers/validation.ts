@@ -24,6 +24,20 @@ export function videoLimitsFor(caps: ProviderCapabilities, type: PostType): Vide
   return { ...base, ...over };
 }
 
+export type ImageLimits = Omit<ProviderCapabilities["media"], "byPostType">;
+
+/** The image limits for one post type: `caps.media` with `byPostType[type]` merged over it, `null` removing a bound. */
+export function imageLimitsFor(caps: ProviderCapabilities, type: PostType): ImageLimits {
+  const { byPostType, ...base } = caps.media;
+  const { notes: _notes, ...over } = byPostType?.[type] ?? {};
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(over)) {
+    if (value === null) delete merged[key];
+    else merged[key] = value;
+  }
+  return merged as ImageLimits;
+}
+
 const EPS = 1e-9;
 
 /** Each declared bound of one ready video, in the contract's order. */

@@ -1,5 +1,6 @@
 import { resolvePostType, postTypeLabel } from "../post-type";
-import { validateAgainstCapabilities } from "../validation";
+import { aspectLabel } from "../requirements";
+import { imageLimitsFor, validateAgainstCapabilities } from "../validation";
 import { INSTAGRAM_MAX_IMAGES } from "./capabilities";
 import type { PostContent, ProviderCapabilities, ValidationIssue } from "../types";
 
@@ -13,6 +14,7 @@ export function validateInstagram(content: PostContent, caps: ProviderCapabiliti
   const issues: ValidationIssue[] = [];
   const type = content.postType ?? resolvePostType(caps, content.media, null);
   const typeLabel = postTypeLabel(caps, type);
+  const story = type === "story";
   const adaptable = (field: string): boolean => {
     const item = content.media[Number(field.split(".")[1])];
     return !!item && (item.mimeType === "image/png" || item.bytes > caps.media.maxBytesPerFile);
@@ -21,6 +23,8 @@ export function validateInstagram(content: PostContent, caps: ProviderCapabiliti
   for (const issue of validateAgainstCapabilities(content, caps)) {
     // PNG and oversize files are converted/compressed before publishing: notes below, not errors.
     if ((issue.code === "mime_not_allowed" || issue.code === "file_too_large") && adaptable(issue.field)) continue;
+    // A Story carries no description at all, so asking for one or refusing its length is noise (K11).
+    if (story && (issue.code === "missing_alt_text" || issue.code === "alt_text_too_long")) continue;
     if (issue.code === "text_only_not_allowed") {
       issues.push({ ...issue, code: "media_required", message: "Instagram posts need at least one image or video." });
     } else if (issue.code.startsWith("video_") && issue.code !== "video_not_accepted") {
@@ -29,6 +33,40 @@ export function validateInstagram(content: PostContent, caps: ProviderCapabiliti
     } else {
       issues.push(issue);
     }
+  }
+
+  if (story) {
+    if (content.text.trim() !== "") {
+      issues.push({
+        severity: "info",
+        code: "story_text_dropped",
+        message: "The post text will not appear on an Instagram Story; a Story carries no caption.",
+        field: "text",
+      });
+    }
+    content.media.forEach((item, i) => {
+      if (item.altText.trim() !== "") {
+        issues.push({
+          severity: "info",
+          code: "story_alt_text_dropped",
+          message: "The image description will not appear on an Instagram Story.",
+          field: `media.${i}` as const,
+        });
+      }
+    });
+    const recommended = caps.media.byPostType?.story?.recommendedAspectRatio;
+    content.media.forEach((item, i) => {
+      if (item.kind === "video" || recommended === undefined || item.width === null || item.height === null) return;
+      const ratio = item.width / item.height;
+      if (Math.abs(ratio - recommended) > RATIO_EPSILON) {
+        issues.push({
+          severity: "info",
+          code: "story_will_crop",
+          message: `Image ${i + 1} is ${aspectLabel(ratio)}; Instagram will crop it to ${aspectLabel(recommended)} or show blank space. Docket sends it unchanged.`,
+          field: `media.${i}` as const,
+        });
+      }
+    });
   }
 
   if (content.media.length > INSTAGRAM_MAX_IMAGES) {
@@ -42,7 +80,7 @@ export function validateInstagram(content: PostContent, caps: ProviderCapabiliti
     });
   }
 
-  const { minAspectRatio, maxAspectRatio, maxWidth } = caps.media;
+  const { minAspectRatio, maxAspectRatio, maxWidth } = imageLimitsFor(caps, type);
   const ratios: number[] = [];
   content.media.forEach((item, i) => {
     const field = `media.${i}` as const;

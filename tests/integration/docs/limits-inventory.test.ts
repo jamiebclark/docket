@@ -72,6 +72,11 @@ function declared(provider: SocialProvider): Map<string, string[]> {
     ["alt text length", media.maxAltTextLength],
   ];
   for (const [k, v] of optional) if (v !== undefined) m.set(k, [String(v)]);
+  for (const [type, over] of Object.entries(media.byPostType ?? {})) {
+    if (over.minAspectRatio !== undefined) m.set(`${type} min aspect`, [over.minAspectRatio === null ? "none" : String(over.minAspectRatio)]);
+    if (over.maxAspectRatio !== undefined) m.set(`${type} max aspect`, [over.maxAspectRatio === null ? "none" : String(over.maxAspectRatio)]);
+    if (over.recommendedAspectRatio !== undefined) m.set(`${type} recommended aspect`, [String(over.recommendedAspectRatio)]);
+  }
   const { byPostType, ...video } = provider.capabilities.video;
   m.set("videos", [String(video.maxVideos)]);
   if (video.maxVideos > 0) {
@@ -187,7 +192,7 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
           provider.key === "facebook"
             ? ["images", "text length"]
             : provider.key === "instagram"
-              ? ["carousel video max aspect", "carousel video min aspect"]
+              ? ["carousel video max aspect", "carousel video min aspect", "story max aspect", "story min aspect"]
               : [];
         expect(flagged).toEqual(expected);
       });

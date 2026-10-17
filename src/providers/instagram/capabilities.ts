@@ -33,6 +33,9 @@ export const INSTAGRAM_REEL_VIDEO = {
 // "9:16 recommended to avoid cropping or blank space". Not for carousel items, whose range excludes it.
 const INSTAGRAM_RECOMMENDED = { recommendedAspectRatio: 9 / 16 } as const;
 
+// docs/research/meta.md Story section: no caption, link or stickers. Shared verbatim by both post-type choices (C3 invariant 1).
+const STORY_OPTION_DESCRIPTION = "Shown for 24 hours in Stories. A Story carries no caption, no link and no stickers.";
+
 export const instagramCapabilities: ProviderCapabilities = {
   text: {
     maxLength: INSTAGRAM_MAX_TEXT,
@@ -52,6 +55,15 @@ export const instagramCapabilities: ProviderCapabilities = {
     maxAspectRatio: 1.91,
     maxAltTextLength: 1000,
     required: true,
+    byPostType: {
+      // docs/research/meta.md Story section: general image handling, no hard aspect range, 9:16 recommended.
+      story: {
+        minAspectRatio: null,
+        maxAspectRatio: null,
+        recommendedAspectRatio: 9 / 16,
+        notes: ["9:16 is recommended. Instagram crops any other shape or shows blank space; Docket sends the image unchanged."],
+      },
+    },
   },
   video: {
     ...INSTAGRAM_REEL_VIDEO,
@@ -67,17 +79,33 @@ export const instagramCapabilities: ProviderCapabilities = {
         maxAspectRatio: 1.91,
         notes: ["Reels cannot be carousel items."],
       },
+      // docs/research/meta-video.md Story video specs: 100 MB, 3-60 s, 0.1:1 min aspect, 9:16 recommended.
+      story: {
+        maxBytes: 100_000_000,
+        maxDurationSeconds: 60,
+        minAspectRatio: 0.1,
+        recommendedAspectRatio: 9 / 16,
+      },
     },
   },
   textOnlyAllowed: false,
-  postTypes: ["image", "carousel", "video", "reel"],
+  postTypes: ["image", "carousel", "video", "reel", "story"],
   postTypeChoices: [
+    {
+      shape: "single_image",
+      default: "image",
+      options: [
+        { type: "image", label: "Feed post", description: "Shown on your profile and in the feed." },
+        { type: "story", label: "Story", description: STORY_OPTION_DESCRIPTION },
+      ],
+    },
     {
       shape: "single_video",
       default: "video",
       options: [
         { type: "video", label: "Feed video", description: "Shown on your profile and feed, and in the Reels tab." },
         { type: "reel", label: "Reel", description: "Shown in the Reels tab only." },
+        { type: "story", label: "Story", description: STORY_OPTION_DESCRIPTION },
       ],
     },
   ],

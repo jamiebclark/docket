@@ -23,6 +23,11 @@ describe("instagramStateSchema", () => {
     expect(instagramStateSchema.parse(c)).toMatchObject({ kinds: ["image", "video"], itemProgress: [] });
   });
 
+  it("accepts STORIES, with no schema version bump", () => {
+    const s = initialState({ mediaType: "STORIES" });
+    expect(instagramStateSchema.parse(s)).toMatchObject({ v: 1, mediaType: "STORIES", container: null });
+  });
+
   it("handles garbage totally", () => {
     for (const bad of [null, undefined, 5, "x", [], {}, { v: 2 }, { v: 1, mediaType: "VIDEO" }]) {
       expect(instagramStateSchema.safeParse(bad).success).toBe(false);

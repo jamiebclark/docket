@@ -16,7 +16,7 @@ export type TextCountingRule = BuiltInCountingRule | CustomCountingRule;
 export type VideoContainer = "mp4" | "mov";
 
 /** Shapes of post that may be published as more than one post type. Closed; reused by later providers. */
-export type PostShape = "single_video";
+export type PostShape = "single_image" | "single_video";
 
 export interface PostTypeOption {
   type: PostType;
@@ -97,6 +97,16 @@ export interface VideoFacts {
   factsUnreadable?: boolean;
 }
 
+export type ImageLimitOverrides = {
+  /** `null` removes the bound for this post type. */
+  minAspectRatio?: number | null;
+  maxAspectRatio?: number | null;
+  /** width ÷ height; the shape the platform recommends. Notice only - Docket never reshapes an image. */
+  recommendedAspectRatio?: number;
+  /** Plain sentences shown in the requirements summary for this type. */
+  notes?: readonly string[];
+};
+
 export interface ProviderCapabilities {
   text: {
     maxLength: number;
@@ -123,6 +133,8 @@ export interface ProviderCapabilities {
     minAspectRatio?: number;
     maxAspectRatio?: number;
     maxAltTextLength?: number;
+    /** Limits for one post type, merged over this block by `imageLimitsFor`. */
+    byPostType?: Partial<Record<PostType, ImageLimitOverrides>>;
   };
   video: VideoCapabilities;
   /** e.g. Instagram: false */
@@ -327,6 +339,9 @@ export interface ValidationIssue {
     | "too_many_items"
     | "media_processing"
     | "media_failed"
+    | "story_text_dropped"
+    | "story_alt_text_dropped"
+    | "story_will_crop"
     | (string & {});
   message: string;
   field: "text" | "media" | "postType" | "consent" | `media.${number}` | "posting" | `posting.${string}`;
