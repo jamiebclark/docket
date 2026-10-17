@@ -11,6 +11,25 @@ import { controlStyles, labelStyles, linkStyles } from "@/components/ui/controls
 
 const GENERIC_FAILURE = "Email or password is incorrect.";
 
+/**
+ * What to show for a failed sign-in.
+ *
+ * `GENERIC_FAILURE` is deliberately vague about *which* of the two was wrong, but it must only be said
+ * when the server actually rejected the credential. Saying it for a request that never arrived is a
+ * different kind of lie: on 2026-10-17 a proxy returned 502 for every POST while GETs passed, this form
+ * reported "Email or password is incorrect", and that one wrong word sent an hour of debugging after a
+ * password bug that did not exist. The password was correct the whole time.
+ *
+ * Better Auth answers 401 for a bad credential and 429 for the rate limit; anything else — a 5xx, a
+ * gateway error, a dropped connection (`status` 0 or absent) — means the password was never checked.
+ */
+function signInMessage(status: number | undefined): string {
+  if (status === 429) return "Too many attempts. Wait a few seconds and try again.";
+  if (status === 401 || status === 403) return GENERIC_FAILURE;
+  const detail = status ? `HTTP ${status}` : "no response";
+  return `Could not reach Docket (${detail}). Your password was not checked — try again, and if it keeps happening the server or the proxy in front of it is refusing requests.`;
+}
+
 /** `canReset` is false when this install has no mailer: see the /forgot-password page for why. */
 export function LoginForm({ next, canReset }: { next: string; canReset: boolean }) {
   const router = useRouter();
@@ -28,7 +47,7 @@ export function LoginForm({ next, canReset }: { next: string; canReset: boolean 
     });
     if (failure) {
       setPending(false);
-      setError(failure.status === 429 ? "Too many attempts. Wait a few seconds and try again." : GENERIC_FAILURE);
+      setError(signInMessage(failure.status));
       return;
     }
     router.replace(safeRedirect(next, "/"));
