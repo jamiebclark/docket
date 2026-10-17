@@ -5,6 +5,7 @@ import * as posts from "../../../src/server/services/posts";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
+import { tickConfig } from "../../helpers/tick";
 
 afterAll(async () => {
   await closeDb();
@@ -130,7 +131,7 @@ describe("post lifecycle", () => {
     await posts.setReviewState(env.scope, p.post.id, "approved");
     await atTime(NOW, () => posts.publishNow(env.scope, p.post.id));
     const { runTick } = await import("../../../src/server/scheduler");
-    await atTime(NOW, () => runTick());
+    await atTime(NOW, () => runTick(tickConfig()));
     const detail = await posts.getPost(env.scope, p.post.id);
     expect(detail.targets[0]!.status).toBe("ambiguous");
     await expect(posts.updatePost(env.scope, p.post.id, { baseText: "no" })).rejects.toBeInstanceOf(ConflictError);

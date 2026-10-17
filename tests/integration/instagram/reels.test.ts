@@ -14,6 +14,7 @@ import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/
 import { IG_ID, instagramVideoSetup } from "../../helpers/instagram-publish";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -33,7 +34,7 @@ const media = `/v26.0/${IG_ID}/media`;
 const quota = `/v26.0/${IG_ID}/content_publishing_limit`;
 const publish = `/v26.0/${IG_ID}/media_publish`;
 const T0 = Date.now() + 60_000;
-const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
 
 const creates = () => graph.requests.filter((r) => r.method === "POST" && r.path === media);
 const publishes = () => graph.requests.filter((r) => r.path === publish);

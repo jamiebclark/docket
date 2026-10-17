@@ -8,6 +8,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const CREATE_SESSION = "/xrpc/com.atproto.server.createSession";
 const REFRESH_SESSION = "/xrpc/com.atproto.server.refreshSession";
@@ -44,7 +45,7 @@ async function setup(opts: { accessJwt?: string } = {}) {
   if (!out.ok) throw new Error("connect failed");
   const accountId = out.account.id;
   const { target } = await createDueTarget(env.project.id, accountId, { baseText: "hello" });
-  const tick = async () => runTick({ config: {} });
+  const tick = async () => runTick(tickConfig({}));
   const row = async () => (await testDb().select().from(postTargets).where(and(eq(postTargets.projectId, env.project.id), eq(postTargets.id, target.id))))[0]!;
   const account = async () => (await testDb().select().from(socialAccounts).where(and(eq(socialAccounts.projectId, env.project.id), eq(socialAccounts.id, accountId))))[0]!;
   const dueNow = () =>

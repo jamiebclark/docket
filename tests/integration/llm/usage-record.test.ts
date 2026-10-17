@@ -20,7 +20,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
 import { createVoiceProfile } from "../../helpers/factories";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 
 afterEach(() => {
@@ -204,7 +204,7 @@ describe("llm_call_usage: the job runner", () => {
     setLlmForTests(fake);
     await e.assets(2);
     const { jobId } = await createJob(e.scope, e.input());
-    const tick = await runTick({ config: { jobMaxItems: 2 } });
+    const tick = await runTick(tickConfig({ jobMaxItems: 2 }));
     expect(tick.generation.counts.done).toBe(2);
     const rows = await rowsFor(e.project.id);
     const jobRows = rows.filter((r) => r.purpose === "generate.job_item");
@@ -222,13 +222,13 @@ describe("llm_call_usage: the job runner", () => {
     await e.assets(1);
     await createJob(e.scope, e.input());
     const CONFIG = { timeBudgetMs: 4000, jobMinCallMs: 1000, jobPersistReserveMs: 500, jobMaxItems: 1 };
-    const first = await runTick({ config: CONFIG });
+    const first = await runTick(tickConfig(CONFIG));
     expect(first.generation.counts).toMatchObject({ deferred: 1 });
     const afterFirst = await rowsFor(e.project.id);
     expect(afterFirst).toHaveLength(1);
     expect(afterFirst[0]).toMatchObject({ ok: false, failureKind: "invalid_output" });
 
-    const second = await runTick({ config: CONFIG });
+    const second = await runTick(tickConfig(CONFIG));
     expect(second.generation.counts).toMatchObject({ done: 1 });
     const afterSecond = await rowsFor(e.project.id);
     expect(afterSecond).toHaveLength(2);
@@ -243,12 +243,12 @@ describe("llm_call_usage: the job runner", () => {
     setLlmForTests(fake);
     await e.assets(1);
     await createJob(e.scope, e.input());
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
     const afterFirst = await rowsFor(e.project.id);
     expect(afterFirst).toHaveLength(1);
     expect(afterFirst[0]).toMatchObject({ ok: false, failureKind: "credit_exhausted" });
 
-    const held = await runTick({ config: { jobMaxItems: 1 } });
+    const held = await runTick(tickConfig({ jobMaxItems: 1 }));
     expect(held.generation.counts).toMatchObject({ claimed: 0 });
     expect(await rowsFor(e.project.id)).toHaveLength(1);
   }, 60_000);

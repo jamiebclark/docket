@@ -12,6 +12,7 @@ import { createFakeX, rateLimited, type FakeX } from "../../helpers/fake-x";
 import { jpeg } from "../../helpers/images";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 const TWEETS = "/2/tweets";
 const ACCESS = "X-ACCESS-TOKEN-e2e-0123456789";
@@ -34,7 +35,7 @@ afterAll(async () => {
 });
 
 /** Ticks with the engine clock pinned `seconds` after T0 (no sleeping). */
-const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
 
 async function setup(text: string, images: readonly string[] = []) {
   const ctx = await createProjectWithMembers();

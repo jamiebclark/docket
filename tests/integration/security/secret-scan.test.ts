@@ -100,7 +100,7 @@ import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
-import { clearHolds, clearProjectCredentials, jobsEnv, modelOk } from "../../helpers/jobs-env";
+import { clearHolds, clearProjectCredentials, jobsEnv, modelOk, tickConfig } from "../../helpers/jobs-env";
 import { atTime } from "../../helpers/clock";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
@@ -324,7 +324,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     for (const script of scripts) {
       pds.route("POST", "/xrpc/com.atproto.repo.createRecord", script);
       targetIds.push((await createDueTarget(env.project.id, connected.account.id, { baseText: "hello" })).target.id);
-      await runTick({ config: {} });
+      await runTick(tickConfig({}));
     }
 
     // Resolving the unknown outcomes: one published with a link, one not published and requeued.
@@ -459,7 +459,7 @@ describe("secret scan (FR-020, SC-005)", () => {
         ],
       },
     });
-    await runTick({ config: { engagementReadMinIntervalMs: 0 } });
+    await runTick(tickConfig({ engagementReadMinIntervalMs: 0 }));
     const engagementList = await listInbox(scope);
     const item1 = engagementList.items.find((i) => i.externalId === "scan-eng-1")!;
     const item2 = engagementList.items.find((i) => i.externalId === "scan-eng-2")!;
@@ -474,7 +474,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     pieces.push({ place: "service result: engagement draft (model)", text: JSON.stringify(drafted2) });
     const approved2 = await approveReply(scope, drafted2.draftId);
     expect(approved2.ok).toBe(true);
-    await runTick({ config: { engagementReadMinIntervalMs: 0 } }); // engagement-send: item2 -> ambiguous
+    await runTick(tickConfig({ engagementReadMinIntervalMs: 0 })); // engagement-send: item2 -> ambiguous
 
     // Rendered pages.
     const params = { params: Promise.resolve({ projectSlug: slug }) };
@@ -580,7 +580,7 @@ describe("secret scan (FR-020, SC-005)", () => {
 
     await genEnv.asset();
     const { jobId: projectLlmJobId } = await createJob(genEnv.scope, genEnv.input());
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     pieces.push({
       place: "page: job detail (project llm refusal)",
       text: renderToStaticMarkup((await JobPage({ params: Promise.resolve({ projectSlug: genEnv.project.slug, jobId: projectLlmJobId }), searchParams: Promise.resolve({}) })) as never),
@@ -602,7 +602,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     await genEnv.asset();
     setLlmForTests(createFakeLlm([modelOk("Scan success post.")]));
     const { jobId: usageJobId } = await createJob(genEnv.scope, genEnv.input());
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     setLlmForTests(null);
     const sessionBeforeUsage = session.current;
     session.current = { user: { id: genEnv.owner.id }, session: { id: "scan-usage-job-session" } };
@@ -631,7 +631,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     await genEnv.asset();
     setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
     const { jobId: heldJobId } = await createJob(genEnv.scope, genEnv.input());
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     setLlmForTests(null);
     const sessionBefore = session.current;
     session.current = { user: { id: genEnv.owner.id }, session: { id: "scan-jobs-session" } };
@@ -712,7 +712,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     pieces.push({ place: "service result: dated import", text: JSON.stringify(datedImportResult) });
 
     setLlmForTests(createFakeLlm([modelOk("Scan pool post.", 1), modelOk("Scan generate post.", 1), modelOk("Scan dated post.")]));
-    await atTime(seriesFiringAt, () => runTick({ config: {} }));
+    await atTime(seriesFiringAt, () => runTick(tickConfig({})));
     setLlmForTests(null);
     setImageProviderForTests(null);
 
@@ -743,7 +743,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     }
     session.current = sessionBeforeLlm;
     // Worker databases are shared across test files (see the `afterAll` comment above): a series left
-    // enabled here would otherwise become due for a later file's plain `runTick()`, which has no
+    // enabled here would otherwise become due for a later file's plain `runTick(tickConfig())`, which has no
     // reason to expect standing series in play at all.
     for (const id of [poolSeriesId, generateSeriesId, datedSeriesId]) {
       await genEnv.scope.standingSeries.update(id, { enabled: false });
@@ -798,8 +798,8 @@ describe("secret scan (FR-020, SC-005)", () => {
     const account = await createMockAccount(env.project.id, {}, { providerKey: "scan-activity-echo", displayName: "Echo", credentialsExpiresAt: new Date(Date.now() + 3_600_000) });
     await repos.accounts.setCredentials(account.id, accounts.encryptCredentials(account.id, { token: TOKEN }), new Date(Date.now() + 3_600_000));
     await createDueTarget(env.project.id, account.id);
-    await runTick({ config: { refreshMaxAccounts: 1000 } });
-    await runTick({ config: { refreshMaxAccounts: 1000 } });
+    await runTick(tickConfig({ refreshMaxAccounts: 1000 }));
+    await runTick(tickConfig({ refreshMaxAccounts: 1000 }));
 
     // A connect callback whose platform text and exchange message echo the authorization code.
     registerThrowaway();

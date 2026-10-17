@@ -16,6 +16,7 @@ import { clearRecordedQueries } from "../../setup/scope-recorder";
 import { createFakeTikTok, tokenReply } from "../../helpers/fake-tiktok";
 import { createVideoAsset } from "../../helpers/factories";
 import { createDraftPost, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -163,7 +164,7 @@ describe("TikTok renewal on the publish path", () => {
     });
     await repos.posts.setStatus(post.id, "scheduled");
 
-    await atTime(new Date(now), () => runTick({ config: {} }));
+    await atTime(new Date(now), () => runTick(tickConfig({})));
     expect(fake.callsTo("POST", TOKEN)).toHaveLength(1);
     expect(fake.callsTo("POST", TOKEN)[0]!.fields).toMatchObject({ grant_type: "refresh_token", refresh_token: "[redacted]" });
     expect(await s.stored()).toMatchObject({ accessToken: "NEW-ACCESS", refreshToken: "NEW-REFRESH" });

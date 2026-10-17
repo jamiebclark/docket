@@ -6,6 +6,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb, testDb } from "../../helpers/db";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { markReady, queueVersionFor, received, videoTargetSetup } from "../../helpers/video-publish-setup";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(async () => {
   received.length = 0;
@@ -25,7 +26,7 @@ describe("publishing an adapted video", () => {
     const { version } = await queueVersionFor(t);
     await markReady(t.project.id, version.id, `projects/${t.project.id}/video/v.mp4`, "https://media.example.test/v.mp4");
     // The object was never stored: it has vanished.
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(result.publishing.counts).toMatchObject({ released: 1 });
     expect(received).toHaveLength(0);
     expect(await rowOf(t.project.id, version.id)).toMatchObject({ state: "queued", storageKey: null, attempts: 0 });
@@ -38,14 +39,14 @@ describe("publishing an adapted video", () => {
     const key = `projects/${t.project.id}/video/v.mp4`;
     await t.storage.put(key, Buffer.from("adapted"), "video/mp4");
     await markReady(t.project.id, version.id, key, t.storage.publicUrl(key));
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(result.publishing.counts).toMatchObject({ done: 1 });
     expect(received[0]!.media[0]).toMatchObject({ url: t.storage.publicUrl(key), mimeType: "video/mp4", bytes: 1234 });
   });
 
   it("waits, with no provider call, when no version exists yet", async () => {
     const t = await videoTargetSetup({ durationSeconds: 90 });
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(received).toHaveLength(0);
     expect(result.publishing.counts).toMatchObject({ waitingForVideo: 1 });
     expect(await t.repos.targets.get(t.target.id)).toMatchObject({ status: "scheduled" });

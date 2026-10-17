@@ -10,6 +10,7 @@ import { closeDb } from "../../helpers/db";
 import { createProject, createProjectWithMembers } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 registerTestProvider({
   ...blueskyLikeProvider,
@@ -38,7 +39,7 @@ describe("account_needs_reauth events", () => {
   it("scheduled renewal refusal", async () => {
     const { project } = await createProjectWithMembers();
     const { account } = await expiring(project.id, { refresh: "fail" });
-    await runTick({ config: { refreshMaxAccounts: 1000 } });
+    await runTick(tickConfig({ refreshMaxAccounts: 1000 }));
     const events = await eventsFor(project.id);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -80,7 +81,7 @@ describe("account_needs_reauth events", () => {
     const repos = forSchedulerProject(project.id);
     await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { pageToken: "old-token" }), null);
     await createDueTarget(project.id, account.id);
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     const events = await eventsFor(project.id);
     expect(events.map((e) => e.kind).sort()).toEqual(["account_needs_reauth", "target_failed"]);
     const reauth = events.find((e) => e.kind === "account_needs_reauth")!;

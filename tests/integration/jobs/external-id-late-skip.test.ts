@@ -7,7 +7,7 @@ import { retryFailedItems } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -47,7 +47,7 @@ describe("a late external-id claim caught by the runner (US2)", () => {
     await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "glen-1", postId: (await e.scope.posts.insert({ baseText: "Other" })).id, claimedAt: new Date() });
 
     for (let i = 0; i < 20; i++) {
-      await runTick({ config: { jobMaxItems: 5 } });
+      await runTick(tickConfig({ jobMaxItems: 5 }));
       const counts = await e.scope.jobItems.countByStatus(jobId);
       if (counts.skipped + counts.failed + counts.done > 0) break;
       await new Promise((r) => setTimeout(r, 50));
@@ -76,7 +76,7 @@ describe("a late external-id claim caught by the runner (US2)", () => {
     setLlmForTests(llm);
 
     for (let i = 0; i < 20; i++) {
-      await runTick({ config: { jobMaxItems: 5 } });
+      await runTick(tickConfig({ jobMaxItems: 5 }));
       const counts = await e.scope.jobItems.countByStatus(jobId);
       if (counts.skipped + counts.failed + counts.done > 0) break;
       await new Promise((r) => setTimeout(r, 50));

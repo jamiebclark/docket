@@ -6,6 +6,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { instagramLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 vi.mock("../../../src/server/services/media-variants", async (orig) => ({
   ...(await orig<typeof import("../../../src/server/services/media-variants")>()),
@@ -39,7 +40,7 @@ describe("media resolution that dies before the provider call", () => {
     await repos.posts.setMedia(post.id, [(await repos.media.insert({
       storageKey: "k", publicUrl: "http://x/k", mimeType: "image/png", byteSize: 1, width: 1000, height: 1000,
     })).id]);
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ retried: 1, ambiguous: 0 });
     expect(advanced).toBe(0);
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "scheduled" });
@@ -66,7 +67,7 @@ describe("media resolution on a step that may publish (F3)", () => {
       storageKey: "k2", publicUrl: "http://x/k2", mimeType: "image/png", byteSize: 1, width: 1000, height: 1000,
     })).id]);
     const before = advanced;
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ retried: 1, ambiguous: 0 });
     expect(advanced).toBe(before);
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "scheduled" });

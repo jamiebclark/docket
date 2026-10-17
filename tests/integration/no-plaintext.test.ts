@@ -24,7 +24,7 @@ import { mockProvider } from "../../src/providers/mock";
 import { runTick } from "../../src/server/scheduler";
 import { atTime } from "../helpers/clock";
 import { createFakeLlmFetch } from "../helpers/fake-llm-http";
-import { clearProjectCredentials, jobsEnv } from "../helpers/jobs-env";
+import { clearProjectCredentials, jobsEnv, tickConfig } from "../helpers/jobs-env";
 import { parkAllDueTargets } from "../helpers/scheduling";
 import { fakeSession } from "../helpers/auth";
 import { closeDb, createThrowawayDb, testDb } from "../helpers/db";
@@ -219,7 +219,7 @@ describe("SC-012: no stored credentials in attempts, errors, summaries or listin
         postIds.push(draft.post.id);
         targetIds.push(draft.targets[0]!.id);
         // One at a time so each mocked call lands on its own account.
-        const tick = await atTime(SLOT, () => runTick({ config: { refreshMaxAccounts: 0 } }));
+        const tick = await atTime(SLOT, () => runTick(tickConfig({ refreshMaxAccounts: 0 })));
         expect(JSON.stringify(tick)).not.toContain(leaked.at(-1)!);
       }
       expect(leaked).toHaveLength(modes.length);

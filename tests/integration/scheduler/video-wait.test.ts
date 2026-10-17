@@ -9,6 +9,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { markReady, queueVersionFor, received, videoTargetSetup } from "../../helpers/video-publish-setup";
 import { versionRows, videoHeartbeat, waitSetup } from "../../helpers/video-wait";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(async () => {
   received.length = 0;
@@ -28,8 +29,8 @@ describe("a due target waits for its adapted video (US5)", () => {
   it("makes no provider call and no attempt row while the version is queued", async () => {
     const t = await waitSetup();
     await queueVersionFor(t);
-    const first = await runTick({ config: {} });
-    const second = await atTime(later(90_000), () => runTick({ config: {} }));
+    const first = await runTick(tickConfig({}));
+    const second = await atTime(later(90_000), () => runTick(tickConfig({})));
     expect(first.publishing.counts).toMatchObject({ waitingForVideo: 1, done: 0 });
     expect(second.publishing.counts).toMatchObject({ waitingForVideo: 1 });
     expect(received).toHaveLength(0);
@@ -44,11 +45,11 @@ describe("a due target waits for its adapted video (US5)", () => {
   it("publishes the version on the tick after it is ready and clears the wait", async () => {
     const t = await waitSetup();
     const { version } = await queueVersionFor(t);
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     const key = `projects/${t.project.id}/video/v.mp4`;
     await t.storage.put(key, Buffer.from("adapted"), "video/mp4");
     await markReady(t.project.id, version.id, key, t.storage.publicUrl(key));
-    const result = await atTime(later(90_000), () => runTick({ config: {} }));
+    const result = await atTime(later(90_000), () => runTick(tickConfig({})));
     expect(result.publishing.counts).toMatchObject({ done: 1 });
     expect(received[0]!.media[0]).toMatchObject({ url: t.storage.publicUrl(key) });
     expect((await t.repos.targets.get(t.target.id))!.videoWaitSince).toBeNull();
@@ -58,7 +59,7 @@ describe("a due target waits for its adapted video (US5)", () => {
     const t = await waitSetup();
     const { version } = await queueVersionFor(t);
     await setState(t.project.id, version.id, { state: "failed", error: "Docket could not read the video." });
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(result.publishing.counts).toMatchObject({ failed: 1 });
     expect(received).toHaveLength(0);
     const failed = await t.repos.targets.get(t.target.id);
@@ -78,10 +79,10 @@ describe("a due target waits for its adapted video (US5)", () => {
       await parkAllDueTargets();
       const t = await waitSetup();
       await queueVersionFor(t);
-      await runTick({ config: {} });
+      await runTick(tickConfig({}));
       const end = later(2 * 60 * 60 * 1000 + 61_000);
       await videoHeartbeat(alive ? end : null);
-      const result = await atTime(end, () => runTick({ config: {} }));
+      const result = await atTime(end, () => runTick(tickConfig({})));
       expect(result.publishing.counts).toMatchObject({ failed: 1 });
       const target = await t.repos.targets.get(t.target.id);
       expect(target).toMatchObject({ status: "failed", videoWaitSince: null });
@@ -95,7 +96,7 @@ describe("a due target waits for its adapted video (US5)", () => {
   it("queues a missing version itself and waits", async () => {
     const t = await waitSetup();
     expect(await versionRows(t.project.id)).toHaveLength(0);
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     const rows = await versionRows(t.project.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ state: "queued", mediaAssetId: t.asset.id });
@@ -104,7 +105,7 @@ describe("a due target waits for its adapted video (US5)", () => {
 
   it("leaves a video that needs no adapting alone", async () => {
     const t = await videoTargetSetup({ durationSeconds: 20 });
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(result.publishing.counts).toMatchObject({ done: 1, waitingForVideo: 0 });
     expect(await versionRows(t.project.id)).toHaveLength(0);
   });

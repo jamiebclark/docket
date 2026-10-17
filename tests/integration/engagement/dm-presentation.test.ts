@@ -11,6 +11,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { parkAllEngagementReads } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 // The tick's engagement-read section claims across every project and is `limit`-bounded, so accounts
 // left active by other files on this worker's database fill the claim and this file's own account is
@@ -33,7 +34,7 @@ describe("direct message presentation (US5, FR-056)", () => {
       settings: { engagementItems: [{ kind: "direct_message", externalId: "dm-1", text: "Hi there", authorHandle: "ada" }] },
     });
 
-    await atTime(AT, () => runTick({ config: NO_WAIT }));
+    await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
 
     const list = await listInbox(scope);
     const dm = list.items.find((i) => i.externalId === "dm-1")!;
@@ -50,7 +51,7 @@ describe("direct message presentation (US5, FR-056)", () => {
       displayName: "Mock",
       settings: { engagementItems: [{ kind: "direct_message", externalId: "dm-2", text: "Hi there", authorHandle: "ada" }] },
     });
-    await atTime(AT, () => runTick({ config: NO_WAIT }));
+    await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
     const list = await listInbox(scope);
     const dm = list.items.find((i) => i.externalId === "dm-2")!;
 

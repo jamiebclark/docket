@@ -11,6 +11,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
 import { standingSeriesEnv } from "../../helpers/standing-series-env";
+import { tickConfig } from "../../helpers/tick";
 
 afterAll(closeDb);
 
@@ -105,7 +106,7 @@ describe("housekeeping", () => {
   });
 
   it("is a section of the tick", async () => {
-    const summary = await runTick();
+    const summary = await runTick(tickConfig());
     expect(summary.housekeeping.ok).toBe(true);
   });
 });

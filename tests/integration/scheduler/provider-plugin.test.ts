@@ -13,6 +13,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 
@@ -57,7 +58,7 @@ describe("a new provider needs no engine change (US7)", () => {
     const draft = await posts.createDraft(scope, { baseText: "Hello", targets: [{ accountId: account.id }] });
     await atTime(BEFORE, () => posts.addToQueue(scope, draft.post.id, {}));
 
-    const result = await atTime(SLOT, () => runTick({ config: {} }));
+    const result = await atTime(SLOT, () => runTick(tickConfig({})));
     expect(result.publishing.counts).toMatchObject({ claimed: 1, done: 1 });
     const target = (await posts.getPost(scope, draft.post.id)).targets[0];
     expect(target).toMatchObject({ status: "published" });

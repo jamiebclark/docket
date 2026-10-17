@@ -71,3 +71,32 @@ describe("the tick time budget (SC-008)", () => {
     expect(await e.scope.jobItems.countByStatus(jobId)).toMatchObject({ queued: 2, running: 0, done: 0 });
   }, 60_000);
 });
+
+describe("a section that skips says so (SC-008)", () => {
+  // The whole point of `outOfBudget`: before it existed, this tick reported `claimed: 0` and `ok: true`,
+  // which is byte-identical to "there was nothing due". A test waiting on a model call then hung until
+  // its own timeout with nothing in the result or the log explaining why the call never came, and the
+  // same silence on a loaded CI runner cost a day of flake-hunting (PR #129).
+  it("reports outOfBudget rather than an empty success when no budget is left to start an item", async () => {
+    const e = await jobsEnv();
+    setLlmForTests(createFakeLlm([modelOk("Never called", 1)]));
+    await e.assets(1);
+    const { jobId } = await createJob(e.scope, e.input());
+
+    // `needed` is minCall + persistReserve. Equal to the whole budget, so no item can ever start.
+    const noRoom = { timeBudgetMs: 1500, jobMinCallMs: 1000, jobPersistReserveMs: 500, jobMaxItems: 1 };
+    const tick = await runTick({ config: noRoom });
+
+    expect(tick.generation.ok).toBe(true);
+    expect(tick.generation.counts).toMatchObject({ claimed: 0, outOfBudget: 1 });
+    // Nothing was touched: the item is still queued with no attempt against it.
+    expect((await e.scope.jobItems.listForJob(jobId))[0]).toMatchObject({ status: "queued", attemptCount: 0 });
+  }, 60_000);
+
+  it("does not report outOfBudget when there was simply nothing due", async () => {
+    await jobsEnv();
+    setLlmForTests(createFakeLlm([]));
+    const tick = await runTick({ config: CONFIG });
+    expect(tick.generation.counts).toMatchObject({ claimed: 0, outOfBudget: 0 });
+  }, 60_000);
+});

@@ -33,6 +33,15 @@ export interface GenerationCounts {
   notConfigured: number;
   /** The tick budget is too short for any item. */
   notRunnable: 0 | 1;
+  /**
+   * The budget was long enough in principle, but too little of it was left by the time this section
+   * ran, so nothing was claimed.
+   *
+   * Reported so that "the section skipped" is never indistinguishable from "there was nothing due":
+   * a silent zero here cost a day of CI flake-hunting, because a test waiting on a model call saw a
+   * successful tick with no indication the call would never come.
+   */
+  outOfBudget: 0 | 1;
   /** Items a billing refusal sent back to the queue with no attempt counted (FR-009). */
   requeued: number;
   /** At least one credential owner was held, so its items were not claimed (FR-021). */
@@ -55,6 +64,7 @@ export const emptyGenerationCounts = (): GenerationCounts => ({
   staleResults: 0,
   notConfigured: 0,
   notRunnable: 0,
+  outOfBudget: 0,
   requeued: 0,
   held: 0,
   probed: 0,
@@ -84,6 +94,7 @@ export async function runGenerationJobs(opts: {
   }
   const now = await clock.now();
   if (now.getTime() + needed > deadline) {
+    counts.outOfBudget = 1;
     await beat();
     return counts;
   }

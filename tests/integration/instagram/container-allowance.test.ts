@@ -14,6 +14,7 @@ import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { IG_ID, instagramSetup, instagramVideoSetup } from "../../helpers/instagram-publish";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -36,7 +37,7 @@ const media = `/v26.0/${IG_ID}/media`;
 const DAY = 86_400_000;
 const T0 = Date.now() + 3_600_000;
 const at = (seconds: number) => new Date(T0 + seconds * 1000);
-const tickAt = (seconds: number) => atTime(at(seconds), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(at(seconds), async () => (await runTick(tickConfig({}))).publishing.counts);
 const creates = () => graph.requests.filter((r) => r.method === "POST" && r.path === media);
 
 async function seed(projectId: string, accountId: string, rows: readonly { units: number; ageSeconds: number }[]) {
@@ -104,7 +105,7 @@ describe("the 400-container allowance", () => {
     await addVideoTarget(base, "b");
     await addVideoTarget(base, "c");
     await seed(base.projectId, base.accountId, [{ units: 398, ageSeconds: 60 }]);
-    await atTime(at(0), () => Promise.all([runTick({ config: {} }), runTick({ config: {} })]));
+    await atTime(at(0), () => Promise.all([runTick(tickConfig({})), runTick(tickConfig({}))]));
     expect(await used(base.projectId, base.accountId)).toBeLessThanOrEqual(400);
     expect(creates()).toHaveLength(2);
   });

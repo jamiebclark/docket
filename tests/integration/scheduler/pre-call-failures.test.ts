@@ -8,6 +8,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { BEFORE, SLOT } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
 import { parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 afterAll(async () => {
@@ -20,7 +21,7 @@ async function queued(settings: Record<string, unknown>, patch?: (env: Awaited<R
   const draft = await posts.createDraft(env.scope, { baseText: "Hello", targets: [{ accountId: account.id }] });
   await atTime(BEFORE, () => posts.addToQueue(env.scope, draft.post.id, {}));
   await patch?.(env, account.id);
-  await atTime(SLOT, () => runTick());
+  await atTime(SLOT, () => runTick(tickConfig()));
   const detail = await posts.getPost(env.scope, draft.post.id);
   return { env, target: detail.targets[0]!, attempts: await posts.listAttempts(env.scope, detail.targets[0]!.id) };
 }

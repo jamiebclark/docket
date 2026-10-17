@@ -12,6 +12,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const WINDOW = 3600;
 let advanced = 0;
@@ -35,7 +36,7 @@ registerTestProvider({
 } as SocialProvider);
 
 const T0 = new Date(Date.now() + 3_600_000);
-const tick = () => atTime(T0, () => runTick({ config: {} }));
+const tick = () => atTime(T0, () => runTick(tickConfig({})));
 const usesOf = (projectId: string, accountId: string) =>
   testDb().select().from(allowanceUses).where(and(eq(allowanceUses.projectId, projectId), eq(allowanceUses.socialAccountId, accountId)));
 

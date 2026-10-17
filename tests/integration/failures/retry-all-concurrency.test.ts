@@ -7,6 +7,7 @@ import { closeDb } from "../../helpers/db";
 import { LATER } from "../../helpers/failures";
 import { failedTarget } from "../../helpers/retry";
 import { parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 afterAll(async () => {
@@ -64,11 +65,11 @@ describe("retryAllFailed — concurrency", () => {
     const ok1 = await failedAt(a.env, acc.id, hour(8), "S1");
     const ok2 = await failedAt(a.env, acc.id, hour(9), "S2");
     const ids = [a.targetId, ok1.targetId, ok2.targetId];
-    const [bulk, tick] = await atTime(LATER, () => Promise.allSettled([posts.retryAllFailed(a.env.scope, { mode: "now" }), runTick()]));
+    const [bulk, tick] = await atTime(LATER, () => Promise.allSettled([posts.retryAllFailed(a.env.scope, { mode: "now" }), runTick(tickConfig())]));
     expect(bulk.status).toBe("fulfilled");
     expect(tick.status).toBe("fulfilled");
     // A second tick certainly sees every retried target as due, so the claim is verified whichever way the race went.
-    await atTime(LATER, () => runTick());
+    await atTime(LATER, () => runTick(tickConfig()));
     for (const id of ids) {
       const attempts = (await posts.listAttempts(a.env.scope, id)).reverse(); // listAttempts is newest first
       const retryAt = attempts.findIndex((x) => x.outcome === "retry_requested");

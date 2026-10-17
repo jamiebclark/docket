@@ -15,6 +15,7 @@ import { closeDb } from "../../helpers/db";
 import { webhookEnv } from "../../helpers/webhooks";
 import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllEmail);
 afterAll(closeDb);
@@ -94,7 +95,7 @@ describe("tick", () => {
     const env = await webhookEnv(["post.published"]);
     await env.publishPost();
 
-    const tick = await runTick({ config: { webhookMaxPerTick: 10 } });
+    const tick = await runTick(tickConfig({ webhookMaxPerTick: 10 }));
     expect(tick.publishing.ok).toBe(true);
     expect(tick.tokenRefresh.ok).toBe(true);
     expect(tick.generation.ok).toBe(true);

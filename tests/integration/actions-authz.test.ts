@@ -41,7 +41,7 @@ import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterT
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
 import { createMemoryStorage } from "../helpers/storage";
-import { jobsEnv, parkAllJobs } from "../helpers/jobs-env";
+import { jobsEnv, parkAllJobs, tickConfig } from "../helpers/jobs-env";
 import { createFakePds, mintJwt, type FakePds } from "../helpers/fake-pds";
 
 beforeAll(registerThrowaway);
@@ -504,7 +504,7 @@ describe("job actions (008)", () => {
     const { jobId } = await createJob(e.scope, e.input());
     const [first] = await e.scope.jobItems.listForJob(jobId);
     await e.scope.media.softDelete(first!.mediaAssetId!, new Date());
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
     return { e, jobId, itemId: first!.id };
   }
 
