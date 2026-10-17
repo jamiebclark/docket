@@ -19,3 +19,4 @@ export * from "./activity";
 export * from "./notifications";
 export * from "./email";
 export * from "./engagement";
+export * from "./insights";

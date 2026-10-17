@@ -88,6 +88,17 @@ describe("enum labels added mid-batch are never compared as enums", () => {
     }
   });
 
+  // 079: frozen_reason is deliberately a text CHECK, not a pg enum, so no later migration can ever
+  // trip the ADD VALUE / partial-index trap for it (data-model.md §3).
+  it("post_metric_poll_states_frozen_reason is a text CHECK, never a pg enum", () => {
+    const createsEnum = files.some((f) => /CREATE TYPE "?post_metric_poll_states_frozen_reason"?/.test(sql(f)));
+    expect(createsEnum).toBe(false);
+    const hasCheck = files.some((f) => sql(f).includes("post_metric_poll_states_frozen_reason_enum"));
+    expect(hasCheck, "expected the frozen_reason_enum CHECK to exist").toBe(true);
+    const schema = readFileSync("src/server/db/schema/insights.ts", "utf8");
+    expect(schema).toContain(`frozenReason} IS NULL OR \${t.frozenReason} IN ('settled', 'gone')`);
+  });
+
   it("the schema's kindOutcomePairs generator and the attention index both keep the discipline", () => {
     const schema = readFileSync("src/server/db/schema/activity.ts", "utf8");
     expect(schema).toContain("kind::text = '${k}' AND outcome::text = '${KIND_OUTCOME[k]}'");

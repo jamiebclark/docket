@@ -584,6 +584,77 @@ export interface EngagementSupport<Settings = unknown> {
   send(ctx: EngagementSendContext<Settings>): Promise<EngagementSendResult>;
 }
 
+/** One metric a platform reports, named with the platform's own word (G30, FR-002). */
+export interface MetricKeyDeclaration {
+  /** The platform's own field name, e.g. `likeCount`. Stored verbatim as a key in `metrics`. */
+  key: string;
+  /** The platform's own label, e.g. "Likes". Rendered as given; never translated or grouped. */
+  label: string;
+}
+
+export interface InsightsDeclaration {
+  /** Keys this platform reports for a post. Empty is allowed only when `account` is not. */
+  post: readonly MetricKeyDeclaration[];
+  /** Keys this platform reports for a connected account. */
+  account: readonly MetricKeyDeclaration[];
+  /** Most posts the platform will answer for in one `readPostMetrics` call (FR-006). */
+  maxPostsPerRead: number;
+  /** The per-account read allowance, for the publishing-first reserve (FR-007). */
+  readBudget: PublishLimit;
+  /**
+   * Set when the surface is known to need a permission this install cannot hold (FR-003).
+   * A provider that declares this is **never claimed**: no call is ever attempted, and the panel
+   * shows `reason` with a link to `docsPath`.
+   */
+  unavailable?: { reason: string; docsPath?: string };
+}
+
+export interface PostMetricsReadContext<Settings = unknown> {
+  account: { id: string; externalId: string; displayName: string; settings: Settings; credentials: unknown };
+  /** One account's targets, at most `min(configured page size, maxPostsPerRead)` of them. */
+  posts: readonly { externalId: string }[];
+  now: Date;
+  signal: AbortSignal;
+}
+
+export type PostMetricEntry =
+  /** `metrics` is validated against `postMetricsSchema` by the caller, then filtered to declared keys. */
+  | { externalId: string; kind: "metrics"; metrics: unknown }
+  /** The platform no longer returns this post. Terminal for this target; **not** a failure (FR-042). */
+  | { externalId: string; kind: "gone" };
+
+export type PostMetricsReadResult =
+  | { kind: "page"; entries: readonly PostMetricEntry[]; summary?: AttemptSummary }
+  | { kind: "retryable_error"; error: string; retryAt?: Date }
+  | { kind: "fatal_error"; error: string }
+  | { kind: "credentials_invalid"; error: string }
+  | { kind: "rate_limited"; error: string; retryAt?: Date }
+  | { kind: "unavailable"; reason: string; docsPath?: string };
+
+export interface AccountMetricsReadContext<Settings = unknown> {
+  account: { id: string; externalId: string; displayName: string; settings: Settings; credentials: unknown };
+  now: Date;
+  signal: AbortSignal;
+}
+
+export type AccountMetricsReadResult =
+  | { kind: "page"; metrics: unknown; summary?: AttemptSummary }
+  | { kind: "retryable_error"; error: string; retryAt?: Date }
+  | { kind: "fatal_error"; error: string }
+  | { kind: "credentials_invalid"; error: string }
+  | { kind: "rate_limited"; error: string; retryAt?: Date }
+  | { kind: "unavailable"; reason: string; docsPath?: string };
+
+export interface InsightsSupport<Settings = unknown> {
+  declaration: InsightsDeclaration;
+  /** Provider-owned shape of a post snapshot's `metrics`; the generic layer validates and never reads into it. */
+  postMetricsSchema: z.ZodType;
+  /** Provider-owned shape of an account snapshot's `metrics`. */
+  accountMetricsSchema: z.ZodType;
+  readPostMetrics(ctx: PostMetricsReadContext<Settings>): Promise<PostMetricsReadResult>;
+  readAccountMetrics(ctx: AccountMetricsReadContext<Settings>): Promise<AccountMetricsReadResult>;
+}
+
 export interface SocialProvider<Settings = unknown, State = unknown> {
   /** Lowercase `[a-z0-9-]+`, unique, stored in `social_accounts.provider_key`. */
   key: string;
@@ -620,4 +691,5 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
   accountDetails?: AccountDetailsReader<Settings>;
   consent?: ConsentDeclaration;
   engagement?: EngagementSupport<Settings>;
+  insights?: InsightsSupport<Settings>;
 }

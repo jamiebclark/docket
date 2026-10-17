@@ -7,7 +7,7 @@ import { pinterestProvider } from "./pinterest";
 import { threadsProvider } from "./threads";
 import { tiktokProvider } from "./tiktok";
 import { xProvider } from "./x";
-import type { OAuthConnectGroup, SocialProvider } from "./types";
+import type { MetricKeyDeclaration, OAuthConnectGroup, SocialProvider } from "./types";
 
 // Adding a provider = one line here (plus its folder under src/providers/<key>/).
 export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider, instagramProvider as SocialProvider, threadsProvider as SocialProvider, xProvider as SocialProvider, tiktokProvider as SocialProvider, pinterestProvider as SocialProvider];
@@ -26,6 +26,59 @@ export function assertCreationAllowance(provider: Pick<SocialProvider, "key" | "
   if (a.name.trim() === "") bad("name must not be empty");
 }
 for (const p of providers) assertCreationAllowance(p);
+
+function assertValidMetricKeys(providerKey: string, surface: "post" | "account", keys: readonly MetricKeyDeclaration[]): void {
+  const bad = (why: string) => {
+    throw new Error(`Inconsistent insights declaration for ${providerKey} (${surface}): ${why}.`);
+  };
+  const seen = new Set<string>();
+  for (const k of keys) {
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,50}$/.test(k.key)) bad(`key "${k.key}" is malformed`);
+    if (seen.has(k.key)) bad(`duplicate key "${k.key}"`);
+    seen.add(k.key);
+    const label = k.label.trim();
+    if (label === "" || k.label.length > 40 || k.label !== label) bad(`label for "${k.key}" must be 1-40 trimmed characters`);
+  }
+}
+
+/** Throws on a malformed `insights` declaration, so a bad provider fails at registry load (G30, D1-D6). */
+export function assertInsightsDeclaration(provider: Pick<SocialProvider, "key" | "insights">): void {
+  const support = provider.insights;
+  if (support === undefined) return;
+  const d = support.declaration;
+  const bad = (why: string) => {
+    throw new Error(`Inconsistent insights declaration for ${provider.key}: ${why}.`);
+  };
+  if (d.post.length === 0 && d.account.length === 0 && !d.unavailable) {
+    bad("post and account are both empty with no unavailable reason; omit insights instead");
+  }
+  assertValidMetricKeys(provider.key, "post", d.post);
+  assertValidMetricKeys(provider.key, "account", d.account);
+  if (!Number.isInteger(d.maxPostsPerRead) || d.maxPostsPerRead < 1 || d.maxPostsPerRead > 200) {
+    bad(`maxPostsPerRead (${d.maxPostsPerRead}) must be an integer between 1 and 200`);
+  }
+  if (!Number.isInteger(d.readBudget.count) || d.readBudget.count < 1) bad(`readBudget.count (${d.readBudget.count}) must be an integer of at least 1`);
+  if (!Number.isInteger(d.readBudget.windowSeconds) || d.readBudget.windowSeconds < 1 || d.readBudget.windowSeconds > 604_800) {
+    bad(`readBudget.windowSeconds (${d.readBudget.windowSeconds}) must be between 1 and 604800`);
+  }
+  if (d.unavailable) {
+    const reason = d.unavailable.reason;
+    if (reason.length < 1 || reason.length > 300) bad("unavailable.reason must be 1-300 characters");
+  }
+  for (const [surface, schema] of [
+    ["post", support.postMetricsSchema],
+    ["account", support.accountMetricsSchema],
+  ] as const) {
+    const def = (schema as unknown as { def: { type: string; catchall?: { def: { type: string } }; shape?: Record<string, { def: { type: string; innerType?: { def: { type: string } } } }> } }).def;
+    if (def.type !== "object" || def.catchall?.def.type !== "never") bad(`${surface}MetricsSchema must be a closed (strict) z.object`);
+    for (const [key, field] of Object.entries(def.shape ?? {})) {
+      if (field.def.type !== "optional" || field.def.innerType?.def.type !== "number") {
+        bad(`${surface}MetricsSchema field "${key}" must be an optional number`);
+      }
+    }
+  }
+}
+for (const p of providers) assertInsightsDeclaration(p);
 
 export function findProvider(key: string): SocialProvider | undefined {
   return providers.find((p) => p.key === key);
