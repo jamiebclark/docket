@@ -153,25 +153,32 @@ nothing reshapes it (FR-017 - `planImage` has no crop or pad step at all), `vali
 the shape notice by comparing against `recommendedAspectRatio` (FR-018), and the requirements summary
 reports "no limit checked" plus the note (FR-023).
 
-**K7 - `mediaConstraintsOf(caps, postType?)`; only the two post-aware callers pass a type.**
-`adaptedMediaFor` (which already receives `opts.postType`) and `resolvePublishMedia` (which already
-computes the post type for the video planner) pass it. `prepareVariants`, `media-fit`, `ensureVariant`,
-the LLM image path and the test helpers do not: with no argument the function behaves exactly as today
-(SC-009). `mediaConstraintsOf` also asserts each image override at registry load - keys must be post
+**K7 - `mediaConstraintsOf(caps, postType?)`; three callers pass a type.**
+`adaptedMediaFor` (which already receives `opts.postType`), `resolvePublishMedia` (which already
+computes the post type for the video planner), and - **corrected after review F1** - `prepareVariants`,
+which resolves each target's type the same way `resolvePublishMedia` does. This entry originally said
+only the first two passed a type; leaving `prepareVariants` post-type-blind is exactly what made a
+9:16 Story image refused before any variant was built. `media-fit`, `ensureVariant`, the LLM image path
+and the test helpers still do not: with no argument the function behaves exactly as today (SC-009). `mediaConstraintsOf` also asserts each image override at registry load - keys must be post
 types, and the merged range must stay consistent - in the same style as `assertVideoCapabilities`.
 
 **K8 - `constraintsHash` stops hashing the aspect bounds.**
 `MediaConstraints.minAspectRatio`/`maxAspectRatio` are read by `planImage` only to refuse; they never
 change the derived file's type, size or dimensions. Hashing them would give a Story and a feed post
-different variant identities for byte-identical output, and `prepareVariants` - which groups by
-provider, not by target post type - would never build the Story's copy, so `adaptedMediaFor` would
-raise `variant_failed` when scheduling a Story whose image needs conversion or compression.
+different variant identities for byte-identical output, so `adaptedMediaFor` would raise
+`variant_failed` when scheduling a Story whose image needs conversion or compression. **Corrected
+after review F1:** this paragraph used to describe `prepareVariants` as grouping "by provider, not by
+target post type" and treat the hash change as sufficient on its own. It was not - the planner still
+refused a 9:16 image under the feed's bounds before any variant was built. `prepareVariants` now
+groups by (provider, resolved post type), and the shared hash is what keeps that free.
 *Consequence, accepted and recorded in `docs/decisions.md`*: every existing cached image variant hashes
 differently once and is rebuilt lazily. Variants are a cache; `resolvePublishMedia` rebuilds a missing
 one at publish time, so no scheduled post can fail because of the change. A test asserts two
 constraint sets differing only in aspect share one hash.
-*Rejected*: making `prepareVariants` post-type aware (duplicates every adapted file for identical
-bytes); bumping `VARIANT_PIPELINE_VERSION` instead (same rebuild, and it would hide why).
+*Rejected*: bumping `VARIANT_PIPELINE_VERSION` instead (same rebuild, and it would hide why).
+Making `prepareVariants` post-type aware was also listed here as rejected, "duplicates every adapted
+file for identical bytes" - measured and disproved by review F1's probe: the hash is identical across
+post types, so the (provider, post type) pairs collapse to one build per asset. It is what shipped.
 
 ### Text, description and shape notices
 

@@ -95,7 +95,7 @@ these two were not, and they are now simply wrong about the code. Neither blocks
               Both the shared-hash path and the removed-bound path are now exercised.
       traces: SC-009, K8
 
-- [ ] MINOR F3 - the planned test amendment for the two new requirements-summary rows still has not landed, so the UI mapping and the duplicate-key fix are untested
+- [X] MINOR F3 (fixed in fix/story-posttype-docs-and-ui-test) - the planned test amendment for the two new requirements-summary rows still has not landed, so the UI mapping and the duplicate-key fix are untested
       where:  src/components/compose/requirements-ui.ts:90, src/components/compose/RequirementsSummary.tsx:47, specs/078-instagram-stories/contracts/compose-and-api.md:104
       why:    Unchanged since the first review and still accurate.
               `contracts/compose-and-api.md:104` lists `src/components/compose/requirements-ui.test.ts`
@@ -113,7 +113,7 @@ these two were not, and they are now simply wrong about the code. Neither blocks
               story target contains two distinct rows whose term is "Note".
       traces: FR-023, A6
 
-- [ ] MINOR F6 - `plan.md` and `research.md` still say `prepareVariants` is deliberately post-type-blind and that the landed design was rejected, so two of the feature's own design records now contradict its code
+- [X] MINOR F6 (fixed in fix/story-posttype-docs-and-ui-test) - `plan.md` and `research.md` still say `prepareVariants` is deliberately post-type-blind and that the landed design was rejected, so two of the feature's own design records now contradict its code
       where:  specs/078-instagram-stories/plan.md:187, specs/078-instagram-stories/research.md:158, specs/078-instagram-stories/research.md:166, specs/078-instagram-stories/research.md:173
       why:    Noticed while checking the remediation, so recorded as MINOR per the re-review rule.
               `research.md:158` (K7) states "**only the two post-aware callers pass a type** ...
