@@ -57,12 +57,29 @@ describe("activity list markup", () => {
   it("renders an accessible table with the outcome as text", () => {
     const html = list([row(), row({ outcome: "published", kind: "target_published", message: "Published." })]);
     expect(html).toContain('<caption class="sr-only">');
-    expect((html.match(/<th scope="col"/g) ?? []).length).toBe(5);
+    expect((html.match(/<th scope="col"/g) ?? []).length).toBe(4);
     expect(html).toContain("Failed");
     expect(html).toContain("Published");
     expect(html).toContain("Open in Failures");
     expect(html).toContain("Hello world");
     expect(html).not.toContain("Project</th>");
+  });
+
+  it("stacks the time under the account instead of giving it a column, and keeps six columns at five", () => {
+    const html = list([row()], true);
+    expect(html).not.toContain("When</th>");
+    expect(html).toContain("Account</th>");
+    expect((html.match(/<th scope="col"/g) ?? []).length).toBe(5);
+    // The account cell carries the platform, the account and the time.
+    expect(html).toMatch(/Bluesky[\s\S]*@me[\s\S]*<time/);
+  });
+
+  it("underlines cell links only on hover, and labels the go-to link without showing its text", () => {
+    const html = list([row()]);
+    // A bare `underline` class, not `hover:underline` / `focus-visible:underline` / `underline-offset-2`.
+    expect(html).not.toMatch(/(?<![:\w-])underline(?![\w-])/);
+    expect(html).toMatch(/class="[^"]*hover:underline[^"]*"/);
+    expect(html).toMatch(/title="Open in Failures"[^>]*>[\s\S]*<span class="sr-only">Open in Failures<\/span>/);
   });
 
   it("adds the Project column on the all-projects variant", () => {

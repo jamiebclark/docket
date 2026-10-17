@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { NotificationPanel } from "@/components/notifications/NotificationPanel";
 import { browserRefreshEnv, startRefreshing, type RefreshHandle } from "@/components/notifications/refresh";
+import { iconControlStyles } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/Icon";
 import type { UnreadSummary } from "@/lib/notifications/types";
 
-const LINK_CLASS =
-  "relative inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+const LINK_CLASS = `relative ${iconControlStyles}`;
 
 const noopSubscribe = () => () => {};
 

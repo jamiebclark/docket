@@ -25,6 +25,9 @@ export function toNotificationItem(
     postDeleted: recordPostDeleted(record),
     message: record.message,
     isNew: seen !== undefined && BigInt(record.seq) > seen && !record.hiddenByMark,
+    // The same comparison `markEvent` makes before it writes, so the row only offers an action that
+    // would do something. A project with no reading position row yet reads as seq > 0: markable.
+    read: seen !== undefined && BigInt(record.seq) <= seen,
     actionsAvailable: (markCounts.get(record.projectId) ?? 0) < EVENT_MARK_CAP,
     link: recordLink(record),
   };

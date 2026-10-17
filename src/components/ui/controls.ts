@@ -23,3 +23,19 @@ export const linkStyles =
 
 /** Checkbox / radio inputs: brand accent comes from `accent-color` in globals.css. */
 export const checkStyles = "size-4 rounded border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2";
+
+/**
+ * A link that *is* a whole table cell (a post excerpt, a project name): purple, underlined only on
+ * hover or keyboard focus. Standing alone in its own column it is not told apart "by colour alone"
+ * the way a link buried in a sentence is, and a permanent rule under 140 characters of post text
+ * reads as clutter. Inside prose use `linkStyles`.
+ */
+export const cellLinkStyles =
+  "rounded-sm text-primary underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+
+/**
+ * A control whose glyph is the whole target — a header nav icon, a row's "go to" arrow. The label
+ * rides along as `sr-only` text and a `title` tooltip, so it stays reachable without taking width.
+ */
+export const iconControlStyles =
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";

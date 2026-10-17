@@ -61,6 +61,17 @@ export function NotificationRowActions({
     if (markAllResult?.ok) window.dispatchEvent(new Event(CHANGED_EVENT));
   }, [markAllResult]);
 
+  // Already at or below the reading position: "Mark read" and "Snooze" would both write nothing and
+  // announce nothing, so the row says where it stands instead of offering two controls that do
+  // nothing when pressed. Pressing "Mark read" on an unread row turns it into this line.
+  if (item.read) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Read<span className="sr-only">{srName}</span>
+      </p>
+    );
+  }
+
   if (!item.actionsAvailable) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

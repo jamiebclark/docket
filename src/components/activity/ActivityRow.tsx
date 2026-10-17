@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
-import { ProviderIcon } from "@/components/ui/Icon";
+import { cellLinkStyles, iconControlStyles } from "@/components/ui/controls";
+import { Icon, ProviderIcon } from "@/components/ui/Icon";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Cell, Row, Sub } from "@/components/ui/Table";
 import { OUTCOME_LABEL, OUTCOME_TONE } from "@/lib/activity/outcomes";
@@ -35,7 +36,7 @@ function Details({ row }: { row: RowData }) {
       ) : null}
       {url ? (
         <div className="text-xs">
-          <a href={url} target="_blank" rel="noopener noreferrer" className="underline">
+          <a href={url} target="_blank" rel="noopener noreferrer" className={cellLinkStyles}>
             Link
           </a>
         </div>
@@ -46,24 +47,29 @@ function Details({ row }: { row: RowData }) {
 
 export function ActivityRow({ row, showProject }: { row: RowData; showProject: boolean }) {
   const platform = row.platform ?? row.platforms[0] ?? null;
+  // Who it happened to and when it happened answer one question, so they share a cell: the account
+  // on top, the time under it, rather than a thin "When" column beside a thin "Account" one.
+  const when = (
+    <Sub>
+      <span className="whitespace-nowrap">
+        <LocalTime value={row.occurredAt} timeZone={row.project.timeZone} />
+      </span>
+    </Sub>
+  );
   return (
     <Row>
       <Cell>
-        <span className="whitespace-nowrap">
-          <LocalTime value={row.occurredAt} timeZone={row.project.timeZone} />
-        </span>
-      </Cell>
-      <Cell>
         {platform ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <ProviderIcon providerKey={platform.key} size={24} />
             <div className="min-w-0">
               <div>{platform.name}</div>
               {row.account ? <Sub>{row.account.name}</Sub> : null}
+              {when}
             </div>
           </div>
         ) : (
-          "—"
+          when
         )}
       </Cell>
       <Cell>
@@ -74,13 +80,11 @@ export function ActivityRow({ row, showProject }: { row: RowData; showProject: b
               {row.post.excerpt ? <Sub>{row.post.excerpt}</Sub> : null}
             </span>
           ) : (
-            <Link href={`/p/${row.project.slug}/posts/${row.post.id}`} className="underline">
+            <Link href={`/p/${row.project.slug}/posts/${row.post.id}`} className={`line-clamp-3 ${cellLinkStyles}`}>
               {row.post.excerpt || "(no text)"}
             </Link>
           )
-        ) : (
-          "—"
-        )}
+        ) : null}
       </Cell>
       <Cell>
         <Badge tone={OUTCOME_TONE[row.outcome]}>{OUTCOME_LABEL[row.outcome]}</Badge>
@@ -90,15 +94,16 @@ export function ActivityRow({ row, showProject }: { row: RowData; showProject: b
       </Cell>
       {showProject ? (
         <Cell>
-          <Link href={`/p/${row.project.slug}/activity`} className="underline">
+          <Link href={`/p/${row.project.slug}/activity`} className={cellLinkStyles}>
             {row.project.name}
           </Link>
         </Cell>
       ) : null}
       <Cell>
         {row.link ? (
-          <Link href={row.link.href} className="whitespace-nowrap underline">
-            {row.link.label}
+          <Link href={row.link.href} title={row.link.label} className={iconControlStyles}>
+            <Icon name="arrowRight" />
+            <span className="sr-only">{row.link.label}</span>
           </Link>
         ) : null}
       </Cell>
