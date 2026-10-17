@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { forProject } from "../../../src/server/dal/scope";
 import { listProviders } from "../../../src/providers/registry";
 import { runTick } from "../../../src/server/scheduler";
@@ -10,6 +10,12 @@ import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
+import { parkAllEngagementReads } from "../../helpers/scheduling";
+
+// The tick's engagement-read section claims across every project and is `limit`-bounded, so accounts
+// left active by other files on this worker's database fill the claim and this file's own account is
+// never read. Park them first.
+beforeEach(parkAllEngagementReads);
 
 afterAll(async () => {
   await closeDb();
