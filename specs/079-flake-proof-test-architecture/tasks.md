@@ -111,16 +111,16 @@ confirm both pass both times (quickstart.md step 1, second block).
 
 ### Implementation for User Story 2
 
-- [ ] T008 [P] [US2] Implement the pure SQL builder in `tests/setup/table-reset.ts`:
+- [X] T008 [P] [US2] Implement the pure SQL builder in `tests/setup/table-reset.ts`:
   `resetStatements(tables)` (one `delete from` per table under `session_replication_role = replica`,
   order-independent given the `projects → voice_profiles → projects` FK cycle) and the exported
   `PRESERVED_ROWS` list containing the `notification_change_marker` singleton
   (`id = true`, from migration `0024_luxuriant_bill_hollister.sql`) per data-model.md section 2 and
   research.md R1.
-- [ ] T009 [US2] Write `tests/setup/table-reset.test.ts`: resetting a database with rows leaves it
+- [X] T009 [US2] Write `tests/setup/table-reset.test.ts`: resetting a database with rows leaves it
   row-for-row identical (per table) to a freshly migrated template database, proving the preserved-row
   list cannot silently fall behind a new migration (depends on T008).
-- [ ] T010 [US2] Implement `tests/setup/reset-database.ts`: a `beforeEach` (registered via
+- [X] T010 [US2] Implement `tests/setup/reset-database.ts`: a `beforeEach` (registered via
   `setupFiles`) that opens its own `pg.Pool` (never `getDb()`, so `tests/setup/scope-recorder.ts` never
   sees it and `closeDb()` calls elsewhere don't affect it), runs `table-reset.ts`'s statements plus the
   preserved-row re-insert inside one transaction with `session_replication_role = replica`, is a no-op
@@ -128,16 +128,16 @@ confirm both pass both times (quickstart.md step 1, second block).
   name does not end in `_test` by reusing the existing check in `tests/setup/test-databases.ts`.
   Exports `shareStateWithinFile()` (switches the current file to a `beforeAll`-only reset, idempotent,
   effective however late in the module body it is called) and `resetDatabaseNow()` (depends on T008).
-- [ ] T011 [US2] Register `tests/setup/reset-database.ts` in `vitest.config.ts`'s `setupFiles`,
+- [X] T011 [US2] Register `tests/setup/reset-database.ts` in `vitest.config.ts`'s `setupFiles`,
   immediately after `tests/setup/worker-db.ts` and before `tests/setup/scope-recorder.ts` (verified
   hook order per research.md R2: `setup:beforeEach` runs before the file's own `beforeEach`) (depends
   on T010).
-- [ ] T012 [US2] Find every file that seeds database state in its own `beforeAll`
+- [X] T012 [US2] Find every file that seeds database state in its own `beforeAll`
   (`grep -rln "beforeAll" tests/integration --include='*.test.ts' | xargs grep -l "getDb\|createVoiceProfile\|factories"`)
   and call `shareStateWithinFile()` at that file's module top level where the setup is genuinely
   expensive to repeat per test (video fixtures, image servers, the MCP bridge) rather than cheap to
   move to `beforeEach`; leave the rest to pick up the new per-test default for free (depends on T011).
-- [ ] T013 [US2] Write `tests/integration/isolation/leftovers.test.ts`: a probe test seeds due work,
+- [X] T013 [US2] Write `tests/integration/isolation/leftovers.test.ts`: a probe test seeds due work,
   runs after a file that deliberately leaves unparked due work behind, and passes with no isolation
   code of its own (SC-011); two `it`s in one file where the first leaves due work behind and the
   second's claim cannot see it (FR-008); a claim path that creates its own state row on first sight of
@@ -147,50 +147,50 @@ confirm both pass both times (quickstart.md step 1, second block).
 **`parkAll*` removal** (311 call sites across 150 files, grouped by directory; each task below touches
 disjoint files and can run in parallel once T011 lands):
 
-- [ ] T014 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 21 files under
+- [X] T014 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 21 files under
   `tests/integration/scheduler/` (depends on T011).
-- [ ] T015 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 17 files under
+- [X] T015 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 17 files under
   `tests/integration/jobs/` (depends on T011).
-- [ ] T016 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 16 files under
+- [X] T016 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 16 files under
   `tests/integration/failures/` (depends on T011).
-- [ ] T017 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 10 files under
+- [X] T017 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 10 files under
   `tests/integration/instagram/` (depends on T011).
-- [ ] T018 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 9 files under
+- [X] T018 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 9 files under
   `tests/integration/threads/` (depends on T011).
-- [ ] T019 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 8 files under
+- [X] T019 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 8 files under
   `tests/integration/facebook/` (depends on T011).
-- [ ] T020 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 7 files under
+- [X] T020 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 7 files under
   `tests/integration/api/endpoints/` (depends on T011).
-- [ ] T021 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 7 files under
+- [X] T021 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 7 files under
   `tests/integration/activity/` (depends on T011).
-- [ ] T022 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 6 files under
+- [X] T022 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 6 files under
   `tests/integration/media/` (depends on T011).
-- [ ] T023 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 6 files under
+- [X] T023 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 6 files under
   `tests/integration/engagement/` (depends on T011).
-- [ ] T024 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 6 files under
+- [X] T024 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 6 files under
   `tests/integration/email/` (depends on T011).
-- [ ] T025 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 5 files under
+- [X] T025 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 5 files under
   `tests/integration/bluesky/` (depends on T011).
-- [ ] T026 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 4 files under
+- [X] T026 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 4 files under
   `tests/integration/pinterest/` (depends on T011).
-- [ ] T027 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 3 files under
+- [X] T027 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 3 files under
   `tests/integration/x/`, the 3 files under `tests/integration/posts/`, the 3 files under
   `tests/integration/llm/`, and the 3 root-level files directly under `tests/integration/` (depends
   on T011).
-- [ ] T028 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 2 files under
+- [X] T028 [P] [US2] Remove `parkAll*` calls and now-unused imports from the 2 files under
   `tests/integration/meta/`, the 2 files under `tests/integration/compose/`, and the single files
   under `tests/integration/tiktok/`, `tests/integration/security/`, `tests/integration/limits/`, and
   `tests/integration/generation/` (depends on T011).
-- [ ] T029 [US2] Remove the `parkAll*` definitions themselves — `parkAllJobs` and
+- [X] T029 [US2] Remove the `parkAll*` definitions themselves — `parkAllJobs` and
   `parkAllStandingSeries` from `tests/helpers/jobs-env.ts`, `parkAllEmail` from
   `tests/helpers/email.ts`, `parkAllEngagementReads` and `parkAllDueTargets` from
   `tests/helpers/scheduling.ts` — along with `clearHolds()`/`clearProjectCredentials()` wherever they
   exist only to undo another test file's rows (not where a test clears its own rows mid-case), now
   that every caller is migrated (depends on T014–T028).
-- [ ] T030 [US2] Write `tests/lint/no-parking-helpers.test.ts`: no file may define, export or import a
+- [X] T030 [US2] Write `tests/lint/no-parking-helpers.test.ts`: no file may define, export or import a
   `parkAll*` symbol; ship with an empty allow-list (the migration is complete by this point), per
   contracts/test-harness.md (depends on T029).
-- [ ] T031 [US2] Run the targeted regression check:
+- [X] T031 [US2] Run the targeted regression check:
   `pnpm exec vitest run tests/integration tests/setup tests/lint tests/helpers` and fix any test whose
   assertions assumed a leftover row from a sibling file (depends on T030).
 
@@ -209,21 +209,21 @@ confirm it fails naming the file and the rule, then remove the probe.
 
 ### Implementation for User Story 3
 
-- [ ] T032 [P] [US3] Add `drainTicks<T>({ tick, until, ceiling, describe })` and the exported
+- [X] T032 [P] [US3] Add `drainTicks<T>({ tick, until, ceiling, describe })` and the exported
   `SECTIONS` constant (the nine section names) to `tests/helpers/tick.ts`: ticks until `until` holds
   or `ceiling` is reached, then throws naming `describe(n)`'s text and the accumulated per-disposition
   tally on failure (FR-029); leaves `TICK_BUDGET_MS` and `tickConfig()` unchanged per
   contracts/test-harness.md.
-- [ ] T033 [US3] Write `tests/lint/tick-drain.test.ts`: forbids a tick loop whose bound is a literal
+- [X] T033 [US3] Write `tests/lint/tick-drain.test.ts`: forbids a tick loop whose bound is a literal
   greater than `1` (`while (… && ticks < N)`, `for (let i = 0; i < N; i++)` beside a `runTick`/tick
   call in the same block), reusing the balanced-paren argument extractor already written in
   `tests/lint/tick-budget.test.ts`; names the file, the loop, and `drainTicks()` as the replacement;
   carries an in-file exemption set, each entry with a one-line reason, in the same style as
   `OWNS_ITS_BUDGET` (depends on T032).
-- [ ] T034 [P] [US3] Write `tests/lint/no-test-retries.test.ts`: asserts the resolved Vitest config
+- [X] T034 [P] [US3] Write `tests/lint/no-test-retries.test.ts`: asserts the resolved Vitest config
   (`vitest.config.ts`) keeps `retry` and `repeats` at their `0` default, and that no test file passes a
   `retry` option to `it`/`describe`/`test`.
-- [ ] T035 [US3] Migrate `tests/integration/email/tick.test.ts`'s "serves 500 due people within 10
+- [X] T035 [US3] Migrate `tests/integration/email/tick.test.ts`'s "serves 500 due people within 10
   ticks" test off its `while (served < 500 && ticks < 10)` loop onto `drainTicks()` with a generous
   ceiling, so the test tolerates a skip instead of requiring exact zero-slack capacity (depends on
   T032; see also T051 in US6, which gives this test the per-disposition diagnostics it needs to be
