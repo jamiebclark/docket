@@ -101,7 +101,10 @@ describe("marking read is exact", () => {
     const set = await setOf(u.id);
     expect((await recentPanel(set, new Date())).items.every((i) => !i.read)).toBe(true);
 
-    await markProblemsView(await setOf(u.id), { kind: "all", slugs: null });
+    // Scoped to the one project under test: "all" would take `FOR UPDATE` on every project this
+    // user is in, and the databases are per worker rather than per file, so a wider lock than the
+    // assertion needs is a wider lock for whatever file is running beside this one.
+    await markProblemsView(await setOf(u.id), { kind: "project", slug: project.slug });
     expect(await count(u.id)).toBe(0);
 
     const panel = await recentPanel(await setOf(u.id), new Date());
