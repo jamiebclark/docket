@@ -99,3 +99,22 @@ describe("unsubscribing never needs a session", () => {
     expect(isPublicPath("/api/email/send")).toBe(false);
   });
 });
+
+describe("resetting a password never needs a session", () => {
+  // The gate sits in front of the pages, so a route missing from PUBLIC_EXACT is unreachable by the
+  // only people who want it — the same trap the unsubscribe routes fell into above. A locked-out
+  // person has no session by definition, so a redirect to /login here is a closed loop.
+  it("lets both reset pages through unauthenticated", () => {
+    for (const p of ["/forgot-password", "/reset-password"]) {
+      expect(isPublicPath(p)).toBe(true);
+      expect(loginRedirectFor(p, "", false)).toBeNull();
+    }
+    expect(loginRedirectFor("/reset-password", "?token=abc", false)).toBeNull();
+  });
+
+  it("does not open up look-alike paths under them", () => {
+    for (const p of ["/forgot-password/other", "/reset-passwordx", "/reset-password/abc", "/forgot-passwords"]) {
+      expect(isPublicPath(p)).toBe(false);
+    }
+  });
+});

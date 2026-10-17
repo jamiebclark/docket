@@ -7,7 +7,8 @@ import { getEnv } from "../env";
 import { getDb } from "../db/client";
 import { runCrossProject } from "../db/cross-project";
 import * as schema from "../db/schema";
-import { createEmailAttemptLimiter } from "./sign-in-limit";
+import { sendPasswordResetEmail } from "../services/password-reset";
+import { createEmailAttemptLimiter, createGlobalAttemptLimiter } from "./sign-in-limit";
 import { ac, roles } from "./access";
 
 /**
@@ -24,6 +25,33 @@ export function gateBlockedPaths(path: string, hasRequest: boolean): { status: 4
 
 /** Per-email sign-in limit, keyed on the submitted email so a forged client IP cannot sidestep it. */
 const signInLimiter = createEmailAttemptLimiter({ max: 3, windowMs: 10_000 });
+
+/**
+ * Per-email reset-request limit, matching Better Auth's own window for the route (3 per 60s) but keyed
+ * on the submitted address rather than the client IP. This one is NOT gated on `ctx.request`: unlike
+ * sign-in, the reset request also arrives in-process from the /forgot-password server action, and that
+ * path never passes through the HTTP rate limiter, so the hook is the only choke point both share.
+ *
+ * The key is the submitted email whether or not an account exists, so a 429 says nothing about which
+ * addresses are real — the endpoint's whole design is to be silent on that (FR: no enumeration).
+ */
+const resetRequestLimiter = createEmailAttemptLimiter({ max: 3, windowMs: 60_000 });
+
+/**
+ * Process-wide ceiling on reset requests, independent of address. The per-email limiter above stops one
+ * address being mailed repeatedly; this stops one caller walking a list of addresses and having Docket
+ * mail every real one. 60 a minute is far above any genuine use of a Docket install.
+ */
+const resetRequestCeiling = createGlobalAttemptLimiter({ max: 60, windowMs: 60_000 });
+
+/**
+ * How long an emailed reset link stays good. One hour is Better Auth's own default; it is stated here
+ * because the figure is quoted to the person in the email body, so the two must not drift.
+ */
+export const RESET_PASSWORD_TTL_SECONDS = 3600;
+
+/** Where Better Auth's token callback sends the person once the link checks out: Docket's own page. */
+export const RESET_PASSWORD_PATH = "/reset-password";
 
 function createAuth() {
   const env = getEnv();
@@ -51,7 +79,33 @@ function createAuth() {
         ...(env.TRUSTED_PROXIES ? { trustedProxies: env.TRUSTED_PROXIES } : {}),
       },
     },
-    emailAndPassword: { enabled: true, minPasswordLength: 12, maxPasswordLength: 128 },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: 12,
+      maxPasswordLength: 128,
+      resetPasswordTokenExpiresIn: RESET_PASSWORD_TTL_SECONDS,
+      // A reset is a credential handover to whoever holds the mailbox, so every other session for that
+      // account goes with it: if the reason for the reset was that somebody else was signed in, leaving
+      // their session alive would defeat the whole exercise.
+      revokeSessionsOnPasswordReset: true,
+      /**
+       * Better Auth has already found the user and minted the single-use token by the time this runs;
+       * all that is left is the message. It must not throw: the endpoint deliberately answers the same
+       * way whether or not the address exists, and an exception here would make a failed send
+       * distinguishable from a successful one and so leak which addresses are real.
+       */
+      sendResetPassword: async ({ user, url }) => {
+        try {
+          await sendPasswordResetEmail({
+            user: { id: user.id, name: user.name, email: user.email },
+            resetUrl: url,
+            expiresAt: new Date(Date.now() + RESET_PASSWORD_TTL_SECONDS * 1000),
+          });
+        } catch {
+          // Swallowed on purpose; `sendPasswordResetEmail` already records the attempt row it can.
+        }
+      },
+    },
     rateLimit: {
       enabled: true,
       // The per-email limit below is the sign-in guard; the per-IP rule is only a loose backstop
@@ -63,6 +117,17 @@ function createAuth() {
         if (ctx.request && ctx.path === "/sign-in/email") {
           const email = (ctx.body as { email?: unknown } | undefined)?.email;
           if (typeof email === "string" && !signInLimiter.attempt(email)) {
+            throw new APIError("TOO_MANY_REQUESTS", { message: "Too many requests. Please try again later." });
+          }
+        }
+        // No `ctx.request` guard: /forgot-password calls this endpoint in-process, where the HTTP rate
+        // limiter never runs, so this hook is the only limit both routes into it share.
+        if (ctx.path === "/request-password-reset") {
+          const email = (ctx.body as { email?: unknown } | undefined)?.email;
+          const tooMany = typeof email === "string" && !resetRequestLimiter.attempt(email);
+          // The ceiling is consumed on every request, including one the per-email limit already refused,
+          // so retry storms against many addresses cannot wash through it.
+          if (!resetRequestCeiling.attempt() || tooMany) {
             throw new APIError("TOO_MANY_REQUESTS", { message: "Too many requests. Please try again later." });
           }
         }

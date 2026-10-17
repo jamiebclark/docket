@@ -20,6 +20,15 @@ import type { SessionLike } from "../../dal/scope";
 import { getEnv } from "../../env";
 import { getMailer, unavailableMailer } from "../../mail";
 
+/**
+ * Whether this install can send mail at all, with no session needed. The signed-out pages use it: the
+ * sign-in page only offers "Forgot your password?" when an email could actually arrive, because a
+ * reset form that silently posts into the void is worse than no link at all (FR-002).
+ */
+export function emailAvailable(): boolean {
+  return getMailer() !== null;
+}
+
 export class EmailUnavailableError extends Error {
   constructor() {
     super("Email is not available on this install");

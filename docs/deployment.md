@@ -154,10 +154,11 @@ Also keep, somewhere safe and separate from the dump:
 
 ## 5. Email
 
-Docket sends email for two things: an invitation (always, once mail is configured) and problem
-notifications (only once a person turns their own email on at `/notifications`). Neither is required —
-without a mail server, invitations fall back to today's copyable single-use link and nobody's email
-settings are offered.
+Docket sends email for three things: an invitation (always, once mail is configured), a password reset
+(always, once mail is configured), and problem notifications (only once a person turns their own email
+on at `/notifications`). Only the password reset depends on mail to work at all — without a mail server,
+invitations fall back to today's copyable single-use link and nobody's email settings are offered, but a
+locked-out person cannot reset their own password and needs whoever runs the install to set one for them.
 
 **Configuring a mail server.** Set the `--- Email ---` group in `.env`: `SMTP_HOST` and `SMTP_FROM` are the
 group (both or neither); `SMTP_USER`/`SMTP_PASSWORD` are an all-or-none credential pair for servers that
@@ -167,10 +168,11 @@ containers after editing (§2). Setting any satellite or one credential without 
 startup, naming the variable and never its value.
 
 **What happens without one.** With the group unset, email is off entirely: `/notifications` offers no
-email control, invitations use today's link-only flow, and nothing is attempted or logged. If the group is
-set but the server cannot reach it (the mail package not installed, or the host unreachable), startup logs
-one line saying so, every would-be send is recorded as unavailable rather than retried in a loop, and
-nobody is told mail went out when it did not.
+email control, invitations use today's link-only flow, the sign-in page omits "Forgot your password?"
+and `/forgot-password` says so rather than showing a form that could send nothing, and nothing is
+attempted or logged. If the group is set but the server cannot reach it (the mail package not installed,
+or the host unreachable), startup logs one line saying so, every would-be send is recorded as unavailable
+rather than retried in a loop, and nobody is told mail went out when it did not.
 
 **Delivery reports are invisible to Docket.** Docket only knows whether the SMTP conversation itself
 accepted or refused a message. A bounce or a "mailbox full" notice that your mail server generates and

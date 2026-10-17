@@ -39,6 +39,14 @@ export function UserMenu({ name, signOut }: { name: string; signOut: () => Promi
         <span className="hidden sm:inline">Notifications</span>
         <span className="sr-only sm:hidden">Notifications</span>
       </Link>
+      <Link
+        href="/account"
+        className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        <Icon name="user" />
+        <span className="hidden sm:inline">Account</span>
+        <span className="sr-only sm:hidden">Account</span>
+      </Link>
       <button
         type="submit"
         className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
