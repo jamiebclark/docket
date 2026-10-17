@@ -3634,3 +3634,20 @@ group and a parallel outcome classifier to replace something tested.
    redirects a cookie-less request to `/login`, which for these two routes is a closed loop: the person
    resetting a password cannot sign in by definition. This is the same trap the unsubscribe routes hit
    (044), so it now has a test of its own beside theirs.
+
+## Flake-proof test architecture: pre-change baseline (2026-10-17)
+
+Spec 079's success criteria (SC-002, SC-004, SC-007) are each a before/after comparison. Recorded here
+before any code in this feature changes, so the comparison has a fixed starting point:
+
+1. **Slowest CI shard wall-clock time: 304 s** (run `39036348302`; shard times 5:04/4:45/3:50/4:38). The
+   SC-007 comparison point — Phase 10's final verification must come in at or under ~334 s (10%
+   allowance) on the gating CI run.
+2. **`parkAll*` call-site count: 150 files, 311 call sites** —
+   `grep -rln "parkAll" --include='*.ts' --include='*.tsx' src tests | wc -l` → 150;
+   `grep -rn "parkAll" --include='*.ts' --include='*.tsx' src tests | wc -l` → 311. The SC-004
+   comparison point — Phase 4 drives both counts to zero.
+3. **`vitest.config.ts`'s `setupFiles` order**: `tests/setup/worker-db.ts` runs first, ahead of
+   `tests/setup/scope-recorder.ts` and `tests/setup/webhook-loopback.ts`. `tests/setup/reset-database.ts`
+   (Phase 4) must be inserted immediately after `worker-db.ts` and before `scope-recorder.ts` — the
+   ordering invariant R2 depends on this being true before the new file is added.

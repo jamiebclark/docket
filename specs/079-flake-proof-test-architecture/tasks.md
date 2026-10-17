@@ -38,7 +38,7 @@ file, since each directory's files are disjoint and migrate identically.
 **Purpose**: a single shared reference point every later success-criterion comparison (SC-002,
 SC-004, SC-007) needs before any code changes.
 
-- [ ] T002 Record the pre-change baseline in `docs/decisions.md` as a new entry: the current slowest
+- [X] T002 Record the pre-change baseline in `docs/decisions.md` as a new entry: the current slowest
   CI shard wall-clock time (304 s, run 39036348302: 5:04/4:45/3:50/4:38 — the SC-007 comparison
   point), the current `parkAll*` call-site count (`grep -rln "parkAll" --include='*.ts' --include='*.tsx' src tests | wc -l` → 150 files, `grep -rn` → 311 call sites — the SC-004 comparison point), and
   the current `setupFiles` order in `vitest.config.ts` (`tests/setup/worker-db.ts` first) so the
