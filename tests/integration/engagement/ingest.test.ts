@@ -137,10 +137,18 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     expect(item.withdrawnAt).not.toBeNull();
   });
 
-  it("flags the account via credentials_invalid and leaves the cursor unmoved", async () => {
+  it("flags the account via credentials_invalid, once renewal has failed too, and leaves the cursor unmoved", async () => {
     const ctx = await createProjectWithMembers();
     const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
-    const account = await accounts.connectMock(scope, { displayName: "Mock", settings: { engagementReadBehaviour: "credentials_invalid" } });
+    // `refresh: "fail"` is the point: the reader only gives up on an account once the renewal the
+    // publish path would do has also refused. The mock refreshes successfully by default.
+    // `simulateCredentialExpiryHours` is what makes connectMock store credentials at all — without
+    // it there is nothing to renew, and this would pass for the wrong reason.
+    const account = await accounts.connectMock(scope, {
+      displayName: "Mock",
+      simulateCredentialExpiryHours: 1,
+      settings: { engagementReadBehaviour: "credentials_invalid", refresh: "fail" },
+    });
 
     const tick = await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
     expect(tick.engagementRead.ok).toBe(true);
@@ -150,6 +158,27 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     expect(state?.cursor).toBeNull();
     const view = (await accounts.listAccounts(scope)).find((a) => a.id === account.id);
     expect(view?.status).toBe("needs_reauth");
+  });
+
+  // The reader polls far more often than posts publish, so before this it reached a session
+  // rejection first and flagged an account the publish path would have healed silently — which
+  // undid a Bluesky reconnect within the hour, four times in one day (2026-10-17).
+  it("renews instead of flagging when the provider can still open a session", async () => {
+    const ctx = await createProjectWithMembers();
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    const account = await accounts.connectMock(scope, {
+      displayName: "Mock",
+      simulateCredentialExpiryHours: 1,
+      settings: { engagementReadBehaviour: "credentials_invalid", refresh: "succeed" },
+    });
+
+    const tick = await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
+    expect(tick.engagementRead.ok).toBe(true);
+    const view = (await accounts.listAccounts(scope)).find((a) => a.id === account.id);
+    expect(view?.status, "a renewable account must stay active, not wait on a human").toBe("active");
+    // The read still stopped: nothing is ingested and the cursor stays put for the retry.
+    expect((await listInbox(scope)).items).toHaveLength(0);
+    expect((await scope.engagementAccountStates.get(account.id))?.cursor).toBeNull();
   });
 
   it("commits items inserted on an earlier page and notifies once, even when a later page in the same run stops the read (review F25)", async () => {

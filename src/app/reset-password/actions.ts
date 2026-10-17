@@ -41,9 +41,20 @@ export async function resetPassword(
     if (isAPIError(error) && error.statusCode === 429) {
       return fail("busy", "Too many attempts. Wait a minute and try again.");
     }
-    // Every other refusal from this endpoint is the token: expired, already spent, or never valid. The
-    // person cannot tell those apart and does not need to — all three are fixed by asking for a new one.
-    return fail("invalid", "This reset link has expired or has already been used. Ask for a new one.");
+    // Only a 400 from this endpoint is actually about the token: expired, already spent, or never
+    // valid. Reporting anything else as a spent link is a lie that costs the person their next step —
+    // they ask for a new link, which is exactly what will not help. Worse, Better Auth consumes the
+    // token before it writes the password, so a failure after that point leaves the token spent and
+    // the password possibly already changed; telling them to request another link sends them round a
+    // loop that burns a token each time. Observed on 2026-10-17, where the real cause was a proxy
+    // returning 502 for every POST and nothing was wrong with the token at all.
+    if (isAPIError(error) && error.statusCode === 400) {
+      return fail("invalid", "This reset link has expired or has already been used. Ask for a new one.");
+    }
+    return fail(
+      "conflict",
+      "Something went wrong while setting your password, and it may or may not have been changed. Try signing in with the new password first — only ask for another link if that fails.",
+    );
   }
 
   redirect("/login?reset=1");

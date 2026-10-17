@@ -2,6 +2,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
+import { after } from "next/server";
 import { organization } from "better-auth/plugins/organization";
 import { getEnv } from "../env";
 import { getDb } from "../db/client";
@@ -95,14 +96,44 @@ function createAuth() {
        * distinguishable from a successful one and so leak which addresses are real.
        */
       sendResetPassword: async ({ user, url }) => {
+        const deliver = async () => {
+          try {
+            const outcome = await sendPasswordResetEmail({
+              user: { id: user.id, name: user.name, email: user.email },
+              resetUrl: url,
+              expiresAt: new Date(Date.now() + RESET_PASSWORD_TTL_SECONDS * 1000),
+            });
+            // Deferred past the response, so this line is the only place an operator can see that a
+            // reset was asked for and what became of it. `unavailable` means no SMTP group is
+            // configured; `failed` means the server refused or could not be reached. Never the address.
+            if (outcome !== "sent") console.error(`Docket auth: password reset email ${outcome}`);
+          } catch (error) {
+            // `sendPasswordResetEmail` promises not to throw and records its own attempt row, so this
+            // is Docket's own fault rather than the mail server's. Name it; it is invisible otherwise.
+            console.error(`Docket auth: password reset delivery threw (${(error as Error)?.name || "unknown"})`);
+          }
+        };
+
+        // The send MUST NOT block the reply. Better Auth awaits this inline unless
+        // `advanced.backgroundTasks.handler` is set (`runInBackgroundOrAwait` in its
+        // context/create-context), and an SMTP conversation is allowed 10s to connect, 10s to greet
+        // and 20s on the socket (src/server/mail/smtp.ts). Blocking on that is wrong twice over:
+        //
+        // 1. A mail host that does not answer takes the page down rather than failing quietly. With
+        //    `SMTP_PORT`/`SMTP_SECURITY` unset the transport connects plaintext on 587, so a provider
+        //    wanting implicit TLS on 465 hangs for the full timeout — observed in production as a
+        //    Cloudflare 502 on /forgot-password.
+        // 2. It leaks whether the address has an account. An unknown address returns at once; a known
+        //    one waits for SMTP. That timing difference is an enumeration oracle, which undoes the
+        //    constant-time miss Better Auth goes to the trouble of providing.
+        //
+        // `after()` runs the work once the response is sent. Outside a request — in-process callers,
+        // tests, scripts — there is no response to defer past, so it throws and we await instead,
+        // which also keeps the integration tests deterministic.
         try {
-          await sendPasswordResetEmail({
-            user: { id: user.id, name: user.name, email: user.email },
-            resetUrl: url,
-            expiresAt: new Date(Date.now() + RESET_PASSWORD_TTL_SECONDS * 1000),
-          });
+          after(deliver);
         } catch {
-          // Swallowed on purpose; `sendPasswordResetEmail` already records the attempt row it can.
+          await deliver();
         }
       },
     },

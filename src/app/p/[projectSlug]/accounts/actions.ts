@@ -11,7 +11,20 @@ import * as connect from "@/server/services/connect";
 import * as slots from "@/server/services/slots";
 import { runAction } from "../run-action";
 
-/** Every mutation refreshes the route so the server-rendered account sections show the new state. */
+/**
+ * Every mutation refreshes the route so the server-rendered account sections show the new state.
+ *
+ * Use this only for actions the browser stays on. An action that hands the client a `landing` URL
+ * must NOT also `refresh()`: refresh tells the client router to re-render the route it is on, and
+ * the form then calls `router.push(landing)`, which tears that render down mid-stream. Next reports
+ * "The destination stream closed early" and the route's error boundary shows "Something went
+ * wrong" — *after* the connect has already succeeded, so the account is live and the person is told
+ * it failed. That is how a working Bluesky reconnect looked broken on 2026-10-17. The landing URL
+ * carries its own query (`?landed=…&connected=…&reconnected=…`), so the push fetches the
+ * destination fresh and the refresh buys nothing. `chooseConnectCandidatesAction` is the exception
+ * that proves it: it redirects server-side, where Next sequences the refresh and the navigation.
+ * `tests/lint/connect-landing-no-refresh.test.ts` holds the line.
+ */
 async function mutate<T>(slug: string, fn: Parameters<typeof runAction<T>>[1]): Promise<ActionResult<T>> {
   const result = await runAction(slug, fn);
   if (result.ok) refresh();
@@ -30,7 +43,8 @@ export async function connectMockAction(
   slug: string,
   input: { displayName: string; simulateCredentialExpiryHours?: number },
 ): Promise<ActionResult<ConnectedAccount>> {
-  return mutate(slug, async (scope) => {
+  // runAction, not mutate: the client navigates to `landing` on success (see above).
+  return runAction(slug, async (scope) => {
     const account = await accounts.connectMock(scope, input);
     return { ...account, landing: landingFor(slug, [account], new Set()) };
   });
@@ -53,12 +67,13 @@ export async function connectCredentialsAction(
       : "";
     return fail("validation", `${outcome.message}${when}`, outcome.fieldErrors);
   }
-  refresh();
+  // No refresh() here: the client pushes to `landing` on success (see the note above).
   return ok({ ...outcome.account, landing: landingFor(slug, [outcome.account], priorIds) });
 }
 
 export async function reconnectMockAction(slug: string, input: { id: string }): Promise<ActionResult<ConnectedAccount>> {
-  return mutate(slug, async (scope) => {
+  // runAction, not mutate: the client navigates to `landing` on success (see above).
+  return runAction(slug, async (scope) => {
     const account = await accounts.reconnectMock(scope, input?.id);
     return { ...account, landing: landingFor(slug, [account], new Set([account.id])) };
   });
