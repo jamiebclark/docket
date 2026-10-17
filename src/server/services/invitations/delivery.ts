@@ -1,7 +1,7 @@
 import { renderInvitationEmail } from "@/lib/email/render";
 import { roleLabel } from "@/lib/roles/roles";
 import type { Role } from "@/server/auth/access";
-import { emailDb, recordInvitationAttempt } from "@/server/dal/email";
+import { emailDb, recordTransactionalAttempt } from "@/server/dal/email";
 import { getMailer } from "@/server/mail";
 import type { MailOutcome } from "@/server/mail/types";
 import { classifyMailOutcome } from "../email/send";
@@ -79,7 +79,7 @@ export const defaultInvitationDelivery: InvitationDelivery = {
     }
 
     const classified = classifyMailOutcome(outcome);
-    await recordInvitationAttempt(emailDb(), input.inviteeUserId, classified.outcome, classified.code, classified.durationMs);
+    await recordTransactionalAttempt(emailDb(), "invitation", input.inviteeUserId, classified.outcome, classified.code, classified.durationMs);
 
     return { ...base, email: classified.outcome === "sent" ? "sent" : "failed" };
   },

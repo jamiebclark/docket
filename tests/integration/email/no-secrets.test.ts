@@ -12,6 +12,7 @@ import type { Mailer, MailOutcome } from "../../../src/server/mail/types";
 import { myEmailSettings } from "../../../src/server/services/email";
 import { sendForClaimedPerson, type EmailSendConfig } from "../../../src/server/services/email/send";
 import { defaultInvitationDelivery } from "../../../src/server/services/invitations/delivery";
+import { sendPasswordResetEmail } from "../../../src/server/services/password-reset";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { seedEmailSettings, seedProjectWithProblem } from "../../helpers/email";
@@ -50,6 +51,7 @@ const CREDENTIAL = "no-secrets-smtp-password-7f3a91c2d8e456b0";
 const BODY_MARKER = "no-secrets-body-marker-9c1e7a40b2d5f836";
 const SUBJECT_MARKER = "no-secrets-subject-marker-481726350917";
 const TOKEN_MARKER = "no-secrets-unsubscribe-token-5b8e2c90d4a1f7";
+const RESET_TOKEN_MARKER = "no-secrets-reset-token-3e7d12b9f5a08c";
 
 const REASONS = ["refused", "rejected", "timed_out", "connect_failed", "tls_failed", "internal", "unavailable"] as const;
 
@@ -95,7 +97,7 @@ async function settingsRow(userId: string) {
   });
 }
 
-const SECRETS = [CREDENTIAL, BODY_MARKER, SUBJECT_MARKER, TOKEN_MARKER];
+const SECRETS = [CREDENTIAL, BODY_MARKER, SUBJECT_MARKER, TOKEN_MARKER, RESET_TOKEN_MARKER];
 
 function assertNoSecret(haystack: string, address: string) {
   for (const s of [...SECRETS, address]) expect(haystack).not.toContain(s);
@@ -180,6 +182,33 @@ describe("US8: nothing leaks", () => {
 
       const rows = await attemptRows(invitee.id);
       expect(rows).toHaveLength(1);
+      expect(rows[0]!.outcome).toBe("internal");
+      assertNoSecret(JSON.stringify(rows[0]), address);
+
+      assertNoSecret(capture.text(), address);
+    } finally {
+      capture.restore();
+    }
+  });
+
+  it("the same quoted reply never leaks on the password-reset path either (FR-033, FR-034)", async () => {
+    const address = "no-secrets-reset@example.test";
+    const person = await createUser({ email: address });
+    setMailerForTests(quotingMailer(address));
+    const capture = captureConsole();
+    try {
+      // The reset URL is the one secret this message carries; it must not survive into the row or a log.
+      const result = await sendPasswordResetEmail({
+        user: { id: person.id, name: "Reset Person", email: address },
+        resetUrl: `https://docket.test/api/auth/reset-password/${RESET_TOKEN_MARKER}`,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      });
+      expect(result).toBe("failed");
+      assertNoSecret(JSON.stringify(result), address);
+
+      const rows = await attemptRows(person.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.purpose).toBe("password_reset");
       expect(rows[0]!.outcome).toBe("internal");
       assertNoSecret(JSON.stringify(rows[0]), address);
 

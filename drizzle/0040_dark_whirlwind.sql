@@ -1,0 +1,2 @@
+ALTER TABLE "email_delivery_attempts" DROP CONSTRAINT "email_delivery_attempts_purpose";--> statement-breakpoint
+ALTER TABLE "email_delivery_attempts" ADD CONSTRAINT "email_delivery_attempts_purpose" CHECK ("email_delivery_attempts"."purpose" IN ('problems','invitation','password_reset'));

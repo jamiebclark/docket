@@ -8,16 +8,21 @@ import { poolTolerantOfDrops } from "../../setup/test-databases";
 
 // research.md §2: Drizzle applies every pending migration inside ONE transaction. An existing
 // install migrates from whatever it is already on, never from scratch, so this is the test that
-// would have caught 0031 and is the one that keeps this entry honest: migrate a scratch database
-// to the migration immediately before this entry's migrations (0036-0039), commit, then apply
-// every remaining migration (including 0036-0039) inside a single transaction the way Drizzle
-// applies any upgrade, and assert it does not fail with 55P04/42P17.
-// Every migration this entry adds, including the ones its review remediation added later.
-// Leaving a later tag out of this list silently moves it into the "already migrated" half, where
-// it runs before the table it alters exists.
-const ENTRY_MIGRATION_TAGS = ["0036", "0037", "0038", "0039"];
+// would have caught 0031: migrate a scratch database to a fixed baseline, commit, then apply every
+// remaining migration inside a single transaction the way Drizzle applies any upgrade, and assert it
+// does not fail with 55P04/42P17.
+//
+// The split is a BASELINE, not a list of one entry's tags. Drizzle decides what is pending by
+// comparing each migration's `when` against the newest `when` already recorded in
+// `__drizzle_migrations`, so if the "already migrated" half contains anything newer than the pending
+// half, every pending migration is treated as already applied and silently skipped. Naming the
+// entry's own tags instead (this file once listed 0036-0039) meant the first migration added after
+// that entry landed in the applied half, pushed the baseline past them, and turned this test into a
+// no-op that still passed its own count assertion. The baseline keeps that from recurring: everything
+// after it is pending, whatever gets added later.
+const BASELINE_TAG = "0035";
 
-const DB = `docket_mig0036_${process.pid}_test`;
+const DB = `docket_mig_upgrade_${process.pid}_test`;
 const q = (n: string) => `"${n}"`;
 
 let admin: pg.Pool;
@@ -44,27 +49,36 @@ afterAll(async () => {
   await rm(folder, { recursive: true, force: true });
 });
 
-describe("0036 applies on top of an already-migrated install, not just a fresh one", () => {
-  it("migrates to 0035, commits, then applies 0036-0039 in one transaction with no 55P04/42P17", async () => {
+describe("pending migrations apply on top of an already-migrated install, not just a fresh one", () => {
+  it(`migrates to ${BASELINE_TAG}, commits, then applies everything after it in one transaction with no 55P04/42P17`, async () => {
     const journalPath = join(folder, "meta", "_journal.json");
     const journal = JSON.parse(await readFile(journalPath, "utf8")) as { entries: { idx: number; tag: string }[] };
-    const upTo0035 = journal.entries.filter((e) => !ENTRY_MIGRATION_TAGS.some((tag) => e.tag.startsWith(tag)));
-    expect(upTo0035.length, "expected 0036-0039 to be the newest migrations").toBe(
-      journal.entries.length - ENTRY_MIGRATION_TAGS.length,
-    );
 
-    await writeFile(journalPath, JSON.stringify({ ...journal, entries: upTo0035 }));
-    await runMigrations(urlFor(DB), folder); // commits: the install is now "already on 0035"
+    const baselineIndex = journal.entries.findIndex((e) => e.tag.startsWith(BASELINE_TAG));
+    expect(baselineIndex, `expected a migration tagged ${BASELINE_TAG} in the journal`).toBeGreaterThanOrEqual(0);
+    const applied = journal.entries.slice(0, baselineIndex + 1);
+    const pending = journal.entries.slice(baselineIndex + 1);
+    // With nothing after the baseline this test proves nothing, so say so rather than passing quietly.
+    expect(pending.length, `expected migrations after ${BASELINE_TAG} to upgrade through`).toBeGreaterThan(0);
 
-    // Restore the full journal, so the next call sees 0036 and 0037 as the only pending migrations
-    // and applies them the way Drizzle applies any upgrade: in one transaction.
+    await writeFile(journalPath, JSON.stringify({ ...journal, entries: applied }));
+    await runMigrations(urlFor(DB), folder); // commits: the install is now "already on the baseline"
+
+    // Restore the full journal, so everything after the baseline is pending and gets applied the way
+    // Drizzle applies any upgrade: in one transaction.
     await writeFile(journalPath, JSON.stringify(journal));
     await expect(runMigrations(urlFor(DB), folder)).resolves.toBeUndefined();
 
     const pool = poolTolerantOfDrops(new pg.Pool({ connectionString: urlFor(DB), max: 1 }));
     try {
-      const row = await pool.query(`select 1 from pg_type where typname = 'engagement_item_kind'`);
-      expect(row.rows).toHaveLength(1);
+      // One object from the pending half, proving the upgrade actually ran rather than being skipped:
+      // the enum 0036-0039 add, and the purpose constraint 0040 replaces.
+      const kind = await pool.query(`select 1 from pg_type where typname = 'engagement_item_kind'`);
+      expect(kind.rows).toHaveLength(1);
+      const purpose = await pool.query(
+        `select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'email_delivery_attempts_purpose'`,
+      );
+      expect(purpose.rows[0]?.def).toContain("password_reset");
     } finally {
       await pool.end();
     }

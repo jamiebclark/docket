@@ -39,6 +39,7 @@ const ICONS = {
   copy: "copy",
   key: "key-round",
   webhook: "webhook",
+  user: "user-round",
   userPlus: "user-plus",
   flask: "flask-conical",
   info: "info",
