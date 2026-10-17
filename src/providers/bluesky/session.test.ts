@@ -23,7 +23,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("connectAccount", () => {
-  it("returns the stored shape and never the app password", async () => {
+  it("returns the stored shape, keeping the app password for unattended re-authentication", async () => {
     pds.route("POST", CREATE, { json: session() });
     const result = await connect();
     expect(result).toEqual({
@@ -32,11 +32,10 @@ describe("connectAccount", () => {
         externalId: "did:plc:alice",
         displayName: "alice.bsky.social",
         settings: { pdsUrl: "https://bsky.social" },
-        credentials: expect.objectContaining({ did: "did:plc:alice", handle: "alice.bsky.social" }),
+        credentials: expect.objectContaining({ did: "did:plc:alice", handle: "alice.bsky.social", appPassword: PASSWORD }),
         expiresAt: new Date("2026-03-01T00:00:00Z"),
       },
     });
-    expect(JSON.stringify(result)).not.toContain(PASSWORD);
     expect(pds.requests).toHaveLength(1);
     expect(pds.requests[0]!.url).toMatch(/^https:\/\/bsky\.social\//);
     expect(pds.requests[0]!.body).toEqual({ identifier: "alice.bsky.social", password: PASSWORD });
@@ -144,6 +143,12 @@ describe("refreshCredentials", () => {
     expect(pds.callsTo("POST", REFRESH)[0]!.headers.authorization).toBe("Bearer old-refresh");
   });
 
+  it("carries the app password through a refresh, so later re-authentication is still possible", async () => {
+    pds.route("POST", REFRESH, { json: session() });
+    const result = await refresh({ ...stored, appPassword: PASSWORD });
+    expect(result).toMatchObject({ ok: true, credentials: { appPassword: PASSWORD } });
+  });
+
   it("falls back to now + 60 d when the new refresh JWT has no exp", async () => {
     pds.route("POST", REFRESH, { json: session({ refreshJwt: "opaque" }) });
     const result = await refresh();
@@ -184,5 +189,49 @@ describe("refreshCredentials", () => {
 
     pds.route("POST", REFRESH, { status: 429, headers: { "retry-after": "90" }, json: { error: "RateLimitExceeded" } });
     expect(await refresh()).toMatchObject({ ok: false, transient: true, retryAt: new Date(now.getTime() + 90_000) });
+  });
+
+  describe("re-authentication after a refusal", () => {
+    it("opens a new session from the stored app password, identifying by DID", async () => {
+      pds.route("POST", REFRESH, { status: 400, json: { error: "ExpiredToken" } });
+      const fresh = session({ handle: "alice.example.com" });
+      pds.route("POST", CREATE, { json: fresh });
+
+      const result = await refresh({ ...stored, appPassword: PASSWORD });
+
+      expect(result).toEqual({
+        ok: true,
+        credentials: { accessJwt: fresh.accessJwt, refreshJwt: fresh.refreshJwt, did: "did:plc:alice", handle: "alice.example.com", appPassword: PASSWORD },
+        expiresAt: new Date("2026-03-01T00:00:00Z"),
+        displayName: "alice.example.com",
+      });
+      // By DID, not handle: the account may have been renamed since it was connected.
+      expect(pds.callsTo("POST", CREATE)[0]!.body).toEqual({ identifier: "did:plc:alice", password: PASSWORD });
+    });
+
+    it("reports the original refusal when the app password no longer works", async () => {
+      pds.route("POST", REFRESH, { status: 400, json: { error: "ExpiredToken" } });
+      pds.route("POST", CREATE, { status: 401, json: { error: "AuthenticationRequired" } });
+
+      const result = await refresh({ ...stored, appPassword: PASSWORD });
+
+      expect(result).toMatchObject({ ok: false, reason: expect.stringContaining("Reconnect the account") });
+      expect(result).not.toHaveProperty("transient");
+    });
+
+    it("refuses a session for a different DID rather than adopting it", async () => {
+      pds.route("POST", REFRESH, { status: 400, json: { error: "ExpiredToken" } });
+      pds.route("POST", CREATE, { json: session({ did: "did:plc:mallory" }) });
+
+      expect(await refresh({ ...stored, appPassword: PASSWORD })).toMatchObject({ ok: false });
+    });
+
+    it("does not try to re-authenticate an account stored without an app password", async () => {
+      pds.route("POST", REFRESH, { status: 400, json: { error: "ExpiredToken" } });
+      pds.route("POST", CREATE, { json: session() });
+
+      expect(await refresh()).toMatchObject({ ok: false });
+      expect(pds.callsTo("POST", CREATE)).toHaveLength(0);
+    });
   });
 });
