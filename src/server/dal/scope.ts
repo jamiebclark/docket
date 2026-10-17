@@ -20,6 +20,16 @@ import {
 } from "./engagement";
 import { createExternalClaimsRepo, type ExternalClaimsRepo } from "./external-claims";
 import {
+  createAccountMetricPollStatesRepo,
+  createAccountMetricSnapshotsRepo,
+  createPostMetricPollStatesRepo,
+  createPostMetricSnapshotsRepo,
+  type AccountMetricPollStatesRepo,
+  type AccountMetricSnapshotsRepo,
+  type PostMetricPollStatesRepo,
+  type PostMetricSnapshotsRepo,
+} from "./insights";
+import {
   countRequest,
   createApiKeysRepo,
   findActiveKeyByHash,
@@ -184,6 +194,10 @@ export interface ProjectScope {
   readonly engagementDrafts: EngagementDraftsRepo;
   readonly engagementReplyClaims: EngagementReplyClaimsRepo;
   readonly engagementAccountStates: EngagementAccountStatesRepo;
+  readonly postMetricSnapshots: PostMetricSnapshotsRepo;
+  readonly accountMetricSnapshots: AccountMetricSnapshotsRepo;
+  readonly postMetricPollStates: PostMetricPollStatesRepo;
+  readonly accountMetricPollStates: AccountMetricPollStatesRepo;
   readonly projectLlm: ProjectLlmRepo;
   readonly llmUsage: LlmUsageRepo;
   /** The caller's own reading position and mute setting; job-runner and API-key scopes throw `ForbiddenError`. */
@@ -240,6 +254,10 @@ export function createSchedulingRepos(exec: Database, projectId: string) {
     engagementDrafts: createEngagementDraftsRepo(exec, projectId),
     engagementReplyClaims: createEngagementReplyClaimsRepo(exec, projectId),
     engagementAccountStates: createEngagementAccountStatesRepo(exec, projectId),
+    postMetricSnapshots: createPostMetricSnapshotsRepo(exec, projectId),
+    accountMetricSnapshots: createAccountMetricSnapshotsRepo(exec, projectId),
+    postMetricPollStates: createPostMetricPollStatesRepo(exec, projectId),
+    accountMetricPollStates: createAccountMetricPollStatesRepo(exec, projectId),
   };
 }
 

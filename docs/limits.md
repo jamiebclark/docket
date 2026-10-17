@@ -171,6 +171,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | note: processing ceiling | 30 minutes, at most 16 reads | | docs/research/bluesky-video.md (decisions.md D7) | Bluesky step machine | `tests/integration/bluesky/video-failures.test.ts` "fails after 30 minutes or 16 reads, at the 5-minute pace once 10 minutes have passed" |
 | note: verified email | Bluesky-hosted accounts need a verified email to upload video | | docs/research/bluesky-video.md | Bluesky (`UploadForbidden`) | `src/providers/bluesky/video-errors.test.ts` "explains %s" |
 | note: client duration ceiling | 10 minutes, unverified as a server limit | | docs/research/bluesky-video.md (decisions.md D2) | not enforced | `src/providers/bluesky/capabilities.test.ts` "declares one MP4 H.264/AAC video up to 3 minutes and 300 MB, silent allowed, no images alongside" |
+| note: insights read budget | 1666 / 3600 s | | approximate, unconfirmed (research.md §3, 080; Bluesky's documented points are for writes, read costs are not published, so the write budget stands in) | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/bluesky/insights.test.ts` "declares the post keys, account keys, labels and maxPostsPerRead:25" |
 
 ## X
 

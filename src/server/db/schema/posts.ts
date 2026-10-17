@@ -286,6 +286,12 @@ export const postTargets = pgTable(
     index("post_targets_attention_idx")
       .on(t.projectId, t.updatedAt.desc(), t.id)
       .where(sql`${t.status} IN ('ambiguous','failed')`),
+    // The insights section counts hand-resolved targets on every tick to keep FR-039's skip count
+    // honest when nothing is claimed. Without this the count is a growing scan of every published
+    // target; the predicate matches `countPublishedWithoutExternalId` exactly.
+    index("post_targets_no_external_id_idx")
+      .on(t.socialAccountId)
+      .where(sql`${t.status} = 'published' AND ${t.externalId} IS NULL AND ${t.resolvedAt} IS NOT NULL`),
   ],
 );
 

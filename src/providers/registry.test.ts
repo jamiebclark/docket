@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { UnknownProviderError } from "./errors";
 import { assertVideoCapabilities, mediaConstraintsOf } from "./media";
-import { assertCreationAllowance } from "./registry";
+import { z } from "zod";
+import { assertCreationAllowance, assertInsightsDeclaration } from "./registry";
 import { readFileSync } from "node:fs";
 import { findConnectGroup, findProvider, getProvider, listConnectGroups, listProviders } from "./registry";
 
@@ -125,6 +126,37 @@ describe("provider registry", () => {
     for (const bad of [{ count: 10 }, { count: 11.5 }, { windowSeconds: 604_801 }, { windowSeconds: 0 }, { name: " " }]) {
       expect(() => assertCreationAllowance({ ...ok, creationAllowance: { ...ok.creationAllowance, ...bad } }), JSON.stringify(bad)).toThrow(/creation allowance/);
     }
+  });
+  it("accepts a well-formed insights declaration and rejects D1-D6 violations", () => {
+    const ok = {
+      key: "x",
+      insights: {
+        declaration: {
+          post: [{ key: "likeCount", label: "Likes" }],
+          account: [{ key: "followersCount", label: "Followers" }],
+          maxPostsPerRead: 25,
+          readBudget: { count: 100, windowSeconds: 3_600 },
+        },
+        postMetricsSchema: z.object({ likeCount: z.number().int().optional() }).strict(),
+        accountMetricsSchema: z.object({ followersCount: z.number().int().optional() }).strict(),
+        readPostMetrics: async () => ({ kind: "page" as const, entries: [] }),
+        readAccountMetrics: async () => ({ kind: "page" as const, metrics: {} }),
+      },
+    };
+    expect(() => assertInsightsDeclaration(ok)).not.toThrow();
+    expect(() => assertInsightsDeclaration({ key: "x" })).not.toThrow();
+    const withDecl = (over: Partial<typeof ok.insights.declaration>) =>
+      assertInsightsDeclaration({ ...ok, insights: { ...ok.insights, declaration: { ...ok.insights.declaration, ...over } } });
+    expect(() => withDecl({ post: [], account: [] })).toThrow(/Inconsistent insights declaration/);
+    expect(() => withDecl({ post: [{ key: "likeCount", label: "Likes" }, { key: "likeCount", label: "Likes" }] })).toThrow(/duplicate/);
+    expect(() => withDecl({ post: [{ key: "likeCount", label: "" }] })).toThrow(/label/);
+    expect(() => withDecl({ maxPostsPerRead: 0 })).toThrow(/maxPostsPerRead/);
+    expect(() => withDecl({ readBudget: { count: 0, windowSeconds: 10 } })).toThrow(/readBudget.count/);
+    const unavailableOk = { ...ok, insights: { ...ok.insights, declaration: { post: [], account: [], maxPostsPerRead: 25, readBudget: { count: 1, windowSeconds: 1 }, unavailable: { reason: "needs a permission" } } } };
+    expect(() => assertInsightsDeclaration(unavailableOk)).not.toThrow();
+    const withSchema = (postMetricsSchema: z.ZodType) => assertInsightsDeclaration({ ...ok, insights: { ...ok.insights, postMetricsSchema } });
+    expect(() => withSchema(z.object({ likeCount: z.number().int().optional() }))).toThrow(/closed/);
+    expect(() => withSchema(z.object({ likeCount: z.string().optional() }).strict())).toThrow(/optional number/);
   });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {

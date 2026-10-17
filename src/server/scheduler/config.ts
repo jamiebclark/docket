@@ -50,6 +50,16 @@ export interface SchedulerConfig {
   engagementWriteReserve?: number;
   engagementTimeShare?: number;
   engagementPruneBatch?: number;
+  /** Post and account insights polling (079): reads claimed per tick, cadence floors, read-budget reserve, retention. */
+  insightsReadPageSize?: number;
+  insightsTargetsPerRun?: number;
+  insightsAccountsPerRun?: number;
+  insightsPollMinIntervalMs?: number;
+  insightsAccountPollIntervalMs?: number;
+  insightsTimeShare?: number;
+  insightsReadReserve?: number;
+  insightsRetentionDays?: number;
+  insightsPruneBatch?: number;
 }
 
 export const WEBHOOK_DEFAULTS = {
@@ -167,6 +177,36 @@ export function engagementConfig(config: SchedulerConfig) {
   };
 }
 
+export const INSIGHTS_DEFAULTS = {
+  readPageSize: 25,
+  targetsPerRun: 50,
+  accountsPerRun: 20,
+  pollMinIntervalMs: 900_000,
+  accountPollIntervalMs: 21_600_000,
+  timeShare: 0.3,
+  readReserve: 0.5,
+  retentionDays: 400,
+  pruneBatch: 200,
+} as const;
+
+/** The insights polling settings with defaults filled in. */
+export function insightsConfig(config: SchedulerConfig) {
+  return {
+    readPageSize: config.insightsReadPageSize ?? INSIGHTS_DEFAULTS.readPageSize,
+    targetsPerRun: config.insightsTargetsPerRun ?? INSIGHTS_DEFAULTS.targetsPerRun,
+    accountsPerRun: config.insightsAccountsPerRun ?? INSIGHTS_DEFAULTS.accountsPerRun,
+    pollMinIntervalMs: config.insightsPollMinIntervalMs ?? INSIGHTS_DEFAULTS.pollMinIntervalMs,
+    accountPollIntervalMs: config.insightsAccountPollIntervalMs ?? INSIGHTS_DEFAULTS.accountPollIntervalMs,
+    readReserve: config.insightsReadReserve ?? INSIGHTS_DEFAULTS.readReserve,
+    retentionDays: config.insightsRetentionDays ?? INSIGHTS_DEFAULTS.retentionDays,
+    pruneBatch: config.insightsPruneBatch ?? INSIGHTS_DEFAULTS.pruneBatch,
+    leaseMs: config.leaseMs,
+    // Insights takes a share of the tick, never all of it, below engagement's share since it is the
+    // least urgent section: see ENGAGEMENT_TIME_SHARE above and research.md §6.
+    timeBudgetMs: Math.floor(config.timeBudgetMs * (config.insightsTimeShare ?? INSIGHTS_DEFAULTS.timeShare)),
+  };
+}
+
 export const STANDING_SERIES_MAX_SERIES_DEFAULT = 2;
 export const STANDING_SERIES_MAX_POSTS_DEFAULT = 2;
 
@@ -198,6 +238,15 @@ type EnvLike = Pick<
   | "ENGAGEMENT_WRITE_RESERVE"
   | "ENGAGEMENT_TIME_SHARE"
   | "ENGAGEMENT_PRUNE_BATCH"
+  | "INSIGHTS_READ_PAGE_SIZE"
+  | "INSIGHTS_TARGETS_PER_RUN"
+  | "INSIGHTS_ACCOUNTS_PER_RUN"
+  | "INSIGHTS_POLL_MIN_INTERVAL_SECONDS"
+  | "INSIGHTS_ACCOUNT_POLL_INTERVAL_SECONDS"
+  | "INSIGHTS_TIME_SHARE"
+  | "INSIGHTS_READ_RESERVE"
+  | "INSIGHTS_RETENTION_DAYS"
+  | "INSIGHTS_PRUNE_BATCH"
 >;
 
 /** `overrides` is for tests. */
@@ -230,6 +279,15 @@ export function schedulerConfig(env: EnvLike, overrides: Partial<SchedulerConfig
     engagementWriteReserve: env.ENGAGEMENT_WRITE_RESERVE,
     engagementTimeShare: env.ENGAGEMENT_TIME_SHARE,
     engagementPruneBatch: env.ENGAGEMENT_PRUNE_BATCH,
+    insightsReadPageSize: env.INSIGHTS_READ_PAGE_SIZE,
+    insightsTargetsPerRun: env.INSIGHTS_TARGETS_PER_RUN,
+    insightsAccountsPerRun: env.INSIGHTS_ACCOUNTS_PER_RUN,
+    insightsPollMinIntervalMs: env.INSIGHTS_POLL_MIN_INTERVAL_SECONDS * 1000,
+    insightsAccountPollIntervalMs: env.INSIGHTS_ACCOUNT_POLL_INTERVAL_SECONDS * 1000,
+    insightsTimeShare: env.INSIGHTS_TIME_SHARE,
+    insightsReadReserve: env.INSIGHTS_READ_RESERVE,
+    insightsRetentionDays: env.INSIGHTS_RETENTION_DAYS,
+    insightsPruneBatch: env.INSIGHTS_PRUNE_BATCH,
     ...overrides,
   };
 }

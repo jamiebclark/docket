@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
-import { engagementAccountStates, postTargets, socialAccounts } from "../../src/server/db/schema";
+import { accountMetricPollStates, engagementAccountStates, postMetricPollStates, postTargets, socialAccounts } from "../../src/server/db/schema";
 import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import type { AccountRecord } from "../../src/server/dal/accounts";
 import type { MediaRow } from "../../src/server/dal/media";
@@ -132,6 +132,50 @@ export async function parkAllEngagementReads(): Promise<void> {
 }
 
 /**
+ * Pushes every account and every published target out of reach of an insights poll claim, creating
+ * the missing poll-state rows first exactly as `claimDueAccountMetricPolls`/`claimDuePostMetricPolls`
+ * do, so a leftover account or target from an earlier test cannot be claimed by this one's tick
+ * (contracts/scheduler-insights.md §7).
+ */
+export async function parkAllInsightsPolls(): Promise<void> {
+  await runCrossProject("test: park insights polls", async () => {
+    const db = getDb();
+    const missingAccounts = await db
+      .select({ id: socialAccounts.id, projectId: socialAccounts.projectId })
+      .from(socialAccounts)
+      .leftJoin(accountMetricPollStates, eq(accountMetricPollStates.socialAccountId, socialAccounts.id))
+      .where(and(isNull(socialAccounts.removedAt), isNull(accountMetricPollStates.socialAccountId)));
+    for (const row of missingAccounts) {
+      await db
+        .insert(accountMetricPollStates)
+        .values({ socialAccountId: row.id, projectId: row.projectId })
+        .onConflictDoNothing({ target: accountMetricPollStates.socialAccountId });
+    }
+    await db.update(accountMetricPollStates).set({ nextPollAt: PARKED_UNTIL });
+
+    const missingTargets = await db
+      .select({ id: postTargets.id, projectId: postTargets.projectId, socialAccountId: postTargets.socialAccountId })
+      .from(postTargets)
+      .leftJoin(postMetricPollStates, eq(postMetricPollStates.postTargetId, postTargets.id))
+      .where(
+        and(
+          eq(postTargets.status, "published"),
+          isNull(postMetricPollStates.postTargetId),
+        ),
+      );
+    for (const row of missingTargets) {
+      await db
+        .insert(postMetricPollStates)
+        .values({ postTargetId: row.id, projectId: row.projectId, socialAccountId: row.socialAccountId })
+        .onConflictDoNothing({ target: postMetricPollStates.postTargetId });
+    }
+    // A frozen row's CHECK forbids a non-null next_poll_at, and a frozen target is never claimed
+    // anyway, so it is left alone here rather than parked.
+    await db.update(postMetricPollStates).set({ nextPollAt: PARKED_UNTIL }).where(isNull(postMetricPollStates.frozenReason));
+  });
+}
+
+/**
  * Pushes every live target in the (shared) test database out of reach, so a tick under test claims
  * only the targets the test itself created afterwards. Call it first in a scheduler test.
  */
@@ -146,4 +190,5 @@ export async function parkAllDueTargets(): Promise<void> {
   // unrelated test is otherwise "due" again and leaks a request into whichever fake network stub is
   // active during this test's tick.
   await parkAllEngagementReads();
+  await parkAllInsightsPolls();
 }
