@@ -62,7 +62,12 @@ const EXEMPT: ReadonlySet<string> = new Set([
   "tests/integration/llm/per-project-resolution.test.ts",
   "tests/integration/media/video-publish.test.ts",
   "tests/integration/meta/no-secrets.test.ts",
+  // ambiguous.test.ts:39 asserts a negative (claimed stays 0) on every one of 100 ticks, not until a
+  // success predicate holds — drainTicks() would only check the last tick, changing what the test
+  // proves.
   "tests/integration/scheduler/ambiguous.test.ts",
+  // concurrency.test.ts:41 repeats the whole scenario REPETITIONS=20 times for flake-hunting
+  // confidence, not capacity; its own tick-draining loop already migrated to drainTicks() (T036).
   "tests/integration/scheduler/concurrency.test.ts",
   "tests/integration/standing-series/self-pause.test.ts",
   "tests/integration/threads/carousel.test.ts",

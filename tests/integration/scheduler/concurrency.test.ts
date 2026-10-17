@@ -7,7 +7,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
-import { tickConfig } from "../../helpers/tick";
+import { drainTicks, tickConfig } from "../../helpers/tick";
 
 
 afterAll(async () => {
@@ -43,13 +43,17 @@ describe("concurrent ticks (SC-002)", () => {
 
         await Promise.all(Array.from({ length: TICKS }, () => runTick(tickConfig({ maxItems: 500 }))));
         // Ticks skip rows locked by a sibling; sweep up whatever was skipped.
-        for (let sweep = 0; sweep < 10; sweep++) {
-          const pending = await runCrossProject("test: pending", () =>
-            getDb().select({ id: postTargets.id, status: postTargets.status }).from(postTargets).where(and(eq(postTargets.projectId, projectId), inArray(postTargets.id, ids))),
-          );
-          if (pending.every((p) => p.status === "published")) break;
-          await runTick(tickConfig({ maxItems: 500 }));
-        }
+        await drainTicks({
+          tick: async () => {
+            await runTick(tickConfig({ maxItems: 500 }));
+            return runCrossProject("test: pending", () =>
+              getDb().select({ id: postTargets.id, status: postTargets.status }).from(postTargets).where(and(eq(postTargets.projectId, projectId), inArray(postTargets.id, ids))),
+            );
+          },
+          until: (pending) => pending.every((p) => p.status === "published"),
+          ceiling: 10,
+          describe: (n) => `all ${TARGETS} targets published within ${n} sweep ticks`,
+        });
 
         const attempts = await runCrossProject("test: attempts", () =>
           getDb().select({ id: publishAttempts.postTargetId, outcome: publishAttempts.outcome }).from(publishAttempts).where(

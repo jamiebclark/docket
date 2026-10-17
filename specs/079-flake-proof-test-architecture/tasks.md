@@ -235,8 +235,17 @@ confirm it fails naming the file and the rule, then remove the probe.
   IN PROGRESS: `tests/integration/tiktok/{failures,unaudited,unaudited-ui,video}.test.ts` migrated;
   `video.test.ts`/`unaudited.test.ts` each keep one justified exemption (comment in
   `tests/lint/tick-drain.test.ts`) for an unconditional loop with no success predicate to drain
-  toward. ~35 files remain in `EXEMPT` (jobs/*, instagram/*, scheduler/*, bluesky/*, threads/*, etc.)
-  — the next pass should continue the sweep file-by-file the same way.
+  toward. `tests/integration/scheduler/concurrency.test.ts` migrated its sweep-up loop to
+  `drainTicks()`; its outer REPETITIONS=20 loop stays exempt (repeats the whole scenario for
+  flake-hunting confidence, unrelated to capacity). `tests/integration/scheduler/ambiguous.test.ts`
+  stays exempt (asserts a negative — claimed stays 0 — on every one of 100 ticks, not until a success
+  predicate holds, so `drainTicks()` would only check the last tick and change what the test proves).
+  ~33 files remain in `EXEMPT` (jobs/*, instagram/*, bluesky/*, threads/*, etc.) — the next pass
+  should continue the sweep file-by-file the same way; several already inspected (email/failure-
+  pause.test.ts, jobs/credit-{hold,outage,probe}.test.ts, jobs/fairness.test.ts, jobs/idempotency.test.ts,
+  jobs/isolation.test.ts, jobs/recovery.test.ts, jobs/processing.test.ts, standing-series/self-
+  pause.test.ts) look like the same per-step-assertion shape as ambiguous.test.ts and likely want
+  justified exemptions rather than migration — confirm each individually before exempting.
 - [ ] T037 [US3] Run the oversubscription check from quickstart.md step 4 — once unloaded
   (`DOCKET_TEST_WORKERS=1`) and once oversubscribed (`DOCKET_TEST_WORKERS=8`) against
   `tests/integration/scheduler tests/integration/email tests/integration/jobs` — and confirm identical
