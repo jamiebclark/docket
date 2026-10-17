@@ -14,6 +14,8 @@ import { ProblemsCallout } from "../../../src/components/notifications/ProblemsC
 import { forProject } from "../../../src/server/dal/scope";
 import { NotificationBellClient } from "../../../src/components/notifications/NotificationBellClient";
 import { NotificationList } from "../../../src/components/notifications/NotificationList";
+import { rowIsRead } from "../../../src/components/notifications/NotificationRowActions";
+import type { RowDone } from "../../../src/app/notifications/actions";
 import ProjectSettingsPage from "../../../src/app/p/[projectSlug]/settings/page";
 import { SignedInHeader } from "../../../src/components/shell/SignedInHeader";
 import { focusAfterMark } from "../../../src/components/notifications/focus";
@@ -135,6 +137,21 @@ describe("notification row actions (FR-015 to FR-020, SC-009)", () => {
     expect(html).not.toContain(">Snooze<");
     expect(html).toContain(">Read<");
     expect(html).toContain("— Failed, Demo, Bluesky · @me");
+  });
+
+  it("reads as 'Read' once this row's own mark comes back, not only when the server says so", () => {
+    const unread = { read: false };
+    const done = (outcome: RowDone["outcome"]) =>
+      ({ ok: true, data: { outcome, eventId: "e1", snoozedUntil: null, announcement: "", unread: { count: 0, display: "", label: "", nextChangeAt: null } } }) as const;
+    expect(rowIsRead(unread, null)).toBe(false);
+    expect(rowIsRead(unread, done("read"))).toBe(true);
+    // A no-op writes nothing, so the row must keep saying what it said; a snooze removes it instead.
+    expect(rowIsRead(unread, done("unchanged"))).toBe(false);
+    expect(rowIsRead(unread, done("snoozed"))).toBe(false);
+    // The server's own answer still wins on its own.
+    expect(rowIsRead({ read: true }, null)).toBe(true);
+    // A failed mark must never make the row look done.
+    expect(rowIsRead(unread, { ok: false, error: "busy", message: "Try again." })).toBe(false);
   });
 
   it("keeps the controls on a row that is not new but still markable (snoozed, or no reading position yet)", () => {
