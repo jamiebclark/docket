@@ -277,10 +277,16 @@ Everything above must be drivable over HTTP. The UI, the jobs, and the API all c
 
 ## Out of scope for now
 
-Video, stories and reels, analytics, other platforms, billing, public sign-up, Netlify.
+Video, stories and reels, other platforms, billing, public sign-up, Netlify. Analytics beyond raw
+per-post and per-account metric capture (079) — any chart, trend, delta or comparison stays out of
+scope.
 
 Comment and inbox management shipped in 077: reading comments, mentions and replies and sending an
 approved reply, for Bluesky. See `docs/engagement.md`.
+
+Post and account insights shipped in 079: a performance panel on the post detail page showing the
+latest reading of whatever numbers Bluesky reports, on a decaying read schedule. See
+`docs/insights.md`.
 
 ## Owner answers (2026-10-02)
 

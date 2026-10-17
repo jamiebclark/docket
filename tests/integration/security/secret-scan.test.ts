@@ -57,6 +57,7 @@ import { POST as composeCheck } from "../../../src/app/p/[projectSlug]/compose/c
 import { GET as authGet, POST as authPost } from "../../../src/app/api/auth/[...all]/route";
 import { GET as health } from "../../../src/app/api/health/route";
 import { POST as tickPost } from "../../../src/app/api/internal/tick/route";
+import PostPage from "../../../src/app/p/[projectSlug]/posts/[postId]/page";
 import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
 import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
 import { connectAttempts, installState, llmCallUsage, membershipAuditLog, projectLlmSettings, session as sessionTable, user } from "../../../src/server/db/schema";
@@ -476,6 +477,17 @@ describe("secret scan (FR-020, SC-005)", () => {
     expect(approved2.ok).toBe(true);
     await runTick(tickConfig({ engagementReadMinIntervalMs: 0 })); // engagement-send: item2 -> ambiguous
 
+    // Insights (079): a tick polls Bluesky's real numbers for the published target through the same
+    // fake PDS, with a platform failure shaped to echo a current access token, and the resulting
+    // panel is rendered below on the post detail page (FR-075, SC-011).
+    pds.route("GET", "/xrpc/app.bsky.feed.getPosts", { status: 500, json: { error: "InternalServerError", message: `insights failure echoing ${NEW_ACCESS}` } });
+    await runTick(tickConfig({}));
+    const [insightsTarget] = await db
+      .select({ postId: postTargets.postId })
+      .from(postTargets)
+      .where(and(eq(postTargets.projectId, env.project.id), eq(postTargets.id, targetIds[0]!)));
+    const insightsPostId = insightsTarget!.postId;
+
     // Rendered pages.
     const params = { params: Promise.resolve({ projectSlug: slug }) };
     const pages: [string, () => Promise<unknown>][] = [
@@ -487,6 +499,7 @@ describe("secret scan (FR-020, SC-005)", () => {
       ["page: inbox", () => InboxPage({ ...params, searchParams: Promise.resolve({}) })],
       ["page: inbox item", () => InboxItemPage({ params: Promise.resolve({ projectSlug: slug, itemId: item1.id }) })],
       ["page: review", () => ReviewPage({ ...params, searchParams: Promise.resolve({}) })],
+      ["page: post (insights)", () => PostPage({ params: Promise.resolve({ projectSlug: slug, postId: insightsPostId }) })],
     ];
     for (const [place, render] of pages) {
       pieces.push({ place, text: renderToStaticMarkup((await render()) as never) });

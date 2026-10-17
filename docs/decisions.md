@@ -3634,3 +3634,95 @@ group and a parallel outcome classifier to replace something tested.
    redirects a cookie-less request to `/login`, which for these two routes is a closed loop: the person
    resetting a password cannot sign in by definition. This is the same trap the unsubscribe routes hit
    (044), so it now has a test of its own beside theirs.
+
+## 079 — Post and account insights, Bluesky as the pilot platform (2026-10-17)
+
+`insights` (G30) is one more optional member on `SocialProvider`, the same shape as `engagement` (077):
+a provider that omits it is absent from the poller and the panel with no error, and no code outside
+`src/providers/` may name a provider key or a platform metric key. Two new tables capture one reading
+each of a post's and an account's numbers; two poll-state tables decide when the next reading is due.
+
+- **A metric the platform does not report is absent, carried all the way to the screen.** Not zero, not
+  a dash, not a null. The provider declares which keys it reports; a key missing from a snapshot
+  renders no row. Bluesky declares no views and no reach, so the panel never implies a post was seen
+  zero times — the rule the whole roadmap turns on, since an Instagram "view" and a Bluesky absence are
+  not the same fact and nothing is ever summed or averaged across platforms.
+- **Nothing overwrites a number.** Every successful read inserts a row; the DAL has no update and no
+  single-row delete for a snapshot. The panel always states "as of &lt;time&gt;", never a current value.
+- **Reads go through the account's existing session, not an unauthenticated host.** Whether Bluesky's
+  public AppView answers anonymously is unverified, so the design does not depend on the answer either
+  way: `agentFor(pdsUrl, accessJwt)` reads through the account's own PDS, the same session 077 already
+  proves out, needing no new permission.
+- **The declaration names metric keys with the platform's own label; the generic layer never renames
+  one.** `{ key, label }` — `likeCount` / "Likes" — with no shared code mapping, aliasing or grouping
+  keys across platforms. This is what makes "never sum across platforms" enforceable in the data layer,
+  not only in a chart that does not exist yet.
+- **The result vocabulary is `EngagementReadResult`'s, minus `cursor_lost`.** An insights read has no
+  cursor: a poll asks for a fixed set of ids and the decaying schedule, not a cursor, decides what comes
+  next.
+- **`readPostMetrics` takes a batch of targets for one account, not one target.** `getPosts` accepts 25
+  at-URIs in one call, and a later platform's reader may cap lower and need batching by account too.
+  Batch size is `min(INSIGHTS_READ_PAGE_SIZE, provider.insights.maxPostsPerRead)`.
+- **The poll schedule decays, from `published_at`, in two pure functions with no clock inside them.**
+  Hourly for the first 24 hours, daily to day 7, weekly to day 28, then frozen — a three-week-old post
+  does not change, and polling it hourly forever spends an allowance a scheduled publish may need, for
+  nothing. The first capture is an hour after publish, not at publish, so the earliest snapshot
+  describes a post that has had an hour of life rather than a row of zeroes-or-absences a reader would
+  mistake for a result. A target already past the frozen boundary when the subsystem arrives gets
+  exactly one capture, then freezes, so a large pre-existing backlog of posts is not left with no
+  numbers forever, and drains over ticks (bounded by `INSIGHTS_TARGETS_PER_RUN`) rather than arriving as
+  a spike.
+- **"The platform no longer returns this post" is a per-entry outcome inside a successful read, not an
+  error.** `getPosts` answers 200 with the dead post simply absent from the page, so an error kind would
+  be a fiction, and a retry loop on a dead at-URI would run hourly for 28 days while the panel claimed a
+  failure that never happened. The target's poll state freezes with that reason, `consecutive_failures`
+  stays at zero, and its earlier snapshots are kept.
+- **The freeze reason is a text CHECK, not a Postgres enum.** 077 already paid for an enum label added
+  beside a partial index (a partial-index predicate cannot cast an enum to text, and cannot name a
+  label added in the same transaction); a later platform will want more freeze reasons, and a CHECK
+  widens with no `ALTER TYPE` and no index rebuild.
+- **The allowance window is counted from the snapshot rows themselves, with no new counter.** For an
+  account, the window count is publishes started in the window (the existing
+  `post_targets_started_idx`) plus snapshots already captured in it, and a poll is refused once that
+  total reaches `floor(stricterBudget.count × (1 − INSIGHTS_READ_RESERVE))` — `stricterBudget` and
+  `reserveFloor` reused unchanged from `engagement-budget.ts`. The honest limitation: a *failed* read
+  leaves no snapshot and so is not counted; `consecutive_failures` and the existing backoff bound that
+  instead. The reserve default is 0.5, double engagement's 0.25 for writes, because a reply somebody
+  approved is worth more of an account's allowance than a number nobody is waiting for. The same reserve
+  is charged even where a platform's documented read limit is separate from its write limit (Bluesky's
+  points are documented for writes only) — conservative rather than exact, and conservative is the
+  right direction, recorded so a later entry with verified read limits can relax it.
+- **A successful poll writes no activity event and no notification.** The panel is the surface; nothing
+  here is something a person needs telling about. The one exception is already generic: a
+  `credentials_invalid` read goes through `markInvalidEmitting`, the same needs-reauth signal every
+  other credential rejection emits.
+- **No new permission statement, no API, no MCP, no export.** The panel is governed by the existing
+  `post: ["view"]` — a brand's own published numbers, visible to anyone who can already see the post,
+  unlike 077's inbox which is a third party's personal data. A capability worth driving over MCP with no
+  endpoint belongs in an API entry first (074's rule), and a later entry owns both; `OPERATIONS` stays
+  untouched.
+- **Two snapshot tables and two poll-state tables, not one of each.** A post metric is keyed on a target
+  and an account metric on an account; they have different cadences, different lifetimes (a post
+  freezes, an account never does) and different natural keys. One table with nullable keys would need a
+  CHECK forbidding the invalid combinations and would make every query say which kind it means anyway.
+- **The section is concurrent, not sequenced behind publishing.** The allowance reserve satisfies the
+  "publishing always wins" requirement before any call is made; sequencing a read-only section behind
+  the slowest section in the tick would buy nothing and cost it its own time share. Its time share
+  defaults to 0.3 against engagement's 0.8, the least urgent section in the tick.
+- **Account snapshots are captured and stored but shown on no screen in this entry.** Required by the
+  capture requirements and the account-read acceptance scenario; the panel requirements are per-target
+  throughout. A later entry owns account trends and needs the history to already exist, so the capture
+  ships now rather than waiting. Published as a named gap in `docs/insights.md` and
+  `docs/feature-map.md` rather than left for a reader to discover.
+- **The constitution amendment.** The Engineering Constraints line's blanket "analytics" exclusion is
+  amended to record that per-post and per-account metric capture is now in scope, while charts, trends
+  and comparisons remain out of it — a `docs(constitution):` commit with a version bump.
+
+### Implementation outcome
+
+The whole spine — provider declaration, four tables, poll state, the concurrent `insightsPoll` tick
+section and the post detail page's performance panel — runs end to end on the `mock` provider with no
+platform credentials, and real Bluesky numbers flow through the same spine with mocked HTTP only. The
+one open question — whether Bluesky's public AppView answers `getPosts`/`getProfile` unauthenticated —
+stays `NEEDS RESEARCH` until the parked human task runs; until then the Bluesky reader is reported as
+"verified with mocks only" (constitution II).

@@ -52,4 +52,12 @@ describe("links to the published docs", () => {
       if (anchor) expect(headingSlugs(readFileSync(doc, "utf8")).has(anchor), where).toBe(true);
     }
   });
+
+  // The performance panel's docsPath link (contracts/panel.md P9) is a provider-declared string, not
+  // a literal docsUrl() call, so the generic scan above cannot see it. Checked directly instead.
+  it("docs/insights.md is in the site nav, and the performance panel's docs page resolves (079, P9)", () => {
+    expect(existsSync("docs/insights.md")).toBe(true);
+    expect(mkdocs).toContain(": insights.md");
+    expect(docsUrl("insights")).toBe(`${DOCS_BASE_URL}insights/`);
+  });
 });

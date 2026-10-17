@@ -78,6 +78,15 @@ spec is written.
   comments and Threads replies are specified but not built, blocked on a human research spike into Meta's comment
   identity model; direct messages are modelled (and marked Private wherever they appear) but not read, drafted or
   sent on any real platform yet.
+- **Post and account insights (079).** A performance panel on the post detail page shows, per target, the latest
+  reading of whatever numbers that platform reports (Bluesky only — see `docs/insights.md`): likes, reposts,
+  replies and quotes, each with Bluesky's own label and no views/reach key (Bluesky confirmed to report neither).
+  The scheduler reads on a decaying schedule (hourly for a day, daily to a week, weekly to four weeks, then
+  frozen), bounded and reserved so it never competes with a scheduled publish for an account's allowance.
+  Verified with mocks only until the live check in `docs/research/bluesky.md` is done. Not yet owned by any spec:
+  account-level numbers (followers and the like, captured and stored every tick but shown on no screen yet), a
+  manual refresh, a per-project on/off switch, any chart/trend/delta/comparison, and `bookmarkCount` (seen in the
+  installed package's generated types but not confirmed from Bluesky's own documentation, so left undeclared).
 
 ## Scheduling and composing (not built)
 

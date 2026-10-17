@@ -72,3 +72,31 @@ whether the PDS or AppView refuses extreme sizes.
   (`at://did/app.bsky.feed.post/<rkey>`) is the external id; web URL is
   `https://bsky.app/profile/<handle>/post/<rkey>`.
 - A createRecord that times out is **ambiguous** (may have posted).
+
+## Metric surface (insights, 079), confirmed 2026-10-17
+Confirmed by reading `node_modules/@atproto/api` directly — the generated types under
+`dist/client/types/app/bsky/` and the bundled lexicon `schemaDict` in `dist/client/lexicons.js`.
+| Fact | Value | Where it was read |
+|---|---|---|
+| `app.bsky.feed.getPosts` params | `uris: string[]`, required, `maxLength` **25** | `schemaDict.AppBskyFeedGetPosts`; `types/app/bsky/feed/getPosts.d.ts` (`QueryParams = { uris: string[] }`) |
+| `app.bsky.feed.getPosts` output | `{ posts: PostView[] }` | `getPosts.d.ts` `OutputSchema` |
+| `PostView` properties, in full | `$type?, uri, cid, author, record, embed?, bookmarkCount?, replyCount?, repostCount?, likeCount?, quoteCount?, indexedAt, viewer?, labels?, threadgate?, debug?` | `types/app/bsky/feed/defs.d.ts` |
+| The four counts Docket declares | `likeCount`, `repostCount`, `replyCount`, `quoteCount` — all **optional** | same |
+| **Confirmed absence**: views, impressions or reach on a post | No such property exists anywhere in `PostView` | same |
+| `app.bsky.actor.getProfile` params | `actor: string` (handle or DID), required | `types/app/bsky/actor/getProfile.d.ts` |
+| `app.bsky.actor.getProfile` output | `ProfileViewDetailed`, with optional `followersCount`, `followsCount`, `postsCount` | `types/app/bsky/actor/defs.d.ts` |
+| **Confirmed absence**: views or reach on a profile | No such property exists anywhere in `ProfileViewDetailed` | same |
+| `bookmarkCount` | Present on `PostView` but left undeclared — not confirmed from Bluesky's own documentation, only from the generated client; recorded as an owned-by-no-entry gap (`docs/feature-map.md`) | same |
+
+`NEEDS RESEARCH`: whether `app.bsky.feed.getPosts` and `app.bsky.actor.getProfile` answer
+**unauthenticated**, at which host, and under what read allowance. Nothing in the 079 design depends
+on the answer: both calls go through the account's own session (`agentFor(settings.pdsUrl,
+credentials.accessJwt)`), the same path 077's engagement reader already proves out, needing no new
+permission. The declared read budget (`readBudget: { count: 1_666, windowSeconds: 3_600 }` on
+`src/providers/bluesky/insights.ts`) borrows the documented **write** points budget above as a stand-in
+— Bluesky's own read costs are not published — and is recorded as approximate/unconfirmed in
+`docs/limits.md`, not as a verified figure.
+
+This is the one open question Phase 8's parked human task resolves: with a real account, a real
+published post and a real tick, confirm (or continue to record as unverified) whether the public
+AppView serves these two calls with no session at all, and replace this paragraph with the answer.

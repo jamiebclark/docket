@@ -438,11 +438,14 @@ export async function removeAccount(scope: ProjectScope, accountId: string): Pro
     for (const postId of postIds) await tx.posts.lockForUpdate(postId);
     for (const target of open) await cancelTargetRow(tx, target.id);
     for (const postId of postIds) await resetEmptyReview(tx, postId);
-    // A soft delete does not cascade (FR-059, data-model.md §10): the four engagement tables are
-    // cleared explicitly. Drafts go with their items via the existing FK cascade.
+    // A soft delete does not cascade (FR-059, data-model.md §10): the four engagement tables and the
+    // two poll-state tables are cleared explicitly. Drafts go with their items via the existing FK
+    // cascade. Snapshot tables are left alone — their rows stay readable (data-model.md §9).
     await tx.engagementReplyClaims.deleteForAccount(id);
     await tx.engagementAccountStates.deleteForAccount(id);
     await tx.engagementItems.deleteForAccount(id);
+    await tx.postMetricPollStates.deleteForAccount(id);
+    await tx.accountMetricPollStates.deleteForAccount(id);
     await tx.accounts.markRemoved(id, now);
   });
 }
