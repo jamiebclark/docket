@@ -9,7 +9,7 @@ import { writeHeartbeat } from "../dal/heartbeats";
 import { decryptCredentials } from "../services/accounts";
 import { nextRetryAt } from "./backoff";
 import { engagementConfig, type SchedulerConfig } from "./config";
-import { markInvalidEmitting } from "./credentials";
+import { markInvalidEmitting, refreshForPublish } from "./credentials";
 import { redact, secretValues } from "./redact";
 
 export interface EngagementReadCounts {
@@ -229,7 +229,7 @@ async function processAccount(
       counts.itemsInserted += inserted;
       counts.accountsWithNewItems++;
     }
-    await handleStop(stop, { account, state, token, repos, ctx, secrets });
+    await handleStop(stop, { account, state, token, repos, ctx, secrets, provider });
     return;
   }
 
@@ -274,9 +274,11 @@ async function handleStop(
     repos: ReturnType<typeof forSchedulerProject>;
     ctx: { config: SchedulerConfig; counts: EngagementReadCounts };
     secrets: readonly string[];
+    /** Needed to renew credentials before declaring them invalid; absent means no renewal is possible. */
+    provider: ReturnType<typeof findProvider>;
   },
 ): Promise<void> {
-  const { account, state, token, repos, ctx, secrets } = input;
+  const { account, state, token, repos, ctx, secrets, provider } = input;
   const now = await clock.now();
   const release = (patch: Parameters<typeof repos.engagementAccountStates.update>[1]) =>
     repos.engagementAccountStates.update(account.id, { ...patch, readLeaseUntil: null, readLeaseOwner: null }, token);
@@ -301,8 +303,37 @@ async function handleStop(
       return;
     }
     case "credentials_invalid": {
-      ctx.counts.credentialsInvalid++;
+      // A read rejecting the session is not proof the account needs a human. Publishing recovers
+      // from the same rejection by renewing — and, where a provider keeps the means to re-open a
+      // session (Bluesky's stored app password, 078/#124), without anyone noticing. Marking the
+      // account invalid straight from here skipped all of that: the reader polls far more often
+      // than posts publish, so it reached the rejection first and flagged an account that could
+      // have healed. Stencilvania lost its Bluesky arm four times in a day that way on
+      // 2026-10-17, each reconnect undone within the hour. Try the renewal the publish path
+      // would, and only give up on the account when that refuses too.
       const ciphertext = await repos.accounts.getCredentialsCiphertext(account.id);
+      const renewed = provider
+        ? await refreshForPublish({
+            projectId: account.projectId,
+            account,
+            provider,
+            seenCiphertext: ciphertext,
+            config: ctx.config,
+          }).catch(() => ({ kind: "unavailable" }) as const)
+        : ({ kind: "unavailable" } as const);
+
+      if (renewed.kind === "refreshed" || renewed.kind === "changed") {
+        // Healed. Leave the account active and come back on the normal backoff with the new session.
+        ctx.counts.retried++;
+        await release({
+          lastError: redact(result.error, secrets),
+          consecutiveFailures: state.consecutiveFailures + 1,
+          readNotBefore: nextRetryAt(now, state.consecutiveFailures + 1, ctx.config),
+        });
+        return;
+      }
+
+      ctx.counts.credentialsInvalid++;
       await markInvalidEmitting(repos, account.id, { expectedCiphertext: ciphertext, reason: redact(result.error, secrets) }).catch(() => undefined);
       await release({ lastError: redact(result.error, secrets), consecutiveFailures: state.consecutiveFailures + 1 });
       return;
