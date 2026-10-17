@@ -5,7 +5,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakePinterest, pinReply, tokenReply } from "../../helpers/fake-pinterest";
 import { PIN_ACCESS, PIN_REFRESH, pinterestPublishSetup } from "../../helpers/pinterest-publish";
-import { createDraftPost, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDraftPost } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 
 const PINS = "/v5/pins";
@@ -14,7 +14,6 @@ let fake: ReturnType<typeof createFakePinterest>;
 let storage: MemoryStorage;
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   vi.stubEnv("PINTEREST_CLIENT_ID", "CLIENT-ID");
   vi.stubEnv("PINTEREST_CLIENT_SECRET", "CLIENT-SECRET-XYZ");
   fake = createFakePinterest().install();

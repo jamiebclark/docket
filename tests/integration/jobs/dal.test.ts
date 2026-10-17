@@ -8,7 +8,6 @@ import { getDb } from "../../../src/server/db/client";
 import { generationJobs } from "../../../src/server/db/schema";
 import { projectOwnedTables } from "../../../src/server/db/project-owned";
 import { checkScope } from "../../helpers/scope-check";
-import { clearHolds } from "../../helpers/jobs-env";
 import { closeDb } from "../../helpers/db";
 import { getRecordedQueries } from "../../setup/scope-recorder";
 import { createImageAssets, createJob, createProject, csvBuilder } from "../../helpers/factories";
@@ -80,7 +79,6 @@ describe("job schema and repositories", () => {
   });
 
   it("with no holds, claimDueJobItems' actual job SELECT is byte-identical to main's (SC-007, invariant 5)", async () => {
-    await clearHolds();
     const project = await createProject();
     await createJob(project.id, { items: 1 });
     const now = new Date();

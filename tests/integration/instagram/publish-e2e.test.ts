@@ -5,14 +5,12 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { IG_ID, instagramSetup } from "../../helpers/instagram-publish";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   graph = createFakeGraph().install();
   storage = createMemoryStorage();
   setStorageForTests(storage);

@@ -8,7 +8,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { png } from "../../helpers/images";
 import { instagramLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
 import { tickConfig } from "../../helpers/tick";
 
@@ -26,7 +26,6 @@ registerTestProvider(spy);
 
 beforeEach(async () => {
   received.length = 0;
-  await parkAllDueTargets();
 });
 afterAll(async () => {
   setStorageForTests(undefined);

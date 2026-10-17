@@ -20,7 +20,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
 import { createVoiceProfile } from "../../helpers/factories";
-import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, tickConfig } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 
 afterEach(() => {
@@ -196,7 +196,6 @@ describe("llm_call_usage: one row per call site, and only for real calls", () =>
 });
 
 describe("llm_call_usage: the job runner", () => {
-  beforeEach(parkAllJobs);
 
   it("a 2-item batch job writes two rows carrying generation_job_id and generation_job_item_id", async () => {
     const e = await jobsEnv();

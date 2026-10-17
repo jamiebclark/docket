@@ -41,7 +41,7 @@ import { pageCandidate, readyAttempt, registerThrowaway, sessionFor, unregisterT
 import { png } from "../helpers/images";
 import { postsEnv } from "../helpers/posts-env";
 import { createMemoryStorage } from "../helpers/storage";
-import { jobsEnv, parkAllJobs, tickConfig } from "../helpers/jobs-env";
+import { jobsEnv, tickConfig } from "../helpers/jobs-env";
 import { createFakePds, mintJwt, type FakePds } from "../helpers/fake-pds";
 
 beforeAll(registerThrowaway);
@@ -494,7 +494,6 @@ describe("connectCredentialsAction", () => {
 });
 
 describe("job actions (008)", () => {
-  beforeEach(parkAllJobs);
 
   /** A job with one failed item (its image was deleted) and one queued item. */
   async function jobWithFailure() {

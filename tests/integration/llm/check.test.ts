@@ -9,13 +9,12 @@ import type { LlmProvider } from "../../../src/server/llm/types";
 import { checkProjectLlm, LLM_CHECK_TIMEOUT_MS } from "../../../src/server/services/generation/check";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { clearHolds, readHold } from "../../helpers/jobs-env";
+import { readHold } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 
 afterEach(async () => {
   setLlmFactoryForTests(null);
   setLlmForTests(null);
-  await clearHolds();
 });
 afterAll(async () => {
   await closeDb();

@@ -20,7 +20,6 @@ import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { atTime } from "../../helpers/clock";
 import { scriptThreads, threadsSetup, threadsVideoSetup, THREADS_TOKEN } from "../../helpers/threads-publish";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
 
@@ -37,7 +36,6 @@ const fake = createFakeGraph();
 const storage = createMemoryStorage();
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   vi.stubEnv("META_APP_ID", "12345");
   vi.stubEnv("META_APP_SECRET", APP_SECRET);
   vi.stubEnv("META_GRAPH_VERSION", "v26.0");

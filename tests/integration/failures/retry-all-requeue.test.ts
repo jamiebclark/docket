@@ -5,9 +5,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { LATER } from "../../helpers/failures";
 import { failedTarget, NEXT_MONDAY, pauseAllSlots } from "../../helpers/retry";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

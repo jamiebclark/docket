@@ -2,9 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { api, createKey, world } from "../../../helpers/api";
 import { closeDb } from "../../../helpers/db";
-import { parkAllDueTargets } from "../../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 const at = (min: number) => new Date(Date.UTC(2020, 0, 1, 12, min));

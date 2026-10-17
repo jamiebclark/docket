@@ -19,7 +19,7 @@ import { createProjectWithMembers, createVideoAsset } from "../../helpers/factor
 import { fakeSession } from "../../helpers/auth";
 import { forProject } from "../../../src/server/dal/scope";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDraftPost, createDueTarget, createMediaAsset, createMockAccount, createSlots, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDraftPost, createDueTarget, createMediaAsset, createMockAccount, createSlots } from "../../helpers/scheduling";
 import { allowanceRows, coreRows, limitRows, planWith, plannerRows, textRows, videoItem, videoRowContent, videoRows, type Expectation } from "../../helpers/limit-rows";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { tickConfig } from "../../helpers/tick";
@@ -27,7 +27,6 @@ import { tickConfig } from "../../helpers/tick";
 /** Any request to a platform fails the test: every row below must be refused or deferred before one is made. */
 const platformCalls: string[] = [];
 beforeEach(async () => {
-  await parkAllDueTargets();
   platformCalls.length = 0;
   vi.stubGlobal("fetch", (input: unknown) => {
     platformCalls.push(String(input instanceof Request ? input.url : input));

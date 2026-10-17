@@ -9,11 +9,9 @@ import { closeDb } from "../../helpers/db";
 import { BEFORE, SLOT, breakAccount } from "../../helpers/failures";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 import type { SchedulerConfig } from "../../../src/server/scheduler/config";
-
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   await closeDb();

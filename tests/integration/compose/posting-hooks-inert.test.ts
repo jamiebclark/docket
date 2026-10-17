@@ -12,7 +12,7 @@ import { closeDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { postsEnv } from "../../helpers/posts-env";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 /** Finds every React element of a given host type (e.g. "select") in a tree of plain-function components, calling each composite along the way. */
@@ -51,7 +51,6 @@ registerTestProvider({
 } as SocialProvider);
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   contexts.length = 0;
   seenNow.length = 0;
 });

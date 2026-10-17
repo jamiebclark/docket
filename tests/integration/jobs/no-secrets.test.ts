@@ -6,7 +6,7 @@ import { cancelJob, createJob, getJob, listJobItems, listJobs } from "../../../s
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, tickConfig } from "../../helpers/jobs-env";
 
 const SECRET = "sk-DISTINCTIVE-fake-secret-7f3a91c2e8b4";
 const saved: Record<string, string | undefined> = {};
@@ -18,7 +18,6 @@ beforeAll(() => {
     process.env[name] = SECRET;
   }
 });
-beforeEach(parkAllJobs);
 afterEach(() => vi.restoreAllMocks());
 afterAll(async () => {
   for (const [name, value] of Object.entries(saved)) {

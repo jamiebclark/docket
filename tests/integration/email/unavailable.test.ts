@@ -9,9 +9,8 @@ import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { validateConfiguration } from "../../../src/server/startup/validate";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
+import { seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 
-beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 afterEach(() => {

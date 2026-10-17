@@ -7,7 +7,7 @@ import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { addMember, createProject } from "../../helpers/factories";
-import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
+import { seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
 import { markEventFor, recordEvent } from "../../helpers/notifications";
 
@@ -18,7 +18,6 @@ function dueAt(date: string, hour: number, zone = NY) {
   return atLocalHour(Temporal.PlainDate.from(date), hour, zone);
 }
 
-beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 const SCHED_CONFIG: SchedulerConfig = {

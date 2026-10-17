@@ -5,11 +5,9 @@ import * as posts from "../../../src/server/services/posts";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { LATER } from "../../helpers/failures";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { failedTarget } from "../../helpers/retry";
 import { tickConfig } from "../../helpers/tick";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

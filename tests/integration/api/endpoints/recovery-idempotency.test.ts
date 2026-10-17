@@ -9,9 +9,7 @@ import { atTime } from "../../../helpers/clock";
 import { closeDb, testDb } from "../../../helpers/db";
 import { LATER, outcomeTarget } from "../../../helpers/failures";
 import { failedTarget } from "../../../helpers/retry";
-import { parkAllDueTargets } from "../../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 type Env = Awaited<ReturnType<typeof failedTarget>>["env"];

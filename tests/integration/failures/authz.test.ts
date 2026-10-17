@@ -18,9 +18,7 @@ import { closeDb } from "../../helpers/db";
 import { createUser } from "../../helpers/factories";
 import { LATER, outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   actAs(null);
   await closeDb();

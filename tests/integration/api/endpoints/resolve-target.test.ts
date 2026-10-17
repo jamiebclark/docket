@@ -7,9 +7,7 @@ import { closeDb } from "../../../helpers/db";
 import { breakAccount, LATER, outcomeTarget } from "../../../helpers/failures";
 import { NEXT_MONDAY, pauseAllSlots } from "../../../helpers/retry";
 import { postsEnv } from "../../../helpers/posts-env";
-import { parkAllDueTargets } from "../../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 async function setup() {

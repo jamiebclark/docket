@@ -6,7 +6,7 @@ import { encryptCredentials } from "../../../src/server/services/accounts";
 import { closeDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 // A throwaway provider: tests replace `script.advance`. No Meta code.
@@ -27,7 +27,6 @@ registerTestProvider({
 
 const defaults = { ...script };
 beforeEach(async () => {
-  await parkAllDueTargets();
   Object.assign(script, defaults);
   advanceCalls = 0;
 });

@@ -4,7 +4,6 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { scriptThreads, THREADS_USER_ID, threadsSetup, threadsVideoSetup, V } from "../../helpers/threads-publish";
 import { tickConfig } from "../../helpers/tick";
@@ -12,7 +11,6 @@ import { tickConfig } from "../../helpers/tick";
 let graph: FakeGraph;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   graph = createFakeGraph().install();
   storage = createMemoryStorage();
   setStorageForTests(storage);

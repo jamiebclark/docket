@@ -16,7 +16,7 @@ import { createProjectWithMembers, createVideoAsset } from "./factories";
 import { jpeg, png } from "./images";
 import { rangeFetch } from "./bluesky-video";
 import { createFakeTikTok } from "./fake-tiktok";
-import { createDraftPost, parkAllDueTargets } from "./scheduling";
+import { createDraftPost } from "./scheduling";
 import { createMemoryStorage } from "./storage";
 
 export const TT_ACCESS = "TT-ACCESS-0123456789";
@@ -45,7 +45,6 @@ export interface TikTokPublishOptions {
  * carries its posting values and consent. `fetch` is the fake TikTok plus the media server. Call `teardown()` in `afterEach`.
  */
 export async function tiktokVideoSetup(opts: TikTokPublishOptions = {}) {
-  await parkAllDueTargets();
   vi.stubEnv("TIKTOK_CLIENT_KEY", "CLIENT-KEY");
   vi.stubEnv("TIKTOK_CLIENT_SECRET", "CLIENT-SECRET-XYZ");
   vi.stubEnv("TIKTOK_APP_AUDITED", opts.audited === false ? "false" : "true");

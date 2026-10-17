@@ -10,7 +10,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { createFakeX, rateLimited, type FakeX } from "../../helpers/fake-x";
 import { jpeg } from "../../helpers/images";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
 import { tickConfig } from "../../helpers/tick";
 
@@ -24,7 +24,6 @@ let storage: ReturnType<typeof createMemoryStorage>;
 beforeEach(async () => {
   storage = createMemoryStorage();
   setStorageForTests(storage);
-  await parkAllDueTargets();
   fake = createFakeX().install();
   fake.secrets(ACCESS, REFRESH);
 });

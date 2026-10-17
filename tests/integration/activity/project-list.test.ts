@@ -4,9 +4,7 @@ import { listProjectActivity } from "../../../src/server/services/activity";
 import { closeDb } from "../../helpers/db";
 import { outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

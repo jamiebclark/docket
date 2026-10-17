@@ -12,14 +12,13 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createVideoAsset } from "../../helpers/factories";
 import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { IG_ID, instagramSetup, instagramVideoSetup } from "../../helpers/instagram-publish";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   graph = createFakeGraph().install();
   storage = createMemoryStorage();
   setStorageForTests(storage);

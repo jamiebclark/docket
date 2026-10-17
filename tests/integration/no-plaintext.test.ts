@@ -24,15 +24,12 @@ import { mockProvider } from "../../src/providers/mock";
 import { runTick } from "../../src/server/scheduler";
 import { atTime } from "../helpers/clock";
 import { createFakeLlmFetch } from "../helpers/fake-llm-http";
-import { clearProjectCredentials, jobsEnv, tickConfig } from "../helpers/jobs-env";
-import { parkAllDueTargets } from "../helpers/scheduling";
+import { jobsEnv, tickConfig } from "../helpers/jobs-env";
 import { fakeSession } from "../helpers/auth";
 import { closeDb, createThrowawayDb, testDb } from "../helpers/db";
 import { createProjectWithMembers } from "../helpers/factories";
 
 afterAll(async () => {
-  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
-  await clearProjectCredentials();
   await closeDb();
 });
 
@@ -185,7 +182,6 @@ describe("SC-012: no stored credentials in attempts, errors, summaries or listin
   const SLOT = new Date("2026-10-05T09:00:00Z");
 
   it("redacts a secret that a provider echoes in a thrown message, an error and a summary", async () => {
-    await parkAllDueTargets();
     const logged: string[] = [];
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) =>
       vi.spyOn(console, m).mockImplementation((...args: unknown[]) => {

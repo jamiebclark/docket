@@ -11,7 +11,7 @@ import { atTime } from "./clock";
 import { createFakePds, mintJwt, type FakePds, type FakeResponse, type RecordedRequest, type RouteScript } from "./fake-pds";
 import { createVideoAsset, type VideoAssetOptions } from "./factories";
 import { postsEnv } from "./posts-env";
-import { createDueTarget, parkAllDueTargets } from "./scheduling";
+import { createDueTarget } from "./scheduling";
 import { createMemoryStorage, type MemoryStorage } from "./storage";
 
 export const SESSION_PATH = "/xrpc/com.atproto.server.createSession";
@@ -119,7 +119,6 @@ export interface BlueskyVideoOptions {
  * `fetch` stubbed to the fake PDS + video service + byte-range media server. Call `unstub()` in `afterEach`.
  */
 export async function blueskyVideoSetup(opts: BlueskyVideoOptions = {}) {
-  await parkAllDueTargets();
   const sizeBytes = opts.sizeBytes ?? 12_000_000;
   const pds = createFakePds();
   const storage = createMemoryStorage();

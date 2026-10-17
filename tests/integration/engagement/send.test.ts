@@ -12,13 +12,11 @@ import * as accounts from "../../../src/server/services/accounts";
 import { fakeSession } from "../../helpers/auth";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { parkAllEngagementReads } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 // The tick's engagement-read section claims across every project and is `limit`-bounded, so accounts
 // left active by other files on this worker's database fill the claim and this file's own account is
 // never read. Park them first.
-beforeEach(parkAllEngagementReads);
 
 afterAll(async () => {
   await closeDb();

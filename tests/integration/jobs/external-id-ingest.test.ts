@@ -6,11 +6,10 @@ import { createJob } from "../../../src/server/services/jobs/create";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv } from "../../helpers/jobs-env";
 import { createDraftPost } from "../../helpers/scheduling";
 import { ObservedQuery, queryObservers } from "../../../src/server/db/client";
 
-beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);

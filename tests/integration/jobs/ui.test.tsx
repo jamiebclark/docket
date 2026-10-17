@@ -1,6 +1,6 @@
 import { isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../../helpers/actions")).sessionModule);
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
@@ -30,17 +30,14 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold, tickConfig } from "../../helpers/jobs-env";
+import { clearHolds, jobsEnv, modelOk, readHold, tickConfig } from "../../helpers/jobs-env";
 import { expectPageHeader } from "../../helpers/page-header";
 
 const HOLD_STRINGS = [CREDIT_HOLD_CAUSE, CREDIT_HOLD_SINCE_LABEL, CREDIT_HOLD_WAITING, CREDIT_HOLD_RESUME, CREDIT_HOLD_ACTION];
 
-beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);
-  // See cancel.test.ts: a hold seeded by the last test would otherwise outlive this file (review F6).
-  await clearHolds();
   await closeDb();
 });
 

@@ -2,6 +2,18 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { creatorReply } from "../../helpers/fake-tiktok";
 import { closeDb } from "../../helpers/db";
 import { CREATOR, STATUS, tiktokVideoSetup, UPLOAD_PATH, UPLOAD_URL, VIDEO_INIT } from "../../helpers/tiktok-publish";
+import { drainTicks } from "../../helpers/tick";
+
+const toPublished = (s: Awaited<ReturnType<typeof tiktokVideoSetup>>) =>
+  drainTicks({
+    tick: async (n) => {
+      await s.tick(new Date(Date.now() + (n - 1) * 120_000));
+      return (await s.row()).status;
+    },
+    until: (status) => status === "published",
+    ceiling: 6,
+    describe: (n) => `status not published after ${n} ticks`,
+  });
 
 let teardown: (() => void) | undefined;
 afterEach(() => teardown?.());
@@ -17,7 +29,7 @@ describe("TikTok video publishing", () => {
     teardown = s.teardown;
     s.fake.on("POST", CREATOR, creator).on("POST", VIDEO_INIT, init).on("PUT", UPLOAD_PATH, [{ kind: "http", status: 206 }, { kind: "http", status: 206 }, { kind: "http", status: 201 }]).on("POST", STATUS, complete);
 
-    for (let i = 0; i < 6 && (await s.row()).status !== "published"; i++) await s.tick(new Date(Date.now() + i * 120_000));
+    await toPublished(s);
 
     const row = await s.row();
     expect(row.status, row.lastError ?? "").toBe("published");
@@ -39,7 +51,7 @@ describe("TikTok video publishing", () => {
     teardown = s.teardown;
     s.fake.on("POST", CREATOR, creator).on("POST", VIDEO_INIT, init).on("PUT", UPLOAD_PATH, { kind: "http", status: 201 }).on("POST", STATUS, complete);
 
-    for (let i = 0; i < 6 && (await s.row()).status !== "published"; i++) await s.tick(new Date(Date.now() + i * 120_000));
+    await toPublished(s);
 
     expect((await s.row()).status).toBe("published");
     expect(s.fake.callsTo("POST", VIDEO_INIT)[0]!.fields.source_info).toMatchObject({ video_size: 3_000_000, chunk_size: 3_000_000, total_chunk_count: 1 });

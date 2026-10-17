@@ -9,9 +9,8 @@ import { runTick } from "../../../src/server/scheduler";
 import { createJob, retryFailedItems, retryItem } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
-import { jobsEnv, modelOk, parkAllJobs, routeLlm, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, routeLlm, tickConfig } from "../../helpers/jobs-env";
 
-beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);

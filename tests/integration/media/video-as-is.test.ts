@@ -8,7 +8,6 @@ import { videoVersions } from "../../../src/server/db/schema";
 import { runTick } from "../../../src/server/scheduler";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb, testDb } from "../../helpers/db";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { received, videoTargetSetup } from "../../helpers/video-publish-setup";
 import { and } from "drizzle-orm";
 import { tickConfig } from "../../helpers/tick";
@@ -16,7 +15,6 @@ import { tickConfig } from "../../helpers/tick";
 beforeEach(async () => {
   received.length = 0;
   runTool.mockClear();
-  await parkAllDueTargets();
 });
 afterAll(async () => {
   setStorageForTests(undefined);

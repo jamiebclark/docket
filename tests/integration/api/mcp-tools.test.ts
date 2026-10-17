@@ -10,6 +10,10 @@ import { createDraftPost, createSlots } from "../../helpers/scheduling";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
 import { mcpCall } from "../../helpers/mcp-bridge";
 import { createMemoryStorage } from "../../helpers/storage";
+import { shareStateWithinFile } from "../../setup/reset-database";
+
+// `w` is one project pair built once and read (and partly written) by every test below.
+shareStateWithinFile();
 
 type Project = Awaited<ReturnType<typeof world>>["a"];
 

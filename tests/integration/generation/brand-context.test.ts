@@ -14,7 +14,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
 import { createVoiceProfile } from "../../helpers/factories";
-import { jobsEnv, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, tickConfig } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 import { createMemoryStorage } from "../../helpers/storage";
 
@@ -97,7 +97,6 @@ describe("brand context reaches every generation entry point", () => {
 
   it("a batch job item carries the brand", async () => {
     setLlmForTests(null);
-    await parkAllJobs();
     const e = await jobsEnv();
     await setBrand(e.scope);
     const llm = createFakeLlm([ok({ mock: "Job post" })]);

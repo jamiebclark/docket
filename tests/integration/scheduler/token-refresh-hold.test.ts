@@ -10,7 +10,7 @@ import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provide
 import { and, eq } from "drizzle-orm";
 import { socialAccounts } from "../../../src/server/db/schema";
 import { closeDb, testDb } from "../../helpers/db";
-import { createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createMockAccount } from "../../helpers/scheduling";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -36,7 +36,6 @@ registerTestProvider({
   },
 } as SocialProvider);
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 async function dueAccount(result: RefreshResult) {

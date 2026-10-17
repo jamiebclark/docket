@@ -5,7 +5,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { instagramLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 vi.mock("../../../src/server/services/media-variants", async (orig) => ({
@@ -28,7 +28,6 @@ registerTestProvider({
   },
 } as SocialProvider);
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 describe("media resolution that dies before the provider call", () => {

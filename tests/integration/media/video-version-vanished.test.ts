@@ -4,13 +4,11 @@ import { videoVersions } from "../../../src/server/db/schema";
 import { runTick } from "../../../src/server/scheduler";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb, testDb } from "../../helpers/db";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { markReady, queueVersionFor, received, videoTargetSetup } from "../../helpers/video-publish-setup";
 import { tickConfig } from "../../helpers/tick";
 
 beforeEach(async () => {
   received.length = 0;
-  await parkAllDueTargets();
 });
 afterAll(async () => {
   setStorageForTests(undefined);

@@ -6,10 +6,9 @@ import { postTargets, publishAttempts } from "../../../src/server/db/schema";
 import { runTick } from "../../../src/server/scheduler";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   await closeDb();
@@ -40,7 +39,6 @@ describe("concurrent ticks (SC-002)", () => {
     { timeout: 600_000 },
     async () => {
       for (let rep = 0; rep < REPETITIONS; rep++) {
-        await parkAllDueTargets();
         const { projectId, ids } = await seed();
 
         await Promise.all(Array.from({ length: TICKS }, () => runTick(tickConfig({ maxItems: 500 }))));

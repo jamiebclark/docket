@@ -7,14 +7,13 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/fake-graph";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { THREADS_USER_ID, threadsSetup, V } from "../../helpers/threads-publish";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   graph = createFakeGraph().install();
   storage = createMemoryStorage();
   setStorageForTests(storage);

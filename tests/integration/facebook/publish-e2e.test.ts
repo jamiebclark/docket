@@ -3,13 +3,11 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { facebookSetup, PAGE_ID } from "../../helpers/facebook-publish";
 import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   graph = createFakeGraph().install();
   storage = createMemoryStorage();
   setStorageForTests(storage);

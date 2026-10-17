@@ -2,6 +2,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { creatorReply } from "../../helpers/fake-tiktok";
 import { closeDb } from "../../helpers/db";
 import { CREATOR, STATUS, tiktokVideoSetup, UPLOAD_PATH, UPLOAD_URL, VIDEO_INIT } from "../../helpers/tiktok-publish";
+import { drainTicks } from "../../helpers/tick";
 
 let teardown: (() => void) | undefined;
 afterEach(() => teardown?.());
@@ -17,7 +18,15 @@ describe("unaudited TikTok app", () => {
     teardown = s.teardown;
     s.fake.on("POST", CREATOR, allOptions).on("POST", VIDEO_INIT, init).on("PUT", UPLOAD_PATH, [{ kind: "http", status: 206 }, { kind: "http", status: 206 }, { kind: "http", status: 201 }]).on("POST", STATUS, complete);
 
-    for (let i = 0; i < 6 && (await s.row()).status !== "published"; i++) await s.tick(new Date(Date.now() + i * 120_000));
+    await drainTicks({
+      tick: async (n) => {
+        await s.tick(new Date(Date.now() + (n - 1) * 120_000));
+        return (await s.row()).status;
+      },
+      until: (status) => status === "published",
+      ceiling: 6,
+      describe: (n) => `status not published after ${n} ticks`,
+    });
 
     expect((await s.row()).status).toBe("published");
     expect(s.fake.callsTo("POST", VIDEO_INIT)[0]!.fields.post_info).toMatchObject({ privacy_level: "SELF_ONLY" });

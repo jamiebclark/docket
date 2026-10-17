@@ -1,8 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { closeDb } from "../helpers/db";
-import { parkAllDueTargets } from "../helpers/scheduling";
-
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   vi.unstubAllEnvs();

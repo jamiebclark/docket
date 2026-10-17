@@ -6,7 +6,7 @@ import * as accounts from "../../../src/server/services/accounts";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 const CREATE_SESSION = "/xrpc/com.atproto.server.createSession";
@@ -18,7 +18,6 @@ const REFRESH = mintJwt(new Date("2030-03-01T00:00:00Z"));
 
 let pds: FakePds;
 beforeEach(async () => {
-  await parkAllDueTargets();
   pds = createFakePds();
   vi.stubGlobal("fetch", pds.fetch);
 });

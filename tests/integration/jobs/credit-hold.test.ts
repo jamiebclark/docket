@@ -23,9 +23,8 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, readHold, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, readHold, tickConfig } from "../../helpers/jobs-env";
 
-beforeEach(parkAllJobs);
 afterEach(() => {
   setLlmFactoryForTests(null);
 });

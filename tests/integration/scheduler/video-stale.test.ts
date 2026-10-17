@@ -3,14 +3,12 @@ import { runTick } from "../../../src/server/scheduler";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createVideoAsset } from "../../helpers/factories";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { markReady, queueVersionFor, received } from "../../helpers/video-publish-setup";
 import { versionRows, waitSetup } from "../../helpers/video-wait";
 import { tickConfig } from "../../helpers/tick";
 
 beforeEach(async () => {
   received.length = 0;
-  await parkAllDueTargets();
 });
 afterAll(async () => {
   setStorageForTests(undefined);

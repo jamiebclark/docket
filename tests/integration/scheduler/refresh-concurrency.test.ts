@@ -9,7 +9,7 @@ import { decryptCredentials, encryptCredentials } from "../../../src/server/serv
 import { closeDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createMockAccount } from "../../helpers/scheduling";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -31,7 +31,6 @@ registerTestProvider({
 } as SocialProvider);
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   refreshCalls = 0;
 });
 afterAll(closeDb);

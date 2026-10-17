@@ -6,10 +6,8 @@ import { atTime } from "../../../helpers/clock";
 import { closeDb } from "../../../helpers/db";
 import { LATER } from "../../../helpers/failures";
 import { failedTarget, NEXT_MONDAY } from "../../../helpers/retry";
-import { parkAllDueTargets } from "../../../helpers/scheduling";
 import { postsEnv } from "../../../helpers/posts-env";
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 type Env = Awaited<ReturnType<typeof failedTarget>>["env"];

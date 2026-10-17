@@ -1,8 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
-import { getDb } from "../../src/server/db/client";
-import { runCrossProject } from "../../src/server/db/cross-project";
-import { engagementAccountStates, postTargets, socialAccounts } from "../../src/server/db/schema";
 import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import type { AccountRecord } from "../../src/server/dal/accounts";
 import type { MediaRow } from "../../src/server/dal/media";
@@ -94,56 +90,4 @@ export async function createDueTarget(
   });
   await r.posts.setStatus(post.id, "scheduled");
   return { post, target: updated! };
-}
-
-/** Far enough out that no test's `now` reaches it. */
-const PARKED_UNTIL = new Date("2100-01-01T00:00:00Z");
-
-/**
- * Pushes every account out of reach of an engagement read claim, so a claim under test returns only
- * the accounts the test created afterwards.
- *
- * Parking the existing `engagement_account_states` rows is NOT enough on its own, which is the bug this
- * replaces: `claimDueEngagementReads` creates a state row lazily for every active account that lacks
- * one, so an account left behind by one of the ~32 files that call `connectMock` has no row to park and
- * comes back due. The rows are therefore created here first, exactly as the claim creates them.
- *
- * Why it matters: the claim is `limit`-bounded and ordered by `read_not_before, social_accounts.id`.
- * With every `read_not_before` null the order is effectively random uuid order, so once more than
- * `limit` accounts are due, a test's own account is silently squeezed out of the claim and the test
- * fails with "expected [] to have a length of 1" — seen on `engagement/read-lease.test.ts`.
- */
-export async function parkAllEngagementReads(): Promise<void> {
-  await runCrossProject("test: park engagement reads", async () => {
-    const db = getDb();
-    const missing = await db
-      .select({ id: socialAccounts.id, projectId: socialAccounts.projectId })
-      .from(socialAccounts)
-      .leftJoin(engagementAccountStates, eq(engagementAccountStates.socialAccountId, socialAccounts.id))
-      .where(and(isNull(socialAccounts.removedAt), isNull(engagementAccountStates.socialAccountId)));
-    for (const row of missing) {
-      await db
-        .insert(engagementAccountStates)
-        .values({ socialAccountId: row.id, projectId: row.projectId })
-        .onConflictDoNothing({ target: engagementAccountStates.socialAccountId });
-    }
-    await db.update(engagementAccountStates).set({ readNotBefore: PARKED_UNTIL });
-  });
-}
-
-/**
- * Pushes every live target in the (shared) test database out of reach, so a tick under test claims
- * only the targets the test itself created afterwards. Call it first in a scheduler test.
- */
-export async function parkAllDueTargets(): Promise<void> {
-  await runCrossProject("test: park due targets", async () => {
-    await getDb()
-      .update(postTargets)
-      .set({ nextAttemptAt: PARKED_UNTIL })
-      .where(inArray(postTargets.status, ["scheduled", "publishing"]));
-  });
-  // Engagement reads are claimed across every project in one pass; a leftover account from an earlier,
-  // unrelated test is otherwise "due" again and leaks a request into whichever fake network stub is
-  // active during this test's tick.
-  await parkAllEngagementReads();
 }

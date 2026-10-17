@@ -232,6 +232,11 @@ confirm it fails naming the file and the rule, then remove the probe.
   (`grep -rln "runTick" tests/integration --include='*.test.ts' | xargs grep -ln "for (let\|while ("`,
   cross-checked against what `tests/lint/tick-drain.test.ts` flags) and migrate each to `drainTicks()`
   until the guard passes with an empty or minimally-justified exemption set (depends on T033, T035).
+  IN PROGRESS: `tests/integration/tiktok/{failures,unaudited,unaudited-ui,video}.test.ts` migrated;
+  `video.test.ts`/`unaudited.test.ts` each keep one justified exemption (comment in
+  `tests/lint/tick-drain.test.ts`) for an unconditional loop with no success predicate to drain
+  toward. ~35 files remain in `EXEMPT` (jobs/*, instagram/*, scheduler/*, bluesky/*, threads/*, etc.)
+  — the next pass should continue the sweep file-by-file the same way.
 - [ ] T037 [US3] Run the oversubscription check from quickstart.md step 4 — once unloaded
   (`DOCKET_TEST_WORKERS=1`) and once oversubscribed (`DOCKET_TEST_WORKERS=8`) against
   `tests/integration/scheduler tests/integration/email tests/integration/jobs` — and confirm identical

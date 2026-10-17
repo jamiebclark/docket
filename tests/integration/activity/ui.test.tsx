@@ -18,9 +18,7 @@ import type { ActivityRow } from "../../../src/server/services/activity";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   actAs(null);
   await closeDb();

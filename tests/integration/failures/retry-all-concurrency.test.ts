@@ -6,10 +6,8 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { LATER } from "../../helpers/failures";
 import { failedTarget } from "../../helpers/retry";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

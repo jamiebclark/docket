@@ -14,7 +14,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeImageProvider } from "../../helpers/fake-image";
 import { png } from "../../helpers/images";
-import { clearHolds, clearProjectCredentials, readHold, seedCreditHold } from "../../helpers/jobs-env";
+import { readHold, seedCreditHold } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 import { createMemoryStorage } from "../../helpers/storage";
 
@@ -23,8 +23,6 @@ afterEach(async () => {
   setImageProviderFactoryForTests(null);
   setStorageForTests(undefined);
   vi.restoreAllMocks();
-  await clearHolds();
-  await clearProjectCredentials();
 });
 afterAll(async () => {
   await closeDb();

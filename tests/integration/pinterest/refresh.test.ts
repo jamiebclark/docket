@@ -10,7 +10,6 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
 import { createFakePinterest, tokenReply } from "../../helpers/fake-pinterest";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -26,7 +25,6 @@ const TOKEN = "/v5/oauth/token";
 const fake = createFakePinterest();
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   // T0 is in 2030 and refresh is global: push every account other files left on this worker's
   // database past T0, so each case sees only the accounts it creates.
   await testDb().update(socialAccounts).set({ credentialsExpiresAt: new Date("2100-01-01T00:00:00Z") });

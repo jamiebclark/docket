@@ -100,9 +100,9 @@ import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { createFakeLlmFetch, type FakeLlmResponse } from "../../helpers/fake-llm-http";
 import { createFakePds, mintJwt } from "../../helpers/fake-pds";
-import { clearHolds, clearProjectCredentials, jobsEnv, modelOk, tickConfig } from "../../helpers/jobs-env";
+import { clearHolds, jobsEnv, modelOk, tickConfig } from "../../helpers/jobs-env";
 import { atTime } from "../../helpers/clock";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { eventsFor } from "../../helpers/activity";
 import { pageCandidate, registerThrowaway, sessionFor, throwawayGroup, unregisterThrowaway } from "../../helpers/connect-group";
@@ -117,8 +117,6 @@ import { getMailer, setMailerForTests } from "../../../src/server/mail";
 import { recordingMailer } from "../../helpers/mailer";
 
 afterAll(async () => {
-  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
-  await clearProjectCredentials();
   setStorageForTests(undefined);
   await closeDb();
 });
@@ -233,7 +231,6 @@ describe("secret scan (FR-020, SC-005)", () => {
   });
 
   it("finds no secret in any output across a full run", async () => {
-    await parkAllDueTargets();
     const db = testDb();
     const pieces: Piece[] = [];
     captureOutput(pieces);
@@ -777,7 +774,6 @@ describe("secret scan (FR-020, SC-005)", () => {
   });
 
   it("activity events store no secret even when a provider, refresh or connect error echoes one (SC-006)", async () => {
-    await parkAllDueTargets();
     const TOKEN = "scan-activity-token-9f8e7d6c5b4a39281706f5e4d3c2b1a0";
     const CODE = "scan-activity-code-0f1e2d3c4b5a69788796a5b4c3d2e1f0";
     const PASSWORD_ECHO = "scan-activity-app-password-aabbccddeeff00112233445566";

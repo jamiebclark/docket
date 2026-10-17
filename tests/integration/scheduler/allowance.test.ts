@@ -11,7 +11,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 const WINDOW = 3600;
@@ -41,7 +41,6 @@ const usesOf = (projectId: string, accountId: string) =>
   testDb().select().from(allowanceUses).where(and(eq(allowanceUses.projectId, projectId), eq(allowanceUses.socialAccountId, accountId)));
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   advanced = 0;
 });
 afterAll(closeDb);

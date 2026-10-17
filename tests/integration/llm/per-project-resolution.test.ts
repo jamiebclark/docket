@@ -15,7 +15,7 @@ import { createJob } from "../../../src/server/services/jobs";
 import { api, createKey } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { clearHolds, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { tickConfig } from "../../helpers/jobs-env";
 import { createVoiceProfile } from "../../helpers/factories";
 import { png } from "../../helpers/images";
 import { postsEnv } from "../../helpers/posts-env";
@@ -28,7 +28,6 @@ afterEach(() => {
 });
 afterAll(async () => {
   setStorageForTests(undefined);
-  await clearHolds();
   await closeDb();
 });
 
@@ -108,7 +107,6 @@ async function setupProject(apiKey: string, storage: MemoryStorage) {
 
 describe("per-project resolution (US1, AS2)", () => {
   it("resolves each generation path to the calling project's own stored credential", async () => {
-    await parkAllJobs();
     const storage = createMemoryStorage();
     setStorageForTests(storage);
     const KEY_A = "sk-fake-project-A-0123456789";

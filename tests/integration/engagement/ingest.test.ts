@@ -8,13 +8,12 @@ import { getInboxItem, listInbox } from "../../../src/server/services/engagement
 import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { createMockAccount, parkAllEngagementReads } from "../../helpers/scheduling";
+import { createMockAccount } from "../../helpers/scheduling";
 import { createPostInReview, createProjectWithMembers } from "../../helpers/factories";
 import { tickConfig } from "../../helpers/tick";
 
 // The read claim sweeps every project and is `limit`-bounded, so accounts left active by other
 // files fill the claim and squeeze this file's own account out of it. Park them first.
-beforeEach(parkAllEngagementReads);
 
 afterAll(async () => {
   await closeDb();

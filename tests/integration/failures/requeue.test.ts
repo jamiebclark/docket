@@ -6,10 +6,8 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { LATER, outcomeTarget, setAccountStatus } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import * as slots from "../../../src/server/services/slots";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

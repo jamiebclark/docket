@@ -8,6 +8,10 @@ import { mcpCall } from "../../helpers/mcp-bridge";
 import { mcpToolsCall, mcpToolsList } from "../../helpers/mcp";
 import { createMemoryStorage } from "../../helpers/storage";
 import { createDraftPost } from "../../helpers/scheduling";
+import { shareStateWithinFile } from "../../setup/reset-database";
+
+// `w` is one project pair built once and read by every test below; shared across the file.
+shareStateWithinFile();
 
 function opFor(id: string): AnyApiOperation {
   return OPERATIONS.find((o) => o.id === id)!;

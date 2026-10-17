@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/server/auth/session", async () => (await import("../../helpers/actions")).sessionModule);
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
@@ -18,9 +18,7 @@ import { closeDb } from "../../helpers/db";
 import { createPostInReview } from "../../helpers/factories";
 import { outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   actAs(null);
   await closeDb();

@@ -5,7 +5,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMediaAsset, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMediaAsset, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 // `effectiveContent` reports a vanished post for the text below (the post disappears between claim and execute).
@@ -50,7 +50,6 @@ registerTestProvider({
 } as SocialProvider);
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   shapes.length = 0;
   contexts.length = 0;
   advanced = 0;

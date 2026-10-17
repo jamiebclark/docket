@@ -5,7 +5,6 @@ import * as accounts from "../../../src/server/services/accounts";
 import { fakeSession } from "../../helpers/auth";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { parkAllEngagementReads } from "../../helpers/scheduling";
 
 afterAll(async () => {
   await closeDb();
@@ -13,7 +12,6 @@ afterAll(async () => {
 
 // The read claim sweeps every project and is `limit`-bounded, so accounts left active by other
 // files fill the claim and squeeze this file's own account out of it. Park them first.
-beforeEach(parkAllEngagementReads);
 
 const AT = new Date("2026-10-10T12:00:00Z");
 const CLAIM_OPTS = { limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] };

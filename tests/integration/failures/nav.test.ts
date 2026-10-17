@@ -13,9 +13,7 @@ import { countNeedsDecision } from "../../../src/server/services/failures";
 import { closeDb } from "../../helpers/db";
 import { outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

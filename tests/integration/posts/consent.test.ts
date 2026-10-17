@@ -14,7 +14,7 @@ import { createProject, createVideoAsset } from "../../helpers/factories";
 import { createFakeTikTok, creatorReply } from "../../helpers/fake-tiktok";
 import { postsEnv } from "../../helpers/posts-env";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 let advanced = 0;
@@ -42,7 +42,6 @@ const provider = registerTestProvider({
 const plain = registerTestProvider({ ...blueskyLikeProvider, key: "consent-free", displayName: "Consent free" } as SocialProvider);
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   advanced = 0;
   nickname = "Ada";
   clearAccountDetailsCache();

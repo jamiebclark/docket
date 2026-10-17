@@ -6,6 +6,10 @@ import { ALL_PERMISSIONS, api, createKey, world } from "../../helpers/api";
 import { call, FIXTURES } from "../../helpers/api-fixtures";
 import { closeDb } from "../../helpers/db";
 import { createMemoryStorage } from "../../helpers/storage";
+import { shareStateWithinFile } from "../../setup/reset-database";
+
+// `w` is one project pair built once and read by every test below; shared across the file.
+shareStateWithinFile();
 
 const KEYED = () => OPERATIONS.filter((op) => op.permission !== null);
 

@@ -18,17 +18,13 @@ import { removeProjectLlm, saveProjectLlm } from "../../../src/server/services/g
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { clearHolds, clearProjectCredentials, jobsEnv, modelOk, parkAllJobs, readHold, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, readHold, tickConfig } from "../../helpers/jobs-env";
 
-beforeEach(parkAllJobs);
 afterEach(() => {
   setLlmFactoryForTests(null);
   setLlmForTests(null);
 });
 afterAll(async () => {
-  // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
-  await clearProjectCredentials();
-  await clearHolds();
   await closeDb();
 });
 

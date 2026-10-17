@@ -4,6 +4,7 @@ import { socialAccounts } from "../../../src/server/db/schema/accounts";
 import { creatorReply, tokenReply } from "../../helpers/fake-tiktok";
 import { closeDb, testDb } from "../../helpers/db";
 import { CREATOR, STATUS, tiktokVideoSetup, UPLOAD_PATH, UPLOAD_URL, VIDEO_INIT } from "../../helpers/tiktok-publish";
+import { drainTicks } from "../../helpers/tick";
 
 let teardown: (() => void) | undefined;
 afterEach(() => teardown?.());
@@ -17,9 +18,17 @@ const complete = { kind: "ok", body: { data: { status: "PUBLISH_COMPLETE" }, err
 const TOKEN = "/v2/oauth/token/";
 const done = ["published", "failed", "ambiguous"];
 
-const run = async (s: Setup, ticks = 10, stepMs = 120_000) => {
+const run = async (s: Setup, ceiling = 10, stepMs = 120_000) => {
   const base = Date.now();
-  for (let i = 0; i < ticks && !done.includes((await s.row()).status); i++) await s.tick(new Date(base + i * stepMs));
+  await drainTicks({
+    tick: async (n) => {
+      await s.tick(new Date(base + (n - 1) * stepMs));
+      return (await s.row()).status;
+    },
+    until: (status) => done.includes(status),
+    ceiling,
+    describe: (n) => `status still not final after ${n} ticks`,
+  });
 };
 
 describe("TikTok: the creator changed since scheduling (D10)", () => {
@@ -67,7 +76,15 @@ describe("TikTok: the daily cap", () => {
     expect(waiting.nextAttemptAt!.getTime()).toBeGreaterThanOrEqual(base + 59 * 60_000);
     expect(s.fake.callsTo("POST", VIDEO_INIT)).toHaveLength(0);
 
-    for (let i = 1; i < 8 && (await s.row()).status !== "published"; i++) await s.tick(new Date(base + 61 * 60_000 + i * 120_000));
+    await drainTicks({
+      tick: async (n) => {
+        await s.tick(new Date(base + 61 * 60_000 + n * 120_000));
+        return (await s.row()).status;
+      },
+      until: (status) => status === "published",
+      ceiling: 8,
+      describe: (n) => `status not published after ${n} ticks`,
+    });
     expect((await s.row()).status).toBe("published");
   });
 
@@ -77,7 +94,15 @@ describe("TikTok: the daily cap", () => {
     s.fake.on("POST", CREATOR, { kind: "error", code: "reached_active_user_cap", message: "cap" });
 
     const base = Date.now();
-    for (let h = 0; h <= 25 && !done.includes((await s.row()).status); h++) await s.tick(new Date(base + h * 61 * 60_000));
+    await drainTicks({
+      tick: async (n) => {
+        await s.tick(new Date(base + (n - 1) * 61 * 60_000));
+        return (await s.row()).status;
+      },
+      until: (status) => done.includes(status),
+      ceiling: 26,
+      describe: (n) => `status still not final after ${n} ticks`,
+    });
 
     const row = await s.row();
     expect(row.status).toBe("failed");

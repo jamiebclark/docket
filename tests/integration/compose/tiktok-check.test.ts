@@ -6,13 +6,12 @@ import { closeDb } from "../../helpers/db";
 import { createVideoAsset } from "../../helpers/factories";
 import { createFakeTikTok, creatorReply } from "../../helpers/fake-tiktok";
 import { postsEnv } from "../../helpers/posts-env";
-import { createMediaAsset, parkAllDueTargets } from "../../helpers/scheduling";
+import { createMediaAsset } from "../../helpers/scheduling";
 
 const CREATOR = "/v2/post/publish/creator_info/query/";
 const fake = createFakeTikTok();
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   vi.stubEnv("TIKTOK_CLIENT_KEY", "CLIENT-KEY");
   vi.stubEnv("TIKTOK_CLIENT_SECRET", "CLIENT-SECRET-XYZ");
   vi.stubEnv("TIKTOK_APP_AUDITED", "true");

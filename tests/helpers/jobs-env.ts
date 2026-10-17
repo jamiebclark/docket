@@ -1,13 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { inArray } from "drizzle-orm";
 import { vi } from "vitest";
 import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import * as credentialOwners from "../../src/server/dal/credential-owners";
 import { readCreditHold, type CreditHold } from "../../src/server/dal/credit-holds";
 import { llmCreditHolds, projectLlmSettings } from "../../src/server/db/schema/generation";
-import { generationJobItems } from "../../src/server/db/schema";
-import { standingSeries } from "../../src/server/db/schema/standing-series";
 import { setLlmForTests } from "../../src/server/llm";
 import { setStorageForTests } from "../../src/server/storage";
 import { createVoiceProfile } from "./factories";
@@ -17,29 +14,6 @@ import { png } from "./images";
 import { postsEnv } from "./posts-env";
 export { TICK_BUDGET_MS, tickConfig } from "./tick";
 import { createMemoryStorage } from "./storage";
-
-/** Stops items left by other test files from being claimed by this file's ticks. */
-export async function parkAllJobs(): Promise<void> {
-  await runCrossProject("test: park job items", async () => {
-    await getDb().update(generationJobItems).set({ status: "cancelled", leaseOwner: null, leaseUntil: null, pendingRetry: null }).where(inArray(generationJobItems.status, ["queued", "running"]));
-  });
-  await clearHolds();
-  await clearProjectCredentials();
-  await parkAllStandingSeries();
-}
-
-/**
- * Stops standing series left behind by other test files from being claimed by this file's ticks.
- *
- * `runTick` also runs the standing-series section, so a series another file left `enabled` (with
- * `next_run_at` permanently due) would be claimed by this file's scripted `createFakeLlm` steps —
- * the same leakage `parkAllJobs` already prevents for job items, holds and project credentials.
- */
-export async function parkAllStandingSeries(): Promise<void> {
-  await runCrossProject("test: park standing series", async () => {
-    await getDb().update(standingSeries).set({ enabled: false, leaseOwner: null, leaseUntil: null });
-  });
-}
 
 /** Seeds a credit hold row directly, bypassing `holdCredit` (US1/US2 tests pinning an existing hold). */
 export async function seedCreditHold(
@@ -77,8 +51,7 @@ export async function clearHolds(): Promise<void> {
  *
  * Worker databases are shared across the files a worker runs, so a credential one file saves makes a later
  * file's project *configured* — and a tick that should have reported `notConfigured` claims the item
- * instead. `parkAllJobs` clears it for the same reason it clears holds: a jobs suite must start from the
- * install's own configuration, whatever ran before it in the worker.
+ * instead.
  */
 export async function clearProjectCredentials(): Promise<void> {
   await runCrossProject("test: clear project LLM credentials", async () => {

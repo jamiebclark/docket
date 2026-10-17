@@ -12,9 +12,8 @@ import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { jobsEnv, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, tickConfig } from "../../helpers/jobs-env";
 
-beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);

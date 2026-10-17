@@ -11,7 +11,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { png } from "../../helpers/images";
 import { instagramLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
 import { tickConfig } from "../../helpers/tick";
 
@@ -34,7 +34,6 @@ registerTestProvider({
 
 const defaults = { ...script };
 beforeEach(async () => {
-  await parkAllDueTargets();
   Object.assign(script, defaults);
   advanceCalls = 0;
 });

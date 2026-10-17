@@ -5,10 +5,7 @@ import * as posts from "../../../src/server/services/posts";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
-
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   await closeDb();

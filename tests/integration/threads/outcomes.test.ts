@@ -11,7 +11,6 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/fake-graph";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { THREADS_TOKEN, THREADS_USER_ID, threadsSetup, V } from "../../helpers/threads-publish";
 import { tickConfig } from "../../helpers/tick";
@@ -19,7 +18,6 @@ import { tickConfig } from "../../helpers/tick";
 let graph: FakeGraph;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   graph = createFakeGraph().install();
   storage = createMemoryStorage();
   setStorageForTests(storage);

@@ -8,11 +8,9 @@ import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 // The test database is shared: park other tests' due targets so a tick only sees this test's.
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   await closeDb();

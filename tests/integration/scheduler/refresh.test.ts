@@ -7,7 +7,7 @@ import { decryptCredentials, encryptCredentials } from "../../../src/server/serv
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 
 // Per-account scripted refresh outcomes, so leftover accounts from other tests are unaffected.
 const scripted = new Map<string, RefreshResult>();
@@ -19,7 +19,6 @@ registerTestProvider({
     scripted.get(account.id) ?? { ok: true, credentials: { token: "fresh" }, expiresAt: new Date(Date.now() + 30 * 86_400_000) },
 } as SocialProvider);
 
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   await closeDb();

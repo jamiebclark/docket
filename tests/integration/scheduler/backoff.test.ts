@@ -8,10 +8,8 @@ import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   await closeDb();

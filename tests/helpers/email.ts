@@ -17,24 +17,6 @@ export interface SeedEmailSettingsOptions {
   lastSentAt?: Date | null;
 }
 
-/**
- * Parks every email recipient, so a test sees only the people it seeds itself.
- *
- * Immediate cadence is due again the instant it is checked — it is event-driven, not interval-driven — so a
- * person seeded by one test stays perpetually "due" with nothing left to say. Worker databases are shared
- * across the files a worker runs, so that person is then claimed by every later test in the worker, in any
- * file. Tests that assert a tick's claim counts fail on the extra claim, and which tests fail depends on the
- * order vitest happens to assign files to workers — so this hides from a sharded CI run and appears on a
- * single-worker one, or vice versa.
- *
- * Call it in `beforeEach`, the way the jobs suites call `parkAllJobs`.
- */
-export async function parkAllEmail(): Promise<void> {
-  await runCrossProject("test: park email recipients", async () => {
-    await getDb().update(emailSettings).set({ cadence: "off", nextDueAt: null });
-  });
-}
-
 /** Writes an `email_settings` row directly, bypassing the service layer (for test setup, not for product paths). */
 export async function seedEmailSettings(userId: string, opts: SeedEmailSettingsOptions = {}) {
   const cadence = opts.cadence ?? "immediate";

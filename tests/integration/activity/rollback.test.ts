@@ -12,7 +12,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { LATER, outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { createProjectWithMembers } from "../../helpers/factories";
 
 const failure = vi.hoisted(() => ({ derive: false }));
@@ -27,7 +27,6 @@ vi.mock("../../../src/server/services/posts/status", async (orig) => {
   };
 });
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 describe("an event commits or rolls back with the change it describes", () => {

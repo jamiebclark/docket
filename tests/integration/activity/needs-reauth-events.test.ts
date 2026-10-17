@@ -9,7 +9,7 @@ import { eventsFor } from "../../helpers/activity";
 import { closeDb } from "../../helpers/db";
 import { createProject, createProjectWithMembers } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 registerTestProvider({
@@ -23,7 +23,6 @@ registerTestProvider({
   }),
 } as SocialProvider);
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 const soon = () => new Date(Date.now() + 3_600_000);

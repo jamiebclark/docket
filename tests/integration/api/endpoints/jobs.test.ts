@@ -7,9 +7,8 @@ import { api, createKey } from "../../../helpers/api";
 import { closeDb } from "../../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../../helpers/fake-llm";
 import type { LlmProvider } from "../../../../src/server/llm/types";
-import { jobsEnv, modelOk, parkAllJobs, routeLlm, tickConfig } from "../../../helpers/jobs-env";
+import { jobsEnv, modelOk, routeLlm, tickConfig } from "../../../helpers/jobs-env";
 
-beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);

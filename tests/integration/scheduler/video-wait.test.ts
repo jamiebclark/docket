@@ -6,14 +6,12 @@ import * as posts from "../../../src/server/services/posts";
 import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { markReady, queueVersionFor, received, videoTargetSetup } from "../../helpers/video-publish-setup";
 import { versionRows, videoHeartbeat, waitSetup } from "../../helpers/video-wait";
 import { tickConfig } from "../../helpers/tick";
 
 beforeEach(async () => {
   received.length = 0;
-  await parkAllDueTargets();
 });
 afterAll(async () => {
   setStorageForTests(undefined);
@@ -76,7 +74,6 @@ describe("a due target waits for its adapted video (US5)", () => {
 
   it("fails after two hours: 'took too long' with a worker heartbeat, 'needs the worker' without", async () => {
     for (const alive of [true, false]) {
-      await parkAllDueTargets();
       const t = await waitSetup();
       await queueVersionFor(t);
       await runTick(tickConfig({}));

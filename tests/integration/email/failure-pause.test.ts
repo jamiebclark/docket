@@ -8,11 +8,10 @@ import { runEmailDeliveries } from "../../../src/server/scheduler/email";
 import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
+import { seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
 import { recordEvent } from "../../helpers/notifications";
 
-beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 const SCHED_CONFIG: SchedulerConfig = {

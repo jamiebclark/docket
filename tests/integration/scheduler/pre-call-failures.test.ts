@@ -7,10 +7,8 @@ import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { BEFORE, SLOT } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

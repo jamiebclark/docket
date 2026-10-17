@@ -41,6 +41,11 @@ const EXEMPT: ReadonlySet<string> = new Set([
   "tests/integration/instagram/reels.test.ts",
   "tests/integration/instagram/stories.test.ts",
   "tests/integration/instagram/video-carousel.test.ts",
+  // tiktok/video.test.ts:67 and tiktok/unaudited.test.ts:41 keep one unconditional fixed-count loop
+  // each (T036): both assert on an in-progress state reached *before* any success predicate could
+  // hold, so there is no "until" to drain toward — migrated everywhere else in both files.
+  "tests/integration/tiktok/video.test.ts",
+  "tests/integration/tiktok/unaudited.test.ts",
   "tests/integration/jobs/credit-hold.test.ts",
   "tests/integration/jobs/credit-outage.test.ts",
   "tests/integration/jobs/credit-probe.test.ts",
@@ -62,10 +67,6 @@ const EXEMPT: ReadonlySet<string> = new Set([
   "tests/integration/standing-series/self-pause.test.ts",
   "tests/integration/threads/carousel.test.ts",
   "tests/integration/threads/container-status.test.ts",
-  "tests/integration/tiktok/failures.test.ts",
-  "tests/integration/tiktok/unaudited.test.ts",
-  "tests/integration/tiktok/unaudited-ui.test.tsx",
-  "tests/integration/tiktok/video.test.ts",
   "tests/integration/x/publish-e2e.test.ts",
 ]);
 

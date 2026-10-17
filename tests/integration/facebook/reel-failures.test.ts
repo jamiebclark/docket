@@ -9,14 +9,12 @@ import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { facebookVideoSetup, PAGE_ID } from "../../helpers/facebook-publish";
 import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/fake-graph";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   graph = createFakeGraph().install();
   storage = createMemoryStorage();
   setStorageForTests(storage);
@@ -106,7 +104,6 @@ describe("a Reel that fails before finish", () => {
   it("a token rejected before finish is fatal, flags the account and sends nothing more", async () => {
     for (const at of ["start", "upload", "check"] as const) {
       graph.reset();
-      await parkAllDueTargets();
       const denied: GraphReply = { kind: "graph_error", code: 190, message: "Invalid OAuth access token", status: 401 };
       script({
         ...(at === "start" ? { start: denied } : {}),

@@ -3,10 +3,8 @@ import { listFailures, countNeedsDecision } from "../../../src/server/services/f
 import { closeDb } from "../../helpers/db";
 import { outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import * as posts from "../../../src/server/services/posts";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

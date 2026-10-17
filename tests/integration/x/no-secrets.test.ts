@@ -21,7 +21,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { sessionFor } from "../../helpers/connect-group";
 import { createFakeX, tokenReply } from "../../helpers/fake-x";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
@@ -41,7 +41,6 @@ let logged: string[] = [];
 const spies: Array<ReturnType<typeof vi.spyOn>> = [];
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   vi.stubEnv("X_CLIENT_ID", "x-client-id");
   vi.stubEnv("X_CLIENT_SECRET", CLIENT_SECRET);
   fake.reset();

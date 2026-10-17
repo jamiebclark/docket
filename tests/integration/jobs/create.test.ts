@@ -5,9 +5,8 @@ import { createJob, previewJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv } from "../../helpers/jobs-env";
 
-beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);

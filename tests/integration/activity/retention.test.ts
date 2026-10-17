@@ -10,9 +10,7 @@ import { eventsFor } from "../../helpers/activity";
 import { closeDb, testDb } from "../../helpers/db";
 import { outcomeTarget } from "../../helpers/failures";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 describe("history outlives what it describes", () => {

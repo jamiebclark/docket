@@ -13,10 +13,9 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, seedCreditHold, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, seedCreditHold, tickConfig } from "../../helpers/jobs-env";
 import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
 
-beforeEach(parkAllJobs);
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);

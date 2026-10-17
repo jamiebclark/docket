@@ -12,7 +12,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
 import { createFakeX, rateLimited, tokenReply } from "../../helpers/fake-x";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
@@ -31,7 +31,6 @@ const TWEETS = "/2/tweets";
 const fake = createFakeX();
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   // T0 is in 2030 and refresh is global: push every account other files left on this worker's
   // database past T0, so each case sees only the accounts it creates.
   await testDb().update(socialAccounts).set({ credentialsExpiresAt: new Date("2100-01-01T00:00:00Z") });

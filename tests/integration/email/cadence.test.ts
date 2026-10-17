@@ -10,7 +10,7 @@ import { runEmailDeliveries } from "../../../src/server/scheduler/email";
 import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { parkAllEmail, seedDuePerson, seedEmailSettings, seedProjectWithProblem } from "../../helpers/email";
+import { seedDuePerson, seedEmailSettings, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
 import { createProject, createUser, addMember } from "../../helpers/factories";
 import { markEventFor, recordEvent } from "../../helpers/notifications";
@@ -20,7 +20,6 @@ function dueAt(date: string, hour: number) {
   return atLocalHour(Temporal.PlainDate.from(date), hour, NY);
 }
 
-beforeEach(parkAllEmail);
 afterAll(closeDb);
 
 const SCHED_CONFIG: SchedulerConfig = {

@@ -13,7 +13,7 @@ import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
 import { postsEnv } from "../../helpers/posts-env";
 
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 const CREATE_SESSION = "/xrpc/com.atproto.server.createSession";
@@ -32,7 +32,6 @@ const SECRETS = [APP_PASSWORD, FIRST_ACCESS, FIRST_REFRESH, NEW_ACCESS, NEW_REFR
 let pds: FakePds;
 let logs: string[];
 beforeEach(async () => {
-  await parkAllDueTargets();
   pds = createFakePds();
   vi.stubGlobal("fetch", pds.fetch);
   logs = [];

@@ -7,9 +7,7 @@ import { closeDb } from "../../helpers/db";
 import { LATER, outcomeTarget } from "../../helpers/failures";
 import { failedTarget, NEXT_MONDAY, pauseAllSlots } from "../../helpers/retry";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 /** Only the rows written after the scheduler's own failure/ambiguity event. */

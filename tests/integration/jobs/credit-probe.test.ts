@@ -15,9 +15,8 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, readHold, routeCredentialOwners, seedCreditHold, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, readHold, routeCredentialOwners, seedCreditHold, tickConfig } from "../../helpers/jobs-env";
 
-beforeEach(parkAllJobs);
 afterEach(() => {
   vi.restoreAllMocks();
 });

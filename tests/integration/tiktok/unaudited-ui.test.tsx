@@ -21,6 +21,7 @@ import { closeDb } from "../../helpers/db";
 import { creatorReply } from "../../helpers/fake-tiktok";
 import { sessionFor } from "../../helpers/connect-group";
 import { CREATOR, STATUS, tiktokVideoSetup, UPLOAD_PATH, UPLOAD_URL, VIDEO_INIT } from "../../helpers/tiktok-publish";
+import { drainTicks } from "../../helpers/tick";
 
 let teardown: (() => void) | undefined;
 afterEach(() => teardown?.());
@@ -90,7 +91,15 @@ describe("unaudited TikTok app: markup", () => {
       .on("POST", VIDEO_INIT, { kind: "ok", body: { data: { publish_id: "v_pub_1", upload_url: UPLOAD_URL }, error: { code: "ok" } } })
       .on("PUT", UPLOAD_PATH, [{ kind: "http", status: 206 }, { kind: "http", status: 206 }, { kind: "http", status: 201 }])
       .on("POST", STATUS, { kind: "ok", body: { data: { status: "PUBLISH_COMPLETE" }, error: { code: "ok" } } });
-    for (let i = 0; i < 6 && (await s.row()).status !== "published"; i++) await s.tick(new Date(Date.now() + i * 120_000));
+    await drainTicks({
+      tick: async (n) => {
+        await s.tick(new Date(Date.now() + (n - 1) * 120_000));
+        return (await s.row()).status;
+      },
+      until: (status) => status === "published",
+      ceiling: 6,
+      describe: (n) => `status not published after ${n} ticks`,
+    });
     expect((await s.row()).status).toBe("published");
 
     const after = await render();

@@ -8,9 +8,8 @@ import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { eventsFor } from "../../helpers/activity";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 afterAll(closeDb);
 
 const statements = readFileSync(resolve(__dirname, "../../../drizzle/0014_backfill_activity_events.sql"), "utf8")

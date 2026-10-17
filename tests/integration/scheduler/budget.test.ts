@@ -6,9 +6,8 @@ import { postTargets } from "../../../src/server/db/schema";
 import { runTick } from "../../../src/server/scheduler";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget, createMockAccount } from "../../helpers/scheduling";
 
-beforeEach(parkAllDueTargets);
 
 afterAll(async () => {
   await closeDb();

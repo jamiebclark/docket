@@ -15,7 +15,7 @@ import { createProjectWithMembers } from "../../helpers/factories";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
 import { createFakeTikTok, tokenReply } from "../../helpers/fake-tiktok";
 import { createVideoAsset } from "../../helpers/factories";
-import { createDraftPost, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDraftPost } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
@@ -34,7 +34,6 @@ const TOKEN = "/v2/oauth/token/";
 const fake = createFakeTikTok();
 
 beforeEach(async () => {
-  await parkAllDueTargets();
   // T0 is in 2030 and refresh is global: push every account other files left on this worker's
   // database past T0, so each case sees only the accounts it creates.
   await testDb().update(socialAccounts).set({ credentialsExpiresAt: new Date("2100-01-01T00:00:00Z") });

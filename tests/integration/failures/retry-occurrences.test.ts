@@ -6,11 +6,9 @@ import * as slots from "../../../src/server/services/slots";
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { LATER, SLOT } from "../../helpers/failures";
-import { parkAllDueTargets } from "../../helpers/scheduling";
 import { failedTarget, NEXT_MONDAY } from "../../helpers/retry";
 import { sql } from "drizzle-orm";
 
-beforeEach(parkAllDueTargets);
 afterAll(async () => {
   await closeDb();
 });

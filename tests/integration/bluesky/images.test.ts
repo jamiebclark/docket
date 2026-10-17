@@ -10,7 +10,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
 import { jpeg, noisePng } from "../../helpers/images";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createDueTarget } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { tickConfig } from "../../helpers/tick";
 
@@ -26,7 +26,6 @@ const MAX = 2_000_000;
 let pds: FakePds;
 let storage: MemoryStorage;
 beforeEach(async () => {
-  await parkAllDueTargets();
   pds = createFakePds();
   storage = createMemoryStorage();
   setStorageForTests(storage);

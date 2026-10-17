@@ -4,9 +4,7 @@ import * as posts from "../../../src/server/services/posts";
 import * as queue from "../../../src/server/services/queue";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
-import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
-
-beforeEach(parkAllDueTargets);
+import { createDueTarget } from "../../helpers/scheduling";
 
 afterAll(async () => {
   await closeDb();
