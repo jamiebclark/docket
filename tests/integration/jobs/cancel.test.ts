@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
@@ -12,7 +12,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
 import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
-import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold, seedCreditHold } from "../../helpers/jobs-env";
+import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold, seedCreditHold, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -24,11 +24,40 @@ afterAll(async () => {
   await closeDb();
 });
 
+// Every tick here runs with an explicit, generous budget; see `tickConfig` for why that matters on CI.
+
+/**
+ * Gates opened by `gatedLlm`, released after every test however it ended. A gate left shut keeps the
+ * tick's `generate` awaiting for ever, and the abandoned tick holds its database client, so `closeDb()`
+ * in `afterAll` waits on a pool that can never drain.
+ */
+const openGates: Array<() => void> = [];
+afterEach(() => {
+  for (const open of openGates.splice(0)) open();
+});
+
+/** Fails fast and says what did not happen, rather than hanging until the test timeout. */
+async function waitForModelCall(started: Promise<void>): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const bail = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("the tick never called the model: generation claimed no item (tick budget or a lost lease)")),
+      15_000,
+    );
+  });
+  try {
+    await Promise.race([started, bail]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** A model whose `generate` waits for `release()`, so a test can act while an item is mid-call. */
 function gatedLlm() {
   const inner = createFakeLlm(Array.from({ length: 6 }, () => modelOk("Late.", 1)));
   let open!: () => void;
   const gate = new Promise<void>((resolve) => (open = resolve));
+  openGates.push(() => open());
   let entered!: () => void;
   const started = new Promise<void>((resolve) => (entered = resolve));
   const llm = {
@@ -49,13 +78,13 @@ describe("cancelling a job (SC-007)", () => {
     setLlmForTests(createFakeLlm([modelOk("First", 1)]));
     await e.assets(3);
     const { jobId } = await createJob(e.scope, e.input());
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
     expect((await e.scope.jobItems.countByStatus(jobId)).done).toBe(1);
 
     const gated = gatedLlm();
     setLlmForTests(gated.llm);
-    const tick = runTick({ config: { jobMaxItems: 1 } });
-    await gated.started;
+    const tick = runTick(tickConfig({ jobMaxItems: 1 }));
+    await waitForModelCall(gated.started);
     const result = await cancelJob(e.scope, jobId);
     expect(result.changed).toBe(true);
     gated.release();
@@ -70,7 +99,7 @@ describe("cancelling a job (SC-007)", () => {
     expect(withPosts).toEqual(["done"]);
     expect((await e.scope.jobs.get(jobId))!).toMatchObject({ status: "cancelled" });
 
-    const later = await runTick({ config: { jobMaxItems: 5 } });
+    const later = await runTick(tickConfig({ jobMaxItems: 5 }));
     expect(later.generation.counts.claimed).toBe(0);
     expect((await e.scope.jobItems.countByStatus(jobId)).done).toBe(1);
   }, 60_000);
@@ -82,7 +111,7 @@ describe("cancelling a job (SC-007)", () => {
     const { jobId } = await createJob(e.scope, e.input());
     const [first] = await e.scope.jobItems.listForJob(jobId);
     await e.scope.media.softDelete(first!.mediaAssetId!, new Date());
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
     expect((await e.scope.jobItems.countByStatus(jobId))).toMatchObject({ failed: 1, queued: 1 });
     await cancelJob(e.scope, jobId);
     expect((await e.scope.jobItems.countByStatus(jobId))).toMatchObject({ failed: 0, queued: 0, cancelled: 2 });
@@ -93,7 +122,7 @@ describe("cancelling a job (SC-007)", () => {
     setLlmForTests(createFakeLlm([modelOk("Saved", 1)]));
     await e.asset();
     const { jobId } = await createJob(e.scope, e.input({ approval: "auto_approve", scheduling: "leave_as_draft" }));
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
     const [item] = await e.scope.jobItems.listForJob(jobId);
     const post = (await e.scope.posts.findByJobItemId(item!.id))!;
 
@@ -115,7 +144,7 @@ describe("cancelling a job (SC-007)", () => {
     );
 
     await cancelJob(e.scope, jobId);
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     expect((await e.scope.posts.get(post.id))!.reviewState).toBe("needs_review");
     // The item is finished, not left running on a cancelled job (F3).
     expect((await e.scope.jobItems.get(item!.id))!.status).toBe("done");
@@ -128,7 +157,7 @@ describe("cancelling a job (SC-007)", () => {
     setLlmForTests(createFakeLlm([modelOk("Only", 1)]));
     await e.assets(1);
     const done = await createJob(e.scope, e.input());
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     expect((await e.scope.jobs.get(done.jobId))!.status).toBe("completed");
     expect(await cancelJob(e.scope, done.jobId)).toMatchObject({ changed: false });
     expect((await e.scope.jobs.get(done.jobId))!.status).toBe("completed");
@@ -149,7 +178,7 @@ describe("cancelling a job (SC-007)", () => {
     const { jobId } = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-skip" }]));
     const other = await e.scope.posts.insert({ baseText: "Already posted" });
     await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "ext-skip", postId: other.id, claimedAt: new Date() });
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     expect((await e.scope.jobItems.countByStatus(jobId)).skipped).toBe(1);
 
     await cancelJob(e.scope, jobId);
@@ -171,7 +200,7 @@ describe("cancelling a job (SC-007)", () => {
     const img = await e.asset();
     const failJob = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-fail", mediaId: img.id }], false));
     await e.scope.media.softDelete(img.id, new Date());
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     expect((await e.scope.jobItems.countByStatus(failJob.jobId)).failed).toBe(1);
     const afterFail = await createJob(e.scope, apiInput([{ fields: { product: "A" }, externalId: "ext-fail" }], false));
     expect(afterFail).toMatchObject({ itemCount: 1, skippedAlreadyPosted: 0 });
@@ -215,7 +244,7 @@ describe("cancelling a job (SC-007)", () => {
     expect((await e.scope.jobItems.countByStatus(jobId)).queued).toBe(2);
     expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
 
-    const tick = await runTick({ config: { jobMaxItems: 5 } });
+    const tick = await runTick(tickConfig({ jobMaxItems: 5 }));
     expect(tick.generation.counts.held).toBe(1);
     expect((await e.scope.jobItems.countByStatus(jobId)).failed).toBe(0);
     expect(await readHold(INSTALL_CREDENTIAL_OWNER)).not.toBeNull();
