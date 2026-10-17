@@ -113,7 +113,9 @@ describe("notification list", () => {
     ]);
     expect(html).toContain("Bluesky and Mastodon");
     expect(html).not.toContain("Removed account");
-    expect(html).not.toContain("Mastodon ·");
+    // No account segment is invented for an event that has none: the meta line runs project ·
+    // platforms · time, and the only separator after the platforms is the one before the time.
+    expect(html).toMatch(/Demo · Bluesky and Mastodon · ?<time/);
   });
 
   it("says so when empty", () => {

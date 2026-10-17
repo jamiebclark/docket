@@ -110,7 +110,10 @@ export function NotificationRowActions({
   const error = (result && !result.ok ? result.message : null) ?? (snoozeResult && !snoozeResult.ok ? snoozeResult.message : null);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    // `-ml-3` cancels the ghost buttons' own `px-3`, so their labels start on the same left edge as
+    // the lines above rather than a step in from them. The "Read" branch above is plain text with no
+    // padding of its own, so it is deliberately not pulled back the same way.
+    <div className="-ml-3 flex flex-wrap items-center gap-2">
       <form action={formAction}>
         <input type="hidden" name="eventId" value={item.id} />
         {!hydrated && returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
