@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { claimDueEngagementReads } from "../../../src/server/dal/engagement-read-claims";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { forProject } from "../../../src/server/dal/scope";
@@ -8,8 +8,12 @@ import { getInboxItem, listInbox } from "../../../src/server/services/engagement
 import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { createMockAccount } from "../../helpers/scheduling";
+import { createMockAccount, parkAllEngagementReads } from "../../helpers/scheduling";
 import { createPostInReview, createProjectWithMembers } from "../../helpers/factories";
+
+// The read claim sweeps every project and is `limit`-bounded, so accounts left active by other
+// files fill the claim and squeeze this file's own account out of it. Park them first.
+beforeEach(parkAllEngagementReads);
 
 afterAll(async () => {
   await closeDb();

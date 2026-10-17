@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forProject } from "../../../src/server/dal/scope";
 import { mockEngagement } from "../../../src/providers/mock/engagement";
 import { listProviders } from "../../../src/providers/registry";
@@ -10,7 +10,12 @@ import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
-import { createMockAccount } from "../../helpers/scheduling";
+import { createMockAccount, parkAllEngagementReads } from "../../helpers/scheduling";
+
+// The tick's engagement-read section claims across every project and is `limit`-bounded, so accounts
+// left active by other files on this worker's database fill the claim and this file's own account is
+// never read. Park them first.
+beforeEach(parkAllEngagementReads);
 
 afterAll(async () => {
   await closeDb();
