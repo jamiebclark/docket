@@ -107,9 +107,15 @@ describe("insights storage (data-model.md §1-4)", () => {
 
     await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
 
-    const [state] = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id));
+    const [state] = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, target.id)));
     expect(state).toBeUndefined();
-    const [accState] = await getDb().select().from(accountMetricPollStates).where(eq(accountMetricPollStates.socialAccountId, account.id));
+    const [accState] = await getDb()
+      .select()
+      .from(accountMetricPollStates)
+      .where(and(eq(accountMetricPollStates.projectId, ctx.project.id), eq(accountMetricPollStates.socialAccountId, account.id)));
     expect(accState).toBeUndefined();
   });
 
@@ -120,7 +126,10 @@ describe("insights storage (data-model.md §1-4)", () => {
 
     await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
 
-    const [snapshot] = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const [snapshot] = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(snapshot?.metrics).toEqual({ likeCount: 4, repostCount: 1 });
     expect(snapshot?.metrics).not.toHaveProperty("notDeclared");
   });
@@ -132,10 +141,16 @@ describe("insights storage (data-model.md §1-4)", () => {
 
     const summary = await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
 
-    const rows = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const rows = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(rows).toHaveLength(0);
     expect(summary.insightsPoll.counts.failed).toBeGreaterThanOrEqual(1);
-    const [state] = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id));
+    const [state] = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, target.id)));
     expect(state?.consecutiveFailures).toBeGreaterThanOrEqual(1);
   });
 
@@ -145,13 +160,19 @@ describe("insights storage (data-model.md §1-4)", () => {
     const { target } = await publishedTarget(ctx.project.id, account.id);
 
     await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
-    const before = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const before = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(before).toHaveLength(1);
 
     const repos = forSchedulerProject(ctx.project.id);
     await repos.targets.update(target.id, { externalId: "ext-2" });
 
-    const after = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const after = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(after).toHaveLength(1);
     expect(after[0]!.metrics).toEqual(before[0]!.metrics);
 

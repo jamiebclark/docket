@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../src/server/db/client";
 import { postMetricPollStates, postMetricSnapshots } from "../../../src/server/db/schema";
 import { claimDuePostMetricPolls } from "../../../src/server/dal/insights-claims";
@@ -88,10 +88,16 @@ describe("insights claim concurrency (contracts/scheduler-insights.md §5, FR-03
     expect(second[0]!.state.postTargetId).toBe(targetId);
     expect(second[0]!.token).not.toBe(tokenA);
 
-    const [snapshot] = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, targetId));
+    const [snapshot] = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, targetId)));
     expect(snapshot).toBeUndefined(); // the killed run wrote nothing
 
-    const [state] = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, targetId));
+    const [state] = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, targetId)));
     expect(state?.pollLeaseOwner).toBe(second[0]!.token);
   });
 
@@ -109,7 +115,10 @@ describe("insights claim concurrency (contracts/scheduler-insights.md §5, FR-03
       repos.postMetricSnapshots.insertIfAbsent({ postTargetId: target!.id, socialAccountId: account.id, providerKey: "mock", capturedAt, metrics: { likeCount: 1 } }),
     ]);
 
-    const rows = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target!.id));
+    const rows = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target!.id)));
     expect(rows).toHaveLength(1);
   });
 
@@ -129,7 +138,10 @@ describe("insights claim concurrency (contracts/scheduler-insights.md §5, FR-03
     // Re-running the earlier capture again (e.g. a retried tick) must not duplicate it.
     await repos.postMetricSnapshots.insertIfAbsent({ postTargetId: target!.id, socialAccountId: account.id, providerKey: "mock", capturedAt: earlier, metrics: { likeCount: 1 } });
 
-    const rows = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target!.id));
+    const rows = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target!.id)));
     expect(rows.map((r) => r.capturedAt.getTime()).sort()).toEqual([earlier.getTime(), later.getTime()].sort());
   });
 });

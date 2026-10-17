@@ -83,10 +83,26 @@ describe("insights cross-project isolation (FR-022, research.md §13)", () => {
 
     await runCrossProject("test: delete a project", () => testDb().delete(projects).where(eq(projects.id, ctx.project.id)));
 
-    expect(await testDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id))).toHaveLength(0);
-    expect(await testDb().select().from(accountMetricSnapshots).where(eq(accountMetricSnapshots.socialAccountId, account.id))).toHaveLength(0);
-    expect(await testDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id))).toHaveLength(0);
-    expect(await testDb().select().from(accountMetricPollStates).where(eq(accountMetricPollStates.socialAccountId, account.id))).toHaveLength(0);
+    expect(
+      await runCrossProject("test: assert deletion", async () =>
+        testDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id)),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await runCrossProject("test: assert deletion", async () =>
+        testDb().select().from(accountMetricSnapshots).where(eq(accountMetricSnapshots.socialAccountId, account.id)),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await runCrossProject("test: assert deletion", async () =>
+        testDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id)),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await runCrossProject("test: assert deletion", async () =>
+        testDb().select().from(accountMetricPollStates).where(eq(accountMetricPollStates.socialAccountId, account.id)),
+      ),
+    ).toHaveLength(0);
   });
 
   it("deleting a post cascades to its target's snapshot and poll-state rows", async () => {
@@ -98,8 +114,18 @@ describe("insights cross-project isolation (FR-022, research.md §13)", () => {
       testDb().delete(posts).where(and(eq(posts.projectId, ctx.project.id), eq(posts.id, post.id))),
     );
 
-    expect(await testDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id))).toHaveLength(0);
-    expect(await testDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id))).toHaveLength(0);
+    expect(
+      await testDb()
+        .select()
+        .from(postMetricSnapshots)
+        .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id))),
+    ).toHaveLength(0);
+    expect(
+      await testDb()
+        .select()
+        .from(postMetricPollStates)
+        .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, target.id))),
+    ).toHaveLength(0);
   });
 
   it("deleting a target cascades to its own snapshot and poll-state rows only", async () => {
@@ -112,10 +138,30 @@ describe("insights cross-project isolation (FR-022, research.md §13)", () => {
       testDb().delete(postTargets).where(and(eq(postTargets.projectId, ctx.project.id), eq(postTargets.id, target.id))),
     );
 
-    expect(await testDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id))).toHaveLength(0);
-    expect(await testDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id))).toHaveLength(0);
-    expect(await testDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, other.id))).toHaveLength(1);
-    expect(await testDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, other.id))).toHaveLength(1);
+    expect(
+      await testDb()
+        .select()
+        .from(postMetricSnapshots)
+        .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id))),
+    ).toHaveLength(0);
+    expect(
+      await testDb()
+        .select()
+        .from(postMetricPollStates)
+        .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, target.id))),
+    ).toHaveLength(0);
+    expect(
+      await testDb()
+        .select()
+        .from(postMetricSnapshots)
+        .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, other.id))),
+    ).toHaveLength(1);
+    expect(
+      await testDb()
+        .select()
+        .from(postMetricPollStates)
+        .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, other.id))),
+    ).toHaveLength(1);
   });
 
   it("hard-deleting an account's row cascades to its own account-metric rows", async () => {
@@ -137,8 +183,16 @@ describe("insights cross-project isolation (FR-022, research.md §13)", () => {
       testDb().delete(socialAccounts).where(and(eq(socialAccounts.projectId, ctx.project.id), eq(socialAccounts.id, account.id))),
     );
 
-    expect(await testDb().select().from(accountMetricSnapshots).where(eq(accountMetricSnapshots.socialAccountId, account.id))).toHaveLength(0);
-    expect(await testDb().select().from(accountMetricPollStates).where(eq(accountMetricPollStates.socialAccountId, account.id))).toHaveLength(0);
+    expect(
+      await runCrossProject("test: assert deletion", async () =>
+        testDb().select().from(accountMetricSnapshots).where(eq(accountMetricSnapshots.socialAccountId, account.id)),
+      ),
+    ).toHaveLength(0);
+    expect(
+      await runCrossProject("test: assert deletion", async () =>
+        testDb().select().from(accountMetricPollStates).where(eq(accountMetricPollStates.socialAccountId, account.id)),
+      ),
+    ).toHaveLength(0);
   });
 
   it("soft-deleting an account leaves its snapshots readable and removes its poll states", async () => {

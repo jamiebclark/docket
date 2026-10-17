@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../src/server/db/client";
+import { runCrossProject } from "../../../src/server/db/cross-project";
 import { accountMetricSnapshots, postMetricPollStates, postMetricSnapshots } from "../../../src/server/db/schema";
 import { schedulerConfig } from "../../../src/server/scheduler/config";
 import { runHousekeeping } from "../../../src/server/scheduler/housekeeping";
@@ -46,7 +47,10 @@ describe("insights retention (FR-073, FR-074, US4-AS3)", () => {
 
     expect(counts.postMetricSnapshotsPruned).toBeGreaterThanOrEqual(1);
     expect(typeof counts.accountMetricSnapshotsPruned).toBe("number");
-    const rows = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const rows = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, env.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(rows.map((r) => r.id)).toEqual([recentId]);
   });
 
@@ -70,7 +74,10 @@ describe("insights retention (FR-073, FR-074, US4-AS3)", () => {
 
     expect(counts.accountMetricSnapshotsPruned).toBeGreaterThanOrEqual(1);
     expect(typeof counts.postMetricSnapshotsPruned).toBe("number");
-    const rows = await getDb().select().from(accountMetricSnapshots).where(eq(accountMetricSnapshots.socialAccountId, account.id));
+    const rows = await getDb()
+      .select()
+      .from(accountMetricSnapshots)
+      .where(and(eq(accountMetricSnapshots.projectId, env.project.id), eq(accountMetricSnapshots.socialAccountId, account.id)));
     expect(rows.map((r) => r.id)).toEqual([recentId]);
   });
 
@@ -91,7 +98,9 @@ describe("insights retention (FR-073, FR-074, US4-AS3)", () => {
 
     await runHousekeeping(config({ insightsPruneBatch: 2 }));
 
-    const remaining = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const remaining = await runCrossProject("test: assert bounded batch", async () =>
+      getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id)),
+    );
     // The batch is bounded at 2 rows per call, cross-project — however many other old rows this run
     // also swept up, at least one of this test's own three old rows must survive the single call.
     expect(remaining.length).toBeGreaterThanOrEqual(1);
@@ -118,7 +127,10 @@ describe("insights retention (FR-073, FR-074, US4-AS3)", () => {
 
     await runHousekeeping(config());
 
-    const [state] = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id));
+    const [state] = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(and(eq(postMetricPollStates.projectId, env.project.id), eq(postMetricPollStates.postTargetId, target.id)));
     expect(state).toBeDefined();
     expect(await env.scope.targets.get(target.id)).not.toBeNull();
     expect(await env.scope.posts.get(post.id)).not.toBeNull();
@@ -142,9 +154,15 @@ describe("insights retention (FR-073, FR-074, US4-AS3)", () => {
 
     await runHousekeeping(config());
 
-    const rows = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const rows = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, env.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(rows).toHaveLength(0);
-    const [state] = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id));
+    const [state] = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(and(eq(postMetricPollStates.projectId, env.project.id), eq(postMetricPollStates.postTargetId, target.id)));
     expect(state).toBeDefined();
     expect(state!.frozenReason).toBe("settled");
   });

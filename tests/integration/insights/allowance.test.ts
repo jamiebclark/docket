@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../src/server/db/client";
 import { postMetricPollStates, postMetricSnapshots } from "../../../src/server/db/schema";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
@@ -50,28 +50,35 @@ describe("insights allowance (contracts/scheduler-insights.md §3, FR-045 … FR
     const summary = await atTime(DUE_AT, () => runTick(tickConfig()));
     expect(summary.insightsPoll.counts.deferredForAllowance).toBeGreaterThanOrEqual(1);
 
-    const [snapshot] = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const [snapshot] = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(snapshot).toBeUndefined();
 
-    const [state] = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, target.id));
+    const [state] = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, target.id)));
     expect(state?.consecutiveFailures).toBe(0);
     expect(state?.lastError).toBeNull();
     expect(state?.pollLeaseUntil).toBeNull();
     expect(state?.nextPollAt).not.toBeNull();
     expect(state!.nextPollAt!.getTime()).toBeLessThanOrEqual(DUE_AT.getTime());
-
-    void ctx;
   });
 
   it("with the default reserve of 0.5, four writes out of ten still leave the account pollable (FR-047)", async () => {
-    const { repos, account } = await accountWithLimit(10); // floor is 5; 4 used stays under it
+    const { ctx, repos, account } = await accountWithLimit(10); // floor is 5; 4 used stays under it
     await fillWritesInWindow(repos, account.id, 4);
     const target = await insightsTarget(repos, account.id);
 
     const summary = await atTime(DUE_AT, () => runTick(tickConfig()));
     expect(summary.insightsPoll.counts.deferredForAllowance).toBe(0);
 
-    const [snapshot] = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.postTargetId, target.id));
+    const [snapshot] = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(snapshot).toBeDefined();
   });
 

@@ -183,7 +183,7 @@ description: "Task list template for feature implementation"
 - [X] T060 [P] Edit `docs/research/bluesky.md`: add the section recording, with provenance, every metric field confirmed from the installed package per research.md §1 (including the confirmed absence of any views/reach field and the 25-URI limit), and the unverified-AppView and unverified-read-limit lines marked `NEEDS RESEARCH` (FR-081)
 - [X] T061 [P] Edit the constitution's Engineering Constraints list in `.specify/memory/constitution.md` and `docs/build-prompt.md`'s "analytics" out-of-scope line: record that per-post and per-account metric capture is now in scope and that charts, trends and comparisons are not, with a `docs(constitution):` commit and a version bump (FR-082)
 - [X] T062 [P] `tests/integration/docs/published-docs.test.ts`: confirm `docs/insights.md` is in the mkdocs nav and every `docsUrl()` target referenced by the panel resolves (FR-076) — depends on T054, T034
-- [ ] T063 Run the full final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` — depends on every task above except Phase 8
+- [X] T063 Run the full final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` — depends on every task above except Phase 8
 
 ---
 
