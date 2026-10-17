@@ -34,8 +34,22 @@ export const cellLinkStyles =
   "rounded-sm text-primary underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
 /**
+ * The chrome a header control shares: height, radius, hover fill and focus ring. It deliberately
+ * sets no gap, padding or colour, so the two below can each set their own — appending a conflicting
+ * utility to a finished class string is decided by CSS source order, not string order, and loses.
+ */
+const headerControlBase =
+  "inline-flex h-9 items-center rounded-lg text-sm font-medium transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+
+/**
  * A control whose glyph is the whole target — a header nav icon, a row's "go to" arrow. The label
  * rides along as `sr-only` text and a `title` tooltip, so it stays reachable without taking width.
  */
-export const iconControlStyles =
-  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+export const iconControlStyles = `${headerControlBase} justify-center gap-1.5 px-2.5 text-muted-foreground`;
+
+/**
+ * The header's identity control: the avatar and name, which are themselves the link to the account
+ * page rather than a separate "Account" item beside them. Full-strength text, since it is the one
+ * header control that carries a visible word.
+ */
+export const identityControlStyles = `${headerControlBase} gap-2 px-1.5 text-foreground`;
