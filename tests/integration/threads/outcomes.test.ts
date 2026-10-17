@@ -14,6 +14,7 @@ import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { THREADS_TOKEN, THREADS_USER_ID, threadsSetup, V } from "../../helpers/threads-publish";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -35,7 +36,7 @@ const quota = `${V}/${THREADS_USER_ID}/threads_publishing_limit`;
 const publish = `${V}/${THREADS_USER_ID}/threads_publish`;
 const T0 = Date.now() + 60_000;
 const tickAt = (seconds: number) =>
-  atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: { providerTimeoutMs: 100 } })).publishing.counts);
+  atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({ providerTimeoutMs: 100 }))).publishing.counts);
 
 type Expected = "ambiguous" | "retryable" | "fatal" | "continued";
 
@@ -183,7 +184,7 @@ describe("Threads outcome matrix", () => {
       .update(postTargets)
       .set({ status: "publishing", leaseOwner: randomUUID(), leaseUntil: past, inFlightStep: "create_container", inFlightMayPublish: false, firstStepAt: past })
       .where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, targetId)));
-    const counts = (await runTick({ config: {} })).publishing.counts;
+    const counts = (await runTick(tickConfig({}))).publishing.counts;
     expect(counts).toMatchObject({ recovered: 1, ambiguous: 0, done: 0 });
     expect((await row()).status).not.toBe("ambiguous");
     expect((await row()).status).not.toBe("failed");
@@ -205,7 +206,7 @@ describe("Threads outcome matrix", () => {
         publishStartedAt: past,
       })
       .where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, targetId)));
-    const counts = (await runTick({ config: {} })).publishing.counts;
+    const counts = (await runTick(tickConfig({}))).publishing.counts;
     expect(counts).toMatchObject({ recovered: 1, ambiguous: 1, done: 0 });
     expect(await row()).toMatchObject({ status: "ambiguous", nextAttemptAt: null, leaseOwner: null });
     const outcomes = (await forSchedulerProject(projectId).attempts.listForTarget(targetId)).map((a) => a.outcome);

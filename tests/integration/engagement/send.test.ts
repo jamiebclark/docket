@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { writeReply } from "../../../src/server/services/engagement/draft";
 import { approveReply } from "../../../src/server/services/engagement/review";
 import { markReplyNotSent, markReplySent } from "../../../src/server/services/failures";
@@ -12,6 +12,13 @@ import * as accounts from "../../../src/server/services/accounts";
 import { fakeSession } from "../../helpers/auth";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
+import { parkAllEngagementReads } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
+
+// The tick's engagement-read section claims across every project and is `limit`-bounded, so accounts
+// left active by other files on this worker's database fill the claim and this file's own account is
+// never read. Park them first.
+beforeEach(parkAllEngagementReads);
 
 afterAll(async () => {
   await closeDb();
@@ -53,7 +60,7 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
   it("sends an approved reply and marks the item answered", async () => {
     const { scope, account } = await setup({ engagementSendBehaviour: "sent" });
     const { itemId, draftId } = await seedApprovedDraft(scope, account.id);
-    const tick = await runTick({ config: NO_WAIT });
+    const tick = await runTick(tickConfig(NO_WAIT));
     expect(tick.engagementSend.ok).toBe(true);
     expect(tick.engagementSend.counts.sent).toBe(1);
     const draft = await scope.engagementDrafts.get(draftId);
@@ -65,12 +72,12 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
   it("an ambiguous outcome is never retried and is visible as a decision to make (SC-005)", async () => {
     const { scope, account } = await setup({ engagementSendBehaviour: "ambiguous" });
     const { draftId, itemId } = await seedApprovedDraft(scope, account.id);
-    const tick = await runTick({ config: NO_WAIT });
+    const tick = await runTick(tickConfig(NO_WAIT));
     expect(tick.engagementSend.counts.ambiguous).toBe(1);
     const draft = await scope.engagementDrafts.get(draftId);
     expect(draft?.sendState).toBe("ambiguous");
 
-    const again = await runTick({ config: NO_WAIT });
+    const again = await runTick(tickConfig(NO_WAIT));
     expect(again.engagementSend.counts.claimed).toBe(0);
 
     await markReplyNotSent(scope, draftId);
@@ -83,7 +90,7 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
   it("markReplySent answers the item without sending again", async () => {
     const { scope, account } = await setup({ engagementSendBehaviour: "ambiguous" });
     const { draftId, itemId } = await seedApprovedDraft(scope, account.id);
-    await runTick({ config: NO_WAIT });
+    await runTick(tickConfig(NO_WAIT));
     await markReplySent(scope, draftId);
     const draft = await scope.engagementDrafts.get(draftId);
     expect(draft?.sendState).toBe("sent");
@@ -94,7 +101,7 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
   it("a platform duplicate refusal is treated as answered", async () => {
     const { scope, account } = await setup({ engagementSendBehaviour: "duplicate" });
     const { draftId, itemId } = await seedApprovedDraft(scope, account.id);
-    const tick = await runTick({ config: NO_WAIT });
+    const tick = await runTick(tickConfig(NO_WAIT));
     expect(tick.engagementSend.counts.duplicate).toBe(1);
     const draft = await scope.engagementDrafts.get(draftId);
     expect(draft?.sendState).toBe("sent");
@@ -106,7 +113,7 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
     const { scope, account } = await setup({ engagementSendBehaviour: "sent" });
     await scope.accounts.setLimit(account.id, { count: 1, windowSeconds: 3600 });
     const { draftId } = await seedApprovedDraft(scope, account.id);
-    const tick = await runTick({ config: NO_WAIT });
+    const tick = await runTick(tickConfig(NO_WAIT));
     expect(tick.engagementSend.counts.waitingAllowance).toBe(1);
     expect(tick.engagementSend.counts.sent).toBe(0);
     const draft = await scope.engagementDrafts.get(draftId);
@@ -127,7 +134,7 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
       approvedByUserId: null,
       claimedAt: new Date(),
     });
-    const tick = await runTick({ config: NO_WAIT });
+    const tick = await runTick(tickConfig(NO_WAIT));
     expect(tick.engagementSend.counts.ambiguous).toBe(1);
     expect(tick.engagementSend.counts.sent).toBe(0);
     const draft = await scope.engagementDrafts.get(draftId);
@@ -151,7 +158,7 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
   it("a live claim stays distinguishable from a released one past generation 1 (F3): release, re-approve, send, then a second approval is refused already_answered", async () => {
     const { scope, account } = await setup({ engagementSendBehaviour: "fatal_error" });
     const { draftId: firstDraftId, itemId } = await seedApprovedDraft(scope, account.id, "ext-regen");
-    const tick = await runTick({ config: NO_WAIT });
+    const tick = await runTick(tickConfig(NO_WAIT));
     expect(tick.engagementSend.counts.failed).toBe(1);
     const firstDraft = await scope.engagementDrafts.get(firstDraftId);
     expect(firstDraft).toMatchObject({ reviewState: "rejected", sendState: "none" });
@@ -166,7 +173,7 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
     expect(approvedSecond).toMatchObject({ ok: true });
 
     await updateAccountSettings(scope, account.id, { engagementSendBehaviour: "sent" });
-    const resend = await runTick({ config: NO_WAIT });
+    const resend = await runTick(tickConfig(NO_WAIT));
     expect(resend.engagementSend.counts.sent).toBe(1);
     const secondDraft = await scope.engagementDrafts.get(second.draftId);
     expect(secondDraft?.sendState).toBe("sent");

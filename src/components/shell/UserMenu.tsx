@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { iconControlStyles, identityControlStyles } from "@/components/ui/controls";
 import { Icon } from "@/components/ui/Icon";
 
 /** Up to two initials from the user's own display name (never derived from an email address). */
@@ -9,11 +10,21 @@ export function initials(name: string): string {
   return letters ? letters.toUpperCase() : "?";
 }
 
-/** Signed-in user's avatar, name and a Sign out button; `signOut` is a server action (see the sign-out task). */
+/**
+ * Signed-in user's avatar, name and a Sign out button; `signOut` is a server action (see the sign-out task).
+ *
+ * Who you are *is* the way to your account, so the avatar and name are the link to `/account` rather
+ * than an icon beside them. Its accessible name is "<name> — Account": the visible name stays the
+ * start of it, so what you read is what you can say (WCAG 2.5.3), and where it goes is still said.
+ *
+ * There is deliberately no "Notifications" item: the bell is the single way in, and its panel
+ * already ends in "View all problems" and "Notification settings" — the one this duplicated. With
+ * no JavaScript the bell is a plain link to `/notifications`, so that page stays reachable either way.
+ */
 export function UserMenu({ name, signOut }: { name: string; signOut: () => Promise<void> }) {
   return (
-    <form action={signOut} className="flex items-center gap-2 text-sm">
-      <span className="flex items-center gap-2">
+    <form action={signOut} className="flex items-center gap-1 text-sm">
+      <Link href="/account" title="Account" className={identityControlStyles}>
         <span
           aria-hidden="true"
           className="flex size-8 items-center justify-center rounded-full bg-brand-gradient text-xs font-semibold text-white"
@@ -22,30 +33,15 @@ export function UserMenu({ name, signOut }: { name: string; signOut: () => Promi
         </span>
         <span className="hidden max-w-40 truncate font-medium md:inline">{name}</span>
         <span className="sr-only md:hidden">{name}</span>
-      </span>
-      <Link
-        href="/activity"
-        className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
+        <span className="sr-only"> — Account</span>
+      </Link>
+      <Link href="/activity" title="All activity" className={iconControlStyles}>
         <Icon name="activity" />
-        <span className="hidden sm:inline">All activity</span>
-        <span className="sr-only sm:hidden">All activity</span>
+        <span className="sr-only">All activity</span>
       </Link>
-      <Link
-        href="/notifications"
-        className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
-        <Icon name="slidersHorizontal" />
-        <span className="hidden sm:inline">Notifications</span>
-        <span className="sr-only sm:hidden">Notifications</span>
-      </Link>
-      <button
-        type="submit"
-        className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
+      <button type="submit" title="Sign out" className={iconControlStyles}>
         <Icon name="logOut" />
-        <span className="hidden sm:inline">Sign out</span>
-        <span className="sr-only sm:hidden">Sign out</span>
+        <span className="sr-only">Sign out</span>
       </button>
     </form>
   );

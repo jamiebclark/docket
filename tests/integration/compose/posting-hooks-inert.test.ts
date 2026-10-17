@@ -13,6 +13,7 @@ import { createProject } from "../../helpers/factories";
 import { postsEnv } from "../../helpers/posts-env";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 /** Finds every React element of a given host type (e.g. "select") in a tree of plain-function components, calling each composite along the way. */
 function findHostElements(node: unknown, type: string, out: { props: Record<string, unknown> }[] = []): { props: Record<string, unknown> }[] {
@@ -95,7 +96,7 @@ describe("G25–G28 hooks are inert for providers that do not use them", () => {
     const project = await createProject();
     const account = await createMockAccount(project.id, {}, { providerKey: "inert-hooks" });
     await createDueTarget(project.id, account.id, { baseText: "plain" });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ claimed: 1, done: 1 });
     expect(contexts).toHaveLength(1);
     expect(contexts[0]!.content.posting).toBeUndefined();

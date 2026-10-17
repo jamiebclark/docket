@@ -8,6 +8,7 @@ import { facebookVideoSetup } from "../../helpers/facebook-publish";
 import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -26,7 +27,7 @@ afterAll(async () => {
 describe("a Reel that breaks a Reel limit is refused at publish time", () => {
   it("fails with the Reel wording and makes no Graph or rupload request", async () => {
     const { row } = await facebookVideoSetup(storage, "short reel", { postType: "reel", video: { width: 1080, height: 1920, durationSeconds: 2 } });
-    await atTime(new Date(Date.now() + 60_000), () => runTick({ config: {} }));
+    await atTime(new Date(Date.now() + 60_000), () => runTick(tickConfig({})));
     const after = await row();
     expect(after.status).toBe("failed");
     expect(after.lastError).toContain("for a Facebook Reel");

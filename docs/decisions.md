@@ -3593,3 +3593,44 @@ expiry and recreation, and a create step killed mid-flight. The API surfaces eve
 does (capabilities, validation issues, requirements summary) with no UI involved. Not built, and owned
 by no spec: Facebook Page Stories, stickers and links on a Story, reading a Story back, and multi-asset
 Stories (`docs/feature-map.md`).
+
+## Password reset: Better Auth owns the token, Docket owns the message (2026-10-16)
+
+Spec 044 built the SMTP mailer and listed password reset as out of scope but newly possible. Reset is
+now wired, and no new mail dependency came with it: `SMTP_HOST`/`SMTP_FROM` already reach any provider,
+including a hosted one over SMTP, so a second transport (a Resend SDK, say) would have added a secret
+group and a parallel outcome classifier to replace something tested.
+
+1. **Better Auth owns the whole token lifecycle.** `/request-password-reset` already does the
+   constant-time miss for an unknown address, writes the single-use row to `verification`, expires it
+   and consumes it. Docket supplies only `sendResetPassword`, so there is no second token
+   implementation to keep correct beside the invitation one.
+2. **`revokeSessionsOnPasswordReset` is on.** A reset hands the account to whoever holds the mailbox;
+   leaving other sessions alive would defeat the common reason for resetting.
+3. **The reset does not sign the person in.** It redirects to `/login?reset=1`, which carries the
+   confirmation. Holding a mailbox proves the address, not that the person remembers what they just
+   typed.
+4. **The per-email limiter is not gated on `ctx.request`,** unlike the sign-in limiter beside it. The
+   reset request also arrives in-process from the `/forgot-password` server action, where Better Auth's
+   HTTP rate limiter never runs, so the `before` hook is the only choke point both routes share. A
+   per-address limit is not enough on its own, though: it cannot see a caller walking a *list* of
+   addresses, each one under its own cap, and every real address on that list gets mailed. So the hook
+   also holds a process-wide ceiling of 60 reset requests a minute, consumed by every request including
+   one the per-email limit already refused. The endpoint being enumeration-safe does not make unbounded
+   outbound mail safe.
+5. **Change-password goes over HTTP through `authClient`,** like the sign-in form (001 D5) and for a
+   sharper reason: with `revokeOtherSessions` Better Auth deletes every session including the current
+   one and sets a replacement cookie, and only the `/api/auth` route runs the `nextCookies()` plugin
+   that writes it back. An in-process server action would change the password and then sign the person
+   out of the browser they changed it in.
+6. **With no SMTP group configured there is no reset form at all** — the sign-in page omits the link
+   and `/forgot-password` explains instead. The request would otherwise succeed, send nothing, and
+   leave someone waiting on an email that is never coming.
+7. **A new `password_reset` purpose on `email_delivery_attempts`** (migration 0040), so a reset send is
+   auditable exactly like an invitation: no address, no body, no token — only the outcome and its SMTP
+   code. `recordInvitationAttempt` became `recordTransactionalAttempt(db, purpose, …)` rather than
+   growing a near-copy.
+8. **Both reset pages are in `auth-gate`'s `PUBLIC_EXACT`.** The optimistic gate in front of the app
+   redirects a cookie-less request to `/login`, which for these two routes is a closed loop: the person
+   resetting a password cannot sign in by definition. This is the same trap the unsubscribe routes hit
+   (044), so it now has a test of its own beside theirs.

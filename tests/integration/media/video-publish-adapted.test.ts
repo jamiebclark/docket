@@ -14,6 +14,7 @@ import { createMockAccount, createDueTarget, parkAllDueTargets } from "../../hel
 import { createMemoryStorage } from "../../helpers/storage";
 import { createVideoFixtures, type VideoFixtures } from "../../helpers/video-fixtures";
 import { queueVersionFor, received, receivedStrict, strictVideoProvider } from "../../helpers/video-publish-setup";
+import { tickConfig } from "../../helpers/tick";
 
 const signal = new AbortController().signal;
 
@@ -59,7 +60,7 @@ requireFfmpeg()("one video, two targets, one too strict for it", () => {
     }
     expect(await ours()).toMatchObject({ state: "ready" });
 
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
 
     // Fits: the stored original, byte for byte.
     expect(received).toHaveLength(1);

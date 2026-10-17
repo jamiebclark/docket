@@ -19,6 +19,13 @@ export interface NotificationItem {
   message: string;
   /** Newer than the person's reading position for that project, and not individually read. */
   isNew: boolean;
+  /**
+   * At or below the person's reading position: already read, so "Mark read" and "Snooze" would write
+   * nothing (`markEvent` returns `unchanged` on exactly this condition). The row says "Read" instead
+   * of offering two controls that do nothing. Distinct from `!isNew`, which is also false for a
+   * snoozed event and for a project with no reading position yet — both still markable.
+   */
+  read: boolean;
   /** False for every row of a project that has reached the per-person mark cap (FR-023). */
   actionsAvailable: boolean;
   link: { href: string; label: string } | null;

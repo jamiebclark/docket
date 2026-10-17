@@ -24,6 +24,19 @@ function problemSrName(item: NotificationItem): string {
 }
 
 type RowResult = ActionResult<RowDone> | null;
+
+/**
+ * Whether the row should read "Read" rather than offer its controls: either the server said so, or
+ * this row's own "Mark read" has come back successfully.
+ *
+ * The second half matters because `item.read` is a server answer that only changes when the page is
+ * fetched again. The bell panel swaps the row itself through `onDone`, but `/notifications` renders
+ * on the server with nothing listening, so without this the row went on offering "Mark read" after
+ * it had already worked — which is indistinguishable, to the person pressing it, from it doing nothing.
+ */
+export function rowIsRead(item: Pick<NotificationItem, "read">, result: RowResult): boolean {
+  return item.read || Boolean(result?.ok && result.data.outcome === "read");
+}
 type MarkAllResult = ActionResult<{ unread: UnreadSummary; busy: string[]; snoozesCleared: number }> | null;
 
 /**
@@ -61,6 +74,25 @@ export function NotificationRowActions({
     if (markAllResult?.ok) window.dispatchEvent(new Event(CHANGED_EVENT));
   }, [markAllResult]);
 
+  const markedHere = Boolean(result?.ok && result.data.outcome === "read");
+  const markAnnouncement = result?.ok ? result.data.announcement : "";
+
+  // Already at or below the reading position: "Mark read" and "Snooze" would both write nothing and
+  // announce nothing, so the row says where it stands instead of offering two controls that do
+  // nothing when pressed. Pressing "Mark read" on an unread row turns it into this line.
+  if (rowIsRead(item, result)) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs text-muted-foreground">
+          Read<span className="sr-only">{srName}</span>
+        </p>
+        {/* The confirmation still has to be said: swapping the controls out must not take the
+            announcement with it, or the people who most need it are the ones who stop hearing it. */}
+        {markedHere ? <LiveRegion message={markAnnouncement} /> : null}
+      </div>
+    );
+  }
+
   if (!item.actionsAvailable) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -78,7 +110,10 @@ export function NotificationRowActions({
   const error = (result && !result.ok ? result.message : null) ?? (snoozeResult && !snoozeResult.ok ? snoozeResult.message : null);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    // `-ml-3` cancels the ghost buttons' own `px-3`, so their labels start on the same left edge as
+    // the lines above rather than a step in from them. The "Read" branch above is plain text with no
+    // padding of its own, so it is deliberately not pulled back the same way.
+    <div className="-ml-3 flex flex-wrap items-center gap-2">
       <form action={formAction}>
         <input type="hidden" name="eventId" value={item.id} />
         {!hydrated && returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}

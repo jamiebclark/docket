@@ -9,7 +9,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { createJob, retryFailedItems, retryItem } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
-import { jobsEnv, modelOk, parkAllJobs, routeLlm } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, routeLlm, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -18,7 +18,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-const tick = () => runTick({ config: { jobMaxItems: 5 } });
+const tick = () => runTick(tickConfig({ jobMaxItems: 5 }));
 
 describe("retries and concurrent ticks never duplicate posts (US2, SC-004)", () => {
   it("retry gives exactly one post, and a second retry changes nothing", async () => {

@@ -10,6 +10,7 @@ import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { scriptThreads, THREADS_USER_ID, threadsSetup, V } from "../../helpers/threads-publish";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -27,7 +28,7 @@ afterAll(async () => {
 
 const T0 = Date.now() + 60_000;
 /** Ticks with the engine clock pinned `seconds` after T0 (no sleeping). */
-const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
 const U = THREADS_USER_ID;
 
 const creates = () => graph.requests.filter((r) => r.method === "POST" && r.path.endsWith(`/${U}/threads`));

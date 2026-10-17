@@ -9,6 +9,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 
@@ -19,7 +20,7 @@ afterAll(async () => {
 const T0 = new Date("2026-10-05T09:00:00Z");
 const WINDOW = 3600;
 const LIMIT = 3;
-const tick = (when: Date) => atTime(when, () => runTick({ config: { maxItems: 100 } }));
+const tick = (when: Date) => atTime(when, () => runTick(tickConfig({ maxItems: 100 })));
 
 describe("per-account publish limits (SC-009)", () => {
   it("never exceeds the limit in any rolling window and defers the excess", async () => {

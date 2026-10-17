@@ -12,7 +12,7 @@ import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { jobsEnv, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -22,7 +22,7 @@ afterAll(async () => {
 });
 
 const tickAt = (at: Date, over: Record<string, unknown> = {}) =>
-  atTime(at, () => runTick({ config: { jobMaxItems: 10, ...over } }));
+  atTime(at, () => runTick(tickConfig({ jobMaxItems: 10, ...over })));
 
 /** Refuses on billing until `succeed()` is called; records every request's label for counting. */
 function switchableLlm(): LlmProvider & { requests: string[]; succeed(): void } {
@@ -85,7 +85,10 @@ describe("credit outage (US1 AS4, SC-001)", () => {
     for (const item of afterRecovery) {
       expect(rows.filter((r) => r.generationJobItemId === item.id)).toHaveLength(1);
     }
-  }, 120_000);
+  // 122 real ticks against a real database. ~13s run alone, but it shares a four-core CI runner with
+  // two other vitest workers on one Postgres, where it has been seen to pass 120s and time out. The
+  // budget here is wall-clock headroom for contention, not an expectation about how long this takes.
+  }, 420_000);
 
   it("SC-001: a 500-item job seeded directly survives a simulated two-hour outage with zero failed", async () => {
     const e = await jobsEnv();
@@ -125,5 +128,8 @@ describe("credit outage (US1 AS4, SC-001)", () => {
     expect(items.every((i) => i.attemptCount === 0)).toBe(true);
     const job = await e.scope.jobs.get(jobId);
     expect(job!.status).not.toBe("completed_with_failures");
-  }, 120_000);
+  // 122 real ticks against a real database. ~13s run alone, but it shares a four-core CI runner with
+  // two other vitest workers on one Postgres, where it has been seen to pass 120s and time out. The
+  // budget here is wall-clock headroom for contention, not an expectation about how long this takes.
+  }, 420_000);
 });

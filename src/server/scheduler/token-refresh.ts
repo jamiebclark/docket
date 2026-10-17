@@ -13,6 +13,14 @@ export interface RefreshCounts {
   failed: number;
   /** Transient failures: the account stays `active` and is retried. */
   deferred: number;
+  /**
+   * Accounts claimed but handed back unrefreshed because the tick ran out of budget.
+   *
+   * Reported so that "the section skipped" is never indistinguishable from "there was nothing to do":
+   * a silent zero here cost a day of CI flake-hunting, because a test asserting `refreshed >= 1` saw
+   * the same counts whether the work was done, absent, or never attempted.
+   */
+  outOfBudget: number;
 }
 
 /**
@@ -26,7 +34,7 @@ export async function runTokenRefresh(opts: {
   startedAt: Date;
 }): Promise<RefreshCounts> {
   const { config } = opts;
-  const counts: RefreshCounts = { refreshed: 0, failed: 0, deferred: 0 };
+  const counts: RefreshCounts = { refreshed: 0, failed: 0, deferred: 0, outOfBudget: 0 };
   const deadline = opts.startedAt.getTime() + config.timeBudgetMs;
   const token = randomUUID();
   const now = await clock.now();
@@ -45,7 +53,8 @@ export async function runTokenRefresh(opts: {
   for (const account of accounts) {
     const repos = forSchedulerProject(account.projectId);
     if ((await clock.now()).getTime() + config.providerTimeoutMs > deadline) {
-      // No budget left: give the lease back so another tick can take it.
+      // No budget left: give the lease back so another tick can take it, and say so.
+      counts.outOfBudget += 1;
       await recordRefreshEmitting(repos, account.id, token, {});
       continue;
     }

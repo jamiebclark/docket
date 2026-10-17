@@ -13,7 +13,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, seedCreditHold } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, seedCreditHold, tickConfig } from "../../helpers/jobs-env";
 import { INSTALL_CREDENTIAL_OWNER } from "../../../src/server/dal/credential-owners";
 
 beforeEach(parkAllJobs);
@@ -26,7 +26,7 @@ afterAll(async () => {
 const LEASE_MS = 300_000;
 const claim = (now: Date) => claimDueJobItems({ now, limit: 5, leaseMs: LEASE_MS, maxAttempts: 3 });
 const later = (ms: number) => new Date(Date.now() + ms);
-const tickAt = (at: Date) => atTime(at, () => runTick({ config: { jobMaxItems: 5 } }));
+const tickAt = (at: Date) => atTime(at, () => runTick(tickConfig({ jobMaxItems: 5 })));
 
 describe("recovering an interrupted tick (US2 scenarios 6–7)", () => {
   it("runs an item killed before save once its lease expires, with exactly one post", async () => {
@@ -56,7 +56,7 @@ describe("recovering an interrupted tick (US2 scenarios 6–7)", () => {
     setLlmForTests(fake);
     await e.asset();
     const { jobId } = await createJob(e.scope, e.input({ approval: "auto_approve", scheduling: "leave_as_draft" }));
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     const [item] = await e.scope.jobItems.listForJob(jobId);
     const post = (await e.scope.posts.findByJobItemId(item!.id))!;
     expect(post.reviewState).toBe("approved");
@@ -81,7 +81,7 @@ describe("recovering an interrupted tick (US2 scenarios 6–7)", () => {
         .where(eq(generationJobItems.id, item!.id));
     });
 
-    const tick = await runTick({ config: { jobMaxItems: 5 } });
+    const tick = await runTick(tickConfig({ jobMaxItems: 5 }));
     expect(tick.generation.counts).toMatchObject({ claimed: 1, finishing: 1, done: 1 });
     expect(fake.requests).toHaveLength(1);
     expect((await e.scope.jobItems.get(item!.id))!.status).toBe("done");

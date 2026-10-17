@@ -93,7 +93,7 @@ export const emailDeliveryAttempts = pgTable(
     durationMs: integer("duration_ms").notNull(),
   },
   (t) => [
-    check("email_delivery_attempts_purpose", sql`${t.purpose} IN ('problems','invitation')`),
+    check("email_delivery_attempts_purpose", sql`${t.purpose} IN ('problems','invitation','password_reset')`),
     check("email_delivery_attempts_cadence", sql`${t.cadence} IS NULL OR ${t.cadence} IN ('immediate','digest')`),
     check(
       "email_delivery_attempts_outcome",

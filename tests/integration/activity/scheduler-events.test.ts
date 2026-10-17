@@ -10,6 +10,8 @@ import { BEFORE, SLOT, breakAccount } from "../../helpers/failures";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
+import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 
 beforeEach(parkAllDueTargets);
 
@@ -18,7 +20,7 @@ afterAll(async () => {
 });
 
 const at = (seconds: number) => new Date(SLOT.getTime() + seconds * 1000);
-const tick = (when: Date, config: Record<string, number> = {}) => atTime(when, () => runTick({ config }));
+const tick = (when: Date, config: Partial<SchedulerConfig> = {}) => atTime(when, () => runTick(tickConfig(config)));
 
 async function queued(settings: Record<string, unknown>) {
   const env = await postsEnv();
@@ -103,7 +105,7 @@ describe("scheduler writes one activity event per applied result", () => {
     const account = await createMockAccount(project.id, { delayMs: 1500 });
     const { target } = await createDueTarget(project.id, account.id);
     const repos = forSchedulerProject(project.id);
-    const ticking = runTick({ config: { providerTimeoutMs: 5000 } });
+    const ticking = runTick(tickConfig({ providerTimeoutMs: 5000 }));
     for (let i = 0; i < 50; i++) {
       if ((await repos.targets.get(target.id))?.leaseOwner) break;
       await new Promise((r) => setTimeout(r, 50));
@@ -136,7 +138,7 @@ describe("an interrupted step (expired lease) is logged", () => {
 
   it("a may-publish step is ambiguous", async () => {
     const projectId = await crashed({ mayPublish: true });
-    await runTick();
+    await runTick(tickConfig());
     const events = await eventsFor(projectId);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ kind: "target_ambiguous", details: { engine: "recovered_ambiguous" } });
@@ -144,7 +146,7 @@ describe("an interrupted step (expired lease) is logged", () => {
 
   it("a safe step that is re-leased writes one interrupted retry, then its result", async () => {
     const projectId = await crashed({ mayPublish: false });
-    await runTick();
+    await runTick(tickConfig());
     const events = await eventsFor(projectId);
     expect(events.map((e) => e.kind)).toEqual(["target_retry_scheduled", "target_published"]);
     expect(events[0]).toMatchObject({ details: { attempt: 1, interrupted: true } });
@@ -152,7 +154,7 @@ describe("an interrupted step (expired lease) is logged", () => {
 
   it("interruption exhaustion fails the target with engine interrupted", async () => {
     const projectId = await crashed({ mayPublish: false, attemptCount: 99 });
-    await runTick();
+    await runTick(tickConfig());
     const events = await eventsFor(projectId);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ kind: "target_failed", details: { engine: "interrupted" } });

@@ -10,6 +10,7 @@ import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { IG_ID, instagramSetup } from "../../helpers/instagram-publish";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -26,7 +27,7 @@ afterAll(async () => {
 });
 
 const T0 = Date.now() + 60_000;
-const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
 
 describe("the unchanged engine publishes both Meta providers", () => {
   it("publishes a Facebook target end to end", async () => {

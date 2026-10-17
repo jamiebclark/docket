@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { engagementItems, engagementReplyClaims } from "../../../src/server/db/schema/engagement";
 import { and, eq } from "drizzle-orm";
 import { runTick } from "../../../src/server/scheduler";
@@ -13,6 +13,13 @@ import { fakeSession } from "../../helpers/auth";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { postsEnv } from "../../helpers/posts-env";
+import { parkAllEngagementReads } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
+
+// The tick's engagement-read section claims across every project and is `limit`-bounded, so accounts
+// left active by other files on this worker's database fill the claim and this file's own account is
+// never read. Park them first.
+beforeEach(parkAllEngagementReads);
 
 afterAll(async () => {
   await closeDb();
@@ -181,7 +188,7 @@ describe("engagement retention (FR-060, FR-061, SC-014)", () => {
       settings: { engagementItems: [{ kind: "reply", externalId: "too-old", text: "Ancient", saidAt: OLD.toISOString() }] },
     });
 
-    await runTick({ config: { engagementReadMinIntervalMs: 0, engagementRetentionDays: RETENTION_DAYS } });
+    await runTick(tickConfig({ engagementReadMinIntervalMs: 0, engagementRetentionDays: RETENTION_DAYS }));
 
     const list = await listInbox(scope);
     expect(list.items.map((i) => i.externalId)).not.toContain("too-old");

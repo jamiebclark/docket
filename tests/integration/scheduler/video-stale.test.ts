@@ -6,6 +6,7 @@ import { createVideoAsset } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { markReady, queueVersionFor, received } from "../../helpers/video-publish-setup";
 import { versionRows, waitSetup } from "../../helpers/video-wait";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(async () => {
   received.length = 0;
@@ -28,7 +29,7 @@ describe("a version built for something that changed is never used (FR-023)", ()
     await t.storage.put(other.storageKey, Buffer.from("other"), other.mimeType);
     await t.repos.posts.setMedia(t.post.id, [other.id]);
 
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(result.publishing.counts).toMatchObject({ waitingForVideo: 1, done: 0 });
     expect(received).toHaveLength(0);
     const rows = await versionRows(t.project.id);
@@ -43,7 +44,7 @@ describe("a version built for something that changed is never used (FR-023)", ()
     await markReady(t.project.id, version.id, key, t.storage.publicUrl(key));
     await t.repos.media.softDelete(t.asset.id, new Date());
 
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(received).toHaveLength(0);
     expect(result.publishing.counts).toMatchObject({ done: 0 });
     expect(await t.repos.targets.get(t.target.id)).toMatchObject({ status: "failed" });

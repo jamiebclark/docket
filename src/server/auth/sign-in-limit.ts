@@ -18,3 +18,31 @@ export function createEmailAttemptLimiter({ max, windowMs }: { max: number; wind
     },
   };
 }
+
+/**
+ * Fixed-window counter with no key: a ceiling on how often one thing may happen process-wide.
+ *
+ * It exists for the reset-request endpoint, which is unauthenticated and causes an email to be sent.
+ * The per-email limiter above bounds how often ONE address can be mailed, but not how many distinct
+ * addresses one caller can walk through — and `/forgot-password` reaches the endpoint in-process,
+ * where Better Auth's per-IP limiter never runs. Without a ceiling, a single client could ask for
+ * resets across thousands of addresses and have Docket mail every real one of them.
+ *
+ * The limit is deliberately far above any genuine use on a Docket install, so it is a ceiling on abuse
+ * rather than a quota anyone can hit by hand.
+ */
+export function createGlobalAttemptLimiter({ max, windowMs }: { max: number; windowMs: number }) {
+  let count = 0;
+  let resetAt = 0;
+  return {
+    attempt(now = Date.now()): boolean {
+      if (resetAt <= now) {
+        count = 1;
+        resetAt = now + windowMs;
+        return true;
+      }
+      count += 1;
+      return count <= max;
+    },
+  };
+}

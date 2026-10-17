@@ -7,6 +7,7 @@ import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { IG_ID, instagramSetup } from "../../helpers/instagram-publish";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -25,7 +26,7 @@ afterAll(async () => {
 const media = `/v26.0/${IG_ID}/media`;
 const T0 = Date.now() + 60_000;
 /** Ticks with the engine clock pinned `seconds` after T0 (no sleeping). */
-const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
 
 const publishRequests = () => graph.requests.filter((r) => r.path.endsWith("/media_publish"));
 

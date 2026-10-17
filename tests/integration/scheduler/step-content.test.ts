@@ -6,6 +6,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMediaAsset, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 // `effectiveContent` reports a vanished post for the text below (the post disappears between claim and execute).
 const GONE_TEXT = "post-that-vanishes";
@@ -64,7 +65,7 @@ describe("stepFor receives the content shape (G4)", () => {
       baseText: "base text",
       patch: { overrideText: "override text" },
     });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ claimed: 1, done: 1 });
     expect(shapes).toEqual([{ text: "override text", mediaCount: 0, videoCount: 0, kinds: [], postType: "text" }]);
     expect(target.id).toBeTruthy();
@@ -80,7 +81,7 @@ describe("stepFor receives the content shape (G4)", () => {
     const asset = await createMediaAsset(project.id);
     await repos.posts.setMedia(withMedia.post.id, [asset.id]);
 
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
 
     const byText = (t: string) => contexts.find((c) => c.content.text === t);
     expect(byText("text only")?.step).toEqual({ name: "publish", mayPublish: true });
@@ -96,7 +97,7 @@ describe("stepFor receives the content shape (G4)", () => {
     const project = await createProject();
     const account = await createMockAccount(project.id, {}, { providerKey: "step-content" });
     await createDueTarget(project.id, account.id, { baseText: "who am i" });
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     expect(contexts.map((c) => c.step)).toContainEqual({ name: "publish", mayPublish: true });
   });
 });
@@ -107,7 +108,7 @@ describe("a post that is gone", () => {
     const repos = createSchedulingRepos(testDb(), project.id);
     const account = await createMockAccount(project.id, {}, { providerKey: "step-content" });
     const { target } = await createDueTarget(project.id, account.id, { baseText: GONE_TEXT });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ failed: 1, ambiguous: 0 });
     expect(advanced).toBe(0);
     expect(await repos.targets.get(target.id)).toMatchObject({

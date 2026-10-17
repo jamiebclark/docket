@@ -1,16 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { safeRedirect } from "@/lib/safe-redirect";
 import { buttonStyles } from "@/components/ui/Button";
 import { alertStyles } from "@/components/ui/Alert";
-import { controlStyles, labelStyles } from "@/components/ui/controls";
+import { controlStyles, labelStyles, linkStyles } from "@/components/ui/controls";
 
 const GENERIC_FAILURE = "Email or password is incorrect.";
 
-export function LoginForm({ next }: { next: string }) {
+/** `canReset` is false when this install has no mailer: see the /forgot-password page for why. */
+export function LoginForm({ next, canReset }: { next: string; canReset: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -67,6 +69,11 @@ export function LoginForm({ next }: { next: string }) {
       >
         {pending ? "Logging in…" : "Log in"}
       </button>
+      {canReset ? (
+        <Link href="/forgot-password" className={`${linkStyles} mt-1 text-center text-sm`}>
+          Forgot your password?
+        </Link>
+      ) : null}
     </form>
   );
 }

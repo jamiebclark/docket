@@ -7,6 +7,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 
@@ -42,14 +43,14 @@ describe("concurrent ticks (SC-002)", () => {
         await parkAllDueTargets();
         const { projectId, ids } = await seed();
 
-        await Promise.all(Array.from({ length: TICKS }, () => runTick({ config: { maxItems: 500 } })));
+        await Promise.all(Array.from({ length: TICKS }, () => runTick(tickConfig({ maxItems: 500 }))));
         // Ticks skip rows locked by a sibling; sweep up whatever was skipped.
         for (let sweep = 0; sweep < 10; sweep++) {
           const pending = await runCrossProject("test: pending", () =>
             getDb().select({ id: postTargets.id, status: postTargets.status }).from(postTargets).where(and(eq(postTargets.projectId, projectId), inArray(postTargets.id, ids))),
           );
           if (pending.every((p) => p.status === "published")) break;
-          await runTick({ config: { maxItems: 500 } });
+          await runTick(tickConfig({ maxItems: 500 }));
         }
 
         const attempts = await runCrossProject("test: attempts", () =>

@@ -15,6 +15,7 @@ import type { LlmProvider } from "../../src/server/llm/types";
 import { createFakeLlm, type FakeStep } from "./fake-llm";
 import { png } from "./images";
 import { postsEnv } from "./posts-env";
+export { TICK_BUDGET_MS, tickConfig } from "./tick";
 import { createMemoryStorage } from "./storage";
 
 /** Stops items left by other test files from being claimed by this file's ticks. */

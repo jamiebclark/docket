@@ -7,6 +7,7 @@ import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { IG_ID, instagramSetup } from "../../helpers/instagram-publish";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -27,7 +28,7 @@ const quota = `/v26.0/${IG_ID}/content_publishing_limit`;
 const publish = `/v26.0/${IG_ID}/media_publish`;
 const T0 = Date.now() + 60_000;
 /** Ticks with the engine clock pinned `seconds` after T0 (no sleeping). */
-const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
 
 describe("Instagram single image through the real scheduler", () => {
   it("publishes in 4 ticks when the container is ready at the first check", async () => {

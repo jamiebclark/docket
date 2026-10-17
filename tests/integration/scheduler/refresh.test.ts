@@ -34,11 +34,20 @@ async function expiring(projectId: string, settings: Record<string, unknown> = {
   return { account, repos };
 }
 
+/**
+ * Pin the budget on every tick here, not just the one that first needed it (below): the refresh section
+ * stops claiming once `now + providerTimeoutMs` passes `startedAt + timeBudgetMs`, which at the env
+ * defaults is a 15s window shared with eight other sections and one wall clock. A tick that runs out
+ * reports zero refreshes with no error, so these assertions fail on CI contention while passing
+ * locally — `counts.failed` came back 0 on run 39009461524.
+ */
+const TICK_BUDGET_MS = 120_000;
+
 describe("token refresh", () => {
   it("refreshes expiring credentials and re-encrypts them", async () => {
     const { project } = await createProjectWithMembers();
     const { account, repos } = await expiring(project.id);
-    const tick = await runTick();
+    const tick = await runTick({ config: { timeBudgetMs: TICK_BUDGET_MS } });
     expect(tick.tokenRefresh.ok).toBe(true);
     expect(tick.tokenRefresh.counts.refreshed).toBeGreaterThanOrEqual(1);
     const after = await repos.accounts.get(account.id);
@@ -56,8 +65,14 @@ describe("token refresh", () => {
 
     // Refresh is global and capped per tick (default 5); expiring accounts left by other
     // files on this worker's database could fill the cap first, so lift it here.
-    const tick = await runTick({ config: { refreshMaxAccounts: 1000 } });
-    expect(tick.tokenRefresh.counts.failed).toBeGreaterThanOrEqual(1);
+    const tick = await runTick({ config: { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS } });
+    // KNOWN FLAKE, cause not yet identified: this has come back `failed: 0` on CI (runs 39009461524
+    // and 39015 shard 1) while passing locally. Pinning the budget did NOT fix it, so it is not the
+    // deadline gate `outOfBudget` now reports — with a 120s budget that gate cannot fire. The counts
+    // are in the message so the next failure says which disposition took the account instead of
+    // asserting a bare zero.
+    const refresh = JSON.stringify(tick.tokenRefresh);
+    expect(tick.tokenRefresh.counts.failed, `tokenRefresh ${refresh}`).toBeGreaterThanOrEqual(1);
     const badAfter = await bad.repos.accounts.get(bad.account.id);
     expect(badAfter).toMatchObject({ status: "needs_reauth", lastError: "Mock refresh failure" });
     expect(badAfter!.lastError).not.toContain("old-secret-token");
@@ -67,7 +82,7 @@ describe("token refresh", () => {
     // flagging tick may still go out on the not-yet-expired token. Once flagged, due targets
     // on the account fail without a provider call.
     const { target } = await createDueTarget(project.id, bad.account.id);
-    await runTick();
+    await runTick({ config: { timeBudgetMs: TICK_BUDGET_MS } });
     const t = await bad.repos.targets.get(target.id);
     expect(t!.status).toBe("failed");
     const attempts = await bad.repos.attempts.listForTarget(target.id);
@@ -78,7 +93,7 @@ describe("token refresh", () => {
     const { project } = await createProjectWithMembers();
     const made = [];
     for (let i = 0; i < 7; i++) made.push(await expiring(project.id));
-    const tick = await runTick({ config: { refreshMaxAccounts: 5 } });
+    const tick = await runTick({ config: { refreshMaxAccounts: 5, timeBudgetMs: TICK_BUDGET_MS } });
     expect(tick.tokenRefresh.counts.refreshed).toBeLessThanOrEqual(5);
     const refreshed = (
       await Promise.all(made.map((m) => m.repos.accounts.get(m.account.id)))
@@ -100,7 +115,7 @@ describe("token refresh", () => {
     // wall clock and reports zero refreshes under CI contention - see ENGAGEMENT_TIME_SHARE
     // and SCHEDULER_TICK_BUDGET_SECONDS for the capacity side of this, which is a separate
     // concern with its own tests.
-    const tickConfig = { refreshMaxAccounts: 1000, timeBudgetMs: 120_000 };
+    const tickConfig = { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS };
     const first = await runTick({ config: tickConfig });
     expect(first.tokenRefresh.counts.deferred).toBeGreaterThanOrEqual(1);
     const after = await repos.accounts.get(account.id);
@@ -129,7 +144,7 @@ describe("token refresh", () => {
       expiresAt: new Date(Date.now() + 30 * 86_400_000),
       displayName: "new.handle",
     });
-    await runTick({ config: { refreshMaxAccounts: 1000 } });
+    await runTick({ config: { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS } });
     expect(await repos.accounts.get(account.id)).toMatchObject({ displayName: "new.handle", status: "active" });
   });
 });

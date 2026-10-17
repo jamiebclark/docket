@@ -72,6 +72,7 @@ describe("snoozing a problem (N17 to N20, FR-010 to FR-014)", () => {
     const panel = await recentPanel(await setOf(snoozer.id), new Date());
     const item = panel.items.find((i) => i.id === e.id);
     expect(item?.isNew).toBe(true);
+    expect(item?.read).toBe(false);
   });
 
   it("re-snoozing replaces the instant in both directions", async () => {
@@ -103,6 +104,9 @@ describe("snoozing a problem (N17 to N20, FR-010 to FR-014)", () => {
     const item = panel.items.find((i) => i.id === e.id);
     expect(item).toBeDefined();
     expect(item?.isNew).toBe(false);
+    // The row's controls follow `read`, which must agree with the `unchanged` above: pressing
+    // "Mark read" again would write nothing, so the row says "Read" rather than offering it.
+    expect(item?.read).toBe(true);
   });
 
   it("a snooze whose target is retried, published and resolved still returns unread once it expires", async () => {

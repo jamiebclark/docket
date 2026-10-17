@@ -9,6 +9,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 // The test database is shared: park other tests' due targets so a tick only sees this test's.
 beforeEach(parkAllDueTargets);
@@ -39,11 +40,11 @@ describe("scheduler end to end (SC-001)", () => {
     const queued = await atTime(BEFORE, () => posts.addToQueue(scope, postId, {}));
     expect(queued[0]).toMatchObject({ ok: true, scheduledAt: SLOT.toISOString() });
 
-    const early = await atTime(at(SLOT, -60), () => runTick());
+    const early = await atTime(at(SLOT, -60), () => runTick(tickConfig()));
     expect(early.publishing.counts.claimed).toBe(0);
     expect((await posts.getPost(scope, postId)).post.status).toBe("scheduled");
 
-    const tick = await atTime(SLOT, () => runTick());
+    const tick = await atTime(SLOT, () => runTick(tickConfig()));
     expect(tick.publishing).toMatchObject({ ok: true, counts: { claimed: 1, done: 1 } });
     const detail = await posts.getPost(scope, postId);
     expect(detail.post.status).toBe("published");
@@ -52,7 +53,7 @@ describe("scheduler end to end (SC-001)", () => {
     expect(attempts).toHaveLength(1);
     expect(attempts[0]).toMatchObject({ outcome: "done", tickId: tick.tickId });
 
-    const second = await atTime(at(SLOT, 5), () => runTick());
+    const second = await atTime(at(SLOT, 5), () => runTick(tickConfig()));
     expect(second.publishing.counts.claimed).toBe(0);
     expect(await posts.listAttempts(scope, targetId)).toHaveLength(1);
   });
@@ -60,12 +61,12 @@ describe("scheduler end to end (SC-001)", () => {
   it("continues a multi-step publish across ticks, one step per tick", async () => {
     const { scope, postId, targetId } = await setup({ behaviour: "multi_step", steps: 2 });
     await atTime(BEFORE, () => posts.addToQueue(scope, postId, {}));
-    const t1 = await atTime(SLOT, () => runTick());
+    const t1 = await atTime(SLOT, () => runTick(tickConfig()));
     expect(t1.publishing.counts).toMatchObject({ continued: 1, done: 0 });
     expect((await posts.getPost(scope, postId)).post.status).toBe("publishing");
-    const t2 = await atTime(at(SLOT, 1), () => runTick());
+    const t2 = await atTime(at(SLOT, 1), () => runTick(tickConfig()));
     expect(t2.publishing.counts).toMatchObject({ continued: 1, done: 0 });
-    const t3 = await atTime(at(SLOT, 2), () => runTick());
+    const t3 = await atTime(at(SLOT, 2), () => runTick(tickConfig()));
     expect(t3.publishing.counts).toMatchObject({ done: 1 });
     expect((await posts.getPost(scope, postId)).post.status).toBe("published");
     expect((await posts.listAttempts(scope, targetId)).map((a) => a.outcome)).toEqual(["done", "continue", "continue"]);
@@ -74,11 +75,11 @@ describe("scheduler end to end (SC-001)", () => {
   it("honours notBefore from the provider before trying again", async () => {
     const { scope, postId, targetId } = await setup({ behaviour: "rate_limited", retryAfterSeconds: 300 });
     await atTime(BEFORE, () => posts.addToQueue(scope, postId, {}));
-    const t1 = await atTime(SLOT, () => runTick());
+    const t1 = await atTime(SLOT, () => runTick(tickConfig()));
     expect(t1.publishing.counts).toMatchObject({ retried: 1 });
-    const soon = await atTime(at(SLOT, 120), () => runTick());
+    const soon = await atTime(at(SLOT, 120), () => runTick(tickConfig()));
     expect(soon.publishing.counts.claimed).toBe(0);
-    const later = await atTime(at(SLOT, 301), () => runTick());
+    const later = await atTime(at(SLOT, 301), () => runTick(tickConfig()));
     expect(later.publishing.counts.claimed).toBe(1);
     const attempts = await posts.listAttempts(scope, targetId);
     expect(attempts).toHaveLength(2);
@@ -88,7 +89,7 @@ describe("scheduler end to end (SC-001)", () => {
   it("publishes a late target and records how late", async () => {
     const { scope, postId, targetId } = await setup();
     await atTime(BEFORE, () => posts.addToQueue(scope, postId, {}));
-    await atTime(at(SLOT, 90), () => runTick());
+    await atTime(at(SLOT, 90), () => runTick(tickConfig()));
     const [attempt] = await posts.listAttempts(scope, targetId);
     expect(attempt!.requestSummary).toMatchObject({ lateBySeconds: 90 });
     expect((await posts.getPost(scope, postId)).post.status).toBe("published");

@@ -7,6 +7,7 @@ import { closeDb } from "../../helpers/db";
 import { LATER } from "../../helpers/failures";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { failedTarget } from "../../helpers/retry";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 afterAll(async () => {
@@ -31,7 +32,7 @@ describe("retry requeue concurrency", () => {
   it("a retry-now racing the scheduler tick is fulfilled and publishes at most once", async () => {
     const { env, targetId } = await failedTarget();
     const [retry] = await atTime(LATER, () =>
-      Promise.allSettled([posts.retryTarget(env.scope, targetId, { mode: "now" }), runTick()]),
+      Promise.allSettled([posts.retryTarget(env.scope, targetId, { mode: "now" }), runTick(tickConfig())]),
     );
     expect(retry.status).toBe("fulfilled");
     const row = (await env.scope.targets.get(targetId))!;

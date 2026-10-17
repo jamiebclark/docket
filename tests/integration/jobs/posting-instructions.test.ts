@@ -11,7 +11,7 @@ import { appendItems, createJob, getJob } from "../../../src/server/services/job
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -34,7 +34,7 @@ type Env = Awaited<ReturnType<typeof setup>>;
 
 async function drain(e: Env, jobId: string) {
   for (let i = 0; i < 10; i++) {
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     const c = await e.scope.jobItems.countByStatus(jobId);
     if (c.queued + c.running === 0) break;
   }

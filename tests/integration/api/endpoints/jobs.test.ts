@@ -7,7 +7,7 @@ import { api, createKey } from "../../../helpers/api";
 import { closeDb } from "../../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../../helpers/fake-llm";
 import type { LlmProvider } from "../../../../src/server/llm/types";
-import { jobsEnv, modelOk, parkAllJobs, routeLlm } from "../../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, routeLlm, tickConfig } from "../../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -63,7 +63,7 @@ describe("open jobs over HTTP", () => {
 
     // Ticks are global, so another file's tick may hold a lease on one of these items for a moment.
     for (let i = 0; i < 40; i++) {
-      await runTick({ config: { jobMaxItems: 3 } });
+      await runTick(tickConfig({ jobMaxItems: 3 }));
       if ((await e.scope.jobs.get(jobId))?.status === "completed") break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -145,7 +145,7 @@ describe("open jobs over HTTP", () => {
     expect(first.status).toBe(201);
     await api("POST", `/jobs/${jobId}/close`, { key: e.key });
     for (let i = 0; i < 40; i++) {
-      await runTick({ config: { jobMaxItems: 3 } });
+      await runTick(tickConfig({ jobMaxItems: 3 }));
       if ((await e.scope.jobs.get(jobId))?.status === "completed") break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -158,7 +158,7 @@ describe("open jobs over HTTP", () => {
     await api("POST", `/jobs/${secondId}/close`, { key: e.key });
 
     for (let i = 0; i < 40; i++) {
-      await runTick({ config: { jobMaxItems: 3 } });
+      await runTick(tickConfig({ jobMaxItems: 3 }));
       if ((await e.scope.jobs.get(secondId))?.status === "completed") break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -182,7 +182,7 @@ describe("open jobs over HTTP", () => {
     await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "already-there", postId: other.id, claimedAt: new Date() });
 
     for (let i = 0; i < 40; i++) {
-      await runTick({ config: { jobMaxItems: 3 } });
+      await runTick(tickConfig({ jobMaxItems: 3 }));
       const refreshed = await api("GET", `/jobs/${jobId}/items/${row.id}`, { key: e.key });
       if (refreshed.json.status === "skipped") break;
       await new Promise((r) => setTimeout(r, 100));
@@ -226,7 +226,7 @@ describe("open jobs over HTTP", () => {
     await api("POST", `/jobs/${jobId}/close`, { key: e.key });
 
     setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
-    await runTick({ config: { jobMaxItems: 3 } });
+    await runTick(tickConfig({ jobMaxItems: 3 }));
 
     const items = await api("GET", `/jobs/${jobId}/items`, { key: e.key });
     expect(items.json.data).toHaveLength(1);

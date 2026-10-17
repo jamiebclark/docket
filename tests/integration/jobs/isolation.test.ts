@@ -5,7 +5,7 @@ import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
-import { jobsEnv, modelOk, parkAllJobs, routeLlm } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, routeLlm, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -15,7 +15,7 @@ afterAll(async () => {
 });
 
 const tick = (at?: Date) => {
-  const run = () => runTick({ config: { jobMaxItems: 5 } });
+  const run = () => runTick(tickConfig({ jobMaxItems: 5 }));
   return at ? atTime(at, run) : run();
 };
 

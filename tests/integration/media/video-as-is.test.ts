@@ -11,6 +11,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { received, videoTargetSetup } from "../../helpers/video-publish-setup";
 import { and } from "drizzle-orm";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(async () => {
   received.length = 0;
@@ -25,7 +26,7 @@ afterAll(async () => {
 describe("a video inside every limit", () => {
   it("reaches the provider as the stored original: same URL, same bytes, no version, no tool", async () => {
     const t = await videoTargetSetup({ durationSeconds: 20, width: 1280, height: 720 });
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(result.publishing.counts).toMatchObject({ done: 1 });
     expect(received).toHaveLength(1);
     expect(received[0]!.media[0]).toMatchObject({ url: t.asset.publicUrl, kind: "video" });

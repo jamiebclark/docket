@@ -281,6 +281,13 @@
       "when": 1792123069443,
       "tag": "0039_fluffy_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792207103350,
+      "tag": "0040_dark_whirlwind",
+      "breakpoints": true
     }
   ]
 }

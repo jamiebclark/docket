@@ -23,6 +23,7 @@ import { createFakeGraph } from "../../helpers/fake-graph";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
+import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -108,7 +109,7 @@ describe("Threads token renewal through the scheduler", () => {
     expect(row.lastError).not.toContain(OLD);
 
     const { target } = await createDueTarget(s.env.project.id, s.id, { dueAt: new Date(Date.now() - 60_000) });
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     const t = await s.repos.targets.get(target.id);
     expect(t?.status).toBe("failed");
     // The engine refuses to publish for a needs_reauth account without calling Threads.
@@ -169,7 +170,7 @@ describe("Threads token renewal through the scheduler", () => {
     const s = await setup(50 * DAY, 2 * DAY);
     await refreshTick(T0);
     const { target } = await createDueTarget(s.env.project.id, s.id, { dueAt: new Date(Date.now() - 60_000) });
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     expect((await s.repos.targets.get(target.id))?.status).toBe("failed");
     expect((await s.row()).status).toBe("needs_reauth");
 

@@ -15,7 +15,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, readHold, routeCredentialOwners, seedCreditHold } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, readHold, routeCredentialOwners, seedCreditHold, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterEach(() => {
@@ -28,7 +28,7 @@ afterAll(async () => {
 });
 
 const tickAt = (at: Date, over: Record<string, unknown> = {}) =>
-  atTime(at, () => runTick({ config: { jobMaxItems: 5, ...over } }));
+  atTime(at, () => runTick(tickConfig({ jobMaxItems: 5, ...over })));
 
 describe("credit probe (US2)", () => {
   it("AS1: a successful probe clears the hold and the next tick claims up to jobMaxItems", async () => {

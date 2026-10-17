@@ -13,6 +13,7 @@ import { createProjectWithMembers } from "../../helpers/factories";
 import { clearRecordedQueries } from "../../setup/scope-recorder";
 import { createFakeX, rateLimited, tokenReply } from "../../helpers/fake-x";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -128,7 +129,7 @@ describe("X reactive renewal after a 401", () => {
     const s = await setup(0, 3 * HOUR);
     const { target } = await createDueTarget(s.projectId, s.accountId, { baseText: "after reactive refresh" });
     const tickAt = (seconds: number) =>
-      atTime(new Date(Date.now() + 60_000 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+      atTime(new Date(Date.now() + 60_000 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
     expect(await tickAt(0)).toMatchObject({ claimed: 1, retried: 1 });
     expect(fake.callsTo("POST", TOKEN)).toHaveLength(1);
     expect(await s.stored()).toMatchObject({ accessToken: "NEW-ACCESS", refreshToken: "NEW-REFRESH" });

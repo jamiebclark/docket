@@ -6,6 +6,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
 import { parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 
@@ -24,7 +25,7 @@ async function published(settings: Record<string, unknown>[]) {
   for (const s of settings) accts.push(await env.account(s));
   const draft = await posts.createDraft(env.scope, { baseText: "Hello", targets: accts.map((a) => ({ accountId: a.id })) });
   await atTime(BEFORE, () => posts.addToQueue(env.scope, draft.post.id, {}));
-  await atTime(SLOT, () => runTick());
+  await atTime(SLOT, () => runTick(tickConfig()));
   const detail = await posts.getPost(env.scope, draft.post.id);
   return { env, postId: draft.post.id, detail, accts };
 }

@@ -23,7 +23,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, readHold } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, readHold, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterEach(() => {
@@ -36,7 +36,7 @@ afterAll(async () => {
 });
 
 const tickAt = (at: Date, over: Record<string, unknown> = {}) =>
-  atTime(at, () => runTick({ config: { jobMaxItems: 5, ...over } }));
+  atTime(at, () => runTick(tickConfig({ jobMaxItems: 5, ...over })));
 
 describe("credit hold (US1)", () => {
   it("AS1: a billing refusal queues the item, due, unattempted, unleased, with its reason", async () => {

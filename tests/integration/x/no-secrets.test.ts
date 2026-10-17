@@ -22,6 +22,7 @@ import { sessionFor } from "../../helpers/connect-group";
 import { createFakeX, tokenReply } from "../../helpers/fake-x";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -89,8 +90,8 @@ describe("X secrets never leave the encrypted column (SC-008)", () => {
     // Publish: one provider failure, then one success.
     await createDueTarget(projectId, accountId, { baseText: "no secrets here" });
     fake.on("POST", "/2/tweets", [{ kind: "http", status: 503, body: `upstream said ${ACCESS2}` }, { kind: "ok", status: 201, body: { data: { id: "77" } } }]);
-    await runTick({ config: {} });
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
+    await runTick(tickConfig({}));
 
     const dump = JSON.stringify([
       (await testDb().select().from(socialAccounts).where(eq(socialAccounts.projectId, projectId))).map(({ credentialsEncrypted: _c, ...rest }) => rest),

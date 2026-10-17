@@ -6,7 +6,7 @@ import { cancelJob, createJob, getJob, listJobItems, listJobs } from "../../../s
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 
 const SECRET = "sk-DISTINCTIVE-fake-secret-7f3a91c2e8b4";
 const saved: Record<string, string | undefined> = {};
@@ -42,7 +42,7 @@ describe("no secrets in jobs", () => {
     setLlmForTests(fake);
     await e.assets(3);
     const { jobId } = await createJob(e.scope, e.input({ template: `Write about this photo. Key ${SECRET}` }));
-    for (let i = 0; i < 4; i++) await runTick({ config: { jobMaxItems: 3 } });
+    for (let i = 0; i < 4; i++) await runTick(tickConfig({ jobMaxItems: 3 }));
 
     const results: unknown[] = [await getJob(e.scope, jobId), await listJobs(e.scope, {}), await e.scope.jobs.get(jobId)];
     const items = await e.scope.jobItems.listForJob(jobId);

@@ -91,7 +91,7 @@ describe("GET /api/me/notifications and /recent", () => {
     const body = await (await recent()).json();
     expect(body.items).toHaveLength(1);
     expect(Object.keys(body.items[0]).sort()).toEqual(
-      ["accountName", "actionsAvailable", "id", "isNew", "link", "message", "occurredAt", "outcome", "outcomeLabel", "platforms", "postDeleted", "project"].sort(),
+      ["accountName", "actionsAvailable", "id", "isNew", "link", "message", "occurredAt", "outcome", "outcomeLabel", "platforms", "postDeleted", "project", "read"].sort(),
     );
     const text = JSON.stringify(body).toLowerCase();
     for (const word of ["details", "token", "secret", "dk_live", "posttext", "attempt"]) expect(text).not.toContain(word);

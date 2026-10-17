@@ -6,6 +6,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 
@@ -15,7 +16,7 @@ afterAll(async () => {
 
 const T0 = new Date("2026-10-05T09:00:00Z");
 const HOUR = 3600 * 1000;
-const tick = (when: Date) => atTime(when, () => runTick({ config: { maxItems: 100 } }));
+const tick = (when: Date) => atTime(when, () => runTick(tickConfig({ maxItems: 100 })));
 
 describe("publish limits and retried targets (review F2)", () => {
   it("an automatic retry follows its backoff and is not deferred by its own earlier start", async () => {

@@ -15,6 +15,7 @@ import { closeDb } from "../../helpers/db";
 import { webhookEnv } from "../../helpers/webhooks";
 import { parkAllEmail, seedDuePerson, seedProjectWithProblem } from "../../helpers/email";
 import { recordingMailer } from "../../helpers/mailer";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllEmail);
 afterAll(closeDb);
@@ -94,7 +95,7 @@ describe("tick", () => {
     const env = await webhookEnv(["post.published"]);
     await env.publishPost();
 
-    const tick = await runTick({ config: { webhookMaxPerTick: 10 } });
+    const tick = await runTick(tickConfig({ webhookMaxPerTick: 10 }));
     expect(tick.publishing.ok).toBe(true);
     expect(tick.tokenRefresh.ok).toBe(true);
     expect(tick.generation.ok).toBe(true);
@@ -125,17 +126,35 @@ describe("tick", () => {
     );
     await Promise.all(people.map((p) => seedProjectWithProblem(p.id)));
 
-    let totalSent = 0;
+    // 10 ticks x 50 is exactly 500: this loop has no spare capacity, so a single person not served on
+    // the tick that claims them fails the test outright rather than being made up later.
+    //
+    // `recovered` counts as served because that is what it means — `recoverEmailClaims` reclaims an
+    // expired lease and advances `mailed_seq` as though the send completed, so nobody is mailed twice
+    // (E10) — and such a person never appears in any tick's `sent`.
+    //
+    // KNOWN FLAKE, cause not yet identified: this has come back 499 with `{claimed: 500, sent: 499,
+    // skipped: 1}` both on CI and once locally, so the missing person was *skipped*, not recovered.
+    // `skipped` covers a stale digest, an empty assembly and a deadline-released claim. It passes run
+    // alone and did not reproduce in five instrumented local runs, so the breakdown below is here to
+    // name the disposition the next time it happens instead of asserting a bare "499 is not 500".
+    let served = 0;
     let ticks = 0;
-    while (totalSent < 500 && ticks < 10) {
+    const tally = { recovered: 0, claimed: 0, sent: 0, retried: 0, paused: 0, skipped: 0, unavailable: 0 };
+    while (served < 500 && ticks < 10) {
       const at = new Date(now.getTime() + ticks * 1000);
       const result = await tickAt(at, { emailMaxPerTick: 50 });
-      totalSent += result.sent;
+      for (const k of Object.keys(tally) as (keyof typeof tally)[]) tally[k] += result[k];
+      served += result.sent + result.recovered;
       ticks++;
     }
-    expect(totalSent).toBe(500);
+    // The breakdown is in the message because a bare "499 is not 500" says nothing about which
+    // disposition took the missing person.
+    const breakdown = JSON.stringify(tally);
+    expect(served, `served ${served} of 500 in ${ticks} ticks; dispositions ${breakdown}`).toBe(500);
     expect(ticks).toBeLessThanOrEqual(10);
-    expect(mailer.sent).toHaveLength(500);
+    // Only freshly sent messages reach the mailer; a recovered lease is an assumed send, not a new one.
+    expect(mailer.sent, breakdown).toHaveLength(500 - tally.recovered);
   });
 
   it("a member removal takes email_project_state and the pending sending_seq with it, in the member's own transaction (FR-025)", async () => {

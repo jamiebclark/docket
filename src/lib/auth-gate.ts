@@ -14,12 +14,21 @@
 // Redirecting either to /login shows a reviewer a bare sign-in form, which is a documented refusal reason.
 // "/" still sends a signed-in visitor into their project, and a fresh install to /setup; it only renders
 // the public description for somebody who is neither. Neither page shows any stored data.
+//
+// The two password-reset pages are public for the same reason the unsubscribe routes are, only more so:
+// somebody resetting a password is by definition unable to sign in, so gating either behind a session
+// makes the feature unreachable by the only people who ever want it. Neither page needs one — the
+// credential is the single-use token Better Auth minted and emailed, which `/reset-password` verifies
+// twice (once in its own callback, again when the form is submitted) — and both redirect a visitor who
+// *does* have a session back to "/".
 const PUBLIC_EXACT = new Set([
   "/",
   "/privacy",
   "/login",
   "/setup",
   "/signup",
+  "/forgot-password",
+  "/reset-password",
   "/manifest.webmanifest",
   "/email/unsubscribe",
   "/api/email/unsubscribe",

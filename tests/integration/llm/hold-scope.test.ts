@@ -18,7 +18,7 @@ import { removeProjectLlm, saveProjectLlm } from "../../../src/server/services/g
 import { atTime } from "../../helpers/clock";
 import { closeDb, testDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { clearHolds, clearProjectCredentials, jobsEnv, modelOk, parkAllJobs, readHold } from "../../helpers/jobs-env";
+import { clearHolds, clearProjectCredentials, jobsEnv, modelOk, parkAllJobs, readHold, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterEach(() => {
@@ -56,7 +56,7 @@ function keyedFactory() {
 }
 
 const tickAt = (at: Date, over: Record<string, unknown> = {}) =>
-  atTime(at, () => runTick({ config: { jobMaxItems: 5, ...over } }));
+  atTime(at, () => runTick(tickConfig({ jobMaxItems: 5, ...over })));
 
 describe("hold scope (US3)", () => {
   it("AS1/SC-006: only the refusing project's items are held; the other keeps completing", async () => {

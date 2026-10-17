@@ -9,6 +9,8 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
+import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 
 beforeEach(parkAllDueTargets);
 
@@ -19,7 +21,7 @@ afterAll(async () => {
 const BEFORE = new Date("2026-10-01T12:00:00Z");
 const SLOT = new Date("2026-10-05T09:00:00Z");
 const at = (seconds: number) => new Date(SLOT.getTime() + seconds * 1000);
-const tick = (when: Date, config: Record<string, number> = {}) => atTime(when, () => runTick({ config }));
+const tick = (when: Date, config: Partial<SchedulerConfig> = {}) => atTime(when, () => runTick(tickConfig(config)));
 
 async function queued(settings: Record<string, unknown>) {
   const ctx = await createProjectWithMembers();

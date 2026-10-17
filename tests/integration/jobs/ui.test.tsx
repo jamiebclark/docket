@@ -30,7 +30,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { actAs } from "../../helpers/actions";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold } from "../../helpers/jobs-env";
+import { clearHolds, jobsEnv, modelOk, parkAllJobs, readHold, tickConfig } from "../../helpers/jobs-env";
 import { expectPageHeader } from "../../helpers/page-header";
 
 const HOLD_STRINGS = [CREDIT_HOLD_CAUSE, CREDIT_HOLD_SINCE_LABEL, CREDIT_HOLD_WAITING, CREDIT_HOLD_RESUME, CREDIT_HOLD_ACTION];
@@ -134,7 +134,7 @@ describe("Job page", () => {
     const { jobId } = await createJob(e.scope, e.input());
     const [first] = await e.scope.jobItems.listForJob(jobId);
     await e.scope.media.softDelete(first!.mediaAssetId!, new Date());
-    await runTick({ config: { jobMaxItems: 2 } });
+    await runTick(tickConfig({ jobMaxItems: 2 }));
 
     const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
     expect(html).toContain("View post");
@@ -159,7 +159,7 @@ describe("Job page", () => {
     await e.assets(1);
     const { jobId } = await createJob(e.scope, e.input());
     expect(find((await jobElement(e, jobId)) as never, AutoRefresh)!.props).toMatchObject({ active: true, intervalMs: 5000 });
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     expect(find((await jobElement(e, jobId)) as never, AutoRefresh)!.props).toMatchObject({ active: false });
   }, 60_000);
 
@@ -173,7 +173,7 @@ describe("Job page", () => {
     const other = await e.scope.posts.insert({ baseText: "Already posted" });
     await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "glen-1", postId: other.id, claimedAt: new Date() });
     for (let i = 0; i < 20; i++) {
-      await runTick({ config: { jobMaxItems: 5 } });
+      await runTick(tickConfig({ jobMaxItems: 5 }));
       if ((await e.scope.jobs.get(jobId))!.status === "completed") break;
       await new Promise((r) => setTimeout(r, 50));
     }
@@ -280,7 +280,7 @@ describe("Credit hold notice (US3)", () => {
     setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
     await e.asset();
     const { jobId } = await createJob(e.scope, e.input());
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     return { e, jobId };
   }
 
@@ -298,7 +298,7 @@ describe("Credit hold notice (US3)", () => {
 
     await clearHolds();
     setLlmForTests(createFakeLlm([modelOk("Done", 1)]));
-    await runTick({ config: { jobMaxItems: 5 } });
+    await runTick(tickConfig({ jobMaxItems: 5 }));
     const finishedHtml = renderToStaticMarkup((await jobElement(e, jobId)) as never);
     expect(finishedHtml).not.toContain(CREDIT_HOLD_CAUSE);
   }, 60_000);
@@ -370,7 +370,7 @@ describe("Model usage on job page (US4, P19)", () => {
     await e.assets(2);
     const { jobId } = await createJob(e.scope, e.input());
     for (let i = 0; i < 20; i++) {
-      await runTick({ config: { jobMaxItems: 2 } });
+      await runTick(tickConfig({ jobMaxItems: 2 }));
       if ((await e.scope.jobs.get(jobId))!.status === "completed") break;
       await new Promise((r) => setTimeout(r, 50));
     }
@@ -388,7 +388,7 @@ describe("Model usage on job page (US4, P19)", () => {
     setLlmForTests(createFakeLlm([modelOk("First", 1), modelOk("Second", 1)]));
     await e.assets(2);
     const { jobId } = await createJob(e.scope, e.input());
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
     const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
     expect(html).toContain("1 call");
     expect(html).toContain("To date");
@@ -399,7 +399,7 @@ describe("Model usage on job page (US4, P19)", () => {
     setLlmForTests(createFakeLlm([modelOk("First", 1)]));
     await e.assets(1);
     const { jobId } = await createJob(e.scope, e.input());
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
     await cancelJob(e.scope, jobId);
     const html = renderToStaticMarkup((await jobElement(e, jobId)) as never);
     expect(html).toContain("1 call");
