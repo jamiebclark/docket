@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { inArray } from "drizzle-orm";
 import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
-import { postTargets } from "../../src/server/db/schema";
+import { engagementAccountStates, postTargets } from "../../src/server/db/schema";
 import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import type { AccountRecord } from "../../src/server/dal/accounts";
 import type { MediaRow } from "../../src/server/dal/media";
@@ -106,5 +106,9 @@ export async function parkAllDueTargets(): Promise<void> {
       .update(postTargets)
       .set({ nextAttemptAt: new Date("2100-01-01T00:00:00Z") })
       .where(inArray(postTargets.status, ["scheduled", "publishing"]));
+    // Engagement reads are claimed across every project in one pass; a leftover account state
+    // from an earlier, unrelated test is otherwise "due" again and leaks a request into whichever
+    // fake network stub is active during this test's tick.
+    await getDb().update(engagementAccountStates).set({ readNotBefore: new Date("2100-01-01T00:00:00Z") });
   });
 }

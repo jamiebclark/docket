@@ -108,16 +108,20 @@ describe("compileEligibility", () => {
       { axis: "kind", switchKey: "ambiguous", onFromSeq: 10n },
     ]);
     const plan = compileEligibility(p);
-    expect(plan.memberGroups).toEqual([{ outcomes: ["failed", "ambiguous"], minSeq: 10n }, { outcomes: ["needs_reauth"], minSeq: 0n }]);
+    expect(plan.memberGroups).toEqual([
+      { outcomes: ["failed", "ambiguous"], minSeq: 10n },
+      { outcomes: ["needs_reauth", "engagement"], minSeq: 0n },
+    ]);
     expect(plan.connectFailed).toEqual({ minSeq: 0n });
     expect(plan.platforms).toBeNull();
   });
 
-  it("is empty when all three member outcomes are off", () => {
+  it("is empty when all member outcomes are off", () => {
     const p = prefs([
       { axis: "kind", switchKey: "failed", onFromSeq: null },
       { axis: "kind", switchKey: "ambiguous", onFromSeq: null },
       { axis: "kind", switchKey: "needs_reauth", onFromSeq: null },
+      { axis: "kind", switchKey: "engagement", onFromSeq: null },
     ]);
     expect(compileEligibility(p).memberGroups).toEqual([]);
   });

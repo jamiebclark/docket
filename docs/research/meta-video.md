@@ -165,8 +165,15 @@ Source: https://developers.facebook.com/docs/instagram-platform/content-publishi
   `pages_read_engagement` (plus `ads_management`/`ads_read` when Page access
   is via Business Manager). Page task `MANAGE` or `CREATE_CONTENT`.
   Source: https://developers.facebook.com/docs/instagram-platform/content-publishing
-- Story video (not needed by Docket): MOV/MP4, 3 to 60 s, 100 MB max, ratio
-  0.1:1 to 10:1. Source: media reference above.
+### Story video specs
+Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+("Story Specifications"). Checked 2026-10-16.
+- Container: MOV or MP4. Duration: 3 s min, 60 s max. File size: 100 MB max.
+  Aspect ratio: 0.1:1 to 10:1.
+- Video codec, audio codec, frame rate and the recommended shape are not
+  restated on this page for Stories; Docket's declaration inherits the Reel
+  spec table above for those (H.264/HEVC, AAC, 23 to 60 FPS, 9:16
+  recommended).
 
 ## Facebook Pages
 

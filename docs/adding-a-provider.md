@@ -11,6 +11,8 @@ The contract lives in `src/providers/types.ts`; the `mock` provider
 - [ ] Put non-secret settings in `settings.ts` (a zod schema; `z.object({})` if none).
 - [ ] Add one line to `providers` in `src/providers/registry.ts`. The key must be unique and match `[a-z0-9-]+`.
 - [ ] Write `<key>.test.ts` next to it with mocked HTTP: `validate` and every `advance` result, including the ambiguous paths.
+- [ ] If the platform supports comments, mentions or replies: declare `engagement` (section 20). Leave it off otherwise —
+  the account is simply absent from the inbox, with no error.
 - [ ] Update this guide if you introduced a new pattern.
 
 `src/providers/**` must not import from `src/server/**`. A lint test enforces it.
@@ -35,6 +37,7 @@ The contract lives in `src/providers/types.ts`; the `mock` provider
 | `posting?` | Per-target posting fields: a values schema and a pure `view()` (G25, section 18). |
 | `accountDetails?` | A server-side read of the account's live, non-secret details for the composer (G26, section 18). |
 | `consent?` | Explicit consent recorded when a target is scheduled (G27, section 18). |
+| `engagement?` | Optional: reading comments/mentions and sending replies (section 20). Omit it and the account is absent from the inbox, with no error. |
 
 ### Generic hooks index
 
@@ -126,13 +129,17 @@ too small, counts, mixing, silence) is still refused. Add a row for every declar
 
 Three optional hooks let one provider publish the same content as more than one post type. Each is inert for a provider that declares nothing.
 
-- **G19, `postTypeChoices`** (on `capabilities`). A list of `PostTypeChoice`: a `shape` (today only `single_video`), at least two `options`
-  (`PostTypeOption`: `type`, `label`, `description`) and a `default` that is one of them. The composer shows one control per target from this
-  declaration, the choice is stored in `post_targets.chosen_post_type`, and `resolvePostType(caps, items, chosen)` in `src/providers/post-type.ts`
-  is the single resolver: total, never throws, and it ignores `chosen` for a shape with no declared choice. `ValidateInput.postType` and
-  `StepContent.postType` carry the resolved type; absent means "resolve with no choice".
-- **G20, `byPostType`** (on `capabilities.video`). Per-type overrides (`VideoLimitOverrides`: any video bound except `byPostType` itself, plus `notes`
-  shown in the summary) merged over the base block by `videoLimitsFor(caps, type)` in `src/providers/validation.ts`.
+- **G19, `postTypeChoices`** (on `capabilities`). A list of `PostTypeChoice`: a `shape` (`single_image` or `single_video`, one choice per shape),
+  at least two `options` (`PostTypeOption`: `type`, `label`, `description`) and a `default` that is one of them. The composer shows one control
+  per target from this declaration, the choice is stored in `post_targets.chosen_post_type`, and `resolvePostType(caps, items, chosen)` in
+  `src/providers/post-type.ts` is the single resolver: total, never throws, and it ignores `chosen` for a shape with no declared choice.
+  `ValidateInput.postType` and `StepContent.postType` carry the resolved type; absent means "resolve with no choice".
+- **G20, `byPostType`** (on `capabilities.video`, and the same idea on `capabilities.media`). Per-type overrides merged over the base block:
+  on video, `VideoLimitOverrides` (any video bound except `byPostType` itself, plus `notes` shown in the summary) merged by
+  `videoLimitsFor(caps, type)`; on media, `ImageLimitOverrides` (`minAspectRatio`, `maxAspectRatio`, `recommendedAspectRatio`, `notes` - a `null`
+  bound *removes* the base bound for that type, rather than tightening it) merged by `imageLimitsFor(caps, type)`, both in
+  `src/providers/validation.ts`. `mediaConstraintsOf(caps, postType?)` in `src/providers/media.ts` takes the resolved type so the media planner
+  checks the right merged bounds; called with no type it is byte-for-byte what a provider without per-type image limits already returned.
 - **G21, `minFrameRate`** (on `capabilities.video`). A lower bound, inclusive. A video whose frame rate is unknown is not refused on it; one below
   it fails with `video_frame_rate_too_low`. `too_many_items` is the matching code for a post with more items than the type allows.
 - **Mixed media.** `ValidateInput.kinds` lists each item as `"image"` or `"video"` in post order; absent means all images.
@@ -498,3 +505,42 @@ chunked upload. All of it is tested with mocked HTTP only; the live checks are l
   posting fields, not shared text, because only a pin's own fields make sense per target.
 - **Where to look.** `src/providers/pinterest/` (`capabilities.ts`, `boards.ts`, `posting.ts`, `validate.ts`, `steps.ts`,
   `publish.ts`, `oauth.ts`, `connect-group.ts`) and `tests/integration/pinterest/`.
+
+## 20. Reading comments and sending replies (`engagement`, 077)
+
+`engagement` is one more optional member on `SocialProvider`, the same shape as `posting` or `consent`: a provider
+opts in by declaring what it can read and whether it can reply, and nothing outside its own folder changes — not
+the inbox, the drafting, the review path, the notifications, the activity log, or the schema.
+
+```ts
+engagement?: {
+  declaration: {
+    reads: readonly ("reply" | "comment" | "mention" | "direct_message")[]; // never empty — omit `engagement` instead
+    canReply: boolean;
+    writeBudget?: { count: number; windowSeconds: number }; // the per-account allowance a reply spends
+    unavailable?: { reason: string; docsPath?: string };    // declared but not readable on this install (G55)
+  };
+  itemDataSchema: z.ZodType;  // your own shape of `engagement_items.provider_data`
+  stateSchema: z.ZodType;     // your own shape of `engagement_account_states.provider_state`
+  read(ctx): Promise<EngagementReadResult>;
+  send(ctx): Promise<EngagementSendResult>;
+};
+```
+
+**Rules, in addition to the usual ones (section 11, no secrets; section 10, mocked HTTP only):**
+
+- `read` returns one page and never throws; it never invents an author field — an absent display name is `null`,
+  not the handle, and `identityStable` is `false` whenever the platform's identifier is not provably the same
+  person twice. Paging, the per-run bound and the cursor live in the scheduler, not the provider.
+- `read` has no side effect on the platform: it must not mark anything seen, read or handled there.
+- `send` is one platform write, with any uncertainty (a timeout, an unparseable answer, a 2xx that does not name
+  what was created) returned as `ambiguous`, never `retryable_error` — the same "never risk a double effect" rule
+  `advance()` already follows.
+- `itemDataSchema` and `stateSchema` must reject anything resembling a credential or token.
+
+`src/providers/bluesky/engagement.ts` is the one real implementation so far: `app.bsky.notification.listNotifications`
+for reading (never calling `updateSeen`), and `com.atproto.repo.createRecord` for sending, reusing the session and
+refresh path `publish.ts` already has. `src/providers/mock/index.ts` declares all four kinds plus an `unavailable`
+variant, so the inbox's capability seam is testable with no platform credentials at all — read that one first. See
+`docs/engagement.md` for what the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md`
+for the full contract.

@@ -8,6 +8,8 @@ import { Pagination } from "@/components/ui/Pagination";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { listReviewQueue } from "@/server/services/review";
+import { listReplyQueue } from "@/server/services/engagement/review";
+import { ReplyList } from "./ReplyList";
 import { ReviewList } from "./ReviewList";
 
 export const metadata: Metadata = { title: "Review" };
@@ -31,10 +33,17 @@ export default async function ReviewPage({ params, searchParams }: Props) {
   const rawPage = Array.isArray(raw.page) ? raw.page[0] : raw.page;
   const page = Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1);
   const queue = await listReviewQueue(scope, { page });
+  const replies = scope.can({ engagement: ["view"] }) ? await listReplyQueue(scope) : null;
 
   return (
     <section className="flex flex-col gap-4">
       <PageHeader title="Review" description="Generated posts waiting for someone to approve them." />
+      {replies && replies.items.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Replies</h2>
+          <ReplyList slug={projectSlug} items={replies.items} canApprove={scope.can({ engagement: ["reply"] })} />
+        </div>
+      ) : null}
       {queue.items.length === 0 ? (
         <EmptyState
           message="Generated posts wait here for approval before they're scheduled. Posts you write yourself don't come here."

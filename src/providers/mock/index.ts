@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { validateAgainstCapabilities } from "../validation";
 import type { PublishContext, StepContent, SocialProvider, StepResult } from "../types";
+import { mockEngagement } from "./engagement";
 import { mockSettingsSchema, type MockSettings, type MockState } from "./settings";
 
 const SIXTY_DAYS_MS = 60 * 86_400_000;
@@ -133,6 +134,8 @@ export const mockProvider: SocialProvider<MockSettings, MockState> = {
     })();
     return { ...result, summary };
   },
+
+  engagement: mockEngagement,
 };
 
 function done(): StepResult {

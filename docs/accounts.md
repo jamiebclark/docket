@@ -106,11 +106,17 @@ Bluesky connects with an **app password**, not the account's main password.
    - **Server (PDS) address**: leave the default unless the account lives on a self-hosted server; then enter its
      `https://` address.
 
-**Stored:** the session tokens Bluesky returns, plus the account's DID and handle, encrypted. **Not stored:** the app
-password. It is used once to open the session and then thrown away, so every reconnect needs an app password again.
+**Stored:** the session tokens Bluesky returns, the account's DID and handle, **and the app password itself** — all
+encrypted at rest, never sent to the browser and never written to logs or publish records.
 
-**Needs reconnecting** means Bluesky refused to renew the session (the app password was revoked, or the session
-expired). Enter an app password again from Accounts. Revoking the app password is done in Bluesky.
+The app password is kept so that Docket can open a new session on its own when Bluesky refuses to renew the old one,
+instead of dropping scheduled posts until somebody pastes a password. The trade-off is deliberate: unlike a refresh
+token, an app password does not expire and survives session revocation, so if the database and its encryption key
+were both exposed, access would last until the password is **revoked in Bluesky**. Revoke it there, not here.
+
+**Needs reconnecting** now means both the session *and* the stored app password were refused — the password was
+revoked or changed in Bluesky. Enter a new one from Accounts. Accounts connected before this was stored have no
+saved password and still need a manual reconnect each time their session is refused.
 
 Video needs nothing more at connect: there is no new connection step. A Bluesky-hosted account must have a **verified email**
 address to upload video, and Bluesky allows about 25 videos a day.
@@ -133,6 +139,9 @@ and Instagram**, sign in with Facebook, and pick the Pages and linked Instagram 
   Facebook password, removed the app, or lost their role on the Page or the app.
 - **Media must be public.** Facebook and Instagram both fetch each image from its URL, so the media bucket must be
   publicly readable ([storage.md](storage.md)).
+- **A single image or video on Instagram can be scheduled as a Story** instead of a feed post, feed video or Reel. A
+  Story carries no caption, no link and no stickers, is shown for 24 hours, and is not cropped by Docket even when its
+  shape is not the recommended 9:16.
 - **Removing access:** removing an account in Docket deletes its stored tokens. To revoke the app entirely, the
   connecting person opens Facebook Settings → Business Integrations (or Apps and Websites) and removes it.
 

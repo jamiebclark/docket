@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { inferPostType, validateAgainstCapabilities, videoLimitsFor } from "./validation";
+import { getProvider } from "./registry";
+import { imageLimitsFor, inferPostType, validateAgainstCapabilities, videoLimitsFor } from "./validation";
 import type { MediaItem, ProviderCapabilities } from "./types";
 
 const caps: ProviderCapabilities = {
@@ -192,6 +193,44 @@ describe("video validation", () => {
       ["media_failed", "media.1"],
     ]);
     expect(issues[1]!.message).toBe("Video 2 failed: Docket could not read this video. Remove it to continue.");
+  });
+});
+
+describe("imageLimitsFor", () => {
+  const ig = getProvider("instagram").capabilities;
+  it("drops the aspect bound for a story, keeping size/width/alt-text limits", () => {
+    const story = imageLimitsFor(ig, "story");
+    expect(story.minAspectRatio).toBeUndefined();
+    expect(story.maxAspectRatio).toBeUndefined();
+    expect(story.maxBytesPerFile).toBe(8_000_000);
+    expect(story.minWidth).toBe(320);
+    expect(story.maxWidth).toBe(1440);
+    expect(story.maxAltTextLength).toBe(1000);
+    expect(story).not.toHaveProperty("byPostType");
+    expect(story).not.toHaveProperty("notes");
+  });
+  it("leaves the base image limits unchanged", () => {
+    const image = imageLimitsFor(ig, "image");
+    expect(image.minAspectRatio).toBe(0.8);
+    expect(image.maxAspectRatio).toBe(1.91);
+  });
+});
+
+describe("videoLimitsFor story", () => {
+  const ig = getProvider("instagram").capabilities;
+  it("matches the Story's own limits exactly (FR-020)", () => {
+    const story = videoLimitsFor(ig, "story");
+    expect(story.containers).toEqual(["mp4", "mov"]);
+    expect(story.videoCodecs).toEqual(["h264", "hevc"]);
+    expect(story.audioCodecs).toEqual(["aac"]);
+    expect(story.maxBytes).toBe(100_000_000);
+    expect(story.minDurationSeconds).toBe(3);
+    expect(story.maxDurationSeconds).toBe(60);
+    expect(story.minAspectRatio).toBe(0.1);
+    expect(story.maxAspectRatio).toBe(10);
+    expect(story.minFrameRate).toBe(23);
+    expect(story.maxFrameRate).toBe(60);
+    expect(story.recommendedAspectRatio).toBe(9 / 16);
   });
 });
 

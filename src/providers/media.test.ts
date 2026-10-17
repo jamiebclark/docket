@@ -105,6 +105,26 @@ describe("planImage", () => {
   });
 });
 
+describe("mediaConstraintsOf per post type", () => {
+  it("drops the aspect bound for a story and keeps format, size and width (SC-009)", () => {
+    const caps = getProvider("instagram").capabilities;
+    const base = mediaConstraintsOf(caps);
+    const story = mediaConstraintsOf(caps, "story");
+    expect(story.minAspectRatio).toBeUndefined();
+    expect(story.maxAspectRatio).toBeUndefined();
+    expect(story.acceptedMimeTypes).toEqual(base.acceptedMimeTypes);
+    expect(story.outputMimeType).toBe(base.outputMimeType);
+    expect(story.maxBytes).toBe(base.maxBytes);
+    expect(story.minWidth).toBe(base.minWidth);
+    expect(story.maxWidth).toBe(base.maxWidth);
+  });
+  it("is byte-for-byte identical to today's result with no post type", () => {
+    const caps = getProvider("instagram").capabilities;
+    expect(mediaConstraintsOf(caps)).toEqual(mediaConstraintsOf(caps, undefined));
+    expect(mediaConstraintsOf(caps)).toEqual(instagram);
+  });
+});
+
 describe("mediaConstraintsOf", () => {
   it("defaults the output type to the first allowed type", () => {
     expect(instagram.outputMimeType).toBe("image/jpeg");

@@ -70,14 +70,18 @@ describe("two videos, or a video with an image, are refused with no request to B
       expect(queued[0]).toMatchObject({ ok: false, code: "validation" });
 
       await s.repos.posts.setMedia(s.post.id, mediaIds);
-      const before = s.pds.requests.length;
+      // The scheduler's engagement-read section sweeps every active Bluesky account in the same
+      // tick, independent of this target's publish attempt; filter its traffic out before counting.
+      const publishRequests = (rs: typeof s.pds.requests) =>
+        rs.filter((r) => !new URL(r.url).pathname.includes("notification.listNotifications"));
+      const before = publishRequests(s.pds.requests).length;
       await s.tick();
       const after = await forSchedulerProject(s.env.project.id).targets.get(s.target.id);
       expect(after).toMatchObject({ status: "failed", externalId: null });
       const attempts = await forSchedulerProject(s.env.project.id).attempts.listForTarget(s.target.id);
       expect(attempts.map((a) => [a.step, a.outcome])).toEqual([["engine-validate", "fatal_error"]]);
       expect(after!.lastError).toContain(message);
-      expect(s.pds.requests.length).toBe(before);
+      expect(publishRequests(s.pds.requests).length).toBe(before);
     });
   }
 });

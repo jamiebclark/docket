@@ -229,7 +229,7 @@ Full rationale lives in `specs/001-foundation-auth-projects/research.md`.
 
 ## 004 — Bluesky provider
 
-- **FR-007, app password never stored.** `connectAccount` exchanges handle + app password for a session and stores only the session tokens, DID and handle (encrypted). The password is not kept anywhere, so "Needs reconnecting" means entering one again.
+- **FR-007, app password never stored. ~~Accepted~~ — reversed 2026-10-16 (Jamie's call).** It used to store only the session tokens, DID and handle, so every refused refresh needed a human. In practice sessions were refused after ~2.5 days rather than the refresh token's ~90, and the Stencilvania Halloween run silently dropped Bluesky posts between the refusal and the reconnect. `connectAccount` now also stores the app password (encrypted, redacted like every other credential leaf), and `refreshCredentials` opens a fresh session with it — identifying by DID, so a renamed handle still signs in — when a refresh is definitively refused. Accounts connected earlier have no stored password and keep the old manual path. *Known cost:* an app password does not expire and survives session revocation, so a credentials leak is open-ended until it is revoked in Bluesky; the premature-refusal cause is still unexplained and this masks rather than fixes it. *Reverse:* drop `appPassword` from `blueskyCredentialsSchema` and the `reauthenticate` call in `refreshCredentials`.
 - **G1 generic credential connect** (`CredentialField.optional/defaultValue/placeholder`, `connectAccount?`, `connectWithCredentials`, `ConnectCredentialsForm`). *Why:* there was no way to connect a non-OAuth provider without a provider-specific screen. *Reverse:* remove the optional fields and the form; no schema was touched.
 - **G2 publish-time refresh** (`needsRefresh?`, `retryable_error.credentialsExpired?`, `scheduler/credentials.ts`, `acquireRefreshLease`). *Why:* Bluesky rotates the refresh token on every refresh, so it must be persisted under a lease before the publish step, and never inside a `mayPublish` step. *Reverse:* drop the two optional members and the hooks in `execute`; the scheduled refresh keeps working.
 - **G3 transient refresh failure** (`RefreshResult.transient/retryAt/displayName`). *Why:* every refresh failure used to be fatal (`needs_reauth`), so one 5xx locked out an account. *Reverse:* ignore `transient` in `applyRefreshResult`.
@@ -3411,3 +3411,185 @@ never applied anywhere, so no install carried its old form), and generating 0035
 Worth knowing for the future: the gap is that nothing tests an **upgrade** from a committed older
 schema. A test that commits through migration N and then applies the rest in one transaction would
 have caught this before release; it is not built yet.
+
+## Engagement inbox: Bluesky identity is settled, Meta identity is not, DMs are sequenced not cut (2026-10-15)
+
+`docs/research/engagement.md` records, from the installed `@atproto/api` generated types, that a
+Bluesky commenter carries a stable identifier (`did`), a handle and usually a display name — so the
+identity question that makes a "recognisable person" risky is already answered for Bluesky, with no
+human task needed. US2/US3 build on that directly.
+
+For Meta (Facebook Page comments, Instagram comments, Threads replies), every FR-001 question —
+read endpoint, required permission and whether it's inside Standard Access, commenter identity
+shape, identifier stability, reply capability, pagination, read rate limits — is **unverified**.
+`docs/research/meta.md` documents publishing only; nothing in it names a comment-read endpoint or a
+commenter identity shape. **Consequence:** no Meta engagement surface is built in this entry. US4 is
+blocked on a human task (a live Standard Access app, a real Page, a real Instagram Business account,
+a real Threads account, a second person to comment, and a browser), scheduled last in `tasks.md` so
+an unrunnable task placed early does not starve the implement loop. No code anywhere in this entry
+may display a Meta commenter identity field that isn't traceable to a confirmed verdict (FR-005).
+
+Direct messages are **not cut from the spec** — US5 stays specified — but no platform's DM facts
+exist for any platform in scope, so DM reading, drafting and sending are sequenced out of this entry
+entirely rather than built on a guess.
+
+## Engagement inbox: the send ledger is an insert-only claim, not a mutable status (2026-10-15)
+
+A send recorded "durably at the moment of the send" (so a crash between sending and recording cannot
+double-send) and an ambiguous send that a person can later unstick both need to be true at once. An
+insert-only row that also carries the outcome cannot do both: making it mutable would contradict
+"never updated, never deleted" and lose the history of a released attempt. The ledger
+(`engagement_reply_claims`) is instead a **claim written before the provider call, in its own
+committed transaction**, keyed `(project_id, social_account_id, item_external_id, generation)`.
+Generation 1 is the first attempt; a concurrent second attempt collides on the key and is refused by
+the record, not by timing. The *outcome* lives on the draft row, never on the ledger. A higher
+generation may only be inserted with a stated reason — `definite_failure` (the platform refused
+definitively, nothing was sent) or `member_decision` (a person on Failures records that an ambiguous
+attempt never arrived) — enforced by a CHECK. Keying on the platform's identifier rather than the
+item row is what lets retention delete an inbound item without losing the fact that it was already
+answered.
+
+## Engagement inbox: one notification per read batch, not per item (2026-10-15)
+
+New inbound items raise attention through the existing activity-event mechanism, but a per-item event
+would have to carry something identifying the item — and the message would be tempting to fill with
+the commenter's own words, which the activity log cannot carry (it feeds notification emails that
+leave the installation). A batch is also the unit a person actually acts on ("I have looked at the
+inbox"), and a popular post would otherwise bury every publishing failure under hundreds of events
+and peg the unread count at its cap. So exactly one `engagement_received` event is written per account
+per read run, `details: { items: n }`, counting only newly inserted rows in the same transaction as
+the insert — a re-read contributes nothing and names no third party.
+
+## Engagement inbox: the reply prompt sits beside the post generator, not inside it (2026-10-15)
+
+Drafting a reply reuses everything *below* the prompt (`resolveLlmForProject`, the credit hold,
+`createUsageRecorder` under a new `engagement.reply` purpose, the voice profile and brand, and the
+provider's own text-counting rule) and nothing of the prompt itself. `services/generation/core.ts` is
+post-shaped at both ends — variant groups, media, a brief, and a `variants`-keyed output — and
+threading a reply through it as a synthetic single-group post would distort the prompt, the output
+schema and the retry-correction loop for every existing caller. Generation already has five call
+sites over one shared core; a sixth artifact with its own prompt (`services/engagement/prompt.ts`) is
+the established pattern, and the constitution's "exactly one implementation" list names slot
+allocation, approval policy and publishing, not prompt text.
+
+## Engagement inbox: the write-budget reserve keeps publishing served first (2026-10-15)
+
+FR-042 requires publishing to never wait on a reply. The engagement-send scheduler section therefore
+runs only after the publishing section resolves in the same tick, and a reply may be sent only while
+the account's writes already started in the current window stay under
+`floor(budget.count × (1 − ENGAGEMENT_WRITE_RESERVE))`, with `ENGAGEMENT_WRITE_RESERVE` defaulting to
+0.25 and `budget` the stricter of the provider's declared engagement write budget and the account's
+own publish limit. A per-run cap (`ENGAGEMENT_SENDS_PER_TICK`, default 5) stops a burst from consuming
+the tick's time budget. On Bluesky the reserve floor is roughly 416 writes an hour kept for
+publishing — orders of magnitude above normal use, invisible until a burst makes it decisive. A reply
+held back by any of the three rules is left `waiting` with a reason, never sent, never failed.
+
+## Engagement inbox: retention is a horizon on both deletion and ingest (2026-10-15)
+
+Inbound items older than `ENGAGEMENT_RETENTION_DAYS` (default 90, operator-configurable) are deleted
+with their drafts in the existing bounded housekeeping pass, provided no draft awaits a decision and
+no send is unresolved; an item the platform reports deleted is eligible on the next pass regardless of
+age; the claim ledger is never pruned. Ingest additionally ignores any item older than the retention
+horizon, so a cursor restart cannot resurrect and re-notify something retention has already removed —
+making the horizon a rule on ingest as well as a deletion rule is what keeps retention from fighting
+the cursor.
+
+## Engagement inbox: three points re-examined after the design settled (2026-10-15)
+
+1. **Sending happens in the tick, not in the HTTP request that approves it.** FR-028 forbids a send
+   nobody approved, but does not require the send to happen inside the approving request, and FR-043
+   explicitly anticipates "waiting for a later run". Sending in the tick is what gives it a lease, a
+   claim ledger and the publishing-first reserve; the approving member is still recorded on the draft
+   and the activity event.
+2. **One new `activity_outcome` label forces the attention index to be rebuilt without naming it.**
+   Executed against Postgres 17.11: a partial index predicate can neither cast an enum to text
+   (`42P17`, the cast is not `IMMUTABLE`) nor name a label added in the same transaction (`55P04`). The
+   predicate is inverted to name only pre-existing labels; the planner still chooses the index for the
+   unread-count query (research.md §2).
+3. **The inbox is its own screen; only the decision lives in Review.** Straight from the spec's stated
+   assumptions, and it keeps the Review queue doing the one job it already does well.
+
+## 078 — Instagram Stories (2026-10-16)
+
+Judgement calls from `specs/078-instagram-stories/spec.md` and its plan (`research.md`, K1–K20).
+External facts come from `docs/research/meta.md` and `docs/research/meta-video.md` (checked
+2026-10-16). All Story behaviour is verified with mocks only.
+
+### Spec decisions
+
+- **D1 — the post's text is dropped, not refused.** A Story target ignores the post's shared text; the
+  person is told so by a non-blocking notice, and a post with a Story target is *not* required to be
+  text-free. *Rejected*: refusing a Story whose post carries text, which would make it impossible to
+  schedule the same content as a captioned Facebook post and a wordless Instagram Story together — the
+  normal case for one post fanned out to several accounts.
+- **D2 — the asset's description is dropped, with the same notice treatment.** Alt text is never sent
+  on a Story; Docket attaches a description to every asset for other uses, so something is always being
+  dropped, and a non-blocking notice names it. *Rejected*: refusing a Story because its (correct, useful
+  elsewhere) asset has a description, which would be perverse.
+- **D3 — a non-9:16 image is passed through to Instagram's own cropping, neither refused nor
+  letterboxed.** The platform documents 9:16 only as a recommendation and states no hard aspect range
+  for an image Story, so refusing would be wrong on the facts; letterboxing would mean Docket inventing
+  a crop or a fill colour on the person's behalf, which its image handling has never done. This follows
+  the precedent Pinterest's "No hard aspect range" set for the same shape of problem (entry 072, K12):
+  declare no bound, warn instead of refuse. Applies to the image only — a Story video keeps the
+  documented 0.1:1–10:1 hard range (FR-020, FR-022).
+- **K1 — `PostShape` gains `single_image`, and `resolvePostType` consults a declared choice for it,
+  exactly as `single_video` already does.** This is the plug-in boundary working as designed, not being
+  bypassed: it is the one place every caller (composer, API, gate, engine, formatter) already asks what
+  a target publishes as, so widening it is the only change that reaches `chosen_post_type` and
+  `postTypeRefusal` without a provider-specific branch in shared code (constitution IV). A provider that
+  declares no `single_image` choice is unaffected — `choiceFor` returns null and the default stays
+  `image`.
+- **K5/K6 — per-post-type image limits are a declaration (`media.byPostType`), not a flag.** A new
+  `ImageLimitOverrides` type (`minAspectRatio`/`maxAspectRatio`, `null` to remove a bound;
+  `recommendedAspectRatio`; `notes`) sits beside the video block's existing `byPostType`, merged by
+  `imageLimitsFor(caps, type)`. Instagram's own `media.byPostType.story` (`minAspectRatio: null`,
+  `maxAspectRatio: null`, `recommendedAspectRatio: 9/16`) is the single declaration that drives the
+  planner no longer refusing a 9:16 image, nothing reshaping it, the shape notice, and the requirements
+  summary reporting "no limit checked" plus the note. *Rejected*: a boolean "is a story" flag threaded
+  through the planner and validator, which would duplicate the range logic the video block already has
+  and give no record of what, specifically, a story relaxes.
+- **K8 — the aspect bounds leave `constraintsHash`, and `prepareVariants` resolves each target's post
+  type before planning, so a Story and a feed post share one variant and a 9:16 Story image is actually
+  built.** `minAspectRatio`/`maxAspectRatio` are read by `planImage` only to refuse; they never change
+  the derived file's type, size or dimensions, so hashing them would give byte-identical output two
+  identities for no reason. `prepareVariants` resolves each target's post type the same way
+  `resolvePublishMedia` does and plans with `mediaConstraintsOf(caps, postType)`, so a Story image
+  outside the feed's aspect range is planned under the Story's (unbounded) range and a variant is
+  actually built — the shared hash means this still collapses to one build per asset, not two.
+  *Consequence, accepted*: every existing cached image variant hashes differently once and is rebuilt
+  lazily — `resolvePublishMedia` rebuilds a missing one at publish time, so no scheduled post can fail
+  because of the change. A test (`src/server/media/hash.test.ts`) asserts two constraint sets differing
+  only in aspect share one hash, and integration tests (`tests/integration/media/variants.test.ts`)
+  assert a Story and a feed post resolve to the same variant row for an in-range asset, and that a 9:16
+  Story image — refused outright for the feed — is built and schedulable as a Story. *Rejected*: leaving
+  `prepareVariants` post-type-blind (the shared hash alone does not help an asset the feed's bounds
+  refuse before any build); bumping `VARIANT_PIPELINE_VERSION` instead (same rebuild, with no record of
+  why).
+- **K11 — a story target drops the feed's aspect error and both alt-text issues.**
+  `validateInstagram` keys its aspect check on `imageLimitsFor(caps, type)`, so with no bounds declared
+  the check cannot fire; it also filters `missing_alt_text` and `alt_text_too_long` for a story, since a
+  Story can carry no description at all, so asking for one is noise and refusing one for an otherwise-
+  correct description would be perverse. Derived from the fact that the description is never sent
+  (D2), not stated directly by the spec, so recorded here as a judgement call.
+- **K16 — a `STORIES` container reads `status_code,status` and names the Story in its ERROR message.**
+  Images today read `status_code` alone and fail with a generic "status ERROR" message. The spec's edge
+  case requires a Story to fail with what Instagram said and to point at the asset, so a `STORIES`
+  container reads the same `VIDEO_STATUS_FIELDS` a video container does and fails with "Instagram could
+  not process the Story's media{: detail}. Check the asset's format, size and shape; nothing was
+  published." Feed images are untouched.
+- **The constitution amendment.** The Engineering Constraints line blanket-excluded "stories" until a
+  spec said otherwise; this spec is that exception. `.specify/memory/constitution.md` now reads
+  "stories (except Instagram Stories, 078 — Facebook Page Stories stay out of scope)" rather than
+  dropping "stories" outright, so Facebook Page Stories — unresearched, unverified — stay excluded by
+  the same sentence that lets Instagram's in.
+
+### Implementation outcome
+
+Image and video Stories compose, validate with their own notices, schedule and publish against a
+mocked Graph, end to end through the real scheduler (`tests/integration/instagram/stories.test.ts`),
+including the daily container allowance, the platform quota, `PUBLISHED`-as-ambiguous, container
+expiry and recreation, and a create step killed mid-flight. The API surfaces everything the composer
+does (capabilities, validation issues, requirements summary) with no UI involved. Not built, and owned
+by no spec: Facebook Page Stories, stickers and links on a Story, reading a Story back, and multi-asset
+Stories (`docs/feature-map.md`).

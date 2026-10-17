@@ -39,6 +39,7 @@ nav:
       - MCP server: mcp.md
       - Failures and retrying: failures.md
       - Activity: activity.md
+      - Replying to comments and messages: engagement.md
   - Reference:
       - Platform limits: limits.md
       - Privacy: privacy.md

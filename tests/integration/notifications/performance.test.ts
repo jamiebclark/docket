@@ -38,7 +38,7 @@ afterAll(async () => {
   // assertion in the file had already passed.
 }, 240_000);
 
-/** ~15% problems (failed, ambiguous), the rest published. */
+/** ~15% problems (failed, ambiguous), ~5% engagement, the rest published. */
 async function seed(projectId: string, count: number) {
   seeded.push(projectId);
   await runCrossProject("test: seed notification performance events", () =>
@@ -50,17 +50,30 @@ async function seed(projectId: string, count: number) {
         date_trunc('milliseconds', now() - (g % 400) * interval '1 day' - (g % 86400) * interval '1 second'),
         k.kind::activity_event_kind,
         k.outcome::activity_outcome,
-        gen_random_uuid(),
-        gen_random_uuid(),
+        k.post_id,
+        k.post_target_id,
         gen_random_uuid(),
         'bluesky',
         ARRAY['bluesky'],
         'Event ' || g,
-        '{}'::jsonb
+        CASE WHEN k.kind = 'engagement_received' THEN '{"items": 1}'::jsonb ELSE '{}'::jsonb END
       FROM generate_series(1, ${count}) AS g,
         LATERAL (
-          SELECT CASE WHEN g % 100 < 8 THEN 'target_failed' WHEN g % 100 < 15 THEN 'target_ambiguous' ELSE 'target_published' END AS kind,
-                 CASE WHEN g % 100 < 8 THEN 'failed' WHEN g % 100 < 15 THEN 'ambiguous' ELSE 'published' END AS outcome
+          SELECT
+            CASE
+              WHEN g % 100 < 5 THEN 'engagement_received'
+              WHEN g % 100 < 13 THEN 'target_failed'
+              WHEN g % 100 < 20 THEN 'target_ambiguous'
+              ELSE 'target_published'
+            END AS kind,
+            CASE
+              WHEN g % 100 < 5 THEN 'engagement'
+              WHEN g % 100 < 13 THEN 'failed'
+              WHEN g % 100 < 20 THEN 'ambiguous'
+              ELSE 'published'
+            END AS outcome,
+            CASE WHEN g % 100 < 5 THEN NULL ELSE gen_random_uuid() END AS post_id,
+            CASE WHEN g % 100 < 5 THEN NULL ELSE gen_random_uuid() END AS post_target_id
         ) AS k
     `),
   );
@@ -124,7 +137,7 @@ async function explainCount(projectIds: string[], userId: string) {
     WHERE activity_events.project_id = '${projectId}' AND ${cond}
       AND activity_events.seq > notification_states.seen_seq LIMIT 100)`;
   const branches = projectIds.flatMap((p) => [
-    branch(p, "activity_events.outcome IN ('failed', 'ambiguous', 'needs_reauth')"),
+    branch(p, "activity_events.outcome IN ('failed', 'ambiguous', 'needs_reauth', 'engagement')"),
     branch(p, `activity_events.outcome = 'connect_failed' AND activity_events.actor_user_id = '${userId}'`),
   ]);
   const rows = await runCrossProject("test: explain notification count", () =>

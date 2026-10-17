@@ -11,6 +11,7 @@ export const NAV_SECTIONS = [
   { slug: "compose", label: "Compose", group: "Publish", icon: "compose" },
   { slug: "calendar", label: "Calendar", group: "Publish", icon: "calendar" },
   { slug: "posts", label: "Posts", group: "Publish", icon: "posts" },
+  { slug: "inbox", label: "Inbox", group: "Publish", icon: "inbox" },
   { slug: "review", label: "Review", group: "Publish", icon: "review" },
   { slug: "failures", label: "Failures", group: "Publish", icon: "failures" },
   { slug: "generate", label: "Generate", group: "Create", icon: "generate" },
@@ -28,8 +29,8 @@ export function isNavItemActive(pathname: string, href: string, exact = false): 
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function count(slug: string, reviewCount: number, failuresCount: number): number {
-  return slug === "review" ? reviewCount : slug === "failures" ? failuresCount : 0;
+function count(slug: string, reviewCount: number, failuresCount: number, inboxCount: number): number {
+  return slug === "review" ? reviewCount : slug === "failures" ? failuresCount : slug === "inbox" ? inboxCount : 0;
 }
 
 function NavLink({ href, label, icon, active, n, slug }: { href: string; label: string; icon: IconName; active: boolean; n: number; slug: string }) {
@@ -71,7 +72,20 @@ function NavLink({ href, label, icon, active, n, slug }: { href: string; label: 
  * carries `aria-current="page"`. Review and Failures show how many posts wait: the accessible name
  * reads "Review (3)" and the number is also drawn as a pill.
  */
-export function LeftNav({ projectSlug, reviewCount = 0, failuresCount = 0 }: { projectSlug: string; reviewCount?: number; failuresCount?: number }) {
+export function LeftNav({
+  projectSlug,
+  reviewCount = 0,
+  failuresCount = 0,
+  inboxCount = 0,
+  canViewInbox = false,
+}: {
+  projectSlug: string;
+  reviewCount?: number;
+  failuresCount?: number;
+  inboxCount?: number;
+  /** FR-037: a member with no `engagement:view` never sees the Inbox entry. */
+  canViewInbox?: boolean;
+}) {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
 
@@ -99,11 +113,11 @@ export function LeftNav({ projectSlug, reviewCount = 0, failuresCount = 0 }: { p
           <div key={group} className="flex md:flex-col md:gap-1">
             <p className="hidden px-3 pb-1 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase md:block">{group}</p>
             <ul className="flex gap-1 md:flex-col">
-              {NAV_SECTIONS.filter((s) => s.group === group).map(({ slug, label, icon }) => {
+              {NAV_SECTIONS.filter((s) => s.group === group && (s.slug !== "inbox" || canViewInbox)).map(({ slug, label, icon }) => {
                 const href = `/p/${projectSlug}/${slug}`;
                 return (
                   <li key={slug}>
-                    <NavLink href={href} label={label} icon={icon} active={isNavItemActive(pathname, href)} n={count(slug, reviewCount, failuresCount)} slug={slug} />
+                    <NavLink href={href} label={label} icon={icon} active={isNavItemActive(pathname, href)} n={count(slug, reviewCount, failuresCount, inboxCount)} slug={slug} />
                   </li>
                 );
               })}

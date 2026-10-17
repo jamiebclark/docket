@@ -33,8 +33,9 @@ describe("unread count", () => {
       await recordEvent(a.id, kind, { actorUserId: u.id });
       await recordEvent(b.id, kind, { actorUserId: u.id });
     }
-    // failed, ambiguous, needs_reauth, and U's own connect failure: 4 per project
-    expect(await count(u.id)).toBe(8);
+    // failed, ambiguous, needs_reauth, U's own connect failure, engagement_received and
+    // engagement_ambiguous (also an "ambiguous" outcome row): 6 per project
+    expect(await count(u.id)).toBe(12);
   });
 
   it("counts a connect failure only for the person who attempted it; a null actor counts for nobody", async () => {

@@ -1,7 +1,7 @@
 import { providerPublishLimits } from "../../src/providers/limits";
 import { mediaConstraintsOf, planImage, type ImagePlan, type MediaConstraints, type PlannedAsset } from "../../src/providers/media";
 import type { MediaItem, PostType, ProviderCapabilities, PublishLimit, SocialProvider } from "../../src/providers/types";
-import { videoLimitsFor } from "../../src/providers/validation";
+import { imageLimitsFor, videoLimitsFor } from "../../src/providers/validation";
 import type { VideoStep } from "../../src/providers/video-plan";
 import type { VideoAssetOptions } from "./factories";
 import { UPLOAD_MIME_TYPES } from "../../src/server/services/media";
@@ -90,6 +90,8 @@ export interface PlannerRow {
   check: (plan: ImagePlan, c: MediaConstraints) => void;
   /** An asset just inside the limit, which must not trip the same rule. */
   inside?: PlannedAsset;
+  /** The post type the row's plan is built for. Absent = the provider's base `media` block. */
+  postType?: PostType;
 }
 
 type Assert = (cond: boolean, message: string) => void;
@@ -181,6 +183,23 @@ export function plannerRows(provider: SocialProvider, assert: Assert): PlannerRo
   if (c.maxAspectRatio !== undefined) {
     const h = Math.ceil(SIDE / c.maxAspectRatio);
     rows.push({ title: `${key}: max aspect`, category: "max aspect", asset: jpeg(SIDE, h - 1), inside: jpeg(SIDE, h), check: refuses("aspect_ratio_out_of_range") });
+  }
+  // Per-type overrides: a `null` bound removes the base check, so the same asset that is refused for the base
+  // type must be accepted for the overriding type (C5).
+  for (const [type, over] of Object.entries(media.byPostType ?? {}) as [PostType, { minAspectRatio?: number | null; maxAspectRatio?: number | null }][]) {
+    if (!over) continue;
+    const merged = imageLimitsFor(provider.capabilities, type);
+    const accepts = (plan: ImagePlan) => {
+      assert(plan.kind !== "refuse", `${key}: ${type} should accept an image outside the base aspect range, got ${JSON.stringify(plan)}`);
+    };
+    if (c.minAspectRatio !== undefined && over.minAspectRatio === null && merged.minAspectRatio === undefined) {
+      const w = Math.ceil(c.minAspectRatio * SIDE);
+      rows.push({ title: `${key}: ${type} min aspect`, category: `${type} min aspect`, asset: jpeg(w - 1, SIDE), postType: type, check: accepts });
+    }
+    if (c.maxAspectRatio !== undefined && over.maxAspectRatio === null && merged.maxAspectRatio === undefined) {
+      const h = Math.ceil(SIDE / c.maxAspectRatio);
+      rows.push({ title: `${key}: ${type} max aspect`, category: `${type} max aspect`, asset: jpeg(SIDE, h - 1), postType: type, check: accepts });
+    }
   }
   return rows;
 }
@@ -341,8 +360,8 @@ export function videoRows(provider: SocialProvider): VideoRow[] {
   return rows;
 }
 
-export const planWith = (provider: SocialProvider, asset: PlannedAsset): ImagePlan =>
-  planImage(asset, mediaConstraintsOf(provider.capabilities), { index: 0, platform: provider.displayName });
+export const planWith = (provider: SocialProvider, asset: PlannedAsset, postType?: PostType): ImagePlan =>
+  planImage(asset, mediaConstraintsOf(provider.capabilities, postType), { index: 0, platform: provider.displayName });
 
 export interface LimitRow {
   title: string;

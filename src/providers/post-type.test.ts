@@ -50,6 +50,31 @@ describe("resolvePostType", () => {
   });
 });
 
+const withImageChoice: ProviderCapabilities = {
+  ...mock,
+  postTypes: [...mock.postTypes, "story"],
+  postTypeChoices: [
+    {
+      shape: "single_image",
+      options: [
+        { type: "image", label: "Feed post", description: "Feed." },
+        { type: "story", label: "Story", description: "Story." },
+      ],
+      default: "image",
+    },
+  ],
+};
+
+describe("resolvePostType for single_image", () => {
+  it("resolves the declared choice: chosen option, fallback to default, no choice declared", () => {
+    expect(resolvePostType(withImageChoice, [img], "story")).toBe("story");
+    expect(resolvePostType(withImageChoice, [img], null)).toBe("image");
+    expect(resolvePostType(withImageChoice, [img], "reel")).toBe("image");
+    expect(resolvePostType(mock, [img], "story")).toBe("image");
+    expect(resolvePostType(null, [img], "story")).toBe("image");
+  });
+});
+
 describe("choice helpers", () => {
   it("finds the choice only for its shape", () => {
     expect(choiceFor(withChoice, [vid])?.default).toBe("video");

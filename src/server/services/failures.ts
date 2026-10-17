@@ -6,7 +6,7 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../dal/errors";
 import type { AccountRecord } from "../dal/accounts";
 import type { AttemptRow } from "../dal/attempts";
 import type { AttemptActor } from "../../lib/failures/attempt-actor";
-import type { ProjectScope } from "../dal/scope";
+import { requirePermission, type ProjectScope } from "../dal/scope";
 import type { TargetRecord } from "../dal/targets";
 import { gate, retryBlockedReason } from "./posts";
 import { excerptOf } from "./posts/list";
@@ -199,10 +199,70 @@ export async function listFailures(scope: ProjectScope, input?: unknown): Promis
   };
 }
 
-/** FR-005: ambiguous targets only; 0 when the viewer cannot see posts. */
+/** FR-005: ambiguous targets, plus ambiguous replies (FR-040); 0 when the viewer cannot see either. */
 export async function countNeedsDecision(scope: ProjectScope): Promise<number> {
-  if (!scope.can({ post: ["view"] })) return 0;
-  return (await scope.targets.countAttention()).ambiguous;
+  const posts = scope.can({ post: ["view"] }) ? (await scope.targets.countAttention()).ambiguous : 0;
+  const replies = scope.can({ engagement: ["view"] }) ? await scope.engagementDrafts.countSendState("ambiguous") : 0;
+  return posts + replies;
+}
+
+export interface ReplyFailureRow {
+  draftId: string;
+  itemId: string;
+  text: string;
+  excerpt: string;
+  account: { id: string; name: string };
+  updatedAt: Date;
+}
+
+/** Ambiguous replies — sent to the platform with no confirmation either way (contracts/services.md §5). */
+export async function listReplyFailures(scope: ProjectScope): Promise<ReplyFailureRow[]> {
+  if (!scope.can({ engagement: ["view"] })) return [];
+  const drafts = await scope.engagementDrafts.listBySendState("ambiguous");
+  const rows: ReplyFailureRow[] = [];
+  for (const draft of drafts) {
+    const account = await scope.accounts.get(draft.socialAccountId);
+    rows.push({
+      draftId: draft.id,
+      itemId: draft.engagementItemId,
+      text: draft.sentText ?? draft.text,
+      excerpt: excerptOf(draft.sentText ?? draft.text),
+      account: { id: draft.socialAccountId, name: account?.displayName ?? "Removed account" },
+      updatedAt: draft.updatedAt,
+    });
+  }
+  return rows;
+}
+
+/** It did arrive: the item is answered, nothing more is sent (contracts/services.md §5). */
+export async function markReplySent(scope: ProjectScope, draftId: string): Promise<void> {
+  requirePermission(scope, { engagement: ["reply"] });
+  const draft = await scope.engagementDrafts.get(draftId);
+  if (!draft) throw new NotFoundError();
+  const now = await clock.now();
+  await scope.engagementDrafts.update(draftId, {
+    sendState: "sent",
+    sentText: draft.text,
+    sentAt: now,
+    externalReplyId: draft.externalReplyId ?? "",
+  });
+  await scope.engagementItems.markAnswered(draft.engagementItemId, now);
+}
+
+/** It did not: releases the ledger for another attempt and returns the draft to review (contracts/services.md §5). */
+export async function markReplyNotSent(scope: ProjectScope, draftId: string): Promise<void> {
+  requirePermission(scope, { engagement: ["reply"] });
+  const draft = await scope.engagementDrafts.get(draftId);
+  if (!draft) throw new NotFoundError();
+  const item = await scope.engagementItems.get(draft.engagementItemId);
+  const now = await clock.now();
+  if (item) {
+    const latest = await scope.engagementReplyClaims.latest(draft.socialAccountId, item.externalId);
+    if (latest && latest.releasedAt === null) {
+      await scope.engagementReplyClaims.release(draft.socialAccountId, item.externalId, latest.generation, "member_decision", scope.membership.userId, now);
+    }
+  }
+  await scope.engagementDrafts.update(draftId, { reviewState: "needs_review", sendState: "none", sentText: null, sentAt: null, reviewedAt: null, reviewedByUserId: null });
 }
 
 /** FR-008 dialog preview. No writes. */

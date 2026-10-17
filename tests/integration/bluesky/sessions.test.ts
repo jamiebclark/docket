@@ -84,10 +84,31 @@ describe("Bluesky sessions through the real scheduler", () => {
     expect(pds.callsTo("POST", CREATE_RECORD)[1]!.headers.authorization).toBe(`Bearer ${NEW_ACCESS}`);
   });
 
-  it("flags needs_reauth with a readable reason when the refresh is refused, then reports account_unavailable", async () => {
+  it("re-authenticates from the stored app password when the refresh is refused, and publishes in the same tick", async () => {
+    pds.route("POST", REFRESH_SESSION, { status: 400, json: { error: "ExpiredToken", message: "refresh expired" } });
+    pds.route("POST", CREATE_RECORD, { json: { uri: URI, cid: CID } });
+    const { tick, row, account } = await setup({ accessJwt: mintJwt(new Date(Date.now() + 60_000)) });
+    // The dead refresh token is replaced by a whole new session opened with the stored password.
+    pds.route("POST", CREATE_SESSION, { json: rotated() });
+
+    expect((await tick()).publishing.counts).toMatchObject({ claimed: 1, done: 1 });
+
+    expect((await row()).status).toBe("published");
+    expect((await account()).status).toBe("active");
+    // Once at connect, once to re-authenticate; by DID the second time.
+    const sessions = pds.callsTo("POST", CREATE_SESSION);
+    expect(sessions).toHaveLength(2);
+    expect(sessions[1]!.body).toMatchObject({ identifier: DID });
+    expect(pds.callsTo("POST", CREATE_RECORD)[0]!.headers.authorization).toBe(`Bearer ${NEW_ACCESS}`);
+  });
+
+  it("flags needs_reauth with a readable reason when the refresh and the stored password are both refused, then reports account_unavailable", async () => {
     pds.route("POST", REFRESH_SESSION, { status: 400, json: { error: "ExpiredToken", message: "refresh expired" } });
     pds.route("POST", CREATE_RECORD, { status: 401, json: { error: "AuthenticationRequired" } });
     const { tick, row, account, dueNow } = await setup();
+    // Revoked or changed in Bluesky: the stored password cannot open a session either, so this
+    // still needs a human.
+    pds.route("POST", CREATE_SESSION, { status: 401, json: { error: "AuthenticationRequired" } });
     await tick();
     const a = await account();
     expect(a.status).toBe("needs_reauth");

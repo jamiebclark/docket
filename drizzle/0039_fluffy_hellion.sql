@@ -1,0 +1,1 @@
+ALTER TABLE "engagement_account_states" DROP COLUMN "auto_draft";

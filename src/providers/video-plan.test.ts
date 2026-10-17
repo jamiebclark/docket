@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_VIDEO_EDIT, type VideoEdit } from "../lib/video/edit";
+import { instagramCapabilities } from "./instagram/capabilities";
 import type { VideoCapabilities, VideoFacts } from "./types";
+import { videoLimitsFor } from "./validation";
 import { planVideo, previewRecipe, type VideoPlan, type VideoSource } from "./video-plan";
 
 const IG: VideoCapabilities = {
@@ -417,6 +419,12 @@ describe("planVideo: each declared bound (FR-038)", () => {
     expect(planVideo(s(), IG, edit(), ctx()).kind).toBe("original");
     expect(derived(planVideo(s(), IG, edit({ recommendedShape: true }), ctx())).steps).toContain("pad");
     expect(planVideo(s(), { ...IG, recommendedAspectRatio: undefined }, edit({ recommendedShape: true }), ctx()).kind).toBe("original");
+  });
+  it("story: the 9:16 recommendation only applies when asked, or when forced by the range", () => {
+    const story = videoLimitsFor(instagramCapabilities, "story");
+    expect(story.recommendedAspectRatio).toBe(9 / 16);
+    expect(planVideo(s(), story, edit(), ctx()).kind).toBe("original");
+    expect(derived(planVideo(s(), story, edit({ recommendedShape: true }), ctx())).steps).toContain("pad");
   });
   it("a target with no limits receives the original", () => {
     expect(planVideo(s(), { maxVideos: 1 }, edit(), ctx())).toEqual({ kind: "original" });

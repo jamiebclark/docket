@@ -54,3 +54,26 @@ export {
 } from "./scheduler";
 export { NotificationsBusyError } from "./notifications";
 export type { NotificationStateRow, NotificationsRepo } from "./notifications";
+export {
+  createEngagementAccountStatesRepo,
+  createEngagementDraftsRepo,
+  createEngagementItemsRepo,
+  createEngagementReplyClaimsRepo,
+} from "./engagement";
+export type {
+  EngagementAccountStateRow,
+  EngagementAccountStatesRepo,
+  EngagementDraftRow,
+  EngagementDraftsRepo,
+  EngagementItemRow,
+  EngagementItemsRepo,
+  EngagementReplyClaimRow,
+  EngagementReplyClaimsRepo,
+  NewEngagementDraft,
+  NewEngagementItem,
+  NewEngagementReplyClaim,
+} from "./engagement";
+export { claimDueEngagementSends } from "./engagement-claims";
+export type { ClaimedEngagementDraft } from "./engagement-claims";
+export { claimDueEngagementReads } from "./engagement-read-claims";
+export type { ClaimedEngagementAccount } from "./engagement-read-claims";

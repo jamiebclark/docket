@@ -12,7 +12,7 @@ export const VIDEO_SLOW_AFTER_MS = 300_000;
 /** Fields beyond the v1 image shape are optional, so a state saved before 019 still parses (P19). */
 export const instagramStateSchema = z.object({
   v: z.literal(1),
-  mediaType: z.enum(["IMAGE", "CAROUSEL", "REELS"]),
+  mediaType: z.enum(["IMAGE", "CAROUSEL", "REELS", "STORIES"]),
   /** REELS only: true = Feed video, false = Reel. */
   shareToFeed: z.boolean().optional(),
   /** CAROUSEL only: kind of every planned item, in post order. Absent = all images. */
@@ -37,7 +37,7 @@ export type InstagramState = z.infer<typeof instagramStateSchema>;
 
 /** What the content publishes as; derived from the post, never stored on its own. */
 export interface InstagramPlan {
-  mediaType: "IMAGE" | "CAROUSEL" | "REELS";
+  mediaType: "IMAGE" | "CAROUSEL" | "REELS" | "STORIES";
   shareToFeed?: boolean;
   kinds?: readonly ("image" | "video")[];
 }

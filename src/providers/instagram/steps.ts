@@ -12,6 +12,7 @@ export function planOf(content: Pick<StepContent, "mediaCount" | "kinds" | "post
   if (count === 0 || count > INSTAGRAM_MAX_IMAGES) return null;
   const kinds: Kind[] = content.kinds && content.kinds.length === count ? [...content.kinds] : Array.from({ length: count }, () => "image");
   if (count === 1) {
+    if (content.postType === "story") return { mediaType: "STORIES" };
     if (kinds[0] === "video") return { mediaType: "REELS", shareToFeed: content.postType !== "reel" };
     return { mediaType: "IMAGE" };
   }
