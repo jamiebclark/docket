@@ -1,6 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { setLlmForTests } from "../../../src/server/llm";
 import { runTick } from "../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
@@ -15,6 +18,9 @@ afterAll(async () => {
 });
 
 const CONFIG = { timeBudgetMs: 4000, jobMinCallMs: 1000, jobPersistReserveMs: 500, jobMaxItems: 1 };
+
+/** A complete config, for the tests below that call a section directly rather than through `runTick`. */
+const SCHED_CONFIG = schedulerConfig(getEnv(), CONFIG);
 
 describe("the tick time budget (SC-008)", () => {
   it("cuts a 6 s call off, ends the tick within the budget, and defers the retry without counting an attempt", async () => {
@@ -83,12 +89,21 @@ describe("a section that skips says so (SC-008)", () => {
     await e.assets(1);
     const { jobId } = await createJob(e.scope, e.input());
 
-    // `needed` is minCall + persistReserve. Equal to the whole budget, so no item can ever start.
-    const noRoom = { timeBudgetMs: 1500, jobMinCallMs: 1000, jobPersistReserveMs: 500, jobMaxItems: 1 };
-    const tick = await runTick({ config: noRoom });
+    // The section is called directly with a `startedAt` already in the past, so its deadline is
+    // definitively behind us. Going through `runTick` with `timeBudgetMs` merely EQUAL to
+    // `minCallMs + persistReserveMs` does not work: the gate is `now + needed > deadline`, which with
+    // those two equal reduces to `now > startedAt` — true on a machine where `clock.now()` costs a
+    // database round trip, false on CI when both land on the same timestamp. That version of this test
+    // failed on CI run 39015 shard 3 with `claimed: 1, outOfBudget: 0`, which is the very class of
+    // wall-clock dependence this file's own fix is about.
+    const config = { ...SCHED_CONFIG, jobMinCallMs: 1000, jobPersistReserveMs: 500, jobMaxItems: 1 };
+    const counts = await runGenerationJobs({
+      config,
+      tickId: "test-out-of-budget",
+      startedAt: new Date(Date.now() - 10 * SCHED_CONFIG.timeBudgetMs),
+    });
 
-    expect(tick.generation.ok).toBe(true);
-    expect(tick.generation.counts).toMatchObject({ claimed: 0, outOfBudget: 1 });
+    expect(counts).toMatchObject({ claimed: 0, outOfBudget: 1, notRunnable: 0 });
     // Nothing was touched: the item is still queued with no attempt against it.
     expect((await e.scope.jobItems.listForJob(jobId))[0]).toMatchObject({ status: "queued", attemptCount: 0 });
   }, 60_000);

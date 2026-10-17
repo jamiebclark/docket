@@ -66,7 +66,13 @@ describe("token refresh", () => {
     // Refresh is global and capped per tick (default 5); expiring accounts left by other
     // files on this worker's database could fill the cap first, so lift it here.
     const tick = await runTick({ config: { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS } });
-    expect(tick.tokenRefresh.counts.failed).toBeGreaterThanOrEqual(1);
+    // KNOWN FLAKE, cause not yet identified: this has come back `failed: 0` on CI (runs 39009461524
+    // and 39015 shard 1) while passing locally. Pinning the budget did NOT fix it, so it is not the
+    // deadline gate `outOfBudget` now reports — with a 120s budget that gate cannot fire. The counts
+    // are in the message so the next failure says which disposition took the account instead of
+    // asserting a bare zero.
+    const refresh = JSON.stringify(tick.tokenRefresh);
+    expect(tick.tokenRefresh.counts.failed, `tokenRefresh ${refresh}`).toBeGreaterThanOrEqual(1);
     const badAfter = await bad.repos.accounts.get(bad.account.id);
     expect(badAfter).toMatchObject({ status: "needs_reauth", lastError: "Mock refresh failure" });
     expect(badAfter!.lastError).not.toContain("old-secret-token");
