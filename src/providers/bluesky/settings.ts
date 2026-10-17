@@ -12,6 +12,13 @@ export const blueskyCredentialsSchema = z.object({
   refreshJwt: z.string().min(1),
   did: z.string().startsWith("did:"),
   handle: z.string().min(1),
+  /**
+   * The app password, kept so a refused refresh can open a new session without a human (Jamie's
+   * call, 2026-10-16: the Halloween run lost posts to sessions that died days early). Optional:
+   * accounts connected before this was stored have none, and fall back to manual reconnect.
+   * Unlike a refresh token it never expires, so a leak is open-ended until it is revoked in Bluesky.
+   */
+  appPassword: z.string().min(1).optional(),
 });
 export type BlueskyCredentials = z.infer<typeof blueskyCredentialsSchema>;
 

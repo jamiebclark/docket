@@ -2,7 +2,7 @@ import { XRPCError } from "@atproto/api";
 import type { ConnectResult, RefreshResult } from "../types";
 import { agentFor } from "./client";
 import { errorName, isDefinitiveRefusal, rateLimitNotBefore } from "./errors";
-import { blueskyCredentialsSchema, normaliseHandle, normalisePdsUrl, type BlueskySettings } from "./settings";
+import { blueskyCredentialsSchema, normaliseHandle, normalisePdsUrl, type BlueskyCredentials, type BlueskySettings } from "./settings";
 
 const SIXTY_DAYS_MS = 60 * 86_400_000;
 const REFRESH_AHEAD_MS = 5 * 60_000;
@@ -44,13 +44,11 @@ export async function connectAccount(input: {
   const pdsUrl = normalisePdsUrl(input.fields.pdsUrl);
   if (pdsUrl === null) return fail("Enter an https:// address with no path, for example https://bsky.social.", "pdsUrl");
 
+  // Trimmed like the handle: an app password pasted from Bluesky's settings often carries a
+  // trailing newline or space, and the PDS answers 401, which reads as a wrong password.
+  const appPassword = (input.fields.appPassword ?? "").trim();
   try {
-    const res = await agentFor(pdsUrl).com.atproto.server.createSession(
-      // Trimmed like the handle: an app password pasted from Bluesky's settings often carries a
-      // trailing newline or space, and the PDS answers 401, which reads as a wrong password.
-      { identifier: handle, password: (input.fields.appPassword ?? "").trim() },
-      { signal: input.signal },
-    );
+    const res = await agentFor(pdsUrl).com.atproto.server.createSession({ identifier: handle, password: appPassword }, { signal: input.signal });
     const { accessJwt, refreshJwt, did, handle: returned } = res.data;
     return {
       ok: true,
@@ -58,7 +56,7 @@ export async function connectAccount(input: {
         externalId: did,
         displayName: returned,
         settings: { pdsUrl } satisfies BlueskySettings,
-        credentials: { accessJwt, refreshJwt, did, handle: returned },
+        credentials: { accessJwt, refreshJwt, did, handle: returned, appPassword },
         expiresAt: jwtExp(refreshJwt) ?? new Date(input.now.getTime() + SIXTY_DAYS_MS),
       },
     };
@@ -90,6 +88,44 @@ export async function connectAccount(input: {
   }
 }
 
+/**
+ * Opens a brand-new session from the stored app password after a refusal. Identifies by DID, not
+ * handle, so an account that was renamed still signs in. `null` means the password no longer works
+ * either, and the caller reports the original refusal so a human reconnects.
+ */
+async function reauthenticate(input: {
+  creds: BlueskyCredentials;
+  settings: BlueskySettings;
+  now: Date;
+  signal: AbortSignal;
+}): Promise<Extract<RefreshResult, { ok: true }> | null> {
+  const { creds } = input;
+  if (!creds.appPassword) return null;
+  try {
+    const res = await agentFor(input.settings.pdsUrl).com.atproto.server.createSession(
+      { identifier: creds.did, password: creds.appPassword },
+      { signal: input.signal },
+    );
+    if (res.data.did !== creds.did) return null;
+    return {
+      ok: true,
+      credentials: {
+        accessJwt: res.data.accessJwt,
+        refreshJwt: res.data.refreshJwt,
+        did: creds.did,
+        handle: res.data.handle ?? creds.handle,
+        appPassword: creds.appPassword,
+      },
+      expiresAt: jwtExp(res.data.refreshJwt) ?? new Date(input.now.getTime() + SIXTY_DAYS_MS),
+      displayName: res.data.handle ?? creds.handle,
+    };
+  } catch {
+    // Includes a network blip, which costs nothing extra: the refresh was already refused for
+    // good, so without this the account was being flagged for a human regardless.
+    return null;
+  }
+}
+
 export async function refreshCredentials(input: {
   account: { id: string; externalId: string; settings: BlueskySettings };
   credentials: unknown;
@@ -107,12 +143,26 @@ export async function refreshCredentials(input: {
     if (res.data.did !== creds.did) return { ok: false, reason: "The server returned a different account." };
     return {
       ok: true,
-      credentials: { accessJwt: res.data.accessJwt, refreshJwt: res.data.refreshJwt, did: creds.did, handle: res.data.handle ?? creds.handle },
+      credentials: {
+        accessJwt: res.data.accessJwt,
+        refreshJwt: res.data.refreshJwt,
+        did: creds.did,
+        handle: res.data.handle ?? creds.handle,
+        // Carried forward, or the first refresh would drop it and re-authentication would be
+        // impossible from then on.
+        ...(creds.appPassword ? { appPassword: creds.appPassword } : {}),
+      },
       expiresAt: jwtExp(res.data.refreshJwt) ?? new Date(input.now.getTime() + SIXTY_DAYS_MS),
       displayName: res.data.handle,
     };
   } catch (err) {
     if (isDefinitiveRefusal(err)) {
+      // The refresh token is dead for good, but a stored app password can open a fresh session,
+      // which is the whole point of keeping one: no missed posts waiting on a human.
+      if (creds.appPassword) {
+        const reauthed = await reauthenticate({ creds, settings: input.account.settings, now: input.now, signal: input.signal });
+        if (reauthed) return reauthed;
+      }
       return { ok: false, reason: `Bluesky refused to renew the session (${errorName(err)}). Reconnect the account with an app password.` };
     }
     const retryAt = err instanceof XRPCError ? rateLimitNotBefore(err.headers, input.now) : null;
