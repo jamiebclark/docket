@@ -73,6 +73,7 @@ const item = (over: Partial<NotificationItem> = {}): NotificationItem => ({
   postDeleted: false,
   message: "Could not publish.",
   isNew: true,
+  read: false,
   actionsAvailable: true,
   link: { href: "/p/demo/failures", label: "Open in Failures" },
   ...over,
@@ -119,13 +120,27 @@ describe("notification list", () => {
 });
 
 describe("notification row actions (FR-015 to FR-020, SC-009)", () => {
-  it("shows 'Mark read' with an accessible name naming the problem, for read and unread rows alike", () => {
+  it("shows 'Mark read' with an accessible name naming the problem, new row or not", () => {
     for (const isNew of [true, false]) {
       const html = list([item({ isNew })]);
       expect(html).toContain(">Mark read<");
       expect(html).toContain("— Failed, Demo, Bluesky · @me");
       expect(html.includes("New")).toBe(isNew);
     }
+  });
+
+  it("says 'Read' instead of offering controls that would write nothing on an already-read row", () => {
+    const html = list([item({ isNew: false, read: true })]);
+    expect(html).not.toContain(">Mark read<");
+    expect(html).not.toContain(">Snooze<");
+    expect(html).toContain(">Read<");
+    expect(html).toContain("— Failed, Demo, Bluesky · @me");
+  });
+
+  it("keeps the controls on a row that is not new but still markable (snoozed, or no reading position yet)", () => {
+    const html = list([item({ isNew: false, read: false })]);
+    expect(html).toContain(">Mark read<");
+    expect(html).toContain(">Snooze<");
   });
 
   it("renders the hidden returnTo field before hydration when given one, and omits it with none", () => {

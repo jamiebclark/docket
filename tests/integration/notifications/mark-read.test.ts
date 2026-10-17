@@ -9,7 +9,7 @@ import {
   setNotificationsLockTimeoutForTests,
 } from "../../../src/server/dal/notifications";
 import { queryObservers, type Database } from "../../../src/server/db/client";
-import { markAllRead, markProblemsView, unreadSummary } from "../../../src/server/services/notifications";
+import { markAllRead, markEventRead, markProblemsView, recentPanel, unreadSummary } from "../../../src/server/services/notifications";
 import { closeDb, testDb } from "../../helpers/db";
 import { addMember, createProject, createUser } from "../../helpers/factories";
 import { recordEvent, startReading } from "../../helpers/notifications";
@@ -91,6 +91,29 @@ async function waitForLockWait(): Promise<void> {
 }
 
 describe("marking read is exact", () => {
+  // The bell panel lists the newest problems whether they are read or not, so after opening the
+  // problems view every row is already read and its "Mark read" would write nothing. The rows say
+  // so through `read`, rather than offering a button that silently does nothing when pressed.
+  it("reports every row read once the problems view has moved the floor past it", async () => {
+    const { project, u } = await fixture();
+    const older = await recordEvent(project.id, "target_failed");
+    const newer = await recordEvent(project.id, "target_failed");
+    const set = await setOf(u.id);
+    expect((await recentPanel(set, new Date())).items.every((i) => !i.read)).toBe(true);
+
+    // Scoped to the one project under test: "all" would take `FOR UPDATE` on every project this
+    // user is in, and the databases are per worker rather than per file, so a wider lock than the
+    // assertion needs is a wider lock for whatever file is running beside this one.
+    await markProblemsView(await setOf(u.id), { kind: "project", slug: project.slug });
+    expect(await count(u.id)).toBe(0);
+
+    const panel = await recentPanel(await setOf(u.id), new Date());
+    expect(panel.items.map((i) => i.id).sort()).toEqual([older.id, newer.id].sort());
+    expect(panel.items.every((i) => i.read)).toBe(true);
+    // And the action those rows would have run really is a no-op, which is why they no longer offer it.
+    expect(await markEventRead(await setOf(u.id), { eventId: newer.id })).toMatchObject({ noop: true });
+  });
+
   it("moves the position to the newest event and the count to zero", async () => {
     const { project, u } = await fixture();
     await recordEvent(project.id, "target_failed");

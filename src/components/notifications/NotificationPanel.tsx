@@ -30,6 +30,9 @@ export function NotificationPanel({
   const [marked, markAction, marking] = useActionState<MarkResult, FormData>(markAllRead, null);
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(new Set());
   const [snoozedIds, setSnoozedIds] = useState<ReadonlySet<string>>(new Set());
+  // The count after the last per-row action, so marking the last unread problem read also retires
+  // "Mark all as read" — otherwise the footer kept offering it with nothing left to mark.
+  const [rowUnread, setRowUnread] = useState<number | null>(null);
 
   useEffect(() => {
     heading.current?.focus();
@@ -44,6 +47,7 @@ export function NotificationPanel({
       } else {
         setReadIds((ids) => new Set(ids).add(result.eventId));
       }
+      setRowUnread(result.unread.count);
       onSummary(result.unread);
     },
     [onSummary],
@@ -58,6 +62,8 @@ export function NotificationPanel({
       })
       .then((panel) => {
         setNow(new Date());
+        // Fresh data carries its own count, so the one left by a row action stops standing in.
+        setRowUnread(null);
         setLoad({ status: "ready", panel });
       })
       .catch((error: unknown) => {
@@ -98,16 +104,16 @@ export function NotificationPanel({
     );
   } else {
     const { panel } = load;
-    unread = result ? result.unread.count : panel.unread.count;
+    unread = result ? result.unread.count : (rowUnread ?? panel.unread.count);
     if (panel.state === "no_projects") {
       body = <p className="text-sm text-muted-foreground">You are not a member of any project yet.</p>;
     } else if (panel.state === "all_muted") {
       // "all_muted" now means the roll-up: no project of the caller's has any kind on (N33). Sentence unchanged.
       body = <p className="text-sm text-muted-foreground">Notifications are off for all of your projects. {settings}.</p>;
     } else {
-      const items = (result ? panel.items.map((item) => ({ ...item, isNew: false })) : panel.items)
+      const items = (result ? panel.items.map((item) => ({ ...item, isNew: false, read: true })) : panel.items)
         .filter((item) => !snoozedIds.has(item.id))
-        .map((item) => (!result && readIds.has(item.id) ? { ...item, isNew: false } : item));
+        .map((item) => (!result && readIds.has(item.id) ? { ...item, isNew: false, read: true } : item));
       body = <NotificationList items={items} now={now} onRowDone={onRowDone} />;
     }
   }
