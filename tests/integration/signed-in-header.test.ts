@@ -39,6 +39,12 @@ describe("SignedInHeader (shown on /p/new and /invitations)", () => {
     expect(html).toMatch(/>All activity</);
   });
 
+  it("leaves /notifications to the bell alone — the user menu no longer duplicates it", async () => {
+    // The bell is mocked out in this file, so any /notifications link here would be a second way in.
+    const html = await render(await createUser());
+    expect(html).not.toContain('href="/notifications"');
+  });
+
   it("makes the avatar and name the link to the account page, with no separate Account item", async () => {
     const html = await render(await createUser({ name: "Robin Fox" }));
     // One /account link, and the name is inside it rather than beside it.

@@ -14,10 +14,12 @@ export function initials(name: string): string {
  * Signed-in user's avatar, name and a Sign out button; `signOut` is a server action (see the sign-out task).
  *
  * Who you are *is* the way to your account, so the avatar and name are the link to `/account` rather
- * than a fifth icon beside them. Its accessible name is "<name> — Account": the visible name stays
- * the start of it, so what you read is what you can say (WCAG 2.5.3), and where it goes is still said.
- * The rest are icon-only — glyph plus a `title` tooltip and an `sr-only` label, the same shape as the
- * notification bell — so the header stays a row of marks rather than a row of sentences.
+ * than an icon beside them. Its accessible name is "<name> — Account": the visible name stays the
+ * start of it, so what you read is what you can say (WCAG 2.5.3), and where it goes is still said.
+ *
+ * There is deliberately no "Notifications" item: the bell is the single way in, and its panel
+ * already ends in "View all problems" and "Notification settings" — the one this duplicated. With
+ * no JavaScript the bell is a plain link to `/notifications`, so that page stays reachable either way.
  */
 export function UserMenu({ name, signOut }: { name: string; signOut: () => Promise<void> }) {
   return (
@@ -36,10 +38,6 @@ export function UserMenu({ name, signOut }: { name: string; signOut: () => Promi
       <Link href="/activity" title="All activity" className={iconControlStyles}>
         <Icon name="activity" />
         <span className="sr-only">All activity</span>
-      </Link>
-      <Link href="/notifications" title="Notifications" className={iconControlStyles}>
-        <Icon name="slidersHorizontal" />
-        <span className="sr-only">Notifications</span>
       </Link>
       <button type="submit" title="Sign out" className={iconControlStyles}>
         <Icon name="logOut" />
