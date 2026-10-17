@@ -43,10 +43,19 @@ let seq = 0;
 /** A distinct address per test: the reset limiter is per-email module state shared across this file. */
 const freshEmail = () => `reset-${Date.now().toString(36)}-${seq++}@example.test`;
 
+/**
+ * Password hashing is deliberately slow, and every test here seeds a user. Hashing OLD_PASSWORD once
+ * and reusing the digest keeps this file from spending a dozen scrypt runs on the one credential it
+ * never actually asserts against — the hashes under test are the ones `resetPassword` and
+ * `signInEmail` compute themselves.
+ */
+let seededHash: Promise<string> | null = null;
+const oldPasswordHash = () => (seededHash ??= hashPassword(OLD_PASSWORD));
+
 /** A user with a credential account, so "the old password stops working" is a real assertion. */
-async function userWithPassword(email: string, password = OLD_PASSWORD) {
+async function userWithPassword(email: string) {
   const row = await createUser({ email });
-  const passwordHash = await hashPassword(password);
+  const passwordHash = await oldPasswordHash();
   await runCrossProject("test: seed credential account", async () => {
     await getDb().insert(account).values({
       userId: row.id,
