@@ -35,6 +35,13 @@ export async function requestPasswordReset(
     if (isAPIError(error) && error.statusCode === 429) {
       return fail("busy", "Too many reset requests for that address. Wait a minute and try again.");
     }
+    // Silent to the caller, never silent to the operator. The reply has to be identical whether or not
+    // the address exists, but swallowing the reason entirely means a genuinely broken reset looks
+    // exactly like a working one — which is how a production failure went unexplained on 2026-10-17.
+    // The status and error name only; never the address, and never the token.
+    console.error(
+      `Docket auth: password reset request failed (${isAPIError(error) ? `status ${error.statusCode}` : (error as Error)?.name || "unknown"})`,
+    );
   }
 
   return ok({ message: RESET_REQUESTED_MESSAGE });
