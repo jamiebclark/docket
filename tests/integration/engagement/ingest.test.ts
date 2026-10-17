@@ -21,7 +21,22 @@ afterAll(async () => {
 });
 
 const AT = new Date("2026-10-10T12:00:00Z");
-const NO_WAIT = { engagementReadMinIntervalMs: 0 };
+/**
+ * `engagementPruneBatch: 0` keeps housekeeping from racing the assertions.
+ *
+ * `runTick` runs housekeeping alongside the engagement read, and the prune pass deletes "any withdrawn
+ * item regardless of age" (services/engagement/retention) — `pruneEngagementItemsBefore` matches on
+ * `withdrawn_at IS NOT NULL` with no age test at all. So the same tick that stamps an item withdrawn is
+ * entitled to delete it, and a test that reads the item back afterwards wins or loses a race with no
+ * ordering between the two sections. That is what failed on CI for three of four consecutive pull
+ * requests (#131, #135, #137) as `NotFoundError: Engagement item not found`, always on the withdrawn
+ * case, always passing when the file ran alone.
+ *
+ * A batch of 0 is `LIMIT 0`, and the DAL returns early on an empty id list, so nothing is pruned.
+ * Retention behaviour itself is covered by `engagement/retention.test.ts`, which is about the prune;
+ * this file is about ingest and must not depend on whether the prune happened to run first.
+ */
+const NO_WAIT = { engagementReadMinIntervalMs: 0, engagementPruneBatch: 0 };
 
 async function setupWithItems(items: Record<string, unknown>[]) {
   const ctx = await createProjectWithMembers();
