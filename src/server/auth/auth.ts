@@ -98,13 +98,19 @@ function createAuth() {
       sendResetPassword: async ({ user, url }) => {
         const deliver = async () => {
           try {
-            await sendPasswordResetEmail({
+            const outcome = await sendPasswordResetEmail({
               user: { id: user.id, name: user.name, email: user.email },
               resetUrl: url,
               expiresAt: new Date(Date.now() + RESET_PASSWORD_TTL_SECONDS * 1000),
             });
-          } catch {
-            // Swallowed on purpose; `sendPasswordResetEmail` already records the attempt row it can.
+            // Deferred past the response, so this line is the only place an operator can see that a
+            // reset was asked for and what became of it. `unavailable` means no SMTP group is
+            // configured; `failed` means the server refused or could not be reached. Never the address.
+            if (outcome !== "sent") console.error(`Docket auth: password reset email ${outcome}`);
+          } catch (error) {
+            // `sendPasswordResetEmail` promises not to throw and records its own attempt row, so this
+            // is Docket's own fault rather than the mail server's. Name it; it is invisible otherwise.
+            console.error(`Docket auth: password reset delivery threw (${(error as Error)?.name || "unknown"})`);
           }
         };
 
