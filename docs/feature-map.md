@@ -78,7 +78,7 @@ spec is written.
   comments and Threads replies are specified but not built, blocked on a human research spike into Meta's comment
   identity model; direct messages are modelled (and marked Private wherever they appear) but not read, drafted or
   sent on any real platform yet.
-- **Post and account insights (079).** A performance panel on the post detail page shows, per target, the latest
+- **Post and account insights (080).** A performance panel on the post detail page shows, per target, the latest
   reading of whatever numbers that platform reports (Bluesky only — see `docs/insights.md`): likes, reposts,
   replies and quotes, each with Bluesky's own label and no views/reach key (Bluesky confirmed to report neither).
   The scheduler reads on a decaying schedule (hourly for a day, daily to a week, weekly to four weeks, then

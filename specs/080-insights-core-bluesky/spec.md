@@ -1,6 +1,6 @@
 # Feature Specification: Post and account insights, with Bluesky as the pilot platform
 
-**Feature Branch**: `079-insights-core-bluesky`
+**Feature Branch**: `080-insights-core-bluesky`
 
 **Created**: 2026-10-17
 

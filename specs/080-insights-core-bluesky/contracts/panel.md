@@ -1,6 +1,6 @@
 # Contract: the performance panel on the post detail page
 
-**Feature**: 079-insights-core-bluesky | **Files**: `src/lib/insights/panel.ts`,
+**Feature**: 080-insights-core-bluesky | **Files**: `src/lib/insights/panel.ts`,
 `src/server/services/posts/view.ts`, `src/components/targets/PerformancePanel.tsx`,
 `src/app/p/[projectSlug]/posts/[postId]/page.tsx`
 

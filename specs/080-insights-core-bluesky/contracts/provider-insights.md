@@ -1,6 +1,6 @@
 # Contract: `SocialProvider.insights` — generic change G30
 
-**Feature**: 079-insights-core-bluesky | **File**: `src/providers/types.ts`
+**Feature**: 080-insights-core-bluesky | **File**: `src/providers/types.ts`
 
 One new optional member on `SocialProvider`. A provider that omits it is absent from the poller and
 from the panel with no error anywhere (FR-001), and **no code outside `src/providers/` may name a

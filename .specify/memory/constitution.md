@@ -78,10 +78,10 @@ Env vars are validated at startup with Zod and documented in `.env.example`.
   for interactivity. Follow the `docket-ui` skill for UI work.
 - Out of scope until a spec says otherwise: video, stories (except Instagram
   Stories, 078 — Facebook Page Stories stay out of scope), reels, analytics
-  (except per-post and per-account metric capture, 079 — charts, trends and
+  (except per-post and per-account metric capture, 080 — charts, trends and
   comparisons stay out of scope), other platforms, billing, public sign-up,
   Netlify. Inbox/comments shipped in 077 (Bluesky only); see
-  `docs/engagement.md`. Post and account insights shipped in 079 (Bluesky
+  `docs/engagement.md`. Post and account insights shipped in 080 (Bluesky
   only); see `docs/insights.md`.
 
 ## Development Workflow

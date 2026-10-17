@@ -1,6 +1,6 @@
 # Phase 0 research: post and account insights, Bluesky pilot
 
-**Feature**: 079-insights-core-bluesky | **Date**: 2026-10-17 | **Spec**: [spec.md](./spec.md)
+**Feature**: 080-insights-core-bluesky | **Date**: 2026-10-17 | **Spec**: [spec.md](./spec.md)
 
 Every fact below is either read from a file in this repository, read from the installed package, or
 marked `NEEDS RESEARCH` together with the statement that nothing in the design depends on it

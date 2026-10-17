@@ -5,7 +5,7 @@ description: "Task list template for feature implementation"
 
 # Tasks: Post and account insights, with Bluesky as the pilot platform
 
-**Input**: Design documents from `/specs/079-insights-core-bluesky/`
+**Input**: Design documents from `/specs/080-insights-core-bluesky/`
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/, quickstart.md (all present)
 

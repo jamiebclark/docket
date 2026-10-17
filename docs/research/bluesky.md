@@ -73,7 +73,7 @@ whether the PDS or AppView refuses extreme sizes.
   `https://bsky.app/profile/<handle>/post/<rkey>`.
 - A createRecord that times out is **ambiguous** (may have posted).
 
-## Metric surface (insights, 079), confirmed 2026-10-17
+## Metric surface (insights, 080), confirmed 2026-10-17
 Confirmed by reading `node_modules/@atproto/api` directly — the generated types under
 `dist/client/types/app/bsky/` and the bundled lexicon `schemaDict` in `dist/client/lexicons.js`.
 | Fact | Value | Where it was read |
@@ -89,7 +89,7 @@ Confirmed by reading `node_modules/@atproto/api` directly — the generated type
 | `bookmarkCount` | Present on `PostView` but left undeclared — not confirmed from Bluesky's own documentation, only from the generated client; recorded as an owned-by-no-entry gap (`docs/feature-map.md`) | same |
 
 `NEEDS RESEARCH`: whether `app.bsky.feed.getPosts` and `app.bsky.actor.getProfile` answer
-**unauthenticated**, at which host, and under what read allowance. Nothing in the 079 design depends
+**unauthenticated**, at which host, and under what read allowance. Nothing in the 080 design depends
 on the answer: both calls go through the account's own session (`agentFor(settings.pdsUrl,
 credentials.accessJwt)`), the same path 077's engagement reader already proves out, needing no new
 permission. The declared read budget (`readBudget: { count: 1_666, windowSeconds: 3_600 }` on

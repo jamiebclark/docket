@@ -1,8 +1,8 @@
 # Implementation Plan: Post and account insights, with Bluesky as the pilot platform
 
-**Branch**: `079-insights-core-bluesky` | **Date**: 2026-10-17 | **Spec**: [spec.md](./spec.md)
+**Branch**: `080-insights-core-bluesky` | **Date**: 2026-10-17 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/079-insights-core-bluesky/spec.md`
+**Input**: Feature specification from `/specs/080-insights-core-bluesky/spec.md`
 
 ## Summary
 
@@ -159,7 +159,7 @@ a future caller forgets, and "frozen" is never a far-future date some later bug 
 ### Documentation (this feature)
 
 ```text
-specs/079-insights-core-bluesky/
+specs/080-insights-core-bluesky/
 ├── spec.md
 ├── plan.md                           # this file
 ├── research.md                       # Phase 0 — §1…§14

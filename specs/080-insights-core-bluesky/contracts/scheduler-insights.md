@@ -1,6 +1,6 @@
 # Contract: the `runInsightsPoll` tick section
 
-**Feature**: 079-insights-core-bluesky | **File**: `src/server/scheduler/insights-poll.ts`
+**Feature**: 080-insights-core-bluesky | **File**: `src/server/scheduler/insights-poll.ts`
 
 One new section in `runTick()`, concurrent with the rest, modelled on
 `src/server/scheduler/engagement-read.ts`.

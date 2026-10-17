@@ -3635,7 +3635,7 @@ group and a parallel outcome classifier to replace something tested.
    resetting a password cannot sign in by definition. This is the same trap the unsubscribe routes hit
    (044), so it now has a test of its own beside theirs.
 
-## 079 — Post and account insights, Bluesky as the pilot platform (2026-10-17)
+## 080 — Post and account insights, Bluesky as the pilot platform (2026-10-17)
 
 `insights` (G30) is one more optional member on `SocialProvider`, the same shape as `engagement` (077):
 a provider that omits it is absent from the poller and the panel with no error, and no code outside

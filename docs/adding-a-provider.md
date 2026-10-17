@@ -546,7 +546,7 @@ variant, so the inbox's capability seam is testable with no platform credentials
 `docs/engagement.md` for what the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md`
 for the full contract.
 
-## 21. Reading post and account metrics (`insights`, 079)
+## 21. Reading post and account metrics (`insights`, 080)
 
 `insights` is one more optional member on `SocialProvider`, the same shape as `engagement`: a provider opts in by
 declaring the post and account keys it reports, with the platform's own name and label for each, and nothing
@@ -584,4 +584,4 @@ insights?: {
 first. `src/providers/bluesky/insights.ts` is the one real implementation so far: `app.bsky.feed.getPosts` for
 post metrics and `app.bsky.actor.getProfile` for account metrics, reusing the account's existing session with no
 new permission. See `docs/insights.md` for what the feature looks like to a member, and
-`specs/079-insights-core-bluesky/contracts/provider-insights.md` for the full contract.
+`specs/080-insights-core-bluesky/contracts/provider-insights.md` for the full contract.

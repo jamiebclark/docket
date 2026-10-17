@@ -1,6 +1,6 @@
 # Quickstart: running and proving the insights subsystem
 
-**Feature**: 079-insights-core-bluesky | **Plan**: [plan.md](./plan.md)
+**Feature**: 080-insights-core-bluesky | **Plan**: [plan.md](./plan.md)
 
 How to run this feature and prove each requirement. Shapes and rules are in
 [data-model.md](./data-model.md) and `contracts/`; this file is the validation guide.
