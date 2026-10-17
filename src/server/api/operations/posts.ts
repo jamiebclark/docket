@@ -22,7 +22,7 @@ const createBody = z.object({
     .record(z.uuid(), z.enum(POST_TYPES))
     .optional()
     .describe(
-      "Optional post type per account, for accounts whose provider offers a choice (Instagram: `video` = Feed video, `reel` = Reel). Absent = the provider's default.",
+      "Optional post type per account, for accounts whose provider offers a choice (Instagram: `video` = Feed video, `reel` = Reel, `story` = Story — published with no caption, no link and no stickers). Absent = the provider's default.",
     ),
 });
 const updateBody = z

@@ -97,7 +97,7 @@ describe("adapt and refuse rows", () => {
 });
 
 describe("Instagram video summary", () => {
-  const ig = (postType?: "video" | "reel" | "carousel") =>
+  const ig = (postType?: "video" | "reel" | "carousel" | "story") =>
     requirementsOf(findProvider("instagram")!.capabilities, { uploadTypes: UPLOAD_MIME_TYPES, postType });
 
   it("prefixes the chosen type, shows the frame-rate range and the placement", () => {
@@ -121,5 +121,24 @@ describe("Instagram video summary", () => {
       "Carousel: up to 10 items; images and videos may be mixed; video items 4:5 – 1.91:1; Reels cannot be carousel items.",
     );
     expect(carouselLine(of("mock"))).toBeNull();
+  });
+
+  // A Story drops the feed's aspect bounds and carries its own image note, and those are the two
+  // rows a person reads before scheduling one. Review F3: the mapping shipped untested.
+  it("gives a Story the recommended shape and its own image note", () => {
+    const r = ig("story");
+    expect(row(r, "Recommended shape")).toBe("9:16");
+    expect(row(r, "Note")).toBe("9:16 is recommended. Instagram crops any other shape or shows blank space; Docket sends the image unchanged.");
+    // the feed's 0.8–1.91 bound is gone, which is the whole point of the override
+    expect(row(r, "Aspect ratio")).not.toBe(row(ig(), "Aspect ratio"));
+  });
+
+  // The `<dl>` keys rows by term, and a Story is the one post type that emits "Note" twice — the
+  // image note above and the carousel note. Keying on term alone collided; this is that guard.
+  it("emits two distinct Note rows for a Story, which the row key must tolerate", () => {
+    const notes = detailRows(ig("story")).filter((d) => d.term === "Note");
+    expect(notes).toHaveLength(2);
+    expect(new Set(notes.map((n) => n.detail)).size).toBe(2);
+    expect(notes.map((n) => n.detail)).toContain("Reels cannot be carousel items.");
   });
 });
