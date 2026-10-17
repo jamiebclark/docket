@@ -19,8 +19,14 @@ describe("the out-of-scope list no longer names comment/inbox management (FR-065
     expect(line).not.toMatch(/inbox\/comments/i);
   });
 
+  // 077 bumped the constitution to 1.5.0; 078 bumped it again. Pinning the exact version makes
+  // this fail on every later amendment, which says nothing about engagement's scope change, so
+  // assert the floor instead: the 077 bump happened and has not been reverted.
   it("the constitution was amended with a version bump", () => {
-    expect(constitution).toMatch(/\*\*Version\*\*:\s*1\.5\.0\b/);
+    const version = /\*\*Version\*\*:\s*(\d+)\.(\d+)\.(\d+)\b/.exec(constitution);
+    expect(version, "the constitution states a version").not.toBeNull();
+    const [major, minor] = [Number(version?.[1]), Number(version?.[2])];
+    expect(major * 1000 + minor).toBeGreaterThanOrEqual(1 * 1000 + 5);
   });
 });
 
