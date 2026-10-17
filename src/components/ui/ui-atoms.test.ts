@@ -1,7 +1,9 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Badge } from "./Badge";
+import { ACTIVITY_OUTCOMES, OUTCOME_LABEL } from "@/lib/activity/outcomes";
+import { Badge, badgeTones } from "./Badge";
+import { OutcomeIcon } from "./OutcomeIcon";
 import { Checklist, checklistStatusText } from "./Checklist";
 import { Dialog } from "./Dialog";
 import { FilterTabs } from "./FilterTabs";
@@ -14,6 +16,31 @@ import { PageHeader } from "./PageHeader";
 import { StatusBadge, statusLabel, statusTone } from "./StatusBadge";
 
 const html = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(el);
+
+describe("OutcomeIcon", () => {
+  it("gives every outcome its own glyph, so the three danger outcomes are not told apart by tint alone", () => {
+    const glyphs = ACTIVITY_OUTCOMES.map((outcome) => {
+      const markup = html(createElement(OutcomeIcon, { outcome }));
+      // The path data is the shape; identical paths would mean two outcomes look the same.
+      return markup.replace(/.*?(<path[\s\S]*<\/svg>).*/, "$1");
+    });
+    expect(new Set(glyphs).size).toBe(ACTIVITY_OUTCOMES.length);
+  });
+
+  it("carries its label as a tooltip and for screen readers, never as colour alone", () => {
+    for (const outcome of ACTIVITY_OUTCOMES) {
+      const markup = html(createElement(OutcomeIcon, { outcome }));
+      expect(markup).toContain(`title="${OUTCOME_LABEL[outcome]}"`);
+      expect(markup).toContain(`<span class="sr-only">${OUTCOME_LABEL[outcome]}</span>`);
+    }
+  });
+
+  it("tints from the same table as Badge, so the two can never drift apart", () => {
+    // `ambiguous` is the warning family in both (docs/design-system.md §3).
+    expect(html(createElement(OutcomeIcon, { outcome: "ambiguous" }))).toContain(badgeTones.warning.pill);
+    expect(html(createElement(OutcomeIcon, { outcome: "failed" }))).toContain(badgeTones.danger.pill);
+  });
+});
 
 describe("StatusBadge", () => {
   it("always renders text, with an amber 'Needs your decision' for ambiguous targets", () => {

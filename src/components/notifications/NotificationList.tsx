@@ -3,15 +3,21 @@ import type { RowDone } from "@/app/notifications/actions";
 import { Badge } from "@/components/ui/Badge";
 import { cellLinkStyles } from "@/components/ui/controls";
 import { Icon, ProviderIcon } from "@/components/ui/Icon";
+import { OutcomeIcon } from "@/components/ui/OutcomeIcon";
 import { RelativeTime } from "@/components/ui/RelativeTime";
-import { OUTCOME_TONE } from "@/lib/activity/outcomes";
 import type { NotificationItem } from "@/lib/notifications/types";
 import { NotificationRowActions } from "./NotificationRowActions";
 
-/** Everything that qualifies the problem, as one quiet line: who it was for, where, and when. */
+/**
+ * Everything that qualifies the problem, as one quiet line: what happened, who it was for, where.
+ *
+ * The outcome label leads it because the corner now shows that outcome as a glyph rather than a
+ * word, and status has to stay text plus colour (design system §1) — so the word moves here rather
+ * than disappearing. It costs nothing on a line that already wraps harmlessly.
+ */
 function metaOf(item: NotificationItem): string {
   const platforms = item.platforms.map((p) => p.name).join(" and ");
-  return [item.project.name, platforms, item.accountName, item.postDeleted ? "Post deleted" : null]
+  return [item.outcomeLabel, item.project.name, platforms, item.accountName, item.postDeleted ? "Post deleted" : null]
     .filter((part): part is string => Boolean(part))
     .join(" · ");
 }
@@ -75,7 +81,7 @@ export function NotificationList({
                     at its start — right-aligned on one row, left on the next. */}
                 <span className="ml-auto flex shrink-0 items-center gap-1.5">
                   {item.isNew ? <Badge tone="brand">New</Badge> : null}
-                  <Badge tone={OUTCOME_TONE[item.outcome]}>{item.outcomeLabel}</Badge>
+                  <OutcomeIcon outcome={item.outcome} />
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
