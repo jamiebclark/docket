@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
+import { buildTargetInsightsView, type TargetInsightsView } from "@/lib/insights/panel";
 import * as clock from "../../dal/clock";
 import { ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
@@ -33,6 +34,7 @@ export interface PostViewTarget {
   attempts: AttemptView[];
   /** The provider's short label for this target, e.g. "Private on TikTok"; null when none. */
   note: string | null;
+  insights: TargetInsightsView;
 }
 
 /** The status line shown beside the badge while a target waits for its adapted video. */
@@ -57,14 +59,20 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
   const canSchedule = scope.can({ post: ["schedule"] });
   const accounts = new Map((await scope.accounts.list()).map((a) => [a.id, a]));
   const targets = await scope.targets.listForPost(id);
+  const targetIds = targets.map((t) => t.id);
+  const [latestSnapshots, pollStates] = await Promise.all([
+    scope.postMetricSnapshots.latestForTargets(targetIds),
+    scope.postMetricPollStates.getMany(targetIds),
+  ]);
   const views = await Promise.all(
     targets.map(async (t): Promise<PostViewTarget> => {
       const account = accounts.get(t.socialAccountId);
+      const providerName = account ? (findProvider(account.providerKey)?.displayName ?? account.providerKey) : "";
       return {
         id: t.id,
         accountId: t.socialAccountId,
         accountName: account?.displayName ?? "Removed account",
-        providerName: account ? (findProvider(account.providerKey)?.displayName ?? account.providerKey) : "",
+        providerName,
         status: t.status,
         scheduleKind: t.scheduleKind,
         scheduledAt: t.scheduledAt,
@@ -78,6 +86,15 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
         actions: targetActions(canSchedule, t.status, account ?? null),
         attempts: await toAttemptViews(scope, await scope.attempts.listForTarget(t.id)),
         note: account ? targetNoteFor(account.providerKey, t.postingFields) : null,
+        insights: buildTargetInsightsView({
+          status: t.status,
+          externalId: t.externalId,
+          declaration: (account ? findProvider(account.providerKey)?.insights?.declaration : undefined) ?? null,
+          providerName,
+          snapshot: (latestSnapshots.get(t.id) as { capturedAt: Date; metrics: Record<string, unknown> } | undefined) ?? null,
+          pollState: pollStates.get(t.id) ?? null,
+          now,
+        }),
       };
     }),
   );
