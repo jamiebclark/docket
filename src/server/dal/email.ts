@@ -285,7 +285,7 @@ export async function markInFlight(
 }
 
 export interface RecordAttemptInput {
-  purpose: "problems" | "invitation";
+  purpose: "problems" | TransactionalPurpose;
   cadence: "immediate" | "digest" | null;
   problemCount: number;
   smtpCode: number | null;
@@ -384,23 +384,29 @@ export async function recordAttempt(
   });
 }
 
+/** The purposes that are sent once, in reply to an action: no lease, no cadence, no unsubscribe. */
+export type TransactionalPurpose = "invitation" | "password_reset";
+
 /**
- * One attempt row for one invitation send, no lease (E24, E26). `userId` is `null` when the invitee has
- * no Docket account — there is no person to reference and FR-033 forbids storing the address.
+ * One attempt row for one transactional send, no lease (E24, E26). `userId` is `null` when there is no
+ * person to reference — an invitee with no Docket account — because FR-033 forbids storing the address,
+ * so an unknown recipient leaves no identifying trace at all. A password reset always has a user: Better
+ * Auth only calls `sendResetPassword` for an address it has already found.
  */
-export async function recordInvitationAttempt(
+export async function recordTransactionalAttempt(
   db: Database,
+  purpose: TransactionalPurpose,
   userId: string | null,
   outcome: EmailOutcomeClass,
   smtpCode: number | null,
   durationMs: number,
 ): Promise<void> {
-  await runCrossProject("scheduler: record invitation attempt", async () => {
+  await runCrossProject(`scheduler: record ${purpose} attempt`, async () => {
     const at = await now(db);
     await db.insert(emailDeliveryAttempts).values({
       userId,
       at,
-      purpose: "invitation",
+      purpose,
       cadence: null,
       problemCount: 0,
       outcome,

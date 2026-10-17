@@ -12,7 +12,7 @@ export function initials(name: string): string {
 
 /**
  * Signed-in user's avatar, name and a Sign out button; `signOut` is a server action (see the sign-out task).
- * The three controls are icon-only — glyph plus a `title` tooltip and an `sr-only` label, the same
+ * The four controls are icon-only — glyph plus a `title` tooltip and an `sr-only` label, the same
  * shape as the notification bell — so the header stays a row of marks rather than a row of sentences.
  */
 export function UserMenu({ name, signOut }: { name: string; signOut: () => Promise<void> }) {
@@ -35,6 +35,10 @@ export function UserMenu({ name, signOut }: { name: string; signOut: () => Promi
       <Link href="/notifications" title="Notifications" className={iconControlStyles}>
         <Icon name="slidersHorizontal" />
         <span className="sr-only">Notifications</span>
+      </Link>
+      <Link href="/account" title="Account" className={iconControlStyles}>
+        <Icon name="user" />
+        <span className="sr-only">Account</span>
       </Link>
       <button type="submit" title="Sign out" className={iconControlStyles}>
         <Icon name="logOut" />
