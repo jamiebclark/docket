@@ -59,7 +59,7 @@ classifies tests into the three categories without being told which are flaky.
 
 ### Implementation for User Story 1
 
-- [ ] T003 [P] [US1] Implement the pure consolidator in `scripts/flake-report.ts`: parse
+- [X] T003 [P] [US1] Implement the pure consolidator in `scripts/flake-report.ts`: parse
   `rep<N>-shard<S>.json` (Vitest `JsonTestResults`) and `rep<N>-shard<S>.meta.json` (exit code, seed,
   stderr tail) from `--input <dir>`; build one `TestVerdict` per test keyed on `file` + `fullName`
   across all inputs; categorize `consistently_passing` / `non_deterministic` / `consistently_failing`
@@ -70,18 +70,18 @@ classifies tests into the three categories without being told which are flaky.
   consistently failing, consistently-passing tests counted but not listed) to `--out <dir>`; exit `0`
   whenever a report was produced, `1` only when there was no usable input or the output directory is
   not writable.
-- [ ] T004 [US1] Add a `flake:report` script to `package.json` that runs `scripts/flake-report.ts`
+- [X] T004 [US1] Add a `flake:report` script to `package.json` that runs `scripts/flake-report.ts`
   through the same `esbuild --bundle --platform=node --target=node24 --format=esm` pattern
   `db:test:clean` already uses, so `pnpm flake:report --input <dir> --out <dir>` works per
   contracts/flake-report.md's CLI table (depends on T003).
-- [ ] T005 [P] [US1] Write `scripts/flake-report.test.ts` against JSON fixtures (no database): a test
+- [X] T005 [P] [US1] Write `scripts/flake-report.test.ts` against JSON fixtures (no database): a test
   failing some repetitions is `non_deterministic`; a test failing every repetition is
   `consistently_failing`; a test passing every repetition is `consistently_passing` and omitted from
   the rendered Markdown but counted in `summary`; a missing or unparseable lane output is a
   `LaneFailure` attributed to no test; a lane that exits non-zero with `numFailedTests === 0` is a
   `LaneFailure`; two distinct failure messages for one test are both kept; `--repetitions`/`--shards`
   are correctly inferred when omitted (depends on T003).
-- [ ] T006 [US1] Create `.github/workflows/flake-hunt.yml`: `workflow_dispatch` (inputs `repetitions`
+- [X] T006 [US1] Create `.github/workflows/flake-hunt.yml`: `workflow_dispatch` (inputs `repetitions`
   default `20`, `lanes` default `4`) plus a weekly `schedule`, never `pull_request` or `push`; a `run`
   job matrixed on `shard: [1,2,3,4] × lane: [1..lanes]`, each repetition running
   `DOCKET_SKIP_PERF_TESTS=1 pnpm exec vitest run --shard=<s>/4 --sequence.shuffle.files --sequence.seed=$rep --reporter=json --outputFile=...`,
@@ -89,7 +89,7 @@ classifies tests into the three categories without being told which are flaky.
   failure, uploading `flake-<shard>-<lane>` as an artifact; a `consolidate` job with `needs: run`,
   `if: always()` that downloads every artifact, runs `pnpm flake:report`, uploads `flake-report`, and
   writes `flake-report.md` to `$GITHUB_STEP_SUMMARY` (depends on T004).
-- [ ] T007 [US1] Run the local smoke test from quickstart.md step 6: three reduced repetitions of
+- [X] T007 [US1] Run the local smoke test from quickstart.md step 6: three reduced repetitions of
   `tests/integration/email` and `tests/integration/scheduler` with `--sequence.shuffle.files
   --sequence.seed=$rep --reporter=json`, then `pnpm flake:report --input .flake/in --out .flake` and
   read `.flake/flake-report.md`; confirm it classifies every test into one of the three categories and
