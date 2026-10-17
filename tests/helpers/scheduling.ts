@@ -169,7 +169,9 @@ export async function parkAllInsightsPolls(): Promise<void> {
         .values({ postTargetId: row.id, projectId: row.projectId, socialAccountId: row.socialAccountId })
         .onConflictDoNothing({ target: postMetricPollStates.postTargetId });
     }
-    await db.update(postMetricPollStates).set({ nextPollAt: PARKED_UNTIL });
+    // A frozen row's CHECK forbids a non-null next_poll_at, and a frozen target is never claimed
+    // anyway, so it is left alone here rather than parked.
+    await db.update(postMetricPollStates).set({ nextPollAt: PARKED_UNTIL }).where(isNull(postMetricPollStates.frozenReason));
   });
 }
 

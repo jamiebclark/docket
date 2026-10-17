@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { nextPostPollAt } from "../../lib/insights/schedule";
 import { getDb, type Database } from "../db/client";
 import {
@@ -76,7 +76,7 @@ export function claimDueAccountMetricPolls(opts: {
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
             inArray(socialAccounts.providerKey, providerKeys),
-            isNull(accountMetricPollStates.pollLeaseUntil),
+            or(isNull(accountMetricPollStates.pollLeaseUntil), lte(accountMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(accountMetricPollStates.nextPollAt),
             lte(accountMetricPollStates.nextPollAt, opts.now),
           ),
@@ -157,7 +157,7 @@ export function claimDuePostMetricPolls(opts: {
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
             inArray(socialAccounts.providerKey, providerKeys),
-            isNull(postMetricPollStates.pollLeaseUntil),
+            or(isNull(postMetricPollStates.pollLeaseUntil), lte(postMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(postMetricPollStates.nextPollAt),
             lte(postMetricPollStates.nextPollAt, opts.now),
           ),

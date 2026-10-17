@@ -1,13 +1,17 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { asc, eq } from "drizzle-orm";
 import { getDb } from "../../../src/server/db/client";
-import { postMetricPollStates, postMetricSnapshots } from "../../../src/server/db/schema";
+import { activityEvents, postMetricPollStates, postMetricSnapshots } from "../../../src/server/db/schema";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { readHeartbeats } from "../../../src/server/dal/heartbeats";
+import { mockInsights } from "../../../src/providers/mock/insights";
+import { mockProvider } from "../../../src/providers/mock";
+import type { SocialProvider } from "../../../src/providers/types";
 import { runTick } from "../../../src/server/scheduler";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
+import { registerTestProvider } from "../../helpers/provider-fixtures";
 import { createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 
@@ -91,5 +95,140 @@ describe("runInsightsPoll (contracts/scheduler-insights.md)", () => {
     // and never escapes to fail the whole section (contracts/scheduler-insights.md §1).
     expect(summary.insightsPoll.ok).toBe(true);
     expect(summary.publishing.ok).toBe(true);
+  });
+
+  it("claims at most INSIGHTS_TARGETS_PER_RUN, oldest-due first, leaving the rest due (FR-034)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    const repos = forSchedulerProject(ctx.project.id);
+    const targetIds: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const { target } = await publishedTarget(ctx.project.id, account.id, { externalId: `ext-${i}` });
+      targetIds.push(target.id);
+      await getDb()
+        .insert(postMetricPollStates)
+        .values({ postTargetId: target.id, projectId: ctx.project.id, socialAccountId: account.id, nextPollAt: new Date(NOW.getTime() - (4 - i) * 1000) })
+        .onConflictDoUpdate({ target: postMetricPollStates.postTargetId, set: { nextPollAt: new Date(NOW.getTime() - (4 - i) * 1000) } });
+    }
+    void repos;
+
+    const summary = await atTime(NOW, () => runTick(tickConfig({ insightsTargetsPerRun: 2 })));
+    expect(summary.insightsPoll.counts.targetsClaimed).toBe(2);
+
+    const rows = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(eq(postMetricPollStates.projectId, ctx.project.id))
+      .orderBy(asc(postMetricPollStates.nextPollAt));
+    const claimed = rows.filter((r) => r.lastPolledAt !== null);
+    const untouched = rows.filter((r) => r.lastPolledAt === null);
+    expect(claimed).toHaveLength(2);
+    expect(untouched).toHaveLength(2);
+    // The two oldest-due (ext-0, ext-1) were claimed; the two newest-due stayed due with their
+    // original timestamp, unmodified.
+    expect(claimed.map((r) => r.postTargetId).sort()).toEqual([targetIds[0], targetIds[1]].sort());
+  });
+
+  it("six targets on a mock with maxPostsPerRead: 3 produce two calls of three (FR-034)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    for (let i = 0; i < 6; i++) await publishedTarget(ctx.project.id, account.id, { externalId: `ext-${i}` });
+
+    const spy = vi.spyOn(mockInsights, "readPostMetrics");
+    try {
+      await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy.mock.calls[0]![0].posts).toHaveLength(3);
+      expect(spy.mock.calls[1]![0].posts).toHaveLength(3);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a tick whose remaining time is under providerTimeoutMs claims nothing, counts outOfBudget, and still reports ok (FR-035, US3-AS5)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    await publishedTarget(ctx.project.id, account.id);
+
+    const summary = await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig({ insightsTimeShare: 0 })));
+    expect(summary.insightsPoll.ok).toBe(true);
+    expect(summary.insightsPoll.counts.outOfBudget).toBeGreaterThanOrEqual(1);
+    expect(summary.insightsPoll.counts.targetsClaimed).toBe(0);
+    expect(summary.insightsPoll.counts.postSnapshotsWritten).toBe(0);
+  });
+
+  it("one gone entry in a three-entry response freezes that target, the other two snapshots are written (FR-042, US2-AS6)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id, { insightsGoneExternalIds: ["ext-1"] });
+    const targets = [] as { id: string; externalId: string }[];
+    for (let i = 0; i < 3; i++) {
+      const { target } = await publishedTarget(ctx.project.id, account.id, { externalId: `ext-${i}` });
+      targets.push({ id: target.id, externalId: `ext-${i}` });
+    }
+
+    await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
+
+    const states = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.projectId, ctx.project.id));
+    const goneState = states.find((s) => s.postTargetId === targets[1]!.id);
+    expect(goneState?.frozenReason).toBe("gone");
+    expect(goneState?.nextPollAt).toBeNull();
+    expect(goneState?.consecutiveFailures).toBe(0);
+
+    const snapshots = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.projectId, ctx.project.id));
+    expect(snapshots.map((s) => s.postTargetId).sort()).toEqual([targets[0]!.id, targets[2]!.id].sort());
+  });
+
+  it("snapshots committed by an earlier batch survive a later batch's failure; the failed target's next_poll_at comes from backoff, not cadence (FR-043)", async () => {
+    let calls = 0;
+    const flakyInsights = {
+      ...mockInsights,
+      async readPostMetrics(callCtx: Parameters<typeof mockInsights.readPostMetrics>[0]) {
+        calls++;
+        if (calls === 2) return { kind: "retryable_error" as const, error: "Mock flaky failure on the second batch." };
+        return mockInsights.readPostMetrics(callCtx);
+      },
+    };
+    registerTestProvider({ ...mockProvider, key: "insights-flaky", insights: flakyInsights } as SocialProvider);
+
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id, {}, { providerKey: "insights-flaky" });
+    const okTargetIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { target } = await publishedTarget(ctx.project.id, account.id, { externalId: `ok-${i}` });
+      okTargetIds.push(target.id);
+      await getDb()
+        .insert(postMetricPollStates)
+        .values({ postTargetId: target.id, projectId: ctx.project.id, socialAccountId: account.id, nextPollAt: new Date(NOW.getTime() - (10 - i) * 1000) })
+        .onConflictDoUpdate({ target: postMetricPollStates.postTargetId, set: { nextPollAt: new Date(NOW.getTime() - (10 - i) * 1000) } });
+    }
+    const { target: failTarget } = await publishedTarget(ctx.project.id, account.id, { externalId: "fail-0" });
+    await getDb()
+      .insert(postMetricPollStates)
+      .values({ postTargetId: failTarget.id, projectId: ctx.project.id, socialAccountId: account.id, nextPollAt: new Date(NOW.getTime() - 1_000) })
+      .onConflictDoUpdate({ target: postMetricPollStates.postTargetId, set: { nextPollAt: new Date(NOW.getTime() - 1_000) } });
+
+    await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
+    expect(calls).toBe(2);
+
+    const snapshots = await getDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.projectId, ctx.project.id));
+    expect(snapshots.map((s) => s.postTargetId).sort()).toEqual([...okTargetIds].sort());
+
+    const [failState] = await getDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.postTargetId, failTarget.id));
+    expect(failState?.consecutiveFailures).toBe(1);
+    expect(failState?.lastCapturedAt).toBeNull();
+    expect(failState?.nextPollAt).not.toBeNull();
+    // Backoff, not the ~1h cadence a fresh capture would set.
+    expect(failState!.nextPollAt!.getTime()).toBeLessThan(NOW.getTime() + 3_600_000 + 3_600_000);
+  });
+
+  it("no activity_events row and no notification exists after a successful poll (FR-044)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    await publishedTarget(ctx.project.id, account.id);
+
+    await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig()));
+
+    const events = await getDb().select().from(activityEvents).where(eq(activityEvents.projectId, ctx.project.id));
+    expect(events).toHaveLength(0);
   });
 });
