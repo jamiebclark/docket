@@ -10,6 +10,7 @@ import { closeDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const CONFIG = {
   timeBudgetMs: 30_000, maxItems: 10, leaseMs: 60_000, providerTimeoutMs: 5_000, maxAttempts: 5,
@@ -75,7 +76,7 @@ async function setup() {
 describe("publish-time refresh (G2, G3)", () => {
   it("proactive: persists the new credentials before advance sees them", async () => {
     const { repos, target } = await setup();
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ done: 1 });
     expect(refreshCalls).toBe(1);
     expect(advanceSeen).toEqual([{ creds: { token: "new" }, stored: { token: "new" } }]);
@@ -105,7 +106,7 @@ describe("publish-time refresh (G2, G3)", () => {
       leaseMs: 600_000,
       expectedCiphertext: ciphertext!,
     });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ released: 1, done: 0 });
     expect(advanceSeen).toHaveLength(0);
     expect(refreshCalls).toBe(0);
@@ -114,7 +115,7 @@ describe("publish-time refresh (G2, G3)", () => {
 
     await repos.accounts.recordRefresh(account.id, OTHER, {});
     await makeDue();
-    const next = await runTick({ config: {} });
+    const next = await runTick(tickConfig({}));
     expect(next.publishing.counts).toMatchObject({ done: 1 });
     expect(await read()).toEqual({ token: "new" });
   });
@@ -122,13 +123,13 @@ describe("publish-time refresh (G2, G3)", () => {
   it("refused: flags the account needs_reauth, then the next tick fails the target as account_unavailable", async () => {
     const { repos, account, target, makeDue, outcomes } = await setup();
     script.refresh = async () => ({ ok: false, reason: "refresh token revoked" });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ released: 1, done: 0 });
     expect(advanceSeen).toHaveLength(0);
     expect(await repos.accounts.get(account.id)).toMatchObject({ status: "needs_reauth", lastError: "refresh token revoked" });
 
     await makeDue();
-    const next = await runTick({ config: {} });
+    const next = await runTick(tickConfig({}));
     expect(next.publishing.counts).toMatchObject({ failed: 1 });
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "failed" });
     expect(await outcomes()).toContain("account_unavailable");
@@ -138,7 +139,7 @@ describe("publish-time refresh (G2, G3)", () => {
     const { repos, account, target } = await setup();
     const retryAt = new Date(Date.now() + 10 * 60_000);
     script.refresh = async () => ({ ok: false, reason: "PDS unreachable", transient: true, retryAt });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ retried: 1, done: 0 });
     expect(advanceSeen).toHaveLength(0);
     const after = await repos.targets.get(target.id);
@@ -155,14 +156,14 @@ describe("publish-time refresh (G2, G3)", () => {
       (ctx.account.credentials as Creds).token === "old"
         ? { kind: "retryable_error", error: "ExpiredToken", credentialsExpired: true }
         : { kind: "done", externalId: "x" };
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ retried: 1, done: 0 });
     expect(refreshCalls).toBe(1);
     expect(await read()).toEqual({ token: "new" });
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "scheduled", attemptCount: 1 });
 
     await makeDue();
-    const next = await runTick({ config: {} });
+    const next = await runTick(tickConfig({}));
     expect(next.publishing.counts).toMatchObject({ done: 1 });
     expect(advanceSeen.map((a) => a.creds.token)).toEqual(["old", "new"]);
     expect(refreshCalls).toBe(1);

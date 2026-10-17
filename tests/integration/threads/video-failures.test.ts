@@ -14,6 +14,7 @@ import { createImageAssets } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
 import { scriptThreads, THREADS_USER_ID, threadsVideoSetup, V } from "../../helpers/threads-publish";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -31,7 +32,7 @@ afterAll(async () => {
 
 const T0 = Date.now() + 60_000;
 const tickAtMs = (ms: number) =>
-  atTime(new Date(ms), async () => (await runTick({ config: { providerTimeoutMs: 100 } })).publishing.counts);
+  atTime(new Date(ms), async () => (await runTick(tickConfig({ providerTimeoutMs: 100 }))).publishing.counts);
 const tickAt = (seconds: number) => tickAtMs(T0 + seconds * 1000);
 const U = THREADS_USER_ID;
 const create = `${V}/${U}/threads`;

@@ -15,7 +15,7 @@ import { createJob } from "../../../src/server/services/jobs";
 import { api, createKey } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { clearHolds, parkAllJobs } from "../../helpers/jobs-env";
+import { clearHolds, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 import { createVoiceProfile } from "../../helpers/factories";
 import { png } from "../../helpers/images";
 import { postsEnv } from "../../helpers/posts-env";
@@ -178,7 +178,7 @@ describe("per-project resolution (US1, AS2)", () => {
     for (let i = 0; i < 10; i++) {
       const [ia, ib] = await Promise.all([a.scope.jobItems.countByStatus(jobIdA), b.scope.jobItems.countByStatus(jobIdB)]);
       if (ia.queued + ia.running === 0 && ib.queued + ib.running === 0) break;
-      await runTick({ config: { jobMaxItems: 5 } });
+      await runTick(tickConfig({ jobMaxItems: 5 }));
     }
 
     const byKey = (key: string) => calls.filter((c) => c.apiKey === key);

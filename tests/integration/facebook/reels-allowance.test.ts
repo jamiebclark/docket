@@ -14,6 +14,7 @@ import { facebookSetup, facebookVideoSetup, PAGE_ID } from "../../helpers/facebo
 import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -42,7 +43,7 @@ const reels = `/v26.0/${PAGE_ID}/video_reels`;
 const DAY = 86_400_000;
 const T0 = Date.now() + 3_600_000;
 const at = (seconds: number) => new Date(T0 + seconds * 1000);
-const tickAt = (seconds: number) => atTime(at(seconds), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(at(seconds), async () => (await runTick(tickConfig({}))).publishing.counts);
 const starts = () => graph.requests.filter((r) => r.method === "POST" && r.path === reels && r.params.upload_phase === "start");
 
 async function seed(projectId: string, accountId: string, units: number, ageSeconds = 3600) {
@@ -90,7 +91,7 @@ describe("the 30-Reels allowance", () => {
     await addReelTarget(base, "b");
     await addReelTarget(base, "c");
     await seed(base.projectId, base.accountId, 28);
-    await atTime(at(0), () => Promise.all([runTick({ config: {} }), runTick({ config: {} })]));
+    await atTime(at(0), () => Promise.all([runTick(tickConfig({})), runTick(tickConfig({}))]));
     expect(await used(base.projectId, base.accountId)).toBeLessThanOrEqual(30);
     expect(starts()).toHaveLength(2);
   });

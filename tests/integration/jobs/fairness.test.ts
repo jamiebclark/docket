@@ -5,7 +5,7 @@ import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -27,7 +27,7 @@ describe("fairness between jobs (SC-006)", () => {
     );
     expect(small.jobId).not.toBe(big.jobId);
 
-    for (let i = 0; i < 2; i++) await runTick({ config: { jobMaxItems: 2 } });
+    for (let i = 0; i < 2; i++) await runTick(tickConfig({ jobMaxItems: 2 }));
     expect(await e.scope.jobItems.countByStatus(small.jobId)).toMatchObject({ done: 2, queued: 0 });
     expect((await e.scope.jobs.get(small.jobId))!.status).toBe("completed");
     const bigCounts = await e.scope.jobItems.countByStatus(big.jobId);

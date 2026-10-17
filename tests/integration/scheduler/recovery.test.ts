@@ -5,6 +5,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 
@@ -36,7 +37,7 @@ async function crashedTarget(opts: { mayPublish: boolean; attemptCount?: number 
 describe("recovery of a killed tick (SC-005)", () => {
   it("retries a step that could not have published, counting an attempt", async () => {
     const { repos, target } = await crashedTarget({ mayPublish: false });
-    const tick = await runTick();
+    const tick = await runTick(tickConfig());
     expect(tick.publishing.counts).toMatchObject({ recovered: 1, done: 1 });
     const row = await repos.targets.get(target.id);
     expect(row).toMatchObject({ status: "published", leaseOwner: null, inFlightStep: null });
@@ -47,19 +48,19 @@ describe("recovery of a killed tick (SC-005)", () => {
 
   it("marks a step that may have published as ambiguous, never retrying it", async () => {
     const { repos, target } = await crashedTarget({ mayPublish: true });
-    const tick = await runTick();
+    const tick = await runTick(tickConfig());
     expect(tick.publishing.counts).toMatchObject({ recovered: 1, ambiguous: 1, done: 0 });
     const row = await repos.targets.get(target.id);
     expect(row).toMatchObject({ status: "ambiguous", nextAttemptAt: null, leaseOwner: null });
     const outcomes = (await repos.attempts.listForTarget(target.id)).map((a) => a.outcome);
     expect(outcomes).toEqual(["recovered_ambiguous"]);
-    const again = await runTick();
+    const again = await runTick(tickConfig());
     expect(again.publishing.counts.claimed).toBe(0);
   });
 
   it("fails a target interrupted too many times", async () => {
     const { repos, target } = await crashedTarget({ mayPublish: false, attemptCount: 99 });
-    const tick = await runTick();
+    const tick = await runTick(tickConfig());
     expect(tick.publishing.counts).toMatchObject({ recovered: 1, failed: 1, done: 0 });
     expect((await repos.targets.get(target.id))?.status).toBe("failed");
   });
@@ -76,7 +77,7 @@ describe("recovery of a killed tick (SC-005)", () => {
         inFlightMayPublish: true,
       },
     });
-    const tick = await runTick();
+    const tick = await runTick(tickConfig());
     expect(tick.publishing.counts.claimed).toBe(0);
     expect((await forSchedulerProject(project.id).targets.get(target.id))?.leaseOwner).toBe(LIVE);
   });

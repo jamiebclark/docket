@@ -5,6 +5,7 @@ import { runTick } from "../../../src/server/scheduler";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 beforeEach(parkAllDueTargets);
 
@@ -21,7 +22,7 @@ describe("a result that arrives after the lease was lost (US2-AS4)", () => {
     const { target } = await createDueTarget(project.id, account.id);
     const repos = forSchedulerProject(project.id);
 
-    const ticking = runTick({ config: { providerTimeoutMs: 5000 } });
+    const ticking = runTick(tickConfig({ providerTimeoutMs: 5000 }));
     // While the slow provider call is in flight, another process takes the lease over.
     for (let i = 0; i < 50; i++) {
       const row = await repos.targets.get(target.id);

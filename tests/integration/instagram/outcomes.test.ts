@@ -13,6 +13,7 @@ import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/
 import { IG_ID, instagramSetup } from "../../helpers/instagram-publish";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -34,7 +35,7 @@ const quota = `/v26.0/${IG_ID}/content_publishing_limit`;
 const publish = `/v26.0/${IG_ID}/media_publish`;
 const T0 = Date.now() + 60_000;
 const tickAt = (seconds: number) =>
-  atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: { providerTimeoutMs: 100 } })).publishing.counts);
+  atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({ providerTimeoutMs: 100 }))).publishing.counts);
 
 type Expected = "ambiguous" | "retryable" | "fatal" | "continued";
 
@@ -133,7 +134,7 @@ describe("Instagram outcome matrix", () => {
         publishStartedAt: past,
       })
       .where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, targetId)));
-    const counts = (await runTick({ config: {} })).publishing.counts;
+    const counts = (await runTick(tickConfig({}))).publishing.counts;
     expect(counts).toMatchObject({ recovered: 1, ambiguous: 1, done: 0 });
     expect(await row()).toMatchObject({ status: "ambiguous", nextAttemptAt: null, leaseOwner: null });
     const outcomes = (await forSchedulerProject(projectId).attempts.listForTarget(targetId)).map((a) => a.outcome);

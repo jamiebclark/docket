@@ -11,7 +11,7 @@ import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -33,7 +33,7 @@ type Env = Awaited<ReturnType<typeof setup>>;
 async function drain(e: Env, jobId: string, config: Record<string, number> = {}) {
   const claims: number[] = [];
   for (let i = 0; i < 15; i++) {
-    const tick = await runTick({ config: { jobMaxItems: 2, ...config } });
+    const tick = await runTick(tickConfig({ jobMaxItems: 2, ...config }));
     claims.push(tick.generation.counts.claimed);
     const counts = await e.scope.jobItems.countByStatus(jobId);
     if (counts.queued + counts.running === 0) break;
@@ -85,7 +85,7 @@ describe("processing a media job in the tick (US1)", () => {
     const e = await setup([modelOk("A", 1), modelOk("B", 1), modelOk("C", 1)]);
     await e.assets(3);
     const { jobId } = await createJob(e.scope, e.input());
-    await runTick({ config: { jobMaxItems: 1 } });
+    await runTick(tickConfig({ jobMaxItems: 1 }));
 
     const versions = createVoiceVersionsRepo(getDb(), e.project.id);
     const v1 = (await versions.getByNumber(e.profile.id, 1))!;

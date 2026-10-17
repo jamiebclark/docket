@@ -7,6 +7,7 @@ import { closeDb, testDb } from "../../helpers/db";
 import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const CREATE_SESSION = "/xrpc/com.atproto.server.createSession";
 const CREATE_RECORD = "/xrpc/com.atproto.repo.createRecord";
@@ -33,7 +34,7 @@ async function setup(text: string) {
   });
   if (!out.ok) throw new Error("connect failed");
   const { target } = await createDueTarget(env.project.id, out.account.id, { baseText: text });
-  const tick = async () => (await runTick({ config: {} })).publishing.counts;
+  const tick = async () => (await runTick(tickConfig({}))).publishing.counts;
   const row = async () => (await testDb().select().from(postTargets).where(and(eq(postTargets.projectId, env.project.id), eq(postTargets.id, target.id))))[0]!;
   return { env, targetId: target.id, tick, row };
 }

@@ -15,6 +15,7 @@ import { createFakeTikTok, creatorReply } from "../../helpers/fake-tiktok";
 import { postsEnv } from "../../helpers/posts-env";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 let advanced = 0;
 let nickname = "Ada";
@@ -188,7 +189,7 @@ describe("consent in the engine (G27)", () => {
         consentDetails: { nickname: "Ada" },
       },
     });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts.claimed).toBe(1);
     expect(advanced).toBe(0);
     const row = await forSchedulerProject(project.id).targets.get(target.id);
@@ -201,7 +202,7 @@ describe("consent in the engine (G27)", () => {
     const draft = await draftWith(env, account.id);
     const [result] = await posts.publishNow(env.scope, draft.post.id);
     expect(result).toMatchObject({ ok: true });
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     expect(advanced).toBeGreaterThan(0);
   });
 });

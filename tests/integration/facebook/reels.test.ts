@@ -9,6 +9,7 @@ import { facebookVideoSetup, PAGE_ID } from "../../helpers/facebook-publish";
 import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/fake-graph";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -28,7 +29,7 @@ const reels = `/v26.0/${PAGE_ID}/video_reels`;
 const upload = "/video-upload/77";
 const statusPath = "/v26.0/77";
 const T0 = Date.now() + 60_000;
-const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: {} })).publishing.counts);
+const tickAt = (seconds: number) => atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({}))).publishing.counts);
 
 const reads = () => graph.requests.filter((r) => r.method === "GET" && r.path === statusPath);
 const phases = (u: string, p: string, v: string, ps?: string): GraphReply => ({

@@ -9,6 +9,7 @@ import { createFakeGraph, type FakeGraph, type GraphReply } from "../../helpers/
 import { IG_ID, instagramSetup } from "../../helpers/instagram-publish";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage, type MemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 let graph: FakeGraph;
 let storage: MemoryStorage;
@@ -30,7 +31,7 @@ const publish = `/v26.0/${IG_ID}/media_publish`;
 const HOUR = 3600;
 const T0 = Date.now() + 60_000;
 const tickAt = (seconds: number, config: Record<string, number> = {}) =>
-  atTime(new Date(T0 + seconds * 1000), async () => (await runTick({ config: { providerTimeoutMs: 100, ...config } })).publishing.counts);
+  atTime(new Date(T0 + seconds * 1000), async () => (await runTick(tickConfig({ providerTimeoutMs: 100, ...config }))).publishing.counts);
 const count = (path: string) => graph.requests.filter((r) => r.path === path).length;
 
 function scriptUntilQuota(quotaReply: GraphReply | GraphReply[]) {

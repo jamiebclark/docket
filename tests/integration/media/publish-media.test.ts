@@ -10,6 +10,7 @@ import { png } from "../../helpers/images";
 import { instagramLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 const received: PostContent[] = [];
 const spy: SocialProvider = {
@@ -60,7 +61,7 @@ describe("publishing with adapted media", () => {
     await prepareVariants({ ...t.repos, project: { id: t.project.id } }, t.post.id);
     const [v] = await t.repos.media.listVariants(t.asset.id);
     await t.storage.delete(v!.storageKey);
-    const result = await runTick({ config: {} });
+    const result = await runTick(tickConfig({}));
     expect(result.publishing.counts).toMatchObject({ done: 1 });
     expect(await t.storage.exists(v!.storageKey)).toBe(true);
     expect(received).toHaveLength(1);
@@ -70,7 +71,7 @@ describe("publishing with adapted media", () => {
   it("fails the target with no provider call when the original is gone", async () => {
     const t = await setup();
     await t.repos.media.softDelete(t.asset.id, new Date());
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     expect(received).toHaveLength(0);
     const row = await t.repos.targets.get(t.target.id);
     expect(row).toMatchObject({ status: "failed" });

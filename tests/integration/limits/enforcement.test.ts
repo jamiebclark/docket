@@ -22,6 +22,7 @@ import { postsEnv } from "../../helpers/posts-env";
 import { createDraftPost, createDueTarget, createMediaAsset, createMockAccount, createSlots, parkAllDueTargets } from "../../helpers/scheduling";
 import { allowanceRows, coreRows, limitRows, planWith, plannerRows, textRows, videoItem, videoRowContent, videoRows, type Expectation } from "../../helpers/limit-rows";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
+import { tickConfig } from "../../helpers/tick";
 
 /** Any request to a platform fails the test: every row below must be refused or deferred before one is made. */
 const platformCalls: string[] = [];
@@ -87,7 +88,7 @@ describe("text rows: refused when scheduling and again at publish time, with no 
 
         // At publish time: scheduled while valid by the engine's view, content then past the limit.
         const target = await dueTargetWithMedia(env.project.id, account.id, row.text, mediaIds, new Date(T0.getTime() - 1000));
-        await atTime(T0, () => runTick());
+        await atTime(T0, () => runTick(tickConfig()));
         const after = await forSchedulerProject(env.project.id).targets.get(target.id);
         expect(after).toMatchObject({ status: "failed", externalId: null });
         expect(after!.lastError).toMatch(new RegExp(`^Can't publish to ${provider.displayName.replace(/[()]/g, "\\$&")}: `));
@@ -132,7 +133,7 @@ describe("video rows: refused by the core, when scheduling and at publish time, 
 
         // At publish time: a first-step target whose media breaks the limit fails on the engine's own check.
         const target = await dueTargetWithMedia(env.project.id, account.id, "hi", mediaIds, new Date(T0.getTime() - 1000), row.chosenPostType);
-        await atTime(T0, () => runTick());
+        await atTime(T0, () => runTick(tickConfig()));
         const after = await forSchedulerProject(env.project.id).targets.get(target.id);
         expect(after).toMatchObject({ status: "failed", externalId: null });
         const attempts = await forSchedulerProject(env.project.id).attempts.listForTarget(target.id);
@@ -238,7 +239,7 @@ describe("publish limits defer without a platform request or a counted attempt (
           );
         }
         const { target } = await createDueTarget(env.project.id, account.id, { baseText: "hi", dueAt: new Date(T0.getTime() - 1000) });
-        await atTime(T0, () => runTick({ config: { maxItems: 100 } }));
+        await atTime(T0, () => runTick(tickConfig({ maxItems: 100 })));
         const repos = forSchedulerProject(env.project.id);
         const after = await repos.targets.get(target.id);
         expect(after).toMatchObject({ status: "scheduled", attemptCount: 0 });
@@ -264,7 +265,7 @@ describe("a creation allowance defers without a platform request or a counted at
         const asset = reel || provider.key === "bluesky" ? await createVideoAsset(env.project.id, { width: 1080, height: 1920 }) : await createMediaAsset(env.project.id);
         await forSchedulerProject(env.project.id).posts.setMedia(post.id, [asset.id]);
         if (reel) await forSchedulerProject(env.project.id).targets.update(target.id, { chosenPostType: "reel" });
-        await atTime(T0, () => runTick({ config: { maxItems: 100 } }));
+        await atTime(T0, () => runTick(tickConfig({ maxItems: 100 })));
         const repos = forSchedulerProject(env.project.id);
         const after = await repos.targets.get(target.id);
         expect(after).toMatchObject({ status: "scheduled", attemptCount: 0 });
@@ -295,7 +296,7 @@ describe("Bluesky publishing does not create a session (FR-019)", () => {
     });
     if (!out.ok) throw new Error("connect failed");
     for (let i = 0; i < 3; i++) await createDueTarget(env.project.id, out.account.id, { baseText: `post ${i}` });
-    const counts = (await runTick({ config: { maxItems: 100 } })).publishing.counts;
+    const counts = (await runTick(tickConfig({ maxItems: 100 }))).publishing.counts;
     expect(counts.done).toBe(3);
     expect(pds.callsTo("POST", "/xrpc/com.atproto.server.createSession")).toHaveLength(1);
     expect(pds.callsTo("POST", "/xrpc/com.atproto.server.refreshSession")).toHaveLength(0);

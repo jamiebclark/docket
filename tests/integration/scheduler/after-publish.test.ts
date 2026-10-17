@@ -13,6 +13,7 @@ import { png } from "../../helpers/images";
 import { instagramLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
+import { tickConfig } from "../../helpers/tick";
 
 // A throwaway provider whose second step runs after a publishing step was sent (G23). No Meta code.
 const script = {
@@ -77,7 +78,7 @@ describe("steps after publishing (G23)", () => {
   it("media deleted after the post was sent → ambiguous, no provider call", async () => {
     const { repos, target, assetId } = await setup({ withMedia: true });
     await repos.media.softDelete(assetId!, new Date());
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ ambiguous: 1, failed: 0 });
     expect(advanceCalls).toBe(0);
     const row = await repos.targets.get(target.id);
@@ -90,7 +91,7 @@ describe("steps after publishing (G23)", () => {
     script.advance = async () => {
       throw new Error("The provider call timed out.");
     };
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ ambiguous: 1, failed: 0 });
     const row = await repos.targets.get(target.id);
     expect(row).toMatchObject({ status: "ambiguous" });
@@ -101,7 +102,7 @@ describe("steps after publishing (G23)", () => {
     const { repos, target } = await setup({
       patch: { attemptCount: 99, leaseOwner: randomUUID(), leaseUntil: expired(), inFlightStep: "check", inFlightMayPublish: false },
     });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ recovered: 1, ambiguous: 1, failed: 0 });
     expect(advanceCalls).toBe(0);
     const row = await repos.targets.get(target.id);
@@ -112,7 +113,7 @@ describe("steps after publishing (G23)", () => {
   it("an account flagged needs_reauth by another target → ambiguous, no provider call", async () => {
     const { repos, account, target } = await setup();
     await testDb().update(socialAccounts).set({ status: "needs_reauth" }).where(and(eq(socialAccounts.projectId, account.projectId), eq(socialAccounts.id, account.id)));
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ ambiguous: 1, failed: 0 });
     expect(advanceCalls).toBe(0);
     const row = await repos.targets.get(target.id);
@@ -122,7 +123,7 @@ describe("steps after publishing (G23)", () => {
 
   it("maxPublishDurationMs exceeded → ambiguous, no provider call", async () => {
     const { repos, target } = await setup();
-    const tick = await runTick({ config: { maxPublishDurationMs: 1000 } });
+    const tick = await runTick(tickConfig({ maxPublishDurationMs: 1000 }));
     expect(tick.publishing.counts).toMatchObject({ ambiguous: 1, failed: 0 });
     expect(advanceCalls).toBe(0);
     const row = await repos.targets.get(target.id);
@@ -133,7 +134,7 @@ describe("steps after publishing (G23)", () => {
   it("a provider fatal_error still fails", async () => {
     const { repos, target } = await setup();
     script.advance = async () => ({ kind: "fatal_error", error: "Facebook says it failed." });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ failed: 1, ambiguous: 0 });
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "failed" });
   });
@@ -141,7 +142,7 @@ describe("steps after publishing (G23)", () => {
   it("ambiguous with credentialsInvalid flags the account, emits once, and stays ambiguous", async () => {
     const { repos, account, target } = await setup();
     script.advance = async () => ({ kind: "ambiguous", error: "Session has expired (code 190).", credentialsInvalid: true });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ ambiguous: 1, failed: 0 });
     const row = await repos.targets.get(target.id);
     expect(row).toMatchObject({ status: "ambiguous", nextAttemptAt: null });
@@ -149,7 +150,7 @@ describe("steps after publishing (G23)", () => {
     expect(await repos.accounts.get(account.id)).toMatchObject({ status: "needs_reauth", lastError: "Session has expired (code 190)." });
     expect(await repos.accounts.listNeedingReauth()).toEqual([expect.objectContaining({ id: account.id })]);
     expect(advanceCalls).toBe(1);
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     expect(advanceCalls).toBe(1);
   });
 });

@@ -10,34 +10,13 @@ import { generationJobItems } from "../../src/server/db/schema";
 import { standingSeries } from "../../src/server/db/schema/standing-series";
 import { setLlmForTests } from "../../src/server/llm";
 import { setStorageForTests } from "../../src/server/storage";
-import type { SchedulerConfig } from "../../src/server/scheduler/config";
 import { createVoiceProfile } from "./factories";
 import type { LlmProvider } from "../../src/server/llm/types";
 import { createFakeLlm, type FakeStep } from "./fake-llm";
 import { png } from "./images";
 import { postsEnv } from "./posts-env";
+export { TICK_BUDGET_MS, tickConfig } from "./tick";
 import { createMemoryStorage } from "./storage";
-
-/**
- * A tick budget high enough that the generation section can always claim, for tests that are not about
- * the budget.
- *
- * `runGenerationJobs` refuses to claim unless `minCallMs + persistReserveMs` (11s by default) still
- * fits before `startedAt + timeBudgetMs`, and it returns `claimed: 0` silently when it does not. The
- * env default of 25s leaves a 14s window between a tick starting and its generation section reaching
- * that check: ample locally, but not guaranteed on a loaded four-core CI runner sharing one Postgres
- * between three workers. A tick that quietly claims nothing makes a test either fail an unrelated
- * assertion or wait for a model call that never comes.
- *
- * `SCHEDULER_TICK_BUDGET_SECONDS` cannot fix this from the environment — it is capped at 25 — so the
- * budget has to be pinned per call. Tests that ARE about the budget (`jobs/budget.test.ts`) pin their
- * own small values instead and must not use this.
- */
-export const TICK_BUDGET_MS = 120_000;
-
-export const tickConfig = (over: Partial<SchedulerConfig> = {}) => ({
-  config: { timeBudgetMs: TICK_BUDGET_MS, ...over },
-});
 
 /** Stops items left by other test files from being claimed by this file's ticks. */
 export async function parkAllJobs(): Promise<void> {

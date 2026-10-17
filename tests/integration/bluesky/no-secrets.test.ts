@@ -14,6 +14,7 @@ import { postsEnv } from "../../helpers/posts-env";
 
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 const CREATE_SESSION = "/xrpc/com.atproto.server.createSession";
 const REFRESH_SESSION = "/xrpc/com.atproto.server.refreshSession";
@@ -82,9 +83,9 @@ describe("Bluesky no-secrets rule (FR-026, SC-007)", () => {
     for (const script of scripts) {
       pds.route("POST", CREATE_RECORD, script);
       const { target } = await createDueTarget(env.project.id, out.account.id, { baseText: "hello" });
-      await runTick({ config: {} });
+      await runTick(tickConfig({}));
       await testDb().update(postTargets).set({ nextAttemptAt: new Date(Date.now() - 1000) }).where(and(eq(postTargets.projectId, env.project.id), eq(postTargets.id, target.id)));
-      await runTick({ config: {} });
+      await runTick(tickConfig({}));
     }
 
     const attempts = await testDb().select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id));

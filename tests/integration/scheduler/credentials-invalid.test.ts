@@ -7,6 +7,7 @@ import { closeDb } from "../../helpers/db";
 import { createProject } from "../../helpers/factories";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
+import { tickConfig } from "../../helpers/tick";
 
 // A throwaway provider: tests replace `script.advance`. No Meta code.
 const script = {
@@ -45,7 +46,7 @@ describe("fatal_error with credentialsInvalid (G7)", () => {
   it("flags the account needs_reauth, fails the target with the reconnect message, and never retries", async () => {
     const { repos, account, target } = await setup();
     script.advance = async () => ({ kind: "fatal_error", error: "Session has expired (code 190)", credentialsInvalid: true });
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ failed: 1, retried: 0, ambiguous: 0 });
     expect(advanceCalls).toBe(1);
     const row = await repos.targets.get(target.id);
@@ -64,9 +65,9 @@ describe("fatal_error with credentialsInvalid (G7)", () => {
   it("does not claim another due target of the account afterwards", async () => {
     const { project, repos, account } = await setup();
     script.advance = async () => ({ kind: "fatal_error", error: "dead", credentialsInvalid: true });
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     const { target: second } = await createDueTarget(project.id, account.id);
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ failed: 1 });
     expect(advanceCalls).toBe(1);
     expect(await repos.targets.get(second.id)).toMatchObject({ status: "failed" });
@@ -79,7 +80,7 @@ describe("fatal_error with credentialsInvalid (G7)", () => {
       await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { pageToken: "reconnected" }), null);
       return { kind: "fatal_error", error: "old token rejected", credentialsInvalid: true };
     };
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     expect(await repos.accounts.get(account.id)).toMatchObject({ status: "active", lastError: null });
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "failed" });
   });
@@ -90,7 +91,7 @@ describe("fatal_error with credentialsInvalid (G7)", () => {
       expect(ctx.step.mayPublish).toBe(true);
       return { kind: "fatal_error", error: "dead", credentialsInvalid: true };
     };
-    const tick = await runTick({ config: {} });
+    const tick = await runTick(tickConfig({}));
     expect(tick.publishing.counts).toMatchObject({ failed: 1, ambiguous: 0 });
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "failed" });
   });
@@ -98,7 +99,7 @@ describe("fatal_error with credentialsInvalid (G7)", () => {
   it("leaves the account active for a fatal_error without the flag", async () => {
     const { repos, account, target } = await setup();
     script.advance = async () => ({ kind: "fatal_error", error: "bad request" });
-    await runTick({ config: {} });
+    await runTick(tickConfig({}));
     expect(await repos.accounts.get(account.id)).toMatchObject({ status: "active", lastError: null });
     expect(await repos.targets.get(target.id)).toMatchObject({ status: "failed", lastError: "bad request" });
   });

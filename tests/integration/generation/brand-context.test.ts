@@ -14,7 +14,7 @@ import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
 import { createVoiceProfile } from "../../helpers/factories";
-import { jobsEnv, parkAllJobs } from "../../helpers/jobs-env";
+import { jobsEnv, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 import { createMemoryStorage } from "../../helpers/storage";
 
@@ -105,7 +105,7 @@ describe("brand context reaches every generation entry point", () => {
     await e.assets(1);
     const { jobId } = await createJob(e.scope, e.input());
     for (let i = 0; i < 15; i++) {
-      await runTick({ config: { jobMaxItems: 2 } });
+      await runTick(tickConfig({ jobMaxItems: 2 }));
       const counts = await e.scope.jobItems.countByStatus(jobId);
       if (counts.queued + counts.running === 0) break;
     }

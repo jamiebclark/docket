@@ -27,6 +27,7 @@ import { postsEnv } from "../../helpers/posts-env";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
 import { createVideoFixtures, type VideoFixtures } from "../../helpers/video-fixtures";
+import { tickConfig } from "../../helpers/tick";
 
 const signal = new AbortController().signal;
 const BEFORE = new Date("2026-10-01T12:00:00Z");
@@ -94,7 +95,7 @@ requireFfmpeg()("publishing a video through the mock provider", () => {
     expect(queued.every((t) => t.ok)).toBe(true);
 
     // The check step asks to be called again after a second, so tick forward until the post settles.
-    for (let i = 0; i < 6; i++) await atTime(new Date(SLOT.getTime() + i * 5000), () => runTick());
+    for (let i = 0; i < 6; i++) await atTime(new Date(SLOT.getTime() + i * 5000), () => runTick(tickConfig()));
 
     const detail = await posts.getPost(env.scope, draft.post.id);
     expect(detail.targets[0]).toMatchObject({ status: "published" });
@@ -121,7 +122,7 @@ requireFfmpeg()("publishing a video through the mock provider", () => {
     await crossProject("test: shorten the video below the minimum", async () =>
       await getDb().update(mediaAssets).set({ durationMs: 500 }).where(eq(mediaAssets.id, assetId)),
     );
-    for (let i = 0; i < 3; i++) await atTime(new Date(SLOT.getTime() + i * 5000), () => runTick());
+    for (let i = 0; i < 3; i++) await atTime(new Date(SLOT.getTime() + i * 5000), () => runTick(tickConfig()));
     const detail = await posts.getPost(env.scope, draft.post.id);
     expect(detail.targets[0]).toMatchObject({ status: "failed" });
     const attempts = await posts.listAttempts(env.scope, detail.targets[0]!.id);
