@@ -46,4 +46,29 @@ describe("provider insights seam (FR-061, SC-013)", () => {
       }
     }
   });
+
+  // contracts/provider-insights-081.md §5, FR-034: three platforms label a metric "Views" and mean
+  // three different events. Keys must stay provider-local — deliberately not a label-uniqueness check.
+  it("declares disjoint post and account metric keys across Instagram, Facebook and Threads", () => {
+    const byProvider = new Map(
+      ["instagram", "facebook", "threads"].map((key) => {
+        const provider = listProviders().find((p) => p.key === key)!;
+        const keys = [...(provider.insights?.declaration.post ?? []), ...(provider.insights?.declaration.account ?? [])].map((m) => m.key);
+        return [key, keys] as const;
+      }),
+    );
+    const providerKeys = [...byProvider.keys()];
+    for (let i = 0; i < providerKeys.length; i++) {
+      for (let j = i + 1; j < providerKeys.length; j++) {
+        const a = byProvider.get(providerKeys[i]!)!;
+        const b = byProvider.get(providerKeys[j]!)!;
+        const overlap = a.filter((k) => b.includes(k));
+        expect(overlap, `${providerKeys[i]} and ${providerKeys[j]} must not share a declared metric key`).toEqual([]);
+      }
+    }
+  });
+
+  it("has no shared metric mapping table under src/providers/meta (each provider's declaration is its own)", () => {
+    expect(() => readFileSync("src/providers/meta/metrics.ts", "utf8")).toThrow();
+  });
 });

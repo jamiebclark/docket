@@ -74,6 +74,14 @@ describe("exchangeCode", () => {
     });
     expect(c!.expiresAt).toEqual(new Date(1_760_000_000_000 + 180 * 86_400_000));
     expect(c!.notes).toBeUndefined();
+    expect(c!.grantedScopes).toEqual(["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"]);
+  });
+
+  it("leaves grantedScopes absent when the token reply carries no scope (FR-012)", async () => {
+    fake.on("POST", "/2/oauth2/token", { kind: "ok", body: tokenReply({ scope: undefined }) });
+    me();
+    const r = await run();
+    expect(r.ok && r.candidates[0]?.grantedScopes).toBeUndefined();
   });
 
   it("falls back to the id when the profile has no username", async () => {
@@ -109,6 +117,7 @@ describe("exchangeCode", () => {
       ok: true,
       candidates: [
         {
+          grantedScopes: ["tweet.read", "users.read", "offline.access"],
           notes: [
             "Posting permission (tweet.write) was not granted. Connect again and allow it.",
             "Image upload permission (media.write) was not granted. Connect again and allow it.",

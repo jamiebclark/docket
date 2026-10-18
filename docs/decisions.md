@@ -3727,6 +3727,184 @@ one open question — whether Bluesky's public AppView answers `getPosts`/`getPr
 stays `NEEDS RESEARCH` until the parked human task runs; until then the Bluesky reader is reported as
 "verified with mocks only" (constitution II).
 
+## 081 — Insights reconnect and Meta/Threads readers (2026-10-17)
+
+### Research decisions
+
+- **Research runs before any reader, and gates only the readers.** The grant-and-eligibility machinery
+  (the `granted_scopes` column, the write boundary, the per-account eligibility predicate, the panel and
+  accounts-page states) needs no platform-metric research at all and is built and tested first; only
+  Instagram's, Facebook's and Threads' `insights.ts` modules wait on `docs/research/meta.md`'s tables
+  (research.md §7, "nothing in the first half of the entry depends on any of these").
+- **Facebook's roadmap metric names are deprecated — FR-005's disagreement.** The roadmap and spec
+  FR-030 named `post_impressions`, `page_impressions` and `page_fans` (plus their paid/organic
+  breakdowns). Meta's Page Insights deprecation, effective 2025-11-15, makes every one of them return an
+  "invalid metric error." Their documented replacements (`post_media_view`, `page_media_view`,
+  `page_follows`, and a further "Page Viewer Metric" planned for June 2026) are themselves mid-migration,
+  and which one answers on Docket's running Graph API version (v26.0, as of 2026-10-17) could not be
+  confirmed from search summaries alone. Decision: ship Facebook with the metrics that are on **no**
+  deprecation list — `post_reactions_by_type_total`, `post_clicks`, `page_post_engagements`,
+  `page_follows` — and leave the whole views/impressions/reach family undeclared as R2, rather than
+  guess and fail the whole surface on one wrong name. Reversal: once R2 is answered (Phase 11 human
+  task), add the confirmed views metric to `src/providers/facebook/insights.ts` and this file.
+- **Six open `NEEDS RESEARCH` rows, each with a stated fallback, none blocking a requirement, default or
+  test (research.md §7):**
+  - **R1** — Instagram's user-level `views` metric's required `period`/`metric_type` combination.
+    Fallback: not declared; `reach`, `follower_count`, `profile_views` are.
+  - **R2** — which Pages views/reach metric answers on v26.0 today (`post_media_view`,
+    `post_total_media_view_unique`, or neither). Fallback: not declared; reactions-by-type and clicks
+    ship instead.
+  - **R3** — Threads' media-insights metric enum from the official page, and whether `shares` exists on
+    that edge. Fallback: declare the third-party-corroborated five (`views`, `likes`, `replies`,
+    `reposts`, `quotes`) only if the implement phase can confirm them officially; otherwise ship
+    `src/providers/threads/insights.ts` as `unavailable`. `shares` is dropped regardless — no source
+    names it.
+  - **R4** — Threads' `user_insights` metric enum (distinct from the profile fields). Fallback:
+    `account: []`.
+  - **R5** — a documented minimum call-budget floor for Facebook Pages and Instagram (Threads already
+    has one: 4800 × an impression floor of 10 = 48,000/24 h). Fallback: the same 48,000/24 h figure,
+    carried as an **interim, UNVERIFIED** stand-in and marked as such in `docs/limits.md`, same as 080's
+    Bluesky row.
+  - **R6** — whether Pinterest's token reply carries a `scope` field. Fallback: `granted_scopes` stays
+    `NULL` for Pinterest; a later entry picks it up.
+- **The declared read-budget floor binds almost nothing on its own, and that is written down rather than
+  left for a reviewer to discover.** 48,000 reads/24 h is three orders of magnitude above what this
+  subsystem ever attempts (`INSIGHTS_TARGETS_PER_RUN` is 50, Instagram's `maxPostsPerRead` is 1), so
+  `reserveFloor` on that number is never reached. The real protection against Meta's own impressions-based
+  limit is the live `X-Business-Use-Case-Usage` header (layer 3), not the declared floor (layer 2); the
+  per-account reserve (layer 1) only bites when an operator has set a per-account publish override. A
+  smaller invented floor would be a fiction with the same shape, so the honest number ships with the
+  honest caveat instead.
+- **Research correction: Meta's rate-limited error codes 80001/80002 were already fixed, and two research
+  notes said otherwise.** The spec's constraint list and FR-046 (and `docs/research/meta.md`'s own "Code
+  impact notes") claimed these codes were missing from `GRAPH_ERROR_TABLE.rateLimited`; commit `3a2626c`
+  already added them, with a passing test. The stale notes are corrected here and in
+  `docs/research/meta.md` rather than carried forward to be "fixed" a second time by a later entry that
+  does not know to check history first.
+
+### Specification decisions
+
+- **`granted_scopes` is a nullable `text[]`, not `jsonb`, and `NULL` means "not known", not "none".**
+  `NULL` = never recorded (an install that has not reconnected, or a provider whose reply does not list
+  permissions); `{}` = the platform answered and granted nothing relevant — the two produce different,
+  honest reasons on screen. An array is chosen over `jsonb` so eligibility is a plain, indexable SQL
+  containment check. Reversal: widen to `jsonb` if a later provider needs structured scope metadata; no
+  schema depends on the array shape beyond the one containment check.
+- **A grant is recorded only from what the platform said, never from what Docket asked for.** Writing
+  `META_SCOPES` into the column at connect would make it a restatement of Docket's own request, answering
+  nothing. Reversal: none needed — this is the whole point of the column.
+- **G31 — `grantedScopes` travels on `ConnectCandidate` and the success arm of `RefreshResult`**, the two
+  existing doors into `social_accounts`; no provider gets a second, private write path. A refresh that
+  reports nothing leaves the stored value unchanged. Reversal: remove the field from both shapes; every
+  caller already treats it as optional.
+- **G32 — `optionalScopes` lives on the `OAuthConnectGroup`, and the per-provider need lives on the
+  `insights` declaration**, a deliberate, minimal divergence from the roadmap's wording ("a declaration on
+  the provider"). The dialog URL is built by the *group* (`authorizationUrl`), and the Meta group backs
+  Facebook and Instagram with different needs from one consent, so the two halves cannot live in one
+  place without duplicating per provider. Reversal: move `optionalScopes` onto each provider and have the
+  group merge them, if a group ever needs per-provider dialogs.
+- **The operator opts in with one environment flag per connect group, defaulting to off.** The precedent
+  is `TIKTOK_APP_AUDITED`; on Meta the permission must *also* be added to the Meta app itself, a deployment
+  act no member can do from a web form, so a per-connect checkbox would offer a choice that does not work
+  on its own. Default off means no existing install's consent screen changes until someone deliberately
+  changes it. Reversal: default the flag on for a fresh install once the permission is considered routine.
+- **With `META_LOGIN_CONFIG_ID` set, Docket says so instead of pretending.** When the flag is on and a
+  config id is set, the dialog is unchanged (Docket cannot add a scope to a fixed configuration), and the
+  accounts page's reason says the permission must be added to the Meta Login configuration, with a link to
+  `docs/meta-setup.md`; no reconnect button is offered for a loop that cannot succeed. Reversal: offer the
+  button again if Meta ever lets a `config_id` request carry additional scopes.
+- **G33 — per-account eligibility, enforced in the claim, not in the reader.** An account is eligible for a
+  provider's insights reads when that provider declares `insights` without a blanket `unavailable`, and
+  either `requiredScopes` is empty or `granted_scopes` is non-null and contains every entry of
+  `requiredScopes`. The claim queries apply this as a SQL predicate, so an unpermissioned account is never
+  claimed, leased, decrypted or called. Reversal: move the check into the reader if the predicate ever
+  needs data the claim query cannot see; the matrix test (research §6) would need rewriting either way.
+- **The panel and the accounts page gain two states; `needs_reauth` is left alone.**
+  `buildTargetInsightsView` gains `needs_reconnect` (the install asks for the permission, this account has
+  not granted it) and `permission_not_requested` (the install has not turned the permission on at all),
+  both ordered before `no_external_id`; the accounts page shows a matching line only in the first case. An
+  account's status badge, its ability to publish and everything the scheduler does with it are untouched.
+  Reversal: collapse the two states into one if the distinction turns out not to matter to a member.
+- **Reconnecting updates the account in place and loses nothing.** `social_accounts_external_uq` keys on
+  `(project_id, provider_key, external_account_id)` and `upsertConnected` already updates rather than
+  inserts; this entry makes that a *stated, tested* property. After a reconnect the row keeps its `id`, its
+  publish-limit overrides, its posting instructions, its slot assignments, its engagement state and its
+  insights poll state and snapshots, and no second row appears. Reversal: none — this was already the
+  behaviour; the entry only adds the test that proves it.
+- **G34 — a provider declares which post types expire, and how long they live.**
+  `insights.declaration.ephemeralPostTypes?: readonly { postType, lifetimeMs }[]`; Instagram declares
+  `story` with a 24-hour lifetime. The pure schedule function reads the declaration — an ephemeral target
+  is polled on the dense first-band cadence from publication and never scheduled past
+  `publishedAt + lifetimeMs`, freezing at that boundary with the new reason `expired`. The scheduler learns
+  nothing about Instagram. Reversal: drop the field; every target then behaves as non-ephemeral again.
+- **A story already expired when this entry lands is frozen, not captured once.** 080 grants a
+  settled-but-never-polled target one catch-up capture so the panel is not empty on day one; for an expired
+  story there is nothing left to read, so the catch-up would spend an allowance recording an error.
+  Reversal: give expired targets the same one-time catch-up if Instagram's expiry proves softer in
+  practice than documented.
+- **`frozen_reason` gains `expired` through a migration**, rendered as "this story has expired; these
+  numbers are final" beside whatever snapshots were captured while it lived. Reversal: the CHECK widens
+  with one `DROP`/`ADD`, same as 080's own addition of `gone`.
+- **Meta's budget is enforced from Meta's own answer, with a conservative declared floor underneath it.**
+  Three layers: (1) the existing per-account reserve, unchanged; (2) a declared `readBudget` that is an
+  explicit, conservative floor (Threads has a documented impression floor of 10, giving `4800 × 10`/24h;
+  Pages and Instagram have no documented floor, so the same figure stands in, marked **interim,
+  UNVERIFIED** in `docs/limits.md`); (3) the live `X-Business-Use-Case-Usage` signal, read on every Graph
+  response, returning `rate_limited` with `retryAt` from `estimated_time_to_regain_access` when any of
+  `call_count`, `total_cputime` or `total_time` reaches a configured ceiling. Layer 3 is what actually
+  respects an impressions-based limit; layers 1 and 2 are the floor that holds when no header arrives.
+  Reversal: drop layer 2's floor once a real figure is confirmed for Pages and Instagram (R5).
+- **Graph codes 80001 and 80002 become rate-limited, because this entry is what makes them reachable.**
+  Already fixed by commit `3a2626c`, as the research correction above records; kept here as the
+  specification-time decision that would have made the fix if it had not already landed. Reversal: none —
+  this is the correct, permanent classification.
+
+### Post-design re-check
+
+Seven points were re-examined after the design settled, each a judgement call with its own reversal.
+
+1. **Facebook ships a smaller vocabulary than the roadmap asked for.** Its two headline metrics are
+   deprecated names that now error, and the replacement cannot be confirmed from here (research §2).
+   Declaring one anyway would have lost `post_clicks` too, because an invalid metric fails the whole call.
+   Reversal: answer R2 in Graph API Explorer and add one line to `src/providers/facebook/insights.ts`.
+2. **`optionalScopes` is on the group and `requiredScopes` on the provider** — confirmed by the code:
+   `authorizationUrl` is built by the group, and the Meta group backs two providers with different needs
+   from a single consent. Reversal: see G32 above.
+3. **Whole-list rejection, not per-element filtering, on a grant Docket cannot fully parse.** Filtering
+   would keep the good entries from a reply Docket evidently misunderstood, and could leave an account
+   *eligible* on the strength of a list that also contained a secret. Rejecting leaves `NULL`, which reads
+   as "needs a reconnect" — honest and recoverable; the connect itself still succeeds, because a grant
+   Docket cannot record is not a reason to refuse a working connection. Reversal: filter per element if a
+   future provider's reply shape can be trusted to isolate the bad entries safely.
+4. **A new `postPollDecision` beside an unchanged `nextPostPollAt`.** FR-043 requires 080's schedule tests
+   to pass untouched, and the cheapest guarantee is not to edit the function they test. The caller needs a
+   *reason*, not only a date, so the wrapper returns a discriminated result. Reversal: fold the reason into
+   `nextPostPollAt`'s own return type once 080's tests can be safely rewritten alongside it.
+5. **`targetsUnqueryable` is counted from a read result, not from SQL.** Telling a Page post id from a
+   Reel's video id is Facebook's own knowledge; a `LIKE` in the generic claim would teach the DAL one
+   platform's id format, which constitution V forbids. The cost is one claim per such target, once, before
+   it freezes terminally. Reversal: move the check into SQL if a future entry needs it cheaper and is
+   willing to leak Facebook's id format into the shared claim.
+6. **The declared Meta read budget binds nothing on its own, and this is written down** rather than left
+   for a reviewer to discover. 48,000 reads/24h is three orders of magnitude above anything the section
+   ever attempts (`INSIGHTS_TARGETS_PER_RUN` is 50, Instagram's `maxPostsPerRead` is 1), so `reserveFloor`
+   on that number is never reached; the real protection is the live header (layer 3) and the per-account
+   reserve (layer 1). A smaller invented floor would be a fiction with the same shape, so the honest number
+   ships with the honest caveat in `docs/limits.md` and here instead. Reversal: replace the floor once R5
+   is answered.
+7. **Two pre-existing defects are fixed in passing, both made reachable by this entry.** The per-read
+   `unavailable` arm never advanced `next_poll_at`, so it would have re-claimed every tick forever; and a
+   target frozen after an earlier failure would render as a permanent failure, because the panel checks
+   `consecutiveFailures` before the freeze reasons. Both were unreachable in 080 and both become live here,
+   so both belong to this entry rather than a later one. Reversal: none — these are corrections, not
+   choices.
+
+Three things the design deliberately does **not** fix, so review does not re-open them: `fatal_error`
+retries for 28 days rather than stopping (research §5.3 — visible and actionable, and a fifth result kind
+is entry 4's business); the Facebook `ANALYZE`-task precondition is invisible to `granted_scopes`, so
+eligibility answers "may Docket call?" and never "will Docket get numbers?" (research §2 — an empty answer
+correctly renders as 080's `nothing_reported`); and repairing Facebook's stored external id for Reel
+targets, which no entry owns.
 
 ## Flake-proof test architecture: pre-change baseline (2026-10-17)
 

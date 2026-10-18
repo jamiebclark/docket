@@ -5,6 +5,7 @@ import { z } from "zod";
 import { assertCreationAllowance, assertInsightsDeclaration } from "./registry";
 import { readFileSync } from "node:fs";
 import { findConnectGroup, findProvider, getProvider, listConnectGroups, listProviders } from "./registry";
+import type { InsightsDeclaration } from "./types";
 
 describe("provider registry", () => {
   it("finds the mock provider", () => {
@@ -130,13 +131,14 @@ describe("provider registry", () => {
   it("accepts a well-formed insights declaration and rejects D1-D6 violations", () => {
     const ok = {
       key: "x",
+      capabilities: getProvider("instagram").capabilities,
       insights: {
         declaration: {
           post: [{ key: "likeCount", label: "Likes" }],
           account: [{ key: "followersCount", label: "Followers" }],
           maxPostsPerRead: 25,
           readBudget: { count: 100, windowSeconds: 3_600 },
-        },
+        } as InsightsDeclaration,
         postMetricsSchema: z.object({ likeCount: z.number().int().optional() }).strict(),
         accountMetricsSchema: z.object({ followersCount: z.number().int().optional() }).strict(),
         readPostMetrics: async () => ({ kind: "page" as const, entries: [] }),
@@ -144,7 +146,7 @@ describe("provider registry", () => {
       },
     };
     expect(() => assertInsightsDeclaration(ok)).not.toThrow();
-    expect(() => assertInsightsDeclaration({ key: "x" })).not.toThrow();
+    expect(() => assertInsightsDeclaration({ key: "x", capabilities: ok.capabilities })).not.toThrow();
     const withDecl = (over: Partial<typeof ok.insights.declaration>) =>
       assertInsightsDeclaration({ ...ok, insights: { ...ok.insights, declaration: { ...ok.insights.declaration, ...over } } });
     expect(() => withDecl({ post: [], account: [] })).toThrow(/Inconsistent insights declaration/);
@@ -157,6 +159,37 @@ describe("provider registry", () => {
     const withSchema = (postMetricsSchema: z.ZodType) => assertInsightsDeclaration({ ...ok, insights: { ...ok.insights, postMetricsSchema } });
     expect(() => withSchema(z.object({ likeCount: z.number().int().optional() }))).toThrow(/closed/);
     expect(() => withSchema(z.object({ likeCount: z.string().optional() }).strict())).toThrow(/optional number/);
+
+    // requiredScopes non-empty requires a missingScopes.reason of 1-300 chars
+    expect(() => withDecl({ requiredScopes: ["read_insights"] })).toThrow(/missingScopes/);
+    expect(() => withDecl({ requiredScopes: ["read_insights"], missingScopes: { reason: "" } })).toThrow(/missingScopes/);
+    expect(() => withDecl({ requiredScopes: ["read_insights"], missingScopes: { reason: "x".repeat(301) } })).toThrow(/missingScopes/);
+    expect(() => withDecl({ requiredScopes: ["read_insights"], missingScopes: { reason: "ok" } })).not.toThrow();
+
+    // every requiredScopes entry must match GRANTED_SCOPE_PATTERN
+    expect(() => withDecl({ requiredScopes: ["Not Valid!"], missingScopes: { reason: "ok" } })).toThrow(/requiredScopes/);
+
+    // ephemeralPostTypes.postType must be a known PostType, in the provider's own capabilities.postTypes, unique
+    expect(() => withDecl({ ephemeralPostTypes: [{ postType: "not-a-post-type" as never, lifetimeMs: 86_400_000 }] })).toThrow(/ephemeralPostTypes/);
+    expect(() => withDecl({ ephemeralPostTypes: [{ postType: "text", lifetimeMs: 86_400_000 }] })).toThrow(/ephemeralPostTypes/);
+    expect(() =>
+      withDecl({
+        ephemeralPostTypes: [
+          { postType: "story", lifetimeMs: 86_400_000 },
+          { postType: "story", lifetimeMs: 86_400_000 },
+        ],
+      }),
+    ).toThrow(/ephemeralPostTypes/);
+    expect(() => withDecl({ ephemeralPostTypes: [{ postType: "story", lifetimeMs: 86_400_000 }] })).not.toThrow();
+
+    // ephemeralPostTypes.lifetimeMs must be an integer in [60_000, 30 * 86_400_000]
+    expect(() => withDecl({ ephemeralPostTypes: [{ postType: "story", lifetimeMs: 1000 }] })).toThrow(/lifetimeMs/);
+    expect(() => withDecl({ ephemeralPostTypes: [{ postType: "story", lifetimeMs: 31 * 86_400_000 }] })).toThrow(/lifetimeMs/);
+
+    // unavailable and requiredScopes are never both set
+    expect(() =>
+      withDecl({ post: [], account: [], unavailable: { reason: "no permission" }, requiredScopes: ["read_insights"], missingScopes: { reason: "ok" } }),
+    ).toThrow(/unavailable.*requiredScopes|requiredScopes.*unavailable/);
   });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {
@@ -218,6 +251,8 @@ describe("provider registry", () => {
         "THREADS_APP_ID",
         "THREADS_APP_SECRET",
         "THREADS_GRAPH_BASE",
+        "THREADS_INSIGHTS_SCOPES",
+        "THREADS_INSIGHTS_USAGE_CEILING",
       ]);
     });
     it("registers x in its own connect group", () => {

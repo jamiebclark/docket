@@ -186,14 +186,16 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
         }
       });
 
-      it("marks only Facebook text length and images, and Instagram's carousel video aspect, UNVERIFIED", () => {
+      it("marks only Facebook text length and images, Instagram's carousel video aspect, and each Meta-family insights read budget, UNVERIFIED", () => {
         const flagged = rows.filter((r) => r.source.includes("UNVERIFIED")).map((r) => r.category).sort();
         const expected =
           provider.key === "facebook"
-            ? ["images", "text length"]
+            ? ["images", "note: insights read budget", "text length"]
             : provider.key === "instagram"
-              ? ["carousel video max aspect", "carousel video min aspect", "story max aspect", "story min aspect"]
-              : [];
+              ? ["carousel video max aspect", "carousel video min aspect", "note: insights read budget", "story max aspect", "story min aspect"]
+              : provider.key === "threads"
+                ? ["note: insights read budget"]
+                : [];
         expect(flagged).toEqual(expected);
       });
 

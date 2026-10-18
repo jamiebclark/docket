@@ -14,9 +14,14 @@ export interface ThreadsConfig {
   appId: string;
   appSecret: string;
   graphBase: string;
+  /** FR-017. Default off: the authorization URL requests no extra scope while this is false. */
+  insightsScopes: boolean;
+  /** FR-045. Percent of Meta's own BUC usage at or above which insights reads back off. */
+  insightsUsageCeiling: number;
 }
 
 type Source = Readonly<Record<string, string | undefined>>;
+const DEFAULT_INSIGHTS_USAGE_CEILING = 80;
 
 /** An `https:` origin only: no credentials, path other than `/`, query or fragment. Returns the origin. */
 function parseBase(value: string): string | null {
@@ -37,6 +42,8 @@ export function parseThreadsEnv(source: Source): { config: ThreadsConfig | null;
   const appId = readEnv(source, "THREADS_APP_ID");
   const appSecret = readEnv(source, "THREADS_APP_SECRET");
   const base = readEnv(source, "THREADS_GRAPH_BASE");
+  const insightsScopesRaw = readEnv(source, "THREADS_INSIGHTS_SCOPES");
+  const usageCeilingRaw = readEnv(source, "THREADS_INSIGHTS_USAGE_CEILING");
 
   if (appSecret && !appId) issues.push({ name: "THREADS_APP_ID", reason: "required when THREADS_APP_SECRET is set" });
   else if (appId && !isAppId(appId)) issues.push({ name: "THREADS_APP_ID", reason: "must be the numeric app id" });
@@ -53,8 +60,22 @@ export function parseThreadsEnv(source: Source): { config: ThreadsConfig | null;
     else issues.push({ name: "THREADS_GRAPH_BASE", reason: "must be an https address with no path, query or credentials" });
   }
 
+  let insightsScopes = false;
+  if (insightsScopesRaw !== null) {
+    const v = insightsScopesRaw.toLowerCase();
+    if (v === "true") insightsScopes = true;
+    else if (v !== "false") issues.push({ name: "THREADS_INSIGHTS_SCOPES", reason: "must be true or false" });
+  }
+
+  let insightsUsageCeiling = DEFAULT_INSIGHTS_USAGE_CEILING;
+  if (usageCeilingRaw !== null) {
+    const n = Number(usageCeilingRaw);
+    if (Number.isInteger(n) && n >= 1 && n <= 100) insightsUsageCeiling = n;
+    else issues.push({ name: "THREADS_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" });
+  }
+
   if (!(appId && appSecret && isAppId(appId) && isAppSecret(appSecret))) return { config: null, issues };
-  return { config: { appId, appSecret, graphBase }, issues };
+  return { config: { appId, appSecret, graphBase, insightsScopes, insightsUsageCeiling }, issues };
 }
 
 /** Reads process.env each call. Throws a value-free error when not configured. */

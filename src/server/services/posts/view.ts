@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import { buildTargetInsightsView, type TargetInsightsView } from "@/lib/insights/panel";
+import { insightsPermissionForAccount } from "../accounts";
 import * as clock from "../../dal/clock";
 import { ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
@@ -64,7 +65,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
     scope.postMetricSnapshots.latestForTargets(targetIds),
     scope.postMetricPollStates.getMany(targetIds),
   ]);
-  const views = await Promise.all(
+  const targetViews = await Promise.all(
     targets.map(async (t): Promise<PostViewTarget> => {
       const account = accounts.get(t.socialAccountId);
       const providerName = account ? (findProvider(account.providerKey)?.displayName ?? account.providerKey) : "";
@@ -91,6 +92,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
           externalId: t.externalId,
           declaration: (account ? findProvider(account.providerKey)?.insights?.declaration : undefined) ?? null,
           providerName,
+          permission: account ? insightsPermissionForAccount(account, findProvider(account.providerKey)) : null,
           snapshot: (latestSnapshots.get(t.id) as { capturedAt: Date; metrics: Record<string, unknown> } | undefined) ?? null,
           pollState: pollStates.get(t.id) ?? null,
           now,
@@ -117,7 +119,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
     },
-    targets: views,
+    targets: targetViews,
     media,
     deleteBlocked: targets.some((t) => t.status === "published" || t.status === "publishing" || t.status === "ambiguous"),
   };

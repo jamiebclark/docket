@@ -90,6 +90,7 @@ export const tiktokConnectGroup: OAuthConnectGroup = {
     const displayName =
       nickname && username ? `${nickname} (@${username})` : nickname || (username ? `@${username}` : tokens.openId);
     const note = unauditedNote(tiktokAudited());
+    const grantedScopes = callbackScopes ?? tokens.scopes ?? undefined;
     return {
       ok: true,
       candidates: [
@@ -100,6 +101,7 @@ export const tiktokConnectGroup: OAuthConnectGroup = {
           settings: { ...(username ? { username } : {}), ...(nickname ? { nickname } : {}) },
           credentials,
           expiresAt: accountExpiry(credentials),
+          ...(grantedScopes ? { grantedScopes } : {}),
           ...(note ? { notes: [note] } : {}),
         },
       ],

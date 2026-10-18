@@ -1,6 +1,7 @@
 import type { SocialProvider } from "../types";
 import { THREADS_DEFAULT_PUBLISH_LIMIT, threadsCapabilities } from "./capabilities";
 import { threadsConnectGroup } from "./connect-group";
+import { threadsInsights } from "./insights";
 import { advanceThreads } from "./publish";
 import { refreshThreads } from "./refresh";
 import { threadsAccountNotes, threadsSettingsSchema, type ThreadsSettings } from "./settings";
@@ -22,4 +23,5 @@ export const threadsProvider: SocialProvider<ThreadsSettings, ThreadsState> = {
   advance: (ctx) => advanceThreads(ctx),
   refreshCredentials: (input) => refreshThreads(input),
   accountNotes: (input) => threadsAccountNotes(input),
+  insights: threadsInsights,
 };
