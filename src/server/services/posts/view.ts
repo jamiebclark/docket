@@ -65,7 +65,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
     scope.postMetricSnapshots.latestForTargets(targetIds),
     scope.postMetricPollStates.getMany(targetIds),
   ]);
-  const views = await Promise.all(
+  const targetViews = await Promise.all(
     targets.map(async (t): Promise<PostViewTarget> => {
       const account = accounts.get(t.socialAccountId);
       const providerName = account ? (findProvider(account.providerKey)?.displayName ?? account.providerKey) : "";
@@ -119,7 +119,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
     },
-    targets: views,
+    targets: targetViews,
     media,
     deleteBlocked: targets.some((t) => t.status === "published" || t.status === "publishing" || t.status === "ambiguous"),
   };

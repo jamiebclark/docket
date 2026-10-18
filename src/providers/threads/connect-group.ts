@@ -100,11 +100,18 @@ export const threadsConnectGroup: OAuthConnectGroup = {
   },
   callbackHint:
     "If Threads refused the login, check that this Threads account accepted the tester invite in Threads under Settings → Website permissions.",
+  optionalScopes: {
+    declared: [{ scope: "threads_manage_insights", purpose: "Read a Threads account's and its posts' numbers" }],
+    doc: docsUrl("meta-setup", "insights"),
+    requested: (source) => (parseThreadsEnv(source).config?.insightsScopes ? ["threads_manage_insights"] : []),
+  },
   authorizationUrl({ state, redirectUri }) {
+    const cfg = requireThreadsConfig();
+    const scopes = ["threads_basic", "threads_content_publish", ...(cfg.insightsScopes ? ["threads_manage_insights"] : [])];
     const url = new URL(THREADS_AUTHORIZE_URL);
-    url.searchParams.set("client_id", requireThreadsConfig().appId);
+    url.searchParams.set("client_id", cfg.appId);
     url.searchParams.set("redirect_uri", redirectUri);
-    url.searchParams.set("scope", "threads_basic,threads_content_publish");
+    url.searchParams.set("scope", scopes.join(","));
     url.searchParams.set("response_type", "code");
     url.searchParams.set("state", state);
     return url.toString();

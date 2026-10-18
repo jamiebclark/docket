@@ -68,4 +68,37 @@ describe("threadsConnectGroup.authorizationUrl", () => {
       "https://threads.com/oauth/authorize?client_id=12345&redirect_uri=https%3A%2F%2Fx.test%2Fconnect%2Fcallback&scope=threads_basic%2Cthreads_content_publish&response_type=code&state=st",
     );
   });
+
+  // FR-018, FR-020, US3-AS1: flag on carries threads_manage_insights in addition to today's scopes.
+  it("with THREADS_INSIGHTS_SCOPES=true, the dialog carries threads_manage_insights in addition to today's scopes", () => {
+    process.env.THREADS_INSIGHTS_SCOPES = "true";
+    try {
+      const url = new URL(threadsConnectGroup.authorizationUrl({ state: "st", redirectUri: "https://x.test/connect/callback" }));
+      expect(url.searchParams.get("scope")).toBe("threads_basic,threads_content_publish,threads_manage_insights");
+    } finally {
+      delete process.env.THREADS_INSIGHTS_SCOPES;
+    }
+  });
+});
+
+describe("threadsConnectGroup.optionalScopes", () => {
+  it("declares threads_manage_insights and has no cannotWiden", () => {
+    expect(threadsConnectGroup.optionalScopes?.declared).toEqual([
+      { scope: "threads_manage_insights", purpose: "Read a Threads account's and its posts' numbers" },
+    ]);
+    expect(threadsConnectGroup.optionalScopes?.cannotWiden).toBeUndefined();
+  });
+
+  it("requests nothing when the flag is off", () => {
+    expect(threadsConnectGroup.optionalScopes?.requested({ THREADS_APP_ID: "12345", THREADS_APP_SECRET: "a".repeat(32) })).toEqual([]);
+  });
+
+  it("requests threads_manage_insights when the flag is on (FR-018, FR-020)", () => {
+    const requested = threadsConnectGroup.optionalScopes?.requested({
+      THREADS_APP_ID: "12345",
+      THREADS_APP_SECRET: "a".repeat(32),
+      THREADS_INSIGHTS_SCOPES: "true",
+    });
+    expect(requested).toEqual(["threads_manage_insights"]);
+  });
 });

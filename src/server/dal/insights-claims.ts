@@ -42,7 +42,7 @@ export interface InsightsProviderRule {
   ephemeralPostTypes: readonly { postType: string; lifetimeMs: number }[];
 }
 
-/** FR-022/FR-023. An ineligible account never reaches a lease, a decrypt or a call. */
+/** FR-022/FR-023. An ineligible account never gets as far as a lease, a decrypt or a call. */
 function eligible(rules: readonly InsightsProviderRule[]) {
   return or(
     ...rules.map((r) =>

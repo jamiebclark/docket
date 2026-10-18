@@ -1,0 +1,170 @@
+import { z } from "zod";
+import type {
+  AccountMetricsReadContext,
+  AccountMetricsReadResult,
+  InsightsSupport,
+  PostMetricEntry,
+  PostMetricsReadContext,
+  PostMetricsReadResult,
+} from "../types";
+import { graphVersion } from "../meta/config";
+import { readPageToken } from "../meta/credentials";
+import { classifyGraphError, scrub } from "../meta/errors";
+import { DEFAULT_GRAPH_BASE, graphRequest, type GraphOutcome, type MetaApp } from "../meta/graph";
+import type { InstagramSettings } from "./settings";
+
+const PLATFORM = "Instagram";
+
+/** docs/research/meta.md, "Instagram media (post) insights" — all CONFIRMED. */
+export const INSTAGRAM_POST_METRICS = ["views", "reach", "likes", "comments", "saved", "shares", "total_interactions"] as const;
+/** docs/research/meta.md, "Instagram user (account) insights" — the three CONFIRMED keys; account-level `views` is R1, not declared. */
+export const INSTAGRAM_ACCOUNT_METRICS = ["reach", "follower_count", "profile_views"] as const;
+/** Deprecated 2025-11-15 (`impressions`) or never documented for media/user insights; never requested (FR-004). */
+export const INSTAGRAM_PROHIBITED_METRICS = ["impressions", "plays", "clips_replays_count", "ig_reels_aggregated_all_plays_count"] as const;
+
+const postMetricsSchema = z
+  .object({
+    views: z.number().optional(),
+    reach: z.number().optional(),
+    likes: z.number().optional(),
+    comments: z.number().optional(),
+    saved: z.number().optional(),
+    shares: z.number().optional(),
+    total_interactions: z.number().optional(),
+  })
+  .strict();
+
+const accountMetricsSchema = z
+  .object({
+    reach: z.number().optional(),
+    follower_count: z.number().optional(),
+    profile_views: z.number().optional(),
+  })
+  .strict();
+
+/** Graph's `{ data: [{ name, values: [{ value }] }] }` shape. An empty or absent `values` leaves the key out — absent, not zero (FR-035). */
+function metricsFromBody(body: unknown, keys: readonly string[]): Record<string, number> {
+  const data = (body as { data?: unknown } | null)?.data;
+  const out: Record<string, number> = {};
+  if (!Array.isArray(data)) return out;
+  for (const item of data) {
+    if (typeof item !== "object" || item === null) continue;
+    const name = (item as Record<string, unknown>).name;
+    if (typeof name !== "string" || !keys.includes(name)) continue;
+    const values = (item as Record<string, unknown>).values;
+    if (!Array.isArray(values) || values.length === 0) continue;
+    const value = (values[values.length - 1] as Record<string, unknown> | null)?.value;
+    if (typeof value === "number") out[name] = value;
+  }
+  return out;
+}
+
+type Failure = Extract<PostMetricsReadResult, { kind: "retryable_error" | "fatal_error" | "credentials_invalid" | "rate_limited" }>;
+
+function codeSuffix(code: number | null, subcode: number | null): string {
+  if (code === null) return "";
+  return subcode !== null ? ` (code ${code}/${subcode})` : ` (code ${code})`;
+}
+
+/** Maps a non-ok outcome to one of the four non-`page` result kinds (contracts/provider-insights-081.md §5). Never throws. */
+function mapOutcome(outcome: Exclude<GraphOutcome, { kind: "ok" }>, secrets: readonly string[]): Failure {
+  switch (outcome.kind) {
+    case "network":
+      return { kind: "retryable_error", error: `${PLATFORM}: could not reach Meta; will retry.` };
+    case "unparseable":
+      return { kind: "retryable_error", error: `${PLATFORM}: Meta answered with an unreadable response.` };
+    case "http_error":
+      if (outcome.status >= 500 || outcome.status === 429) return { kind: "retryable_error", error: `${PLATFORM}: Meta answered HTTP ${outcome.status}.` };
+      return { kind: "fatal_error", error: `${PLATFORM}: Meta answered HTTP ${outcome.status}.` };
+    case "graph_error": {
+      const e = outcome.error;
+      const cls = classifyGraphError(e);
+      const suffix = codeSuffix(e.code, e.subcode);
+      if (cls === "invalid_token") return { kind: "credentials_invalid", error: `${PLATFORM} says the access token is no longer valid${suffix}.` };
+      if (cls === "rate_limited") return { kind: "rate_limited", error: `${PLATFORM}: ${scrub(e.message, secrets)}${suffix}` };
+      if (cls === "temporary" || outcome.status >= 500) return { kind: "retryable_error", error: `${PLATFORM}: ${scrub(e.message, secrets)}${suffix}` };
+      return { kind: "fatal_error", error: `${PLATFORM}: ${scrub(e.message, secrets)}${suffix}` };
+    }
+  }
+}
+
+/** Graph's generic "object does not exist" code for a node that is gone — judgement call, not yet in research.md. */
+const GONE_CODE = 100;
+
+async function readPostMetrics(ctx: PostMetricsReadContext<InstagramSettings>): Promise<PostMetricsReadResult> {
+  const token = readPageToken(ctx.account.credentials);
+  if (!token) return { kind: "credentials_invalid", error: "The stored token is unreadable; reconnect the account." };
+  const graph: MetaApp = { graphBase: DEFAULT_GRAPH_BASE, version: graphVersion() };
+
+  const entries: PostMetricEntry[] = [];
+  for (const post of ctx.posts) {
+    const outcome = await graphRequest(graph, {
+      method: "GET",
+      path: `/${post.externalId}/insights`,
+      params: { metric: INSTAGRAM_POST_METRICS.join(",") },
+      token,
+      signal: ctx.signal,
+    });
+    if (outcome.kind === "ok") {
+      entries.push({ externalId: post.externalId, kind: "metrics", metrics: metricsFromBody(outcome.body, INSTAGRAM_POST_METRICS) });
+      continue;
+    }
+    if (outcome.kind === "graph_error" && outcome.error.code === GONE_CODE) {
+      entries.push({ externalId: post.externalId, kind: "gone" });
+      continue;
+    }
+    return mapOutcome(outcome, [token]);
+  }
+  return { kind: "page", entries };
+}
+
+async function readAccountMetrics(ctx: AccountMetricsReadContext<InstagramSettings>): Promise<AccountMetricsReadResult> {
+  const token = readPageToken(ctx.account.credentials);
+  if (!token) return { kind: "credentials_invalid", error: "The stored token is unreadable; reconnect the account." };
+  const graph: MetaApp = { graphBase: DEFAULT_GRAPH_BASE, version: graphVersion() };
+
+  const outcome = await graphRequest(graph, {
+    method: "GET",
+    path: `/${ctx.account.externalId}/insights`,
+    params: { metric: INSTAGRAM_ACCOUNT_METRICS.join(","), period: "day" },
+    token,
+    signal: ctx.signal,
+  });
+  if (outcome.kind !== "ok") return mapOutcome(outcome, [token]);
+  return { kind: "page", metrics: metricsFromBody(outcome.body, INSTAGRAM_ACCOUNT_METRICS) };
+}
+
+/**
+ * Verified with mocked HTTP only until the live check in Phase 8 runs (FR-037, constitution II).
+ * One media per call (`maxPostsPerRead: 1`) — Graph's insights edge documents no batch parameter.
+ */
+export const instagramInsights: InsightsSupport<InstagramSettings> = {
+  declaration: {
+    requiredScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+    missingScopes: {
+      reason: "Instagram needs the instagram_manage_insights permission before Docket can read its numbers.",
+      docsPath: "meta-setup#insights",
+    },
+    post: [
+      { key: "views", label: "Views" },
+      { key: "reach", label: "Reach" },
+      { key: "likes", label: "Likes" },
+      { key: "comments", label: "Comments" },
+      { key: "saved", label: "Saved" },
+      { key: "shares", label: "Shares" },
+      { key: "total_interactions", label: "Interactions" },
+    ],
+    account: [
+      { key: "reach", label: "Reach" },
+      { key: "follower_count", label: "New followers" },
+      { key: "profile_views", label: "Profile views" },
+    ],
+    maxPostsPerRead: 1,
+    readBudget: { count: 48_000, windowSeconds: 86_400 }, // interim, UNVERIFIED (research §4)
+    ephemeralPostTypes: [{ postType: "story", lifetimeMs: 86_400_000 }],
+  },
+  postMetricsSchema,
+  accountMetricsSchema,
+  readPostMetrics,
+  readAccountMetrics,
+};

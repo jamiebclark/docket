@@ -115,3 +115,65 @@ describe("accounts page: the insights-need-a-reconnect line (FR-027, US1-AS4, US
     expect(account.grantedScopes ?? null).toBeNull();
   });
 });
+
+describe("accounts page: Instagram's own Meta connect group, flag on (US3-AS2, US3-AS3)", () => {
+  const ENV_KEYS = ["META_APP_ID", "META_APP_SECRET", "META_INSIGHTS_SCOPES", "META_LOGIN_CONFIG_ID"] as const;
+  const ORIGINAL: Record<string, string | undefined> = {};
+  function setEnv(patch: Partial<Record<(typeof ENV_KEYS)[number], string>>) {
+    for (const k of ENV_KEYS) ORIGINAL[k] = process.env[k];
+    process.env.META_APP_ID = "12345";
+    process.env.META_APP_SECRET = "a".repeat(32);
+    for (const [k, v] of Object.entries(patch)) process.env[k] = v;
+  }
+  function restoreEnv() {
+    for (const k of ENV_KEYS) {
+      if (ORIGINAL[k] === undefined) delete process.env[k];
+      else process.env[k] = ORIGINAL[k];
+    }
+  }
+
+  it("flag on, not yet granted: the reconnect line, reason, docs link, reconnect button, unchanged status badge", async () => {
+    setEnv({ META_INSIGHTS_SCOPES: "true" });
+    try {
+      // Already connected before this entry's flag existed: holds every baseline scope, but not
+      // instagram_manage_insights — the real shape of "not yet granted" (US3-AS2).
+      const { env } = await connectWith("instagram", [
+        "pages_show_list",
+        "pages_manage_posts",
+        "pages_read_engagement",
+        "instagram_basic",
+        "instagram_content_publish",
+      ]);
+      const html = await renderedHtml(env);
+      expect(html).toContain("Insights need a reconnect");
+      expect(html).toContain("instagram_manage_insights");
+      const [view] = await accounts.listAccounts(env.scope);
+      expect(view!.status).toBe("active");
+      expect(view!.insightsPermission?.kind).toBe("not_granted");
+      expect(view!.insightsPermission?.kind === "not_granted" && view!.insightsPermission.canReconnect).toBe(true);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it("flag on, config id set: the Login-for-Business reason, no reconnect button (FR-019)", async () => {
+    setEnv({ META_INSIGHTS_SCOPES: "true", META_LOGIN_CONFIG_ID: "777" });
+    try {
+      const { env } = await connectWith("instagram", [
+        "pages_show_list",
+        "pages_manage_posts",
+        "pages_read_engagement",
+        "instagram_basic",
+        "instagram_content_publish",
+      ]);
+      const html = await renderedHtml(env);
+      expect(html).toContain("Login for Business");
+      expect(html).not.toContain("Reconnect ");
+      const [view] = await accounts.listAccounts(env.scope);
+      expect(view!.insightsPermission?.kind).toBe("not_granted");
+      expect(view!.insightsPermission?.kind === "not_granted" && view!.insightsPermission.canReconnect).toBe(false);
+    } finally {
+      restoreEnv();
+    }
+  });
+});
