@@ -195,6 +195,19 @@ group backs Facebook and Instagram from a single consent). The per-provider need
 `insights` declaration instead (G33), not on the group, because one group's dialog must satisfy every provider
 behind it. Inert for a provider that never sets `grantedScopes` or `optionalScopes`.
 
+`optionalScopes` has four members:
+
+| Member | Meaning |
+|---|---|
+| `declared` | Every extra scope the group may ask for, each as `{ scope, purpose }`. Static and non-secret, so it can be rendered in the UI and the docs. |
+| `doc` | Published guide explaining the opt-in, usually `docsUrl("meta-setup", "insights")`. |
+| `requested(source)` | Pure, reads only `source`: the scopes this group will actually add to its dialog as currently configured. An operator who has not opted in gets `[]`, and the dialog is unchanged. |
+| `cannotWiden(source)` | Pure. Non-null when the operator opted in but Docket *cannot* widen the dialog — Facebook Login for Business takes its permission set from the Meta app's own configuration (FR-019). Reconnecting cannot help, so no reconnect control is offered; the returned `reason` (and optional `doc`) is shown instead. |
+
+The distinction `cannotWiden` draws matters: "you have not asked for this yet" and "asking again cannot
+help, the app configuration decides" are different problems with different fixes, and offering a Reconnect
+button for the second is a dead end.
+
 `pasteToken` is the fallback for when the redirect cannot work: a secret `field`, some `help` text and an `exchange` that returns the
 same candidates. The pasted token is never stored (G6).
 

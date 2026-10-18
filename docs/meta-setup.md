@@ -325,3 +325,48 @@ sitting, adapted video is "verified with mocks only". Report all results togethe
 4. **Crop.** Publish a cropped version with a focal point off-centre.
 5. **Trim.** Publish a trimmed version (start and end set).
 6. **Rewrap.** Publish one rewrap (a MOV, or an MP4 whose index is at the end) to Instagram.
+
+## Insights
+
+Reading numbers back from Facebook Pages, Instagram and Threads is **opt-in**. Docket does
+not widen an existing connection on its own: until you turn these on, nothing extra is
+requested and every insight surface shows as unavailable with a reason.
+
+| Variable | Effect |
+|---|---|
+| `META_INSIGHTS_SCOPES=true` | The Meta dialog (Facebook Pages + Instagram) also asks for `read_insights` and `instagram_manage_insights`. |
+| `THREADS_INSIGHTS_SCOPES=true` | The Threads dialog also asks for `threads_manage_insights`. |
+
+Set the variable, restart, then **reconnect the account** — a token already issued does not
+gain permissions retroactively.
+
+### Facebook Login for Business takes its permissions from the app
+
+If your Meta app uses Facebook Login for Business, the consent dialog's permission set comes
+from the *app's own configuration*, not from what Docket asks for. Docket detects this and
+says so rather than offering a Reconnect button that cannot help: add the permissions to the
+app configuration in the Meta dashboard first.
+
+### Page insights also need the `analyze` task — a role, not a permission
+
+Verified live on 2026-10-17 (see `docs/research/meta.md`): Page insights require
+`pages_read_engagement` **and** `read_insights` **and** a Page access token whose holder can
+perform the **`analyze` task** on that Page.
+
+That last one is a Business Manager role, not an OAuth scope. The consequence is worth
+understanding before you debug:
+
+- `read_insights` carries **no granular per-Page target ids**, unlike `pages_manage_posts` or
+  `pages_read_engagement`. You cannot tell from the token which Pages it really covers.
+- A person can grant Docket every permission it asks for and still read nothing, because
+  their role on that Page lacks `analyze`.
+- **Reconnecting will not fix this.** Grant the `analyze` task to the connecting person in
+  Business Manager instead.
+
+### Pages owned by a Business Portfolio
+
+`/me/accounts` does not list a Page owned by a Business Portfolio, so a portfolio Page can be
+absent from the chooser even with `pages_show_list` granted. Docket works around this by
+reading the Page ids out of `/debug_token`'s granular scopes
+(`src/providers/meta/candidates.ts`). If a Page is missing from the chooser entirely, check
+that the person connecting has a role on it in the portfolio.
