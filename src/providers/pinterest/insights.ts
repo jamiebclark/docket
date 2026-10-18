@@ -181,14 +181,21 @@ export const pinterestInsights: InsightsSupport<unknown> = {
     missingPostScopes: { reason: MISSING_SCOPE_REASON, docsPath: SETUP },
     accountScopes: [],
     post: [
-      { key: "IMPRESSION", label: "Impressions" },
-      { key: "PIN_CLICK", label: "Pin clicks" },
-      { key: "OUTBOUND_CLICK", label: "Outbound clicks" },
-      { key: "SAVE", label: "Saves" },
+      { key: "IMPRESSION", label: "Impressions", shape: { kind: "windowed", windowMs: null } },
+      { key: "PIN_CLICK", label: "Pin clicks", shape: { kind: "windowed", windowMs: null } },
+      { key: "OUTBOUND_CLICK", label: "Outbound clicks", shape: { kind: "windowed", windowMs: null } },
+      { key: "SAVE", label: "Saves", shape: { kind: "windowed", windowMs: null } },
     ],
     account: [
-      { key: "pinterest_follower_count", label: "Followers" },
-      { key: "monthly_views", label: "Monthly views" },
+      { key: "pinterest_follower_count", label: "Followers", shape: { kind: "cumulative" } },
+      {
+        key: "monthly_views",
+        label: "Monthly views",
+        shape: {
+          kind: "unknown",
+          reason: "Pinterest does not document the window this number covers, so Docket cannot plot it over time.",
+        },
+      },
     ],
     maxPostsPerRead: 1,
     postIdSource: "externalId",

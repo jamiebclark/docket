@@ -41,21 +41,21 @@ code can be written until every provider compiles with a required `shape`.
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete — `MetricShape` is read by
 the fold, the trend reader, the comparison reader and `shape.ts`.
 
-- [ ] T003 Add `MetricShape` discriminated union and make `shape: MetricShape` required (no default) on `MetricKeyDeclaration` in `src/providers/types.ts`, per [contracts/metric-shape.md](contracts/metric-shape.md) §1
-- [ ] T004 [P] Classify Bluesky's 7 keys (`likeCount`, `repostCount`, `replyCount`, `quoteCount`, `followersCount`, `followsCount`, `postsCount`) as `cumulative` in `src/providers/bluesky/insights.ts`, per [research.md](research.md) §1.1
-- [ ] T005 [P] Classify Instagram's 7 post keys as `cumulative` and 2 account keys (`reach`, `follower_count`) as `windowed` with `windowMs: 86_400_000` in `src/providers/instagram/insights.ts`, per [research.md](research.md) §1.1
-- [ ] T006 [P] Classify Facebook's 4 post keys as `cumulative` and 2 account keys (`page_post_engagements`, `page_follows`) as `unknown` with the exact reason strings from [contracts/metric-shape.md](contracts/metric-shape.md) §2 in `src/providers/facebook/insights.ts`
-- [ ] T007 [P] Classify TikTok's 4 post keys and 3 account keys as `cumulative` in `src/providers/tiktok/insights.ts`, per [research.md](research.md) §1.1
-- [ ] T008 [P] Classify Pinterest's 4 post keys as `windowed` with `windowMs: null`, its `pinterest_follower_count` as `cumulative`, and `monthly_views` as `unknown` with the exact reason string from [contracts/metric-shape.md](contracts/metric-shape.md) §2 in `src/providers/pinterest/insights.ts`
-- [ ] T009 [P] Classify X's 6 post keys as `cumulative` in `src/providers/x/insights.ts` (no account keys declared, no change there)
-- [ ] T010 [P] Confirm Threads' `insights.ts` declares no keys (`post: []`, `account: []`) and still compiles with the new required field — no classification needed, verify only
-- [ ] T011 [P] Classify `mock`'s 3 post keys and 2 account keys as `cumulative` in `src/providers/mock/insights.ts`, per [research.md](research.md) §1.3 — do not add or reclassify any key, existing fixtures assert against these three
-- [ ] T012 [P] Create `src/lib/insights/shape.ts` with pure `isPlottable(shape)` and `shapeNote(shape)` per [contracts/metric-shape.md](contracts/metric-shape.md) §3, with `src/lib/insights/shape.test.ts` covering all three shape kinds
-- [ ] T013 [P] Add the G38 row to the Generic hooks index and a prose section in `docs/adding-a-provider.md`, per [contracts/metric-shape.md](contracts/metric-shape.md) §4
-- [ ] T014 [P] Record the classification decision, the three `unknown` keys and the refusal to pin a period in `docs/decisions.md`, per [contracts/metric-shape.md](contracts/metric-shape.md) §4
-- [ ] T015 [P] Record the two open period questions (Facebook's account period, Pinterest's `monthly_views` window) in `docs/research/meta.md` and `docs/research/pinterest.md`, per [research.md](research.md) §1.2, §8
-- [ ] T016 Add `tests/integration/insights/provider-seam.test.ts` asserting every provider's declared keys carry a `shape`, and that exactly `page_follows`, `page_post_engagements` and `monthly_views` are classified `unknown`
-- [ ] T017 Run `pnpm typecheck`, confirm it fails if a `shape` is removed locally (delete one, confirm the failure, restore it), then confirm it passes; run `tests/integration/insights/panel.test.tsx` unchanged and confirm it still passes byte-identically
+- [X] T003 Add `MetricShape` discriminated union and make `shape: MetricShape` required (no default) on `MetricKeyDeclaration` in `src/providers/types.ts`, per [contracts/metric-shape.md](contracts/metric-shape.md) §1
+- [X] T004 [P] Classify Bluesky's 7 keys (`likeCount`, `repostCount`, `replyCount`, `quoteCount`, `followersCount`, `followsCount`, `postsCount`) as `cumulative` in `src/providers/bluesky/insights.ts`, per [research.md](research.md) §1.1
+- [X] T005 [P] Classify Instagram's 7 post keys as `cumulative` and 2 account keys (`reach`, `follower_count`) as `windowed` with `windowMs: 86_400_000` in `src/providers/instagram/insights.ts`, per [research.md](research.md) §1.1
+- [X] T006 [P] Classify Facebook's 4 post keys as `cumulative` and 2 account keys (`page_post_engagements`, `page_follows`) as `unknown` with the exact reason strings from [contracts/metric-shape.md](contracts/metric-shape.md) §2 in `src/providers/facebook/insights.ts`
+- [X] T007 [P] Classify TikTok's 4 post keys and 3 account keys as `cumulative` in `src/providers/tiktok/insights.ts`, per [research.md](research.md) §1.1
+- [X] T008 [P] Classify Pinterest's 4 post keys as `windowed` with `windowMs: null`, its `pinterest_follower_count` as `cumulative`, and `monthly_views` as `unknown` with the exact reason string from [contracts/metric-shape.md](contracts/metric-shape.md) §2 in `src/providers/pinterest/insights.ts`
+- [X] T009 [P] Classify X's 6 post keys as `cumulative` in `src/providers/x/insights.ts` (no account keys declared, no change there)
+- [X] T010 [P] Confirm Threads' `insights.ts` declares no keys (`post: []`, `account: []`) and still compiles with the new required field — no classification needed, verify only
+- [X] T011 [P] Classify `mock`'s 3 post keys and 2 account keys as `cumulative` in `src/providers/mock/insights.ts`, per [research.md](research.md) §1.3 — do not add or reclassify any key, existing fixtures assert against these three
+- [X] T012 [P] Create `src/lib/insights/shape.ts` with pure `isPlottable(shape)` and `shapeNote(shape)` per [contracts/metric-shape.md](contracts/metric-shape.md) §3, with `src/lib/insights/shape.test.ts` covering all three shape kinds
+- [X] T013 [P] Add the G38 row to the Generic hooks index and a prose section in `docs/adding-a-provider.md`, per [contracts/metric-shape.md](contracts/metric-shape.md) §4
+- [X] T014 [P] Record the classification decision, the three `unknown` keys and the refusal to pin a period in `docs/decisions.md`, per [contracts/metric-shape.md](contracts/metric-shape.md) §4
+- [X] T015 [P] Record the two open period questions (Facebook's account period, Pinterest's `monthly_views` window) in `docs/research/meta.md` and `docs/research/pinterest.md`, per [research.md](research.md) §1.2, §8
+- [X] T016 Add `tests/integration/insights/provider-seam.test.ts` asserting every provider's declared keys carry a `shape`, and that exactly `page_follows`, `page_post_engagements` and `monthly_views` are classified `unknown`
+- [X] T017 Run `pnpm typecheck`, confirm it fails if a `shape` is removed locally (delete one, confirm the failure, restore it), then confirm it passes; run `tests/integration/insights/panel.test.tsx` unchanged and confirm it still passes byte-identically
 
 **Checkpoint**: `pnpm typecheck` passes, `panel.test.tsx` is unchanged and green, all 46 keys are classified. Every later phase can now read `shape`.
 

@@ -134,8 +134,8 @@ describe("provider registry", () => {
       capabilities: getProvider("instagram").capabilities,
       insights: {
         declaration: {
-          post: [{ key: "likeCount", label: "Likes" }],
-          account: [{ key: "followersCount", label: "Followers" }],
+          post: [{ key: "likeCount", label: "Likes", shape: { kind: "cumulative" } }],
+          account: [{ key: "followersCount", label: "Followers", shape: { kind: "cumulative" } }],
           maxPostsPerRead: 25,
           readBudget: { count: 100, windowSeconds: 3_600 },
         } as InsightsDeclaration,
@@ -150,8 +150,15 @@ describe("provider registry", () => {
     const withDecl = (over: Partial<typeof ok.insights.declaration>) =>
       assertInsightsDeclaration({ ...ok, insights: { ...ok.insights, declaration: { ...ok.insights.declaration, ...over } } });
     expect(() => withDecl({ post: [], account: [] })).toThrow(/Inconsistent insights declaration/);
-    expect(() => withDecl({ post: [{ key: "likeCount", label: "Likes" }, { key: "likeCount", label: "Likes" }] })).toThrow(/duplicate/);
-    expect(() => withDecl({ post: [{ key: "likeCount", label: "" }] })).toThrow(/label/);
+    expect(() =>
+      withDecl({
+        post: [
+          { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+          { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+        ],
+      }),
+    ).toThrow(/duplicate/);
+    expect(() => withDecl({ post: [{ key: "likeCount", label: "", shape: { kind: "cumulative" } }] })).toThrow(/label/);
     expect(() => withDecl({ maxPostsPerRead: 0 })).toThrow(/maxPostsPerRead/);
     expect(() => withDecl({ readBudget: { count: 0, windowSeconds: 10 } })).toThrow(/readBudget.count/);
     const unavailableOk = { ...ok, insights: { ...ok.insights, declaration: { post: [], account: [], maxPostsPerRead: 25, readBudget: { count: 1, windowSeconds: 1 }, unavailable: { reason: "needs a permission" } } } };

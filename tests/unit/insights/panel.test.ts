@@ -6,10 +6,10 @@ const NOW = new Date("2026-01-01T00:00:00Z");
 
 const DECLARATION: InsightsDeclaration = {
   post: [
-    { key: "likeCount", label: "Likes" },
-    { key: "quoteCount", label: "Quotes" },
+    { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+    { key: "quoteCount", label: "Quotes", shape: { kind: "cumulative" } },
   ],
-  account: [{ key: "followersCount", label: "Followers" }],
+  account: [{ key: "followersCount", label: "Followers", shape: { kind: "cumulative" } }],
   maxPostsPerRead: 25,
   readBudget: { count: 100, windowSeconds: 3600 },
 };

@@ -4055,3 +4055,28 @@ assertions now carry the section counts, so the next occurrence should name it.
 subscriber is claimed, assembled and released on *every* tick for as long as they stay subscribed,
 burning the email section's per-tick claim budget on no-ops. That is the scheduling contract
 (E12, FR-016 to FR-020) and wants a decision, not a drive-by change.
+
+## 083 — G38, the shape every metric needs before it can be plotted (2026-10-18)
+
+- **`shape` on `MetricKeyDeclaration` is required, not optional, and is a discriminated union, not a
+  `windowSeconds?: number`.** Required so a provider added later cannot declare a key without a
+  shape — enforced by `tsc`, not a lint rule or registry test anyone could forget. A discriminated
+  union because `unknown`'s reason string (rendered where the series would be, FR-004) and
+  `windowed`'s confirmed-or-not window length need different payloads; an optional
+  `windowSeconds` with "absent means cumulative" would make absence mean both "cumulative" and
+  "nobody classified this yet", which is exactly the distinction FR-001 exists to make. Reversal:
+  none anticipated — the compiler gate is the point.
+- **Three keys are classified `unknown`, and classifying them changed no request.** Facebook's
+  `page_follows` (period "not stated") and `page_post_engagements` (period one of day/week/28-days,
+  and Docket's reader pins none of them), and Pinterest's `monthly_views` (no source states a
+  window at all). The fix for each — pinning a `period` on Facebook's account read, or Pinterest
+  documenting its window — is a reader change that belongs to a later entry; FR-005 forbids making
+  it here. The practical cost, stated in `docs/insights.md`: Facebook Pages get no account trend at
+  all, and Pinterest gets a follower trend but no monthly-views trend.
+- **`mock` keeps all five of its keys `cumulative`, unchanged.** FR-005 forbids changing any
+  provider's declared keys, and reclassifying one of `mock`'s three post or two account keys would
+  silently redefine a fixture other suites already assert against. The `windowed` and `unknown`
+  code paths are instead exercised through Instagram, Facebook and Pinterest's real declarations in
+  integration fixtures, and through synthetic declarations in unit tests — every pure function in
+  this entry takes a declaration as an argument, so a unit test can hand it any shape with no
+  provider involved.

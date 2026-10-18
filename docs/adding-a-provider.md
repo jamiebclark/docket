@@ -76,6 +76,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G35 | `postIdSource`/`missingPostId` on an `insights` declaration — which stored column a post reader is given | 21 |
 | G36 | `publicPostId` on `StepResult`'s `{ kind: "done" }`, persisted by the generic publish path | 21 |
 | G37 | `postScopes`/`missingPostScopes` and `accountScopes`/`missingAccountScopes` on an `insights` declaration — eligibility checked per surface, not once for both | 21 |
+| G38 | `shape` on a `MetricKeyDeclaration` — whether a key is cumulative, windowed or unknown | 21 |
 
 ## 3. Capabilities and counting rules
 
@@ -664,6 +665,27 @@ Three more platforms each broke a different assumption the first three readers g
   (Pinterest's account surface, every `mock` account); a provider with no declared keys for a
   surface is not claimed on that surface regardless of scopes (X's account surface). An account
   missing either surface's scopes is still counted exactly once by `accountsSkippedNoPermission`.
+
+### The shape of a metric (G38)
+
+Every `MetricKeyDeclaration` now requires a `shape`, declared beside the key and label it already
+carries, by the provider, from its own `docs/research/*.md` — never inferred from the key's name and
+never branched on by `src/server/**` or `src/lib/**`. `tsc` is the gate: a provider that forgets a
+key's shape does not compile.
+
+- **`{ kind: "cumulative" }`** — a running total. Drawn as a continuous value over time; a fall is
+  drawn as a fall, never clamped.
+- **`{ kind: "windowed"; windowMs: number | null }`** — resets each period. Drawn as one value per
+  period, at most one reading per project-local day (the newest that day), never accumulated.
+  `windowMs` is the period's length when research confirms one, `null` when a window exists but its
+  length is not fixed or not confirmed.
+- **`{ kind: "unknown"; reason: string }`** — the platform does not state (or Docket's pinned request
+  does not pin down) the period a number covers. Absent from every trend and comparison, with
+  `reason` rendered where the series would otherwise be; still shown as a latest number on the
+  existing per-post/per-account panel, unchanged.
+
+Classifying a key must never change a request made to the platform — if a reader's request would need
+to change to make a key's period knowable, that is a reader change for a later entry, not this one.
 
 **FR-050, a change to how an existing hook's output is used, not a new hook**: a run-time
 `unavailable` a reader returns from `readPostMetrics`/`readAccountMetrics` is now persisted at commit
