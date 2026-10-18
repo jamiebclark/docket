@@ -31,8 +31,8 @@ const notRequestedProvider: SocialProvider = {
     ...mockProvider.insights!,
     declaration: {
       ...mockProvider.insights!.declaration,
-      requiredScopes: ["needs_insight_scope"],
-      missingScopes: { reason: "Reconnect to grant insights access.", docsPath: "meta-setup" },
+      postScopes: ["needs_insight_scope"],
+      missingPostScopes: { reason: "Reconnect to grant insights access.", docsPath: "meta-setup" },
     },
   },
 } as SocialProvider;
@@ -186,6 +186,87 @@ describe("the performance panel on the post detail page (contracts/panel.md)", (
     expect(panelMarkup).not.toMatch(/>\d</);
     expect(panelMarkup).not.toMatch(/>-</);
     expect(panelMarkup).not.toMatch(/>0</);
+  });
+
+  it("a Pinterest-403-like run-time unavailable reaches the panel as unavailable with reason and docs link (FR-050, SC-003)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    const { post, target } = await publishedTarget(ctx.project.id, account.id);
+    await getDb()
+      .insert(postMetricPollStates)
+      .values({
+        postTargetId: target.id,
+        projectId: ctx.project.id,
+        socialAccountId: account.id,
+        nextPollAt: null,
+        unavailableReason: "This account's pin analytics are refused by the platform.",
+        unavailableDocsPath: "pinterest-setup#insights",
+      });
+
+    const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));
+    const markup = await html(page);
+
+    expect(markup).toContain("pin analytics are refused by the platform.");
+    expect(markup).toContain("pinterest-setup#insights");
+  });
+
+  it("an X-opt-in-off-like run-time unavailable reaches the panel as unavailable with reason and docs link (FR-050, SC-003)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    const { post, target } = await publishedTarget(ctx.project.id, account.id);
+    await getDb()
+      .insert(postMetricPollStates)
+      .values({
+        postTargetId: target.id,
+        projectId: ctx.project.id,
+        socialAccountId: account.id,
+        nextPollAt: null,
+        unavailableReason: "Metered reads are off until an operator turns them on.",
+        unavailableDocsPath: "x-setup#insights",
+      });
+
+    const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));
+    const markup = await html(page);
+
+    expect(markup).toContain("Metered reads are off until an operator turns them on.");
+    expect(markup).toContain("x-setup#insights");
+  });
+
+  it("a TikTok metric the response omitted is absent from the rendered panel — no row, no dash, no zero (FR-024, contracts/platform-readers-082.md §4)", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "tiktok",
+      displayName: "Ada",
+      externalAccountId: "panel-tiktok",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["video.list", "user.info.stats"],
+    });
+    const { post, target } = await publishedTarget(ctx.project.id, account.id);
+    await repos.postMetricSnapshots.insertIfAbsent({
+      postTargetId: target.id,
+      socialAccountId: account.id,
+      providerKey: "tiktok",
+      capturedAt: NOW,
+      // like_count and share_count present; comment_count and view_count omitted, as TikTok's
+      // response would when it does not report them.
+      metrics: { like_count: 10, share_count: 2 },
+    });
+
+    const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));
+    const markup = await html(page);
+
+    expect(markup).toContain("Likes");
+    expect(markup).toContain(">10<");
+    expect(markup).toContain("Shares");
+    expect(markup).toContain(">2<");
+    expect(markup).not.toContain("Comments");
+    expect(markup).not.toContain("Views");
+    const panelMarkup = markup.slice(markup.indexOf("Performance"));
+    expect(panelMarkup).not.toMatch(/>-</);
   });
 
   it("heading order is unbroken: h2 before the h3 Performance heading, no client component", async () => {

@@ -43,7 +43,7 @@ export async function refreshTikTok(input: { credentials: unknown; now: Date; si
       next.refreshExpiresAt = now + life.ms;
       next.refreshExpiryEstimated = life.estimated;
     }
-    return { ok: true, credentials: next, expiresAt: accountExpiry(next) };
+    return { ok: true, credentials: next, expiresAt: accountExpiry(next), ...(out.scopes ? { grantedScopes: out.scopes } : {}) };
   } catch {
     return { ok: false, transient: true, retryAt, reason: UNREACHABLE };
   }

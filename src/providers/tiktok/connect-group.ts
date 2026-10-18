@@ -10,6 +10,11 @@ import { unauditedNote } from "./settings";
 const NO_POST_PERMISSION = "TikTok did not grant permission to post. Connect again and allow posting.";
 const SETUP = docsUrl("tiktok-setup");
 
+const INSIGHTS_SCOPES_DECLARED = [
+  { scope: "video.list", purpose: "Read a TikTok video's likes, comments, shares and views" },
+  { scope: "user.info.stats", purpose: "Read a TikTok account's followers, likes and video counts" },
+] as const;
+
 function refused(f: TikTokOAuthFailure, secrets: readonly string[]): { ok: false; message: string } {
   if (f.transient) return { ok: false, message: "TikTok could not be reached to finish connecting. Nothing changed. Try again." };
   const hint = f.clientProblem ? "Check TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET" : "Check the callback address and the app's permissions";
@@ -25,9 +30,19 @@ export const tiktokConnectGroup: OAuthConnectGroup = {
       { name: "TIKTOK_CLIENT_KEY", secret: false, required: false },
       { name: "TIKTOK_CLIENT_SECRET", secret: true, required: false },
       { name: "TIKTOK_APP_AUDITED", secret: false, required: false },
+      { name: "TIKTOK_INSIGHTS_SCOPES", secret: false, required: false },
     ],
     issues: (source) => parseTikTokEnv(source).issues,
     configured: (source) => parseTikTokEnv(source).config !== null,
+  },
+  optionalScopes: {
+    declared: INSIGHTS_SCOPES_DECLARED,
+    doc: docsUrl("tiktok-setup", "insights"),
+    requested: (source) => {
+      const { config } = parseTikTokEnv(source);
+      if (!config?.insightsScopes) return [];
+      return INSIGHTS_SCOPES_DECLARED.map((s) => s.scope);
+    },
   },
   redirectRequirement: {
     https: true,
@@ -39,10 +54,11 @@ export const tiktokConnectGroup: OAuthConnectGroup = {
     "If TikTok refused the sign-in, check that the redirect URI in your TikTok app matches exactly and that Login Kit and the Content Posting API (Direct Post) are added.",
   authorizationUrl({ state, redirectUri }) {
     const cfg = requireTikTokConfig();
+    const extra = cfg.insightsScopes ? INSIGHTS_SCOPES_DECLARED.map((s) => s.scope) : [];
     const url = new URL(TIKTOK_AUTHORIZE_URL);
     url.searchParams.set("client_key", cfg.clientKey);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", TIKTOK_SCOPES);
+    url.searchParams.set("scope", [TIKTOK_SCOPES, ...extra].join(","));
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("state", state);
     return url.toString();

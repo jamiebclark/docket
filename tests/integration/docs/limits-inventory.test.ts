@@ -204,6 +204,16 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
           if (/interim/i.test(r.source)) expect(r.source, r.category).toMatch(/UNVERIFIED|test double/);
         }
       });
+
+      if (provider.key === "tiktok") {
+        it("documents the 600/60s insights read budget as PARTLY CONFIRMED, not UNVERIFIED (082 T059)", () => {
+          const row = rows.find((r) => r.category === "note: insights read budget");
+          expect(row).toBeDefined();
+          expect(row!.value).toBe("600 / 60 s");
+          expect(row!.source).toContain("PARTLY CONFIRMED");
+          expect(row!.source).not.toContain("UNVERIFIED");
+        });
+      }
     });
   }
 });

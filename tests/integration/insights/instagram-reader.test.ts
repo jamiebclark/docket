@@ -72,11 +72,11 @@ describe("US3: the opt-in flag on, a reconnect granting the scope, and Instagram
     await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { pageToken: TOKEN }), null);
 
     const permission = insightsPermissionFor({
-      requiredScopes: instagramInsights.declaration.requiredScopes ?? [],
+      requiredScopes: instagramInsights.declaration.postScopes ?? [],
       grantedScopes: account.grantedScopes,
       requestedScopes: metaConnectGroup.optionalScopes?.requested(process.env) ?? [],
       cannotWiden: metaConnectGroup.optionalScopes?.cannotWiden?.(process.env) ?? null,
-      missingScopes: instagramInsights.declaration.missingScopes ?? null,
+      missingScopes: instagramInsights.declaration.missingPostScopes ?? null,
     });
     expect(permission.kind).toBe("ok");
 
@@ -123,6 +123,8 @@ describe("US3: the opt-in flag on, a reconnect granting the scope, and Instagram
         failingSince: pollState?.failingSince ?? null,
         lastError: pollState?.lastError ?? null,
         frozenReason: pollState?.frozenReason ?? null,
+        unavailableReason: pollState?.unavailableReason ?? null,
+        unavailableDocsPath: pollState?.unavailableDocsPath ?? null,
       },
       now: new Date(NOW.getTime() + 3_600_000),
     });

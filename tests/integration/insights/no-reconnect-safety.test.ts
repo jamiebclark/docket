@@ -28,14 +28,23 @@ const instagramLikeProvider: SocialProvider = {
     ...mockProvider.insights!,
     declaration: {
       ...mockProvider.insights!.declaration,
-      requiredScopes: REQUIRED,
-      missingScopes: { reason: "Reconnect to grant insights access.", docsPath: "meta-setup" },
+      accountScopes: REQUIRED,
+      missingAccountScopes: { reason: "Reconnect to grant insights access.", docsPath: "meta-setup" },
     },
   },
 } as SocialProvider;
 registerTestProvider(instagramLikeProvider);
 
-const rule: InsightsProviderRule = { providerKey: instagramLikeProvider.key, requiredScopes: REQUIRED, ephemeralPostTypes: [] };
+const rule: InsightsProviderRule = {
+  providerKey: instagramLikeProvider.key,
+  postScopes: [],
+  accountScopes: REQUIRED,
+  postIdSource: "externalId",
+  missingPostId: null,
+  postMetricsDeclared: true,
+  accountMetricsDeclared: true,
+  ephemeralPostTypes: [],
+};
 
 describe("a pre-081 install's Instagram account stays untouched (FR-023, SC-003, US1-AS2)", () => {
   it("granted_scopes IS NULL: absent from the claim, no lease, no snapshot, no HTTP request", async () => {

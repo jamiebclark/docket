@@ -100,6 +100,8 @@ Until TikTok audits the app:
 - TikTok allows about **15 posts per creator per day**, audited or not (a cap shared with other apps). Docket waits
   when TikTok reports it.
 - A published private post has no public link, so Docket records TikTok's `publish_id` and shows no link.
+- TikTok never issues a public post id for a private post, so an unaudited install's posts have no readable numbers
+  either — Docket shows the same "cannot read this post's numbers" state as a post whose id was lost before an upgrade.
 
 ## Photo posts and domain verification
 
@@ -154,6 +156,23 @@ the creator's own privacy options instead of the fixed "Only me (private)". Sett
 
 TikTok refuses `http://` and `localhost` redirect addresses. See
 [Local HTTPS for Threads](meta-setup.md#local-https-for-threads) for a local certificate and a tunnel-free address.
+
+## Insights
+
+Reading a published post's likes, comments, shares and views, and a connected account's followers,
+likes and video count (see [insights.md](insights.md)), needs two permissions beyond the two in
+step 2 — `video.list` and `user.info.stats` — and Docket does not request them until the deployer
+opts in.
+
+1. Add `video.list` and `user.info.stats` to the app's scopes, the same way as step 2's.
+2. Set `TIKTOK_INSIGHTS_SCOPES=true` in `.env` and restart. The next TikTok connect or reconnect
+   then asks for both permissions in the same dialog; an account connected before the flag was on
+   keeps its existing grant until it reconnects.
+
+An account connected before the flag was turned on, or whose last grant did not include the
+permission, shows "Insights need a reconnect" on the Accounts page with a link back here.
+Reconnecting through the existing Reconnect button updates that same account in place — nothing
+else about it changes, and its ability to post is unaffected either way.
 
 ## Owed live checks
 

@@ -222,6 +222,7 @@ X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce 
 | note: photo domain verification | Photo URLs must come from a domain verified in the TikTok developer portal | | docs/research/tiktok.md ("Photo posts") | TikTok (`url_ownership_unverified`), explained by the step machine | `tests/integration/tiktok/photo.test.ts` "surfaces url_ownership_unverified as a plain failure" |
 | note: chunk sizing | Contiguous chunks of 5 MB to 64 MB (about 30 per file); the final chunk absorbs the remainder and stays under 128 MB | | docs/research/tiktok.md ("Upload video") | TikTok step machine (`chunkPlan`) | `src/providers/tiktok/state.test.ts` "covers the whole file with contiguous ranges" |
 | note: status ceiling | 60 min | | docs/research/tiktok.md ("Fetch post status"); a post still processing then ends ambiguous | TikTok step machine | `tests/integration/tiktok/failures.test.ts` "ends ambiguous when TikTok is still processing after 60 minutes" |
+| note: insights read budget | 600 / 60 s |  | PARTLY CONFIRMED, per-app token (docs/research/tiktok.md "Rate limit"); the per-account declaration is deliberately permissive — `INSIGHTS_TARGETS_PER_RUN` and the reserve are the real protection | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/tiktok/insights.test.ts` "declares a 600/60s read budget, PARTLY CONFIRMED per-app token (research §1)" |
 
 ## Pinterest
 
