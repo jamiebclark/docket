@@ -102,7 +102,7 @@ the fold, the trend reader, the comparison reader and `shape.ts`.
 
 **Purpose**: From Phase 4 onward the constitution's out-of-scope line ("analytics […] charts, trends and comparisons stay out of scope") is false. Amend it in its own commit, as `plan.md`'s implementation order requires.
 
-- [ ] T031 Amend the constitution's out-of-scope line in `.specify/memory/constitution.md` (or wherever the canonical constitution file lives in this repo) to reflect that this entry makes charts, trends and comparisons in scope, with a version bump, in a standalone `docs(constitution):` commit
+- [X] T031 Amend the constitution's out-of-scope line in `.specify/memory/constitution.md` (or wherever the canonical constitution file lives in this repo) to reflect that this entry makes charts, trends and comparisons in scope, with a version bump, in a standalone `docs(constitution):` commit
 
 ---
 
