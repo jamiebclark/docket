@@ -144,7 +144,16 @@ describe("token refresh", () => {
       expiresAt: new Date(Date.now() + 30 * 86_400_000),
       displayName: "new.handle",
     });
-    await runTick({ config: { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS } });
-    expect(await repos.accounts.get(account.id)).toMatchObject({ displayName: "new.handle", status: "active" });
+    const tick = await runTick({ config: { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS } });
+    // This assertion checks two keys, so a bare failure cannot say which one broke — and they have
+    // opposite causes. `displayName` alone staying "old.handle" means the account was never refreshed:
+    // either not claimed (its provider missing from `listProviders()` at tick time, so its key is not
+    // in the claim's `providerKeys`) or handed back as `outOfBudget`, which this section does silently
+    // whenever `now + providerTimeoutMs > deadline`. But `status` flipping to "needs_reauth" means the
+    // catch path fired and the refresh threw. Measured at 1-2 of 20 repetitions across three hunts,
+    // and it has blocked three unrelated PRs, so the counts and the row both go in the message.
+    const row = await repos.accounts.get(account.id);
+    const seen = `tokenRefresh ${JSON.stringify(tick.tokenRefresh)}; row displayName=${row?.displayName} status=${row?.status} lastError=${row?.lastError ?? "null"} lastRefreshedAt=${row?.lastRefreshedAt?.toISOString() ?? "null"}`;
+    expect(row, seen).toMatchObject({ displayName: "new.handle", status: "active" });
   });
 });
