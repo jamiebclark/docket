@@ -29,14 +29,23 @@ const instagramLikeProvider: SocialProvider = {
     ...mockProvider.insights!,
     declaration: {
       ...mockProvider.insights!.declaration,
-      requiredScopes: REQUIRED,
-      missingScopes: { reason: "Reconnect to grant insights access.", docsPath: "meta-setup" },
+      accountScopes: REQUIRED,
+      missingAccountScopes: { reason: "Reconnect to grant insights access.", docsPath: "meta-setup" },
     },
   },
 } as SocialProvider;
 registerTestProvider(instagramLikeProvider);
 
-const rule: InsightsProviderRule = { providerKey: instagramLikeProvider.key, requiredScopes: REQUIRED, ephemeralPostTypes: [] };
+const rule: InsightsProviderRule = {
+  providerKey: instagramLikeProvider.key,
+  postScopes: [],
+  accountScopes: REQUIRED,
+  postIdSource: "externalId",
+  missingPostId: null,
+  postMetricsDeclared: true,
+  accountMetricsDeclared: true,
+  ephemeralPostTypes: [],
+};
 
 // A whole tick claims across every project, so rows left behind by other files on this worker's
 // database are claimed by this test's tick: `no-reconnect-safety.test.ts` asserts zero HTTP requests

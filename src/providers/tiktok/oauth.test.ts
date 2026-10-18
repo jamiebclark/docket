@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeTikTok, tokenReply } from "../../../tests/helpers/fake-tiktok";
 import { exchangeCode, refreshLifetimeMs, refreshTokens } from "./oauth";
 
-const cfg = { clientKey: "CLIENT-KEY", clientSecret: "CLIENT-SECRET-XYZ" };
+const cfg = { clientKey: "CLIENT-KEY", clientSecret: "CLIENT-SECRET-XYZ", insightsScopes: false };
 const TOKEN = "/v2/oauth/token/";
 const fake = createFakeTikTok();
 beforeEach(() => {

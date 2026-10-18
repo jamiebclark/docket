@@ -3,6 +3,7 @@ import { TIKTOK_DEFAULT_PUBLISH_LIMIT, tiktokCapabilities } from "./capabilities
 import { tiktokConnectGroup } from "./connect-group";
 import { tiktokAccountDetails } from "./creator";
 import { tiktokConsent, tiktokPosting } from "./posting";
+import { tiktokInsights } from "./insights";
 import { advanceTikTok } from "./publish";
 import { needsRefresh, refreshTikTok } from "./refresh";
 import { tiktokStepFor } from "./steps";
@@ -25,4 +26,5 @@ export const tiktokProvider: SocialProvider<TikTokSettings, unknown> = {
   posting: tiktokPosting,
   accountDetails: tiktokAccountDetails,
   consent: tiktokConsent,
+  insights: tiktokInsights,
 };

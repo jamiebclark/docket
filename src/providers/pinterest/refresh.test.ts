@@ -58,6 +58,28 @@ describe("refreshPinterest", () => {
     });
   });
 
+  it("a reply whose scope differs from the stored grant updates grantedScopes", async () => {
+    vi.stubEnv("PINTEREST_CLIENT_ID", "id");
+    vi.stubEnv("PINTEREST_CLIENT_SECRET", "secret");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ access_token: "new-access", refresh_token: "new-refresh", expires_in: 100, scope: "pins:read" })),
+    );
+    const now = new Date(10_000);
+    const out = await refreshPinterest({ credentials: creds, now, signal: new AbortController().signal });
+    expect(out).toMatchObject({ ok: true, grantedScopes: ["pins:read"] });
+  });
+
+  it("a reply with no scope field leaves grantedScopes unchanged", async () => {
+    vi.stubEnv("PINTEREST_CLIENT_ID", "id");
+    vi.stubEnv("PINTEREST_CLIENT_SECRET", "secret");
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ access_token: "new-access", expires_in: 100 })));
+    const now = new Date(10_000);
+    const out = await refreshPinterest({ credentials: creds, now, signal: new AbortController().signal });
+    expect(out).toMatchObject({ ok: true });
+    if (out.ok) expect(out).not.toHaveProperty("grantedScopes");
+  });
+
   it("keeps the stored refresh token and expiry untouched when the reply carries no refresh token (U8)", async () => {
     vi.stubEnv("PINTEREST_CLIENT_ID", "id");
     vi.stubEnv("PINTEREST_CLIENT_SECRET", "secret");

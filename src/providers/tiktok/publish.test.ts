@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublishContext } from "../types";
-import { advanceTikTok } from "./publish";
+import { advanceTikTok, plausiblePublicPostId } from "./publish";
 import { sealUploadUrl } from "./sealed";
 import { creatorReply, createFakeTikTok } from "../../../tests/helpers/fake-tiktok";
 
@@ -136,6 +136,38 @@ describe("advanceTikTok video", () => {
     expect(await advanceTikTok(ctx("check_status", state))).toMatchObject({ kind: "done", externalId: "pub1" });
   });
 
+  it("check_status adds the first public post id alongside the unchanged externalId", async () => {
+    tiktok.on("POST", "/v2/post/publish/status/fetch/", {
+      kind: "ok",
+      body: { data: { status: "PUBLISH_COMPLETE", publicaly_available_post_id: ["7123456789012345678", "other"] }, error: { code: "ok" } },
+    });
+    const state = { v: 1, kind: "video", phase: "status", restarts: 0, nickname: "Ada", publishId: "pub1", sentAt: new Date(now.getTime() - 60_000).toISOString(), reads: 0 };
+    const r = await advanceTikTok(ctx("check_status", state));
+    expect(r).toMatchObject({ kind: "done", externalId: "pub1", publicPostId: "7123456789012345678" });
+    expect((r as { summary?: { response?: { publicPostIds?: string[] } } }).summary?.response?.publicPostIds).toEqual(["7123456789012345678", "other"]);
+  });
+
+  it("check_status omits publicPostId when the list is empty or absent", async () => {
+    tiktok.on("POST", "/v2/post/publish/status/fetch/", { kind: "ok", body: { data: { status: "PUBLISH_COMPLETE" }, error: { code: "ok" } } });
+    const state = { v: 1, kind: "video", phase: "status", restarts: 0, nickname: "Ada", publishId: "pub1", sentAt: new Date(now.getTime() - 60_000).toISOString(), reads: 0 };
+    const r = await advanceTikTok(ctx("check_status", state));
+    expect(r).toMatchObject({ kind: "done", externalId: "pub1" });
+    expect(r).not.toHaveProperty("publicPostId");
+  });
+
+  it("check_status does not send a 300-character id as publicPostId, but keeps it in the full list", async () => {
+    const long = "x".repeat(300);
+    tiktok.on("POST", "/v2/post/publish/status/fetch/", {
+      kind: "ok",
+      body: { data: { status: "PUBLISH_COMPLETE", publicaly_available_post_id: [long] }, error: { code: "ok" } },
+    });
+    const state = { v: 1, kind: "video", phase: "status", restarts: 0, nickname: "Ada", publishId: "pub1", sentAt: new Date(now.getTime() - 60_000).toISOString(), reads: 0 };
+    const r = await advanceTikTok(ctx("check_status", state));
+    expect(r).toMatchObject({ kind: "done", externalId: "pub1" });
+    expect(r).not.toHaveProperty("publicPostId");
+    expect((r as { summary?: { response?: { publicPostIds?: string[] } } }).summary?.response?.publicPostIds).toEqual([long.slice(0, 40)]);
+  });
+
   it("check_status waits until the next read is due, and gives up ambiguous at the ceiling", async () => {
     const sentAt = new Date(now.getTime() - 5_000).toISOString();
     const state = { v: 1, kind: "video", phase: "status", restarts: 0, nickname: "Ada", publishId: "pub1", sentAt, reads: 0 };
@@ -213,5 +245,34 @@ describe("advanceTikTok after a publish", () => {
     vi.stubEnv("TIKTOK_CLIENT_KEY", "");
     vi.stubEnv("TIKTOK_CLIENT_SECRET", "");
     expect((await advanceTikTok(ctx("check_status", null))).kind).toBe("ambiguous");
+  });
+});
+
+describe("plausiblePublicPostId", () => {
+  it("accepts a 1-character id", () => {
+    expect(plausiblePublicPostId("a")).toBe("a");
+  });
+
+  it("accepts a 64-character id", () => {
+    const id = "a".repeat(64);
+    expect(plausiblePublicPostId(id)).toBe(id);
+  });
+
+  it("rejects a 65-character id", () => {
+    expect(plausiblePublicPostId("a".repeat(65))).toBeNull();
+  });
+
+  it("rejects an empty string", () => {
+    expect(plausiblePublicPostId("")).toBeNull();
+  });
+
+  it("rejects an id containing whitespace", () => {
+    expect(plausiblePublicPostId("abc def")).toBeNull();
+  });
+
+  it("rejects non-string, non-number values", () => {
+    expect(plausiblePublicPostId(null)).toBeNull();
+    expect(plausiblePublicPostId(undefined)).toBeNull();
+    expect(plausiblePublicPostId({})).toBeNull();
   });
 });

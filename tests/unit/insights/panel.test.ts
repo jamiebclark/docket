@@ -75,12 +75,12 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
   });
 
   it("row 5: gone wins over failing even with failures recorded", () => {
-    const pollState = { nextPollAt: null, consecutiveFailures: 3, failingSince: NOW, lastError: "boom", frozenReason: "gone" };
+    const pollState = { nextPollAt: null, consecutiveFailures: 3, failingSince: NOW, lastError: "boom", frozenReason: "gone", unavailableReason: null, unavailableDocsPath: null };
     expect(buildTargetInsightsView({ ...BASE, pollState })).toEqual({ state: "gone", snapshot: null });
   });
 
   it("row 5: gone with a surviving snapshot carries its rows", () => {
-    const pollState = { nextPollAt: null, consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: "gone" };
+    const pollState = { nextPollAt: null, consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: "gone", unavailableReason: null, unavailableDocsPath: null };
     const snapshot = { capturedAt: NOW, metrics: { likeCount: 4 } };
     expect(buildTargetInsightsView({ ...BASE, pollState, snapshot })).toEqual({
       state: "gone",
@@ -89,7 +89,7 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
   });
 
   it("new row (FR-036): unqueryable goes after gone and before expired, carrying any surviving snapshot, never a failure", () => {
-    const frozen = { nextPollAt: null, consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: "unqueryable" };
+    const frozen = { nextPollAt: null, consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: "unqueryable", unavailableReason: null, unavailableDocsPath: null };
     expect(buildTargetInsightsView({ ...BASE, pollState: frozen })).toEqual({
       state: "unqueryable",
       reason: "This post's stored platform id cannot be used to request its numbers.",
@@ -105,7 +105,7 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
 
   it("row 6: failing with no earlier snapshot", () => {
     const since = new Date("2025-12-01T00:00:00Z");
-    const pollState = { nextPollAt: null, consecutiveFailures: 1, failingSince: since, lastError: "Reads have been failing.", frozenReason: null };
+    const pollState = { nextPollAt: null, consecutiveFailures: 1, failingSince: since, lastError: "Reads have been failing.", frozenReason: null, unavailableReason: null, unavailableDocsPath: null };
     expect(buildTargetInsightsView({ ...BASE, pollState })).toEqual({
       state: "failing",
       since,
@@ -116,7 +116,7 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
 
   it("row 6: failing carries the last good snapshot too", () => {
     const since = new Date("2025-12-01T00:00:00Z");
-    const pollState = { nextPollAt: null, consecutiveFailures: 4, failingSince: since, lastError: "boom", frozenReason: null };
+    const pollState = { nextPollAt: null, consecutiveFailures: 4, failingSince: since, lastError: "boom", frozenReason: null, unavailableReason: null, unavailableDocsPath: null };
     const snapshot = { capturedAt: NOW, metrics: { likeCount: 2 } };
     expect(buildTargetInsightsView({ ...BASE, pollState, snapshot })).toEqual({
       state: "failing",
@@ -126,8 +126,77 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
     });
   });
 
+  it("FR-050: a run-time unavailable renders after failing and before not_polled_yet", () => {
+    const pollState = {
+      nextPollAt: new Date("2026-01-02T00:00:00Z"),
+      consecutiveFailures: 0,
+      failingSince: null,
+      lastError: null,
+      frozenReason: null,
+      unavailableReason: "Pinterest refused this account's pin analytics.",
+      unavailableDocsPath: "pinterest-setup#insights",
+    };
+    expect(buildTargetInsightsView({ ...BASE, pollState })).toEqual({
+      state: "unavailable",
+      reason: "Pinterest refused this account's pin analytics.",
+      docsPath: "pinterest-setup#insights",
+    });
+  });
+
+  it("FR-050: a run-time unavailable loses to failing (consecutiveFailures > 0 still wins)", () => {
+    const since = new Date("2025-12-01T00:00:00Z");
+    const pollState = {
+      nextPollAt: null,
+      consecutiveFailures: 2,
+      failingSince: since,
+      lastError: "boom",
+      frozenReason: null,
+      unavailableReason: "Should not be reached.",
+      unavailableDocsPath: null,
+    };
+    expect(buildTargetInsightsView({ ...BASE, pollState })).toEqual({ state: "failing", since, reason: "boom", snapshot: null });
+  });
+
+  it("FR-050: a cleared unavailableReason (null) reflects a successful read — no unavailable state once a snapshot exists", () => {
+    const pollState = {
+      nextPollAt: new Date("2026-01-02T00:00:00Z"),
+      consecutiveFailures: 0,
+      failingSince: null,
+      lastError: null,
+      frozenReason: null,
+      unavailableReason: null,
+      unavailableDocsPath: null,
+    };
+    const snapshot = { capturedAt: NOW, metrics: { likeCount: 4 } };
+    expect(buildTargetInsightsView({ ...BASE, pollState, snapshot })).toEqual({
+      state: "reported",
+      capturedAt: NOW,
+      rows: [{ label: "Likes", value: 4 }],
+    });
+  });
+
+  it("FR-050: the declaration-level unavailable and the run-time one render byte-identical unavailable shapes", () => {
+    const declarationLevel = (() => {
+      const declaration: InsightsDeclaration = { ...DECLARATION, unavailable: { reason: "Needs a permission Docket does not hold.", docsPath: "limits" } };
+      return buildTargetInsightsView({ ...BASE, declaration });
+    })();
+    const runTimeLevel = (() => {
+      const pollState = {
+        nextPollAt: null,
+        consecutiveFailures: 0,
+        failingSince: null,
+        lastError: null,
+        frozenReason: null,
+        unavailableReason: "Needs a permission Docket does not hold.",
+        unavailableDocsPath: "limits",
+      };
+      return buildTargetInsightsView({ ...BASE, pollState });
+    })();
+    expect(runTimeLevel).toEqual(declarationLevel);
+  });
+
   it("row 7: no snapshot and no failure is not polled yet, carrying the due time", () => {
-    const pollState = { nextPollAt: new Date("2026-01-02T00:00:00Z"), consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: null };
+    const pollState = { nextPollAt: new Date("2026-01-02T00:00:00Z"), consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: null, unavailableReason: null, unavailableDocsPath: null };
     expect(buildTargetInsightsView({ ...BASE, pollState })).toEqual({ state: "not_polled_yet", firstReadDueAt: pollState.nextPollAt });
   });
 

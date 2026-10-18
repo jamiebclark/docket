@@ -2,6 +2,7 @@ import type { SocialProvider } from "../types";
 import { pinterestAccountDetails } from "./boards";
 import { PINTEREST_DEFAULT_PUBLISH_LIMIT, pinterestCapabilities } from "./capabilities";
 import { pinterestConnectGroup } from "./connect-group";
+import { pinterestInsights } from "./insights";
 import { pinterestPosting } from "./posting";
 import { advancePinterest } from "./publish";
 import { refreshPinterest, needsRefresh } from "./refresh";
@@ -24,4 +25,5 @@ export const pinterestProvider: SocialProvider<PinterestSettings, unknown> = {
   accountNotes: (input) => pinterestAccountNotes(input),
   posting: pinterestPosting,
   accountDetails: pinterestAccountDetails,
+  insights: pinterestInsights,
 };

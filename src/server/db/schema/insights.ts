@@ -92,6 +92,9 @@ export const postMetricPollStates = pgTable(
     failingSince: timestamp("failing_since", { withTimezone: true }),
     frozenAt: timestamp("frozen_at", { withTimezone: true }),
     frozenReason: text("frozen_reason"),
+    /** A run-time `{ kind: "unavailable" }` read result, kept honest for the panel (FR-050). */
+    unavailableReason: text("unavailable_reason"),
+    unavailableDocsPath: text("unavailable_docs_path"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
@@ -106,6 +109,18 @@ export const postMetricPollStates = pgTable(
     check("post_metric_poll_states_frozen_has_no_next", sql`${t.frozenAt} IS NULL OR ${t.nextPollAt} IS NULL`),
     check("post_metric_poll_states_failing_pair", sql`(${t.consecutiveFailures} = 0) = (${t.failingSince} IS NULL)`),
     check("post_metric_poll_states_last_error_len", sql`${t.lastError} IS NULL OR char_length(${t.lastError}) <= 500`),
+    check(
+      "post_metric_poll_states_unavailable_reason_len",
+      sql`${t.unavailableReason} IS NULL OR char_length(${t.unavailableReason}) <= 500`,
+    ),
+    check(
+      "post_metric_poll_states_unavailable_docs_pair",
+      sql`${t.unavailableDocsPath} IS NULL OR ${t.unavailableReason} IS NOT NULL`,
+    ),
+    check(
+      "post_metric_poll_states_unavailable_docs_path_len",
+      sql`${t.unavailableDocsPath} IS NULL OR char_length(${t.unavailableDocsPath}) <= 100`,
+    ),
     index("post_metric_poll_states_claim_idx")
       .on(t.nextPollAt, t.postTargetId)
       .where(sql`${t.pollLeaseUntil} IS NULL AND ${t.nextPollAt} IS NOT NULL`),
@@ -133,6 +148,9 @@ export const accountMetricPollStates = pgTable(
     consecutiveFailures: smallint("consecutive_failures").default(0).notNull(),
     lastError: text("last_error"),
     failingSince: timestamp("failing_since", { withTimezone: true }),
+    /** A run-time `{ kind: "unavailable" }` read result, kept honest for the panel (FR-050). */
+    unavailableReason: text("unavailable_reason"),
+    unavailableDocsPath: text("unavailable_docs_path"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
@@ -144,6 +162,18 @@ export const accountMetricPollStates = pgTable(
     check("account_metric_poll_states_failures_nonneg", sql`${t.consecutiveFailures} >= 0`),
     check("account_metric_poll_states_failing_pair", sql`(${t.consecutiveFailures} = 0) = (${t.failingSince} IS NULL)`),
     check("account_metric_poll_states_last_error_len", sql`${t.lastError} IS NULL OR char_length(${t.lastError}) <= 500`),
+    check(
+      "account_metric_poll_states_unavailable_reason_len",
+      sql`${t.unavailableReason} IS NULL OR char_length(${t.unavailableReason}) <= 500`,
+    ),
+    check(
+      "account_metric_poll_states_unavailable_docs_pair",
+      sql`${t.unavailableDocsPath} IS NULL OR ${t.unavailableReason} IS NOT NULL`,
+    ),
+    check(
+      "account_metric_poll_states_unavailable_docs_path_len",
+      sql`${t.unavailableDocsPath} IS NULL OR char_length(${t.unavailableDocsPath}) <= 100`,
+    ),
     index("account_metric_poll_states_claim_idx")
       .on(t.nextPollAt, t.socialAccountId)
       .where(sql`${t.pollLeaseUntil} IS NULL AND ${t.nextPollAt} IS NOT NULL`),

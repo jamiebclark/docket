@@ -189,6 +189,8 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | text only | yes |  | docs/research/x.md | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: text only" |
 | videos | 0 |  | X video is not on the roadmap | validateResolvedContent | `tests/integration/limits/enforcement.test.ts` "x: videos" |
 | publish limit | 100 / 900 s |  | docs/research/x.md (confirmed 2026-10-07, per user) | engine deferral | `tests/integration/limits/enforcement.test.ts` "x: publish limit 100 / 900 s" |
+| note: insights read budget | 8000 / 2592000 s |  | derived from the $0.001 Owned Read price (docs/research/x.md); off by default, realised 4,000 after the publishing reserve | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/x/insights.test.ts` "derives readBudget.count from X_INSIGHTS_READ_CEILING" |
+| note: platform post-read cap | 3,000,000 / cycle |  | docs/research/x.md:19-41; far above anything Docket can reach, recorded so the number is on file | not enforced | `src/providers/x/insights.test.ts` "documents the platform post-read cap, 3,000,000 reads per cycle, not enforced (docs/research/x.md:19-41)" |
 
 X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce that cap (it is shared by every account on the app, not per account), so it has no row; a 429 from it defers the post instead.
 
@@ -222,6 +224,7 @@ X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce 
 | note: photo domain verification | Photo URLs must come from a domain verified in the TikTok developer portal | | docs/research/tiktok.md ("Photo posts") | TikTok (`url_ownership_unverified`), explained by the step machine | `tests/integration/tiktok/photo.test.ts` "surfaces url_ownership_unverified as a plain failure" |
 | note: chunk sizing | Contiguous chunks of 5 MB to 64 MB (about 30 per file); the final chunk absorbs the remainder and stays under 128 MB | | docs/research/tiktok.md ("Upload video") | TikTok step machine (`chunkPlan`) | `src/providers/tiktok/state.test.ts` "covers the whole file with contiguous ranges" |
 | note: status ceiling | 60 min | | docs/research/tiktok.md ("Fetch post status"); a post still processing then ends ambiguous | TikTok step machine | `tests/integration/tiktok/failures.test.ts` "ends ambiguous when TikTok is still processing after 60 minutes" |
+| note: insights read budget | 600 / 60 s |  | PARTLY CONFIRMED, per-app token (docs/research/tiktok.md "Rate limit"); the per-account declaration is deliberately permissive — `INSIGHTS_TARGETS_PER_RUN` and the reserve are the real protection | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/tiktok/insights.test.ts` "declares a 600/60s read budget, PARTLY CONFIRMED per-app token (research §1)" |
 
 ## Pinterest
 
@@ -240,6 +243,7 @@ X also caps the whole app at 10,000 posts per 24 hours. Docket does not enforce 
 | note: pin link | 2048 code points, per target, optional, absolute http(s) |  | docs/research/pinterest.md (`link` maxLength 2048); the URL check is a Docket choice | Pinterest validation (`validate.ts`) | `src/providers/pinterest/validate.test.ts` "link_too_long at 2049, publishes at 2048" |
 | note: board required | Every pin names exactly one board, chosen per target |  | docs/research/pinterest.md ("Identity model") | Pinterest validation (`validate.ts`) | `src/providers/pinterest/validate.test.ts` "board_required when boardId is null and boards exist" |
 | note: aspect ratio | A warning outside 0.5–1.0 (2:3 recommended); never refused |  | docs/research/pinterest.md (feed cropping, not rejection; not independently confirmed) | Pinterest validation (`validate.ts`) | `src/providers/pinterest/validate.test.ts` "aspect_far_from_recommended is a warning and still publishes" |
+| note: insights read budget | 1000 / 86400 s |  | CONFIRMED, `org_read` Trial tier (docs/research/pinterest.md:287): every install starts there and the connection cannot reveal the app's tier | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/pinterest/insights.test.ts` "declares a 1000/86400s read budget, the org_read Trial figure (FR-033)" |
 
 While the deployer's Pinterest app has Trial access, the whole server shares 300 pin creations per day across every connected Pinterest account. Docket does not enforce that cap (it is per app, not per account), so it has no row; a 429 from it defers the post instead. It is stated on the account card, in the requirements summary and in `docs/pinterest-setup.md`.
 

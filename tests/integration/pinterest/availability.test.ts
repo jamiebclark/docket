@@ -4,11 +4,20 @@ vi.mock("@/server/auth/session", async () => (await import("../../helpers/action
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
+import { and, eq } from "drizzle-orm";
 import { NotFoundError } from "../../../src/server/dal/errors";
+import { getDb } from "../../../src/server/db/client";
+import { postMetricPollStates, socialAccounts } from "../../../src/server/db/schema";
+import { forSchedulerProject } from "../../../src/server/dal/scheduler";
+import { runTick } from "../../../src/server/scheduler";
 import * as connect from "../../../src/server/services/connect";
+import { encryptCredentials } from "../../../src/server/services/accounts";
+import { createFakePinterest } from "../../helpers/fake-pinterest";
 import { closeDb } from "../../helpers/db";
+import { createProjectWithMembers } from "../../helpers/factories";
 import { sessionFor } from "../../helpers/connect-group";
 import { postsEnv } from "../../helpers/posts-env";
+import { tickConfig } from "../../helpers/tick";
 
 afterAll(closeDb);
 afterEach(() => {
@@ -45,5 +54,62 @@ describe("Pinterest availability on Accounts", () => {
       unavailable: { reason: "Pinterest needs an HTTPS callback address that is not localhost." },
     });
     expect(group?.unavailable?.doc).toMatch(/pinterest-setup\/?#callback-address/);
+  });
+});
+
+describe("PINNER_DATA_ACCESS_DENIED backs off rather than retrying tightly and does not flag the account (FR-031)", () => {
+  const NOW = new Date("2026-06-01T00:00:00Z");
+
+  it("the target's next poll is pushed into the future and the account's status stays active", async () => {
+    const fake = createFakePinterest().install();
+    try {
+      const ctx = await createProjectWithMembers();
+      const repos = forSchedulerProject(ctx.project.id);
+      const account = await repos.accounts.upsertConnected({
+        providerKey: "pinterest",
+        displayName: "Ada's Pinterest",
+        externalAccountId: "availability-user-1",
+        settings: {},
+        credentialsEncrypted: null,
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        grantedScopes: ["user_accounts:read", "boards:read", "pins:write", "pins:read"],
+      });
+      const credentials = {
+        v: 1,
+        accessToken: "AVAILABILITY-ACCESS",
+        refreshToken: "AVAILABILITY-REFRESH",
+        accessExpiresAt: NOW.getTime() + 2_592_000_000,
+        refreshIssuedAt: NOW.getTime(),
+        refreshExpiresAt: NOW.getTime() + 5_184_000_000,
+        refreshExpiryEstimated: false,
+      };
+      await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, credentials), new Date(credentials.refreshExpiresAt));
+
+      const post = await repos.posts.insert({ baseText: "Hello" });
+      const [target] = await repos.targets.insertMany([{ postId: post.id, socialAccountId: account.id }]);
+      await repos.targets.update(target!.id, { status: "published", externalId: "availability-pin-1", publishedAt: NOW });
+
+      fake.on("GET", "/v5/pins/availability-pin-1/analytics", { kind: "error", status: 403, message: "PINNER_DATA_ACCESS_DENIED" });
+      fake.on("GET", "/v5/user_account", { kind: "ok", body: { id: "availability-user-1", follower_count: 1, monthly_views: 1 } });
+
+      await runTick(tickConfig());
+
+      const [poll] = await getDb()
+        .select()
+        .from(postMetricPollStates)
+        .where(and(eq(postMetricPollStates.projectId, ctx.project.id), eq(postMetricPollStates.postTargetId, target!.id)));
+      expect(poll).toMatchObject({ unavailableReason: expect.stringContaining("business account"), frozenAt: null });
+      expect(poll!.nextPollAt).not.toBeNull();
+      expect(poll!.nextPollAt!.getTime()).toBeGreaterThan(Date.now());
+
+      const [row] = await getDb()
+        .select()
+        .from(socialAccounts)
+        .where(and(eq(socialAccounts.projectId, ctx.project.id), eq(socialAccounts.id, account.id)));
+      expect(row!.status).toBe("active");
+    } finally {
+      fake.uninstall();
+    }
   });
 });

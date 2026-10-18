@@ -59,23 +59,35 @@ export function assertInsightsDeclaration(provider: Pick<SocialProvider, "key" |
     bad(`maxPostsPerRead (${d.maxPostsPerRead}) must be an integer between 1 and 200`);
   }
   if (!Number.isInteger(d.readBudget.count) || d.readBudget.count < 1) bad(`readBudget.count (${d.readBudget.count}) must be an integer of at least 1`);
-  if (!Number.isInteger(d.readBudget.windowSeconds) || d.readBudget.windowSeconds < 1 || d.readBudget.windowSeconds > 604_800) {
-    bad(`readBudget.windowSeconds (${d.readBudget.windowSeconds}) must be between 1 and 604800`);
+  // 2,592,000 s (30 days) is X's billing cycle (contracts/x-metered-reads.md §2); every other
+  // provider's window is far shorter, so the bound only needs to admit that one case.
+  if (!Number.isInteger(d.readBudget.windowSeconds) || d.readBudget.windowSeconds < 1 || d.readBudget.windowSeconds > 2_592_000) {
+    bad(`readBudget.windowSeconds (${d.readBudget.windowSeconds}) must be between 1 and 2592000`);
   }
   if (d.unavailable) {
     const reason = d.unavailable.reason;
     if (reason.length < 1 || reason.length > 300) bad("unavailable.reason must be 1-300 characters");
   }
-  if (d.unavailable && d.requiredScopes && d.requiredScopes.length > 0) {
-    bad("unavailable and requiredScopes must never both be set");
+  if (d.unavailable && ((d.postScopes && d.postScopes.length > 0) || (d.accountScopes && d.accountScopes.length > 0))) {
+    bad("unavailable and postScopes/accountScopes must never both be set");
   }
-  if (d.requiredScopes && d.requiredScopes.length > 0) {
-    const reason = d.missingScopes?.reason;
+  for (const [surface, scopes, missing] of [
+    ["postScopes", d.postScopes, d.missingPostScopes],
+    ["accountScopes", d.accountScopes, d.missingAccountScopes],
+  ] as const) {
+    if (!scopes || scopes.length === 0) continue;
+    const reason = missing?.reason;
     if (reason === undefined || reason.length < 1 || reason.length > 300) {
-      bad("requiredScopes is non-empty but missingScopes.reason is missing or not 1-300 characters");
+      bad(`${surface} is non-empty but ${surface === "postScopes" ? "missingPostScopes" : "missingAccountScopes"}.reason is missing or not 1-300 characters`);
     }
-    for (const scope of d.requiredScopes) {
-      if (!GRANTED_SCOPE_PATTERN.test(scope)) bad(`requiredScopes entry "${scope}" does not match GRANTED_SCOPE_PATTERN`);
+    for (const scope of scopes) {
+      if (!GRANTED_SCOPE_PATTERN.test(scope)) bad(`${surface} entry "${scope}" does not match GRANTED_SCOPE_PATTERN`);
+    }
+  }
+  if (d.postIdSource === "publicPostId") {
+    const reason = d.missingPostId?.reason;
+    if (reason === undefined || reason.length < 1 || reason.length > 300) {
+      bad("postIdSource is publicPostId but missingPostId.reason is missing or not 1-300 characters");
     }
   }
   if (d.ephemeralPostTypes) {

@@ -73,6 +73,9 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G32 | `optionalScopes` on an `OAuthConnectGroup` | 4 |
 | G33 | `requiredScopes`/`missingScopes` on an `insights` declaration, checked in the claim | 21 |
 | G34 | `ephemeralPostTypes` on an `insights` declaration | 21 |
+| G35 | `postIdSource`/`missingPostId` on an `insights` declaration — which stored column a post reader is given | 21 |
+| G36 | `publicPostId` on `StepResult`'s `{ kind: "done" }`, persisted by the generic publish path | 21 |
+| G37 | `postScopes`/`missingPostScopes` and `accountScopes`/`missingAccountScopes` on an `insights` declaration — eligibility checked per surface, not once for both | 21 |
 
 ## 3. Capabilities and counting rules
 
@@ -635,3 +638,41 @@ nothing platform-specific from either hook; a later platform with its own gated 
 post type needs no scheduler change. `src/providers/instagram/insights.ts`, `src/providers/facebook/insights.ts`
 and `src/providers/threads/insights.ts` are the real implementations; `src/providers/mock/insights.ts` can script
 both. See `specs/081-insights-reconnect-and-meta/contracts/provider-insights-081.md` for the full contract.
+
+### A declared identifier source, a written-forward id, and per-surface eligibility (G35, G36, G37)
+
+Three more platforms each broke a different assumption the first three readers got away with.
+
+- **G35 — `postIdSource`/`missingPostId`.** Most providers' post reader can use the target's own
+  `external_id` — the id the publish step returned. TikTok cannot: the id it returns from publishing
+  is a `publish_id`, not a video id, so the post reader instead needs `post_targets.public_post_id`,
+  a column written separately (see G36). A provider sets `postIdSource: "publicPostId"` and a
+  `missingPostId` reason/docsPath; the post claim then requires that column non-null **in its own
+  SQL**, so a target without one is never claimed, never leased, never decrypted for — the lazy
+  insert instead freezes it `unqueryable` with zero calls spent. Default is `"externalId"`, so every
+  existing provider is unaffected.
+- **G36 — `publicPostId` on `StepResult`'s `{ kind: "done" }`.** A provider's publish step may return
+  `publicPostId` beside the `externalId` and `url` it already returns; the generic publish path
+  persists it to `post_targets.public_post_id` with no scheduler or engine code naming the provider.
+  This is the only way a `postIdSource: "publicPostId"` column is ever written going forward — a
+  one-off migration backfill covers targets published before this field existed.
+- **G37 — per-surface eligibility.** `requiredScopes`/`missingScopes` (G33) checked one set of scopes
+  for both surfaces at once; Pinterest and TikTok each need different scopes (or none) per surface,
+  so the declaration splits into `postScopes`/`missingPostScopes` and
+  `accountScopes`/`missingAccountScopes`, each checked by its own claim's SQL predicate
+  (`granted_scopes @> scopes`). A surface with an empty scopes array needs no permission at all
+  (Pinterest's account surface, every `mock` account); a provider with no declared keys for a
+  surface is not claimed on that surface regardless of scopes (X's account surface). An account
+  missing either surface's scopes is still counted exactly once by `accountsSkippedNoPermission`.
+
+**FR-050, a change to how an existing hook's output is used, not a new hook**: a run-time
+`unavailable` a reader returns from `readPostMetrics`/`readAccountMetrics` is now persisted at commit
+time onto the poll-state row (`unavailable_reason`/`unavailable_docs_path`) and read back by the
+panel, instead of being inferred solely from the declaration. Pinterest's `PINNER_DATA_ACCESS_DENIED`
+is the first reader to rely on this: the *account* is never flagged, but the *post* surface's
+`unavailable` reason now survives a page reload instead of being recomputed from scratch each time.
+
+`src/providers/tiktok/insights.ts`, `src/providers/pinterest/insights.ts` and `src/providers/x/insights.ts`
+are the real implementations; `src/providers/mock/insights.ts` can script all three (`insightsPostIdSource`,
+`insightsPostScopes`, `insightsAccountScopes`). See
+`specs/082-insights-tiktok-pinterest-x/contracts/provider-insights-082.md` for the full contract.

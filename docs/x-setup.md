@@ -102,6 +102,41 @@ refresh token expires (about six months, U3). **Needs reconnecting** means X rej
   hours; Docket does not enforce that, and waits when X reports it (429).
 - A post X rejects as a duplicate is not retried. Docket shows "X refused this as a duplicate of a recent post." (U2).
 
+## Insights
+
+Reading a post's numbers back (likes, replies, reposts, quotes, bookmarks, impressions — see
+[insights.md](insights.md)) is **off by default**, because it costs money: X's documented price
+for an "Owned Read" is **$0.001 per resource** (<https://docs.x.com/x-api/getting-started/pricing>,
+checked 2026-10-18). At roughly 32 reads per post over its first 28 days (the schedule Docket
+polls on), 100 posts a month comes to about 3,200 resource reads, or **$3.20**. New pay-per-use
+accounts get the $20/$50 promotional credit described above, which covers that on its own for a
+few months.
+
+Turn it on with:
+
+```
+X_INSIGHTS_ENABLED=true
+```
+
+No reconnect is needed: `tweet.read` is already one of the five scopes step 3 requests, so an
+account connected before this flag existed already holds it.
+
+Each account is capped at `X_INSIGHTS_READ_CEILING` reads per 30-day cycle (default **8000**).
+Half of that is reserved for publishing, so the realised ceiling is **4,000 reads, about $4.00 per
+account per cycle**; Docket defers rather than fails once an account reaches it, and a scheduled
+publish for the same account is never affected.
+
+Impressions (`impression_count`) are included: it is a field of X's public `public_metrics`, not
+of `non_public_metrics`, and there is no way to request four of the five without it. Docket never
+asks for `non_public_metrics`, `organic_metrics` or `promoted_metrics` — those need owning the
+post and are not requested at all.
+
+**Account numbers are not read.** X's per-user read price is not confirmed to be the same $0.001
+owned rate, and Docket will not spend the operator's money on an unverified billing assumption.
+Two billing questions stay parked until X's pricing page is clearer: whether a per-user read is
+priced the same as a per-post read, and what a page of up to 100 ids actually costs (one resource,
+or one per id).
+
 ## When a post is ambiguous
 
 If the connection drops after Docket sent the post, Docket cannot know whether X published it. It does not retry, and

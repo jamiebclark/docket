@@ -7,6 +7,7 @@ import {
   claimDuePostMetricPolls,
   countAccountsMissingInsightsScopes,
   countPublishedWithoutExternalId,
+  countPublishedWithoutPublicPostId,
   type ClaimedAccountMetricPoll,
   type ClaimedPostMetricPoll,
   type InsightsProviderRule,
@@ -32,6 +33,7 @@ export interface InsightsPollCounts {
   targetsUnqueryable: number;
   postsGone: number;
   targetsSkippedNoExternalId: number;
+  targetsSkippedNoPublicPostId: number;
   accountsSkippedNoPermission: number;
   deferredForAllowance: number;
   retried: number;
@@ -53,6 +55,7 @@ export const emptyInsightsPollCounts = (): InsightsPollCounts => ({
   targetsUnqueryable: 0,
   postsGone: 0,
   targetsSkippedNoExternalId: 0,
+  targetsSkippedNoPublicPostId: 0,
   accountsSkippedNoPermission: 0,
   deferredForAllowance: 0,
   retried: 0,
@@ -80,8 +83,13 @@ export async function runInsightsPoll(opts: { config: SchedulerConfig; tickId: s
     .filter((p) => p.insights && !p.insights.declaration.unavailable)
     .map((p) => ({
       providerKey: p.key,
-      requiredScopes: p.insights?.declaration.requiredScopes ?? [],
-      ephemeralPostTypes: p.insights?.declaration.ephemeralPostTypes ?? [],
+      postScopes: p.insights!.declaration.postScopes ?? [],
+      accountScopes: p.insights!.declaration.accountScopes ?? [],
+      postIdSource: p.insights!.declaration.postIdSource ?? "externalId",
+      missingPostId: p.insights!.declaration.missingPostId ?? null,
+      postMetricsDeclared: p.insights!.declaration.post.length > 0,
+      accountMetricsDeclared: p.insights!.declaration.account.length > 0,
+      ephemeralPostTypes: p.insights!.declaration.ephemeralPostTypes ?? [],
     }));
 
   if (providers.length === 0) {
@@ -101,6 +109,7 @@ export async function runInsightsPoll(opts: { config: SchedulerConfig; tickId: s
   counts.accountsClaimed = accounts.length;
   counts.targetsClaimed = targets.length;
   counts.targetsSkippedNoExternalId = await countPublishedWithoutExternalId(providers);
+  counts.targetsSkippedNoPublicPostId = await countPublishedWithoutPublicPostId(providers);
   counts.accountsSkippedNoPermission = await countAccountsMissingInsightsScopes(providers);
 
   const targetsByAccount = new Map<string, ClaimedPostMetricPoll[]>();
@@ -388,7 +397,12 @@ async function commitPostBatch(input: {
             counts.unavailable++;
             await repos.postMetricPollStates.update(
               t.state.postTargetId,
-              { lastError: reason, nextPollAt: nextRetryAt(now, t.state.consecutiveFailures + 1, config) },
+              {
+                lastError: reason,
+                nextPollAt: nextRetryAt(now, t.state.consecutiveFailures + 1, config),
+                unavailableReason: reason,
+                unavailableDocsPath: result.docsPath ?? null,
+              },
               t.token,
             );
             break;
@@ -409,7 +423,7 @@ async function commitPostBatch(input: {
         counts.targetsFrozen++;
         await tx.postMetricPollStates.update(
           t.state.postTargetId,
-          { nextPollAt: null, frozenAt: now, frozenReason: "gone" },
+          { nextPollAt: null, frozenAt: now, frozenReason: "gone", unavailableReason: null, unavailableDocsPath: null },
           t.token,
         );
         continue;
@@ -419,7 +433,16 @@ async function commitPostBatch(input: {
         counts.targetsFrozen++;
         await tx.postMetricPollStates.update(
           t.state.postTargetId,
-          { nextPollAt: null, frozenAt: now, frozenReason: "unqueryable", lastError: null, consecutiveFailures: 0, failingSince: null },
+          {
+            nextPollAt: null,
+            frozenAt: now,
+            frozenReason: "unqueryable",
+            lastError: null,
+            consecutiveFailures: 0,
+            failingSince: null,
+            unavailableReason: null,
+            unavailableDocsPath: null,
+          },
           t.token,
         );
         continue;
@@ -471,6 +494,8 @@ async function commitPostBatch(input: {
           nextPollAt: decision.kind === "due" ? decision.at : null,
           frozenAt: decision.kind === "frozen" ? now : null,
           frozenReason: decision.kind === "frozen" ? decision.reason : null,
+          unavailableReason: null,
+          unavailableDocsPath: null,
         },
         t.token,
       );
@@ -525,7 +550,12 @@ async function commitAccountResult(input: {
         counts.unavailable++;
         await repos.accountMetricPollStates.update(
           accountId,
-          { lastError: reason, nextPollAt: nextRetryAt(now, failures + 1, config) },
+          {
+            lastError: reason,
+            nextPollAt: nextRetryAt(now, failures + 1, config),
+            unavailableReason: reason,
+            unavailableDocsPath: result.docsPath ?? null,
+          },
           accountClaimToken,
         );
         break;
@@ -557,7 +587,16 @@ async function commitAccountResult(input: {
     await tx.accountMetricSnapshots.insertIfAbsent({ socialAccountId: accountId, providerKey, capturedAt: now, metrics });
     await tx.accountMetricPollStates.update(
       accountId,
-      { consecutiveFailures: 0, failingSince: null, lastError: null, lastPolledAt: now, lastCapturedAt: now, nextPollAt },
+      {
+        consecutiveFailures: 0,
+        failingSince: null,
+        lastError: null,
+        lastPolledAt: now,
+        lastCapturedAt: now,
+        nextPollAt,
+        unavailableReason: null,
+        unavailableDocsPath: null,
+      },
       accountClaimToken,
     );
   });

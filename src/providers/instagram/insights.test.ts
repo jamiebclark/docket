@@ -43,8 +43,13 @@ describe("instagramInsights declaration", () => {
     for (const prohibited of INSTAGRAM_PROHIBITED_METRICS) expect(keys).not.toContain(prohibited);
   });
 
-  it("requires the three documented scopes", () => {
-    expect(instagramInsights.declaration.requiredScopes).toEqual([
+  it("requires the three documented scopes on both surfaces", () => {
+    expect(instagramInsights.declaration.postScopes).toEqual([
+      "instagram_basic",
+      "instagram_manage_insights",
+      "pages_read_engagement",
+    ]);
+    expect(instagramInsights.declaration.accountScopes).toEqual([
       "instagram_basic",
       "instagram_manage_insights",
       "pages_read_engagement",

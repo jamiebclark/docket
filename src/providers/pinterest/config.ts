@@ -4,6 +4,8 @@ import { readEnv } from "../meta/config";
 export interface PinterestConfig {
   clientId: string;
   clientSecret: string;
+  /** FR-027. Default off: `authorizationUrl` requests no extra scope while this is false. */
+  insightsScopes: boolean;
 }
 
 type Source = Readonly<Record<string, string | undefined>>;
@@ -20,6 +22,7 @@ export function parsePinterestEnv(source: Source): { config: PinterestConfig | n
   const issues: ProviderEnvIssue[] = [];
   const clientId = readEnv(source, "PINTEREST_CLIENT_ID");
   const clientSecret = readEnv(source, "PINTEREST_CLIENT_SECRET");
+  const insightsScopesRaw = readEnv(source, "PINTEREST_INSIGHTS_SCOPES");
 
   if (clientSecret && !clientId) issues.push({ name: "PINTEREST_CLIENT_ID", reason: "required when PINTEREST_CLIENT_SECRET is set" });
   else if (clientId && !valid(clientId, ID_MAX)) {
@@ -31,10 +34,17 @@ export function parsePinterestEnv(source: Source): { config: PinterestConfig | n
     issues.push({ name: "PINTEREST_CLIENT_SECRET", reason: "must be the app secret from the Pinterest developer portal" });
   }
 
+  let insightsScopes = false;
+  if (insightsScopesRaw !== null) {
+    const v = insightsScopesRaw.toLowerCase();
+    if (v === "true") insightsScopes = true;
+    else if (v !== "false") issues.push({ name: "PINTEREST_INSIGHTS_SCOPES", reason: "must be true or false" });
+  }
+
   if (!(clientId && clientSecret && valid(clientId, ID_MAX) && valid(clientSecret, SECRET_MAX))) {
     return { config: null, issues };
   }
-  return { config: { clientId, clientSecret }, issues };
+  return { config: { clientId, clientSecret, insightsScopes }, issues };
 }
 
 /** Reads process.env each call. Throws a value-free error when not configured. */

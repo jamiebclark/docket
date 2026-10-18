@@ -166,8 +166,13 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<InstagramSettin
  */
 export const instagramInsights: InsightsSupport<InstagramSettings> = {
   declaration: {
-    requiredScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
-    missingScopes: {
+    postScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+    missingPostScopes: {
+      reason: "Instagram needs the instagram_manage_insights permission before Docket can read its numbers.",
+      docsPath: "meta-setup#insights",
+    },
+    accountScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+    missingAccountScopes: {
       reason: "Instagram needs the instagram_manage_insights permission before Docket can read its numbers.",
       docsPath: "meta-setup#insights",
     },

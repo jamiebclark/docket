@@ -33,8 +33,9 @@ describe("threadsInsights declaration", () => {
     expect(keys).not.toContain("shares");
   });
 
-  it("declares no requiredScopes (mutually exclusive with unavailable, per the registry assertion)", () => {
-    expect(threadsInsights.declaration.requiredScopes).toBeUndefined();
+  it("declares no postScopes/accountScopes (mutually exclusive with unavailable, per the registry assertion)", () => {
+    expect(threadsInsights.declaration.postScopes).toBeUndefined();
+    expect(threadsInsights.declaration.accountScopes).toBeUndefined();
   });
 
   it("declares a 48,000/86,400s read budget, interim and UNVERIFIED (research §4)", () => {

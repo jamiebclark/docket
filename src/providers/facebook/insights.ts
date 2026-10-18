@@ -215,8 +215,13 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<FacebookSetting
  */
 export const facebookInsights: InsightsSupport<FacebookSettings> = {
   declaration: {
-    requiredScopes: ["pages_read_engagement", "read_insights"],
-    missingScopes: {
+    postScopes: ["pages_read_engagement", "read_insights"],
+    missingPostScopes: {
+      reason: "A Facebook Page needs the read_insights permission before Docket can read its numbers.",
+      docsPath: "meta-setup#insights",
+    },
+    accountScopes: ["pages_read_engagement", "read_insights"],
+    missingAccountScopes: {
       reason: "A Facebook Page needs the read_insights permission before Docket can read its numbers.",
       docsPath: "meta-setup#insights",
     },

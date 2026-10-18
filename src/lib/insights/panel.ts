@@ -38,6 +38,9 @@ export interface BuildTargetInsightsViewInput {
     failingSince: Date | null;
     lastError: string | null;
     frozenReason: string | null;
+    /** FR-050. A run-time `unavailable` persisted at commit time; cleared on a successful read or a freeze. */
+    unavailableReason: string | null;
+    unavailableDocsPath: string | null;
   } | null;
   now: Date;
 }
@@ -81,6 +84,9 @@ export function buildTargetInsightsView(input: BuildTargetInsightsViewInput): Ta
   if (pollState?.frozenReason === "expired") return { state: "expired", snapshot: snapshotFor(declaration, snapshot) };
   if (pollState && pollState.consecutiveFailures > 0) {
     return { state: "failing", since: pollState.failingSince!, reason: pollState.lastError ?? "", snapshot: snapshotFor(declaration, snapshot) };
+  }
+  if (pollState?.unavailableReason) {
+    return { state: "unavailable", reason: pollState.unavailableReason, docsPath: pollState.unavailableDocsPath ?? undefined };
   }
   if (!snapshot) return { state: "not_polled_yet", firstReadDueAt: pollState?.nextPollAt ?? null };
   const rows = rowsFor(declaration, snapshot.metrics);

@@ -1,6 +1,7 @@
 import type { SocialProvider } from "../types";
 import { X_DEFAULT_PUBLISH_LIMIT, xCapabilities } from "./capabilities";
 import { xConnectGroup } from "./connect-group";
+import { xInsights } from "./insights";
 import { advanceX } from "./publish";
 import { needsRefresh, refreshX } from "./refresh";
 import { xAccountNotes, xSettingsSchema, type XSettings } from "./settings";
@@ -21,4 +22,5 @@ export const xProvider: SocialProvider<XSettings, XState> = {
   stepFor: xStepFor,
   advance: advanceX,
   accountNotes: (input) => xAccountNotes(input),
+  insights: xInsights,
 };

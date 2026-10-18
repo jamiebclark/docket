@@ -63,8 +63,16 @@ export const mockSettingsSchema = z.object({
   insightsReturnUndeclaredKey: z.boolean().default(false),
   /** A payload over the 2,000-byte size check — must be refused with no partial row. */
   insightsOversizedPayload: z.boolean().default(false),
-  /** 081: drives the eligibility matrix test's `InsightsProviderRule.requiredScopes`, without touching a real provider. */
-  insightsRequiredScopes: z.array(z.string()).default([]),
+  /** G37: drives the eligibility matrix test's `InsightsProviderRule.postScopes`, without touching a real provider. */
+  insightsPostScopes: z.array(z.string()).default([]),
+  /** G37: drives the eligibility matrix test's `InsightsProviderRule.accountScopes`, without touching a real provider. */
+  insightsAccountScopes: z.array(z.string()).default([]),
+  /** G35: which stored column a test target's post reader is given. */
+  insightsPostIdSource: z.enum(["externalId", "publicPostId"]).default("externalId"),
+  /** G35: the `docsPath` carried on `missingPostId` when `insightsPostIdSource` is `"publicPostId"`. */
+  insightsMissingPostIdDocsPath: z.string().nullable().default(null),
+  /** FR-050: the `docsPath` carried on a scripted run-time `unavailable` result. */
+  insightsUnavailableDocsPath: z.string().nullable().default(null),
   /** 081: drives the ephemeral schedule and the `expired` freeze, end to end, via a test-built `InsightsProviderRule.ephemeralPostTypes`. */
   insightsEphemeralLifetimeMs: z.number().int().min(60_000).max(30 * 86_400_000).nullable().default(null),
   /** 081: these post ids come back `kind: "unqueryable"` instead of `metrics` or `gone`. */

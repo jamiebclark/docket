@@ -70,9 +70,15 @@ describe("Pinterest setup documentation", () => {
 
   it("has the headings that the connect group and messages link to", () => {
     const found = slugs(doc);
-    for (const anchor of ["callback-address", "owed-live-checks"]) {
+    for (const anchor of ["callback-address", "owed-live-checks", "insights"]) {
       expect(found, anchor).toContain(anchor);
     }
+  });
+
+  it("states the PINTEREST_INSIGHTS_SCOPES flag, the pins:read permission and what each buys, with a default matching .env.example", () => {
+    expect(doc).toMatch(/PINTEREST_INSIGHTS_SCOPES=true/);
+    expect(doc).toMatch(/pins:read/);
+    expect(read(".env.example")).toMatch(/# PINTEREST_INSIGHTS_SCOPES=false/);
   });
 
   it("resolves every relative link and anchor in the Pinterest pages", () => {

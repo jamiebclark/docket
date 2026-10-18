@@ -161,15 +161,29 @@ covers. Pin analytics need a business account, and a Trial app's content is invi
 (`docs/research/pinterest.md:57`), so both become `unavailable` reasons with a docs link rather than a
 confusing empty panel.
 
-**X ships declared unavailable, deliberately.** `public_metrics` is reachable with the `tweet.read` scope
-already in `X_SCOPES`, so this is not a permission problem — it is a cost one: since February 2026 X API
-reads are pay-per-use with no free read tier for new apps, and legacy Free keys get on the order of a
-hundred reads a month, which a per-post poll would exhaust in a day. So X declares an `unavailable`
-reason naming the metered read and links to `docs/x-setup.md`, and no call is ever made — unless the
-operator opts in explicitly with an env flag, in which case the poll runs at a conservative floor
-interval with its own hard cap. Verify the current pricing and tiers against X's own developer
-documentation and record it in `docs/research/x.md` with source URLs and the date; do not take the figure
-above on trust.
+**X ships behind a priced opt-in, NOT as permanently unavailable.** `public_metrics` is reachable with
+the `tweet.read` scope already in `X_SCOPES`, so this was never a permission problem — and the cost
+objection in the first draft of this roadmap was computed at the wrong rate. Verified 2026-10-18 against
+https://docs.x.com/x-api/getting-started/pricing: **Owned Reads — "requests made by your own developer
+app for your own data (posts, bookmarks, followers, likes, lists, and more)" — cost $0.001 per resource**,
+a fifth of the $0.005 standard Post read. Docket reading metrics for posts it published, on an account
+the operator connected, is an owned read.
+
+At that rate 100 posts a month on entry 1's decay schedule (~33 polls per post over 28 days) is ~3,300
+resources, about **$3.30 a month**, and X grants new accounts "$20 in free X API credits when you save
+your first eligible payment card" — roughly 20,000 owned reads. There is no free allowance otherwise,
+and pay-per-usage is "capped at 3 million Post reads per monthly billing cycle".
+
+So build the reader, keep it **off by default**, and gate it on an explicit env opt-in whose docs state
+the per-read price and a worked monthly estimate: a self-hoster must consent to spending real money,
+however small. Keep the conservative floor interval and a hard per-cycle cap — the live risk is a runaway
+bill from a misconfigured schedule, not the unit price. With the opt-in off, declare `unavailable` with a
+reason naming the metered read, link `docs/x-setup.md`, and make no call.
+
+Two things stay unverified and belong in a parked human task rather than an assumption: whether
+`public_metrics` on an owned post bills as one resource per post, and whether `non_public_metrics`
+(impressions) is included at the owned rate. Both need a live call against a funded key. Record the
+answers in `docs/research/x.md` with source URLs and the date.
 
 Update `docs/tiktok-setup.md`, `docs/pinterest-setup.md` and `docs/x-setup.md` with the extra permission
 each install must grant and what it gets for it.

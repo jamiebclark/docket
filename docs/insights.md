@@ -13,7 +13,9 @@ it was read stated plainly.
 | Instagram | Yes — reactions-by-type, comments, shares, saves, plus the reel/video family where the post type has one (whichever the response actually contains) | Captured (reach, follower count, profile views), shown nowhere yet | `instagram_manage_insights`, opt-in (see "Reconnecting for insights" below) |
 | Facebook Pages | Yes — reactions by type and post clicks; the views/impressions family is a named gap (see "Named gaps") | Captured (Page follows), shown nowhere yet | `read_insights`, opt-in |
 | Threads | Yes, where research could confirm the metric names; otherwise declared `unavailable` with a reason — see "Named gaps" | Declared `unavailable` for this entry (`account: []`) | `threads_manage_insights`, opt-in |
-| TikTok, Pinterest, X | Not yet | Not yet | — |
+| TikTok | Yes — likes, comments, shares, views; a post TikTok's own response omits is `unqueryable` rather than guessed (see "Named gaps") | Yes — followers, likes, video count | `video.list` for post numbers, `user.info.stats` for account numbers, both opt-in (see [tiktok-setup.md#insights](tiktok-setup.md#insights)) |
+| Pinterest | Yes — impressions, pin clicks, outbound clicks, saves | Yes — followers, monthly views, no flag needed (reuses `user_accounts:read` from connecting) | `pins:read` for pin analytics, opt-in (see [pinterest-setup.md#insights](pinterest-setup.md#insights)); needs a business account, and a Trial app's pins are invisible to anyone but their own creator |
+| X | Yes — likes, replies, reposts, quotes, impressions | Not read — the per-user read price is unconfirmed (see "Named gaps") | Reuses `tweet.read`, already requested; metered at $0.001/read and off by default (see [x-setup.md#insights](x-setup.md#insights)) |
 
 A platform with no `insights` module simply never grows these tables and never does any of this
 work — there is nothing to turn off, and nothing changes on screen beyond the panel stating plainly
@@ -51,6 +53,20 @@ says so plainly, with no reconnect button offered for a loop that cannot succeed
   with reason `unqueryable` rather than erroring forever.
 - **No account-metric screen yet.** Every platform's account snapshots (followers and the like) are
   captured on schedule, as in 080, but no screen shows them.
+- **Unrecoverable TikTok ids show as unavailable, not guessed.** TikTok's publish response holds the
+  real post id (`publicaly_available_post_id`) separately from the `publish_id` Docket used to store
+  as the target's external id. A target published before this entry, whose real id cannot be
+  recovered from retained publish attempts, has no id to query at all — insights for it stay
+  unavailable rather than Docket guessing at a video id that may be wrong.
+- **TikTok cannot tell "deleted" apart from "never a valid id".** TikTok's video-query endpoint
+  simply omits an id from its response whether the video was deleted or the id was never a video id
+  to begin with; both land as the same `unqueryable` outcome, reported with one reason that covers
+  both.
+- **X's account numbers are not read, and two billing questions are parked.** X's per-user read
+  price is not confirmed to match the $0.001 owned-post rate, so Docket does not spend money on an
+  unverified assumption. Whether a `public_metrics` read on an owned post bills as one resource, and
+  whether a page of user ids cost one resource total or one per id, stay open until X's pricing page
+  is clearer — see [x-setup.md#insights](x-setup.md#insights).
 
 ## The snapshot-not-current-value rule
 
