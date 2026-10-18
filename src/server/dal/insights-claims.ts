@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
-import { nextPostPollAt } from "../../lib/insights/schedule";
+import { and, asc, eq, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { postPollDecision } from "../../lib/insights/schedule";
 import { getDb, type Database } from "../db/client";
 import {
   accountMetricPollStates,
@@ -33,6 +33,30 @@ function strip(row: SocialAccountRow): ClaimedAccount {
   return rest;
 }
 
+/** data-model.md §4 (G33). The claim's eligibility rule for one provider. */
+export interface InsightsProviderRule {
+  providerKey: string;
+  /** Empty = no permission needed (Bluesky, mock). Otherwise every one must be held. */
+  requiredScopes: readonly string[];
+  /** FR-038/FR-041: used by the lazy insert to freeze an already-expired subject with no call. */
+  ephemeralPostTypes: readonly { postType: string; lifetimeMs: number }[];
+}
+
+/** FR-022/FR-023. An ineligible account never reaches a lease, a decrypt or a call. */
+function eligible(rules: readonly InsightsProviderRule[]) {
+  return or(
+    ...rules.map((r) =>
+      r.requiredScopes.length === 0
+        ? eq(socialAccounts.providerKey, r.providerKey)
+        : and(
+            eq(socialAccounts.providerKey, r.providerKey),
+            isNotNull(socialAccounts.grantedScopes),
+            sql`${socialAccounts.grantedScopes} @> ${sql.param([...r.requiredScopes])}::text[]`,
+          ),
+    ),
+  );
+}
+
 /**
  * Claims accounts due for an account metrics read, across every project (data-model.md §5, §7).
  * `FOR UPDATE SKIP LOCKED` on `account_metric_poll_states` only, so a concurrent publish holding the
@@ -42,13 +66,13 @@ export function claimDueAccountMetricPolls(opts: {
   now: Date;
   limit: number;
   leaseMs: number;
-  providerKeys: readonly string[];
+  providers: readonly InsightsProviderRule[];
 }): Promise<ClaimedAccountMetricPoll[]> {
   return crossProject("scheduler: claim due account metric polls", async () => {
-    if (opts.limit <= 0 || opts.providerKeys.length === 0) return [];
+    if (opts.limit <= 0 || opts.providers.length === 0) return [];
     return getDb().transaction(async (tx) => {
       const exec = tx as unknown as Database;
-      const providerKeys = [...opts.providerKeys];
+      const rules = opts.providers;
       const missing = await exec
         .select({ id: socialAccounts.id, projectId: socialAccounts.projectId })
         .from(socialAccounts)
@@ -57,7 +81,7 @@ export function claimDueAccountMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            inArray(socialAccounts.providerKey, providerKeys),
+            eligible(rules),
             isNull(accountMetricPollStates.socialAccountId),
           ),
         );
@@ -75,7 +99,7 @@ export function claimDueAccountMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            inArray(socialAccounts.providerKey, providerKeys),
+            eligible(rules),
             or(isNull(accountMetricPollStates.pollLeaseUntil), lte(accountMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(accountMetricPollStates.nextPollAt),
             lte(accountMetricPollStates.nextPollAt, opts.now),
@@ -111,19 +135,22 @@ export function claimDuePostMetricPolls(opts: {
   limit: number;
   leaseMs: number;
   minIntervalMs: number;
-  providerKeys: readonly string[];
+  providers: readonly InsightsProviderRule[];
 }): Promise<ClaimedPostMetricPoll[]> {
   return crossProject("scheduler: claim due post metric polls", async () => {
-    if (opts.limit <= 0 || opts.providerKeys.length === 0) return [];
+    if (opts.limit <= 0 || opts.providers.length === 0) return [];
     return getDb().transaction(async (tx) => {
       const exec = tx as unknown as Database;
-      const providerKeys = [...opts.providerKeys];
+      const rules = opts.providers;
+      const rulesByProviderKey = new Map(rules.map((r) => [r.providerKey, r]));
       const missing = await exec
         .select({
           targetId: postTargets.id,
           projectId: postTargets.projectId,
           socialAccountId: postTargets.socialAccountId,
           publishedAt: postTargets.publishedAt,
+          chosenPostType: postTargets.chosenPostType,
+          providerKey: socialAccounts.providerKey,
         })
         .from(postTargets)
         .innerJoin(socialAccounts, eq(socialAccounts.id, postTargets.socialAccountId))
@@ -135,16 +162,28 @@ export function claimDuePostMetricPolls(opts: {
             isNotNull(postTargets.publishedAt),
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            inArray(socialAccounts.providerKey, providerKeys),
+            eligible(rules),
             isNull(postMetricPollStates.postTargetId),
           ),
         )
         .limit(opts.limit);
       for (const row of missing) {
-        const nextPollAt = nextPostPollAt({ publishedAt: row.publishedAt!, lastCapturedAt: null, now: opts.now, minIntervalMs: opts.minIntervalMs });
+        const rule = rulesByProviderKey.get(row.providerKey);
+        const decision = postPollDecision({
+          publishedAt: row.publishedAt!,
+          lastCapturedAt: null,
+          now: opts.now,
+          minIntervalMs: opts.minIntervalMs,
+          chosenPostType: row.chosenPostType,
+          ephemeralPostTypes: rule?.ephemeralPostTypes,
+        });
         await exec
           .insert(postMetricPollStates)
-          .values({ postTargetId: row.targetId, projectId: row.projectId, socialAccountId: row.socialAccountId, nextPollAt })
+          .values(
+            decision.kind === "due"
+              ? { postTargetId: row.targetId, projectId: row.projectId, socialAccountId: row.socialAccountId, nextPollAt: decision.at }
+              : { postTargetId: row.targetId, projectId: row.projectId, socialAccountId: row.socialAccountId, nextPollAt: null, frozenAt: opts.now, frozenReason: decision.reason },
+          )
           .onConflictDoNothing({ target: postMetricPollStates.postTargetId });
       }
       const rows = await exec
@@ -156,7 +195,7 @@ export function claimDuePostMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            inArray(socialAccounts.providerKey, providerKeys),
+            eligible(rules),
             or(isNull(postMetricPollStates.pollLeaseUntil), lte(postMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(postMetricPollStates.nextPollAt),
             lte(postMetricPollStates.nextPollAt, opts.now),
@@ -186,9 +225,9 @@ export function claimDuePostMetricPolls(opts: {
  * Companion count for `targetsSkippedNoExternalId` (data-model.md §5, FR-039): a target published by
  * hand never gets a state row, so this is the only way to observe it.
  */
-export function countPublishedWithoutExternalId(providerKeys: readonly string[]): Promise<number> {
+export function countPublishedWithoutExternalId(providers: readonly InsightsProviderRule[]): Promise<number> {
   return crossProject("scheduler: count insights-eligible targets with no external id", async () => {
-    if (providerKeys.length === 0) return 0;
+    if (providers.length === 0) return 0;
     const [row] = await getDb()
       .select({ n: sql<number>`count(*)::int` })
       .from(postTargets)
@@ -199,7 +238,39 @@ export function countPublishedWithoutExternalId(providerKeys: readonly string[])
           isNotNull(postTargets.resolvedAt),
           isNull(postTargets.externalId),
           isNull(socialAccounts.removedAt),
-          inArray(socialAccounts.providerKey, [...providerKeys]),
+          eligible(providers),
+        ),
+      );
+    return row?.n ?? 0;
+  });
+}
+
+/**
+ * Companion count for `accountsSkippedNoPermission` (data-model.md §4, FR-049): an ineligible account
+ * is excluded by the claim, so the claim cannot report it.
+ */
+export function countAccountsMissingInsightsScopes(providers: readonly InsightsProviderRule[]): Promise<number> {
+  return crossProject("scheduler: count insights-ineligible accounts", async () => {
+    const rules = providers.filter((r) => r.requiredScopes.length > 0);
+    if (rules.length === 0) return 0;
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(socialAccounts)
+      .where(
+        and(
+          isNull(socialAccounts.removedAt),
+          eq(socialAccounts.status, "active"),
+          or(
+            ...rules.map((r) =>
+              and(
+                eq(socialAccounts.providerKey, r.providerKey),
+                or(
+                  isNull(socialAccounts.grantedScopes),
+                  sql`NOT (${socialAccounts.grantedScopes} @> ${sql.param([...r.requiredScopes])}::text[])`,
+                ),
+              ),
+            ),
+          ),
         ),
       );
     return row?.n ?? 0;

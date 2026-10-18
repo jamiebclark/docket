@@ -8,6 +8,7 @@ import {
   countPublishedWithoutExternalId,
   type ClaimedAccountMetricPoll,
   type ClaimedPostMetricPoll,
+  type InsightsProviderRule,
 } from "../dal/insights-claims";
 import { forSchedulerProject, type ClaimedAccount } from "../dal/scheduler";
 import { writeHeartbeat } from "../dal/heartbeats";
@@ -66,11 +67,15 @@ export async function runInsightsPoll(opts: { config: SchedulerConfig; tickId: s
   const deadline = opts.startedAt.getTime() + cfg.timeBudgetMs;
 
   // FR-003: a declared-but-unavailable surface is never claimed, so no call is ever attempted for it.
-  const providerKeys = listProviders()
+  const providers: InsightsProviderRule[] = listProviders()
     .filter((p) => p.insights && !p.insights.declaration.unavailable)
-    .map((p) => p.key);
+    .map((p) => ({
+      providerKey: p.key,
+      requiredScopes: p.insights?.declaration.requiredScopes ?? [],
+      ephemeralPostTypes: p.insights?.declaration.ephemeralPostTypes ?? [],
+    }));
 
-  if (providerKeys.length === 0) {
+  if (providers.length === 0) {
     await writeHeartbeat("insights_poll", await clock.now(), { ...counts });
     return counts;
   }
@@ -82,11 +87,11 @@ export async function runInsightsPoll(opts: { config: SchedulerConfig; tickId: s
     return counts;
   }
 
-  const accounts = await claimDueAccountMetricPolls({ now, limit: cfg.accountsPerRun, leaseMs: opts.config.leaseMs, providerKeys });
-  const targets = await claimDuePostMetricPolls({ now, limit: cfg.targetsPerRun, leaseMs: opts.config.leaseMs, minIntervalMs: cfg.pollMinIntervalMs, providerKeys });
+  const accounts = await claimDueAccountMetricPolls({ now, limit: cfg.accountsPerRun, leaseMs: opts.config.leaseMs, providers });
+  const targets = await claimDuePostMetricPolls({ now, limit: cfg.targetsPerRun, leaseMs: opts.config.leaseMs, minIntervalMs: cfg.pollMinIntervalMs, providers });
   counts.accountsClaimed = accounts.length;
   counts.targetsClaimed = targets.length;
-  counts.targetsSkippedNoExternalId = await countPublishedWithoutExternalId(providerKeys);
+  counts.targetsSkippedNoExternalId = await countPublishedWithoutExternalId(providers);
 
   const targetsByAccount = new Map<string, ClaimedPostMetricPoll[]>();
   for (const t of targets) {

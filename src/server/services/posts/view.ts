@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { findProvider } from "@/providers/registry";
 import { buildTargetInsightsView, type TargetInsightsView } from "@/lib/insights/panel";
+import { insightsPermissionForAccount } from "../accounts";
 import * as clock from "../../dal/clock";
 import { ForbiddenError, NotFoundError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
@@ -91,6 +92,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
           externalId: t.externalId,
           declaration: (account ? findProvider(account.providerKey)?.insights?.declaration : undefined) ?? null,
           providerName,
+          permission: account ? insightsPermissionForAccount(account, findProvider(account.providerKey)) : null,
           snapshot: (latestSnapshots.get(t.id) as { capturedAt: Date; metrics: Record<string, unknown> } | undefined) ?? null,
           pollState: pollStates.get(t.id) ?? null,
           now,

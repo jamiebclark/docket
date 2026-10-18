@@ -191,6 +191,27 @@ export default async function AccountsPage({
                     {note}
                   </p>
                 ))}
+                {account.insightsPermission?.kind === "not_granted" ? (
+                  <div className="flex flex-wrap items-end gap-3">
+                    <p className="text-sm">
+                      <span className="font-medium text-foreground">Insights need a reconnect.</span>{" "}
+                      {account.insightsPermission.reason}
+                      {account.insightsPermission.docsPath ? (
+                        <>
+                          {" "}
+                          <a href={account.insightsPermission.docsPath} className="underline">
+                            Set up insights →
+                          </a>
+                        </>
+                      ) : null}
+                    </p>
+                    {canManage && account.insightsPermission.canReconnect
+                      ? groups
+                          .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
+                          .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
+                      : null}
+                  </div>
+                ) : null}
                 {canManage && isMock ? (
                   <div className="flex flex-wrap items-end gap-4">
                     {account.status === "needs_reauth" ? <ReconnectMockButton slug={projectSlug} id={account.id} /> : null}

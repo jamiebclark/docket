@@ -99,5 +99,10 @@ export type {
   PostMetricSnapshotsRepo,
   PostPollStatePatch,
 } from "./insights";
-export { claimDueAccountMetricPolls, claimDuePostMetricPolls, countPublishedWithoutExternalId } from "./insights-claims";
-export type { ClaimedAccountMetricPoll, ClaimedPostMetricPoll } from "./insights-claims";
+export {
+  claimDueAccountMetricPolls,
+  claimDuePostMetricPolls,
+  countAccountsMissingInsightsScopes,
+  countPublishedWithoutExternalId,
+} from "./insights-claims";
+export type { ClaimedAccountMetricPoll, ClaimedPostMetricPoll, InsightsProviderRule } from "./insights-claims";

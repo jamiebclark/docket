@@ -19,6 +19,7 @@ const BASE: BuildTargetInsightsViewInput = {
   externalId: "ext-1",
   declaration: DECLARATION,
   providerName: "Bluesky",
+  permission: null,
   snapshot: null,
   pollState: null,
   now: NOW,
@@ -45,6 +46,32 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
 
   it("row 4: a hand-published target with no external id has no post to read numbers from", () => {
     expect(buildTargetInsightsView({ ...BASE, externalId: null })).toEqual({ state: "no_external_id" });
+  });
+
+  it("new row (FR-025): permission_not_requested goes after unavailable and before no_external_id, carrying no number", () => {
+    const permission = { kind: "not_requested" as const, missing: ["read_insights"], reason: "Docket has not been given permission.", docsPath: "meta-setup" };
+    const view = buildTargetInsightsView({ ...BASE, externalId: null, permission });
+    expect(view).toEqual({ state: "permission_not_requested", reason: "Docket has not been given permission.", docsPath: "meta-setup" });
+    const declaration: InsightsDeclaration = { ...DECLARATION, unavailable: { reason: "Not available." } };
+    expect(buildTargetInsightsView({ ...BASE, declaration, permission })).toEqual({ state: "unavailable", reason: "Not available." });
+  });
+
+  it("new row (FR-025): needs_reconnect goes after unavailable and before no_external_id, carrying canReconnect", () => {
+    const permission = {
+      kind: "not_granted" as const,
+      missing: ["instagram_manage_insights"],
+      reason: "Reconnect to grant insights access.",
+      docsPath: "meta-setup",
+      canReconnect: true,
+    };
+    const view = buildTargetInsightsView({ ...BASE, externalId: null, permission });
+    expect(view).toEqual({
+      state: "needs_reconnect",
+      reason: "Reconnect to grant insights access.",
+      docsPath: "meta-setup",
+      canReconnect: true,
+    });
+    expect(JSON.stringify(view)).not.toMatch(/"value"|"rows"/);
   });
 
   it("row 5: gone wins over failing even with failures recorded", () => {

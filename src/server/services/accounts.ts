@@ -1,7 +1,8 @@
 import { providerPublishLimits } from "../../providers/limits";
 import { z } from "zod";
 import { findProvider, listProviders } from "@/providers/registry";
-import type { CredentialField, ProviderCapabilities, PublishLimit } from "@/providers/types";
+import type { CredentialField, ProviderCapabilities, PublishLimit, SocialProvider } from "@/providers/types";
+import { insightsPermissionFor, type InsightsPermission } from "@/lib/insights/eligibility";
 import {
   connectMockSchema,
   publishLimitSchema,
@@ -39,6 +40,26 @@ export interface AccountView {
   notes: string[];
   /** Per-account writing rules, normalised; `null` when none are set. */
   postingInstructions: string | null;
+  /** G33. Null when this provider declares no insights or needs no permission. */
+  insightsPermission: InsightsPermission | null;
+}
+
+/** G33: the one decision, computed from the stored grant, the provider's declaration and the
+ * group's `optionalScopes` — shared by the accounts page and the post-targets panel. */
+export function insightsPermissionForAccount(
+  a: Pick<AccountRecord, "grantedScopes">,
+  provider: SocialProvider | undefined,
+): InsightsPermission | null {
+  const requiredScopes = provider?.insights?.declaration.requiredScopes ?? [];
+  if (requiredScopes.length === 0) return null;
+  const group = provider?.connect.strategy === "oauth" ? provider.connect.group : undefined;
+  return insightsPermissionFor({
+    requiredScopes,
+    grantedScopes: a.grantedScopes ?? null,
+    requestedScopes: group?.optionalScopes?.requested(process.env) ?? [],
+    cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env) ?? null,
+    missingScopes: provider?.insights?.declaration.missingScopes ?? null,
+  });
 }
 
 export interface ConnectableProvider {
@@ -107,6 +128,7 @@ function view(a: AccountRecord, timeZone: string, now?: Date): AccountView {
     connectedAt: a.createdAt,
     notes: notesFor(a, timeZone, now),
     postingInstructions: a.postingInstructions,
+    insightsPermission: insightsPermissionForAccount(a, provider),
   };
 }
 
