@@ -228,7 +228,7 @@ description: "Task list template for feature implementation"
 - [X] T101 [P] Edit `docs/adding-a-provider.md`: record G35, G36, G37 in the "Generic hooks index" (continuing from G34) and explain each in §21, including the FR-050 "change to how an existing hook's output is used" note (FR-060) — depends on T015, T018, T025
 - [X] T102 [P] Edit `docs/decisions.md`: append G35, G36, G37 with their reversals (contracts/provider-insights-082.md §2-§4), the four new FR-050 columns vs. inference, the Pinterest message-token exception (already in T075), and the X ceiling default — each with its reversal (FR-060) — depends on T101, T075
 - [X] T103 [P] Edit `docs/feature-map.md`: record what this entry shipped (TikTok, Pinterest, X readers; the identifier repair; the FR-050 honesty fix) and the named gaps it leaves (FR-064) — depends on T054, T068, T077
-- [ ] T104 Run the full final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` — depends on every task above except Phase 10
+- [X] T104 Run the full final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` — depends on every task above except Phase 10
 
 ---
 
