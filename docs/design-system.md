@@ -563,3 +563,67 @@ into the change that found them.
 |---|---|---|---|
 | E1 | Heading levels invert around the posting-slot grid: the Accounts page renders "Posting slots (zone)" as an `h4` (`src/app/p/[projectSlug]/accounts/page.tsx`), while the seven weekday names *inside* the grid are `h3` (`src/components/schedule/WeekSlotGrid.tsx`). A screen-reader outline therefore nests backwards. | Low | Fixing it properly means `WeekSlotGrid` taking a `headingLevel` prop, as `SetupNotice` does, rather than hard-coding a level in a component meant to be reusable. Found during the week-add audit (048), which changed no headings. |
 | E2 | `accounts/page.tsx` and `WeekSlotGrid.tsx` each hand-roll `cardStyles`' exact class string instead of importing it. | Low | Cosmetic duplication, no visual difference. The week-add form (048) uses `cardStyles`; the two older spots should follow when either is next touched. |
+
+## 17. Charts (2026-10-18)
+
+Docket's first charts, added for Insights (083). The conventions below are project rules, not
+suggestions — the next entry that draws a chart follows them rather than inventing a third look.
+`src/components/insights/` is the only place chart SVG lives.
+
+**Technique.** Server-rendered inline SVG: a server component returns `<svg viewBox="0 0 W H">`
+with plain `<polyline>`, `<path>`, `<rect>`, `<line>` and `<text>`. No `"use client"`, no canvas, no
+charting library, no new runtime dependency. Two primitives: `TrendChart` (a line, or a bar per
+period) and `GroupChart` (horizontal bars, one per comparison group). `viewBox` plus `width="100%"`
+and `height="auto"`, so a chart scales with its card without a resize observer.
+
+**No interactivity, so no tooltip.** Everything a tooltip would say is in the chart's table instead.
+Sample sizes and exact values must be readable without hovering, clicking or expanding anything.
+
+**Colour: one series per chart, so no palette.** Every chart in this entry holds exactly one
+series — an account's own metric, or one comparison's groups — so the categorical palette that
+would otherwise force a chart to invent colours is never needed.
+
+| Element | Token |
+|---|---|
+| mark (line, bar fill) | `primary` |
+| axis, gridlines, baseline | `border` |
+| axis labels, "as of" | `muted-foreground` |
+| caution hatch (a `provisional` group) | `primary` at 100% in a 45° `<pattern>` over `surface` |
+| card, caption | `surface`, `heading` |
+
+All of these pairs are already in `scripts/check-contrast.mjs`'s set; this entry introduces no new
+pair. **Never colour alone** — a `provisional` group is told from a `ranked` one by a hatched fill
+*and* the words "few posts"; a removed subject by "(removed)" in its label. **Never `dark:` classes
+and never a raw Tailwind colour** — if a chart looks wrong in dark mode, the token is wrong.
+
+**Every chart states, as text, never only in a tooltip:** the range it covers and the capture time
+of its most recent point; the platform's own label for the metric; for a `windowed` metric, its
+window where confirmed and that it is not accumulated; for a comparison group, its sample size and
+its caution where `provisional`; the count of suppressed groups and why; each exclusion and its
+count.
+
+**Every chart has a table, and the table is the accessible version.** It names each series, its
+platform, its metric and its sample size (opened by default on comparison cards). The SVG is
+`role="img"` with `aria-labelledby` pointing at the chart's caption; its decorative internals are
+`aria-hidden="true"`. Nothing in the SVG is the sole carrier of a number — this is both the
+accessibility answer and the audit surface for "never sum across platforms": a reviewer can read
+the rule off the DOM instead of off pixels.
+
+**Honest degenerate states:**
+
+| Situation | What is drawn |
+|---|---|
+| a day with no snapshot | a visible gap — never interpolated, carried forward or zeroed |
+| a series with one point | the point, plus "a trend needs more than one reading" |
+| a platform declaring no account metrics | no chart and no empty series — a line stating the platform reports no account numbers, linking `docs/insights.md` |
+| a metric whose shape is `unknown` | no series; the shape's reason where the series would be |
+| a cumulative metric that falls | drawn as it falls — never clamped to zero or the previous value |
+| a key a platform started reporting partway through | a series that starts partway through; the gap before it is a gap |
+| no published posts, or no snapshots at all | an `EmptyState` naming what has to happen — publish, then wait for the first scheduled read — never an empty chart |
+| the insights read fails | the page's `error.tsx`; the rest of the project shell does not break or go blank |
+
+Loading is a `loading.tsx` of skeleton blocks matching the layout, per §8 above.
+
+**Numbers** are formatted with the app's existing count formatter, `tabular-nums` in tables, and
+never rounded in a way that would merge two platforms' magnitudes onto one axis — which cannot
+happen, because no axis in this entry carries two platforms' values.

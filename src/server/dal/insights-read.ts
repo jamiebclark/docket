@@ -72,6 +72,13 @@ export async function postMetricReadingRows(
 }
 
 /**
+ * The account-trends read (US1): the same project-pinned `UNION ALL` of surviving snapshots and
+ * folded rollup points as `accountMetricReadingRows`, named for its caller,
+ * `src/server/services/insights/view.ts` (research.md §6).
+ */
+export const accountTrendRows = accountMetricReadingRows;
+
+/**
  * Buckets ascending `rows` by UTC day and keeps the last (newest `capturedAt`) reading per (subject,
  * metric key, day) — exactly one value per day, a point beating nothing and a surviving snapshot
  * beating an older point (contracts/fold.md §4, FR-054).
