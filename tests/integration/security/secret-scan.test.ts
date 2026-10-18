@@ -1117,7 +1117,7 @@ describe("secret scan (FR-020, SC-005)", () => {
     ];
     expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
     // The three accounts' poll states are now rescheduled hours or days past this test's fake `NOW`,
-    // which is still well before the real clock another test's unwrapped `runTick()` reads — park them
+    // which is still well before the real clock an unpinned tick elsewhere reads — park them
     // so they cannot leak a claim into a later file sharing this worker's database.
     await parkAllDueTargets();
   });

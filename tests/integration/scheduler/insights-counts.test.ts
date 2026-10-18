@@ -138,9 +138,17 @@ describe("the counts the panel reads (contracts/scheduler-insights-081.md §2, �
     const account = await createMockAccount(ctx.project.id, {}, { providerKey: publicIdProvider.key });
     await publishedTarget(ctx.project.id, account.id, { externalId: "counts-no-public-id-1", publishedAt: NOW });
 
+    // `targetsSkippedNoExternalId` is a cross-project count (the tick is scheduler-wide), so a
+    // worker's database carries whatever other files left behind. Asserting a global zero here
+    // tests their isolation, not this behaviour. The property that matters is that THIS target —
+    // which has an external id and lacks only the public post id — moves the publicPostId counter
+    // and not the other one, so measure the delta across creating it.
+    const before = await atTime(NOW, () => runTick(tickConfig()));
+    await publishedTarget(ctx.project.id, account.id, { externalId: "counts-no-public-id-2", publishedAt: NOW });
+
     const summary = await atTime(new Date(NOW.getTime() + HOUR_MS), () => runTick(tickConfig()));
     expect(summary.insightsPoll.counts.targetsSkippedNoPublicPostId).toBeGreaterThanOrEqual(1);
-    expect(summary.insightsPoll.counts.targetsSkippedNoExternalId).toBe(0);
+    expect(summary.insightsPoll.counts.targetsSkippedNoExternalId).toBe(before.insightsPoll.counts.targetsSkippedNoExternalId);
     expect(summary.insightsPoll.counts.failed).toBe(0);
   });
 
