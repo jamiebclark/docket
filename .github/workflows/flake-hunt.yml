@@ -106,6 +106,11 @@ jobs:
           name: flake-${{ matrix.shard }}-${{ matrix.lane }}
           path: .flake/
           if-no-files-found: ignore
+          # `.flake` is dot-prefixed, so upload-artifact treats everything under it as hidden and
+          # silently uploads nothing — "No files were found with the provided path", with the step
+          # still green. Observed on run 39086120968: every lane wrote its reports, every upload
+          # found none of them, and the consolidator read an empty directory.
+          include-hidden-files: true
           retention-days: 7
 
   # `if: always()` so a lane that failed outright still contributes to the report: a dead or empty
@@ -132,5 +137,6 @@ jobs:
         with:
           name: flake-report
           path: .flake/out
+          include-hidden-files: true
           retention-days: 90
       - run: cat .flake/out/flake-report.md >> "$GITHUB_STEP_SUMMARY"
