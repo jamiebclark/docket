@@ -76,6 +76,10 @@ export const generationRecordSchema = z.object({
   provider: z.enum(["openai", "anthropic"]),
   model: z.string(),
   voiceProfile: z.object({ id: z.string(), versionId: z.string(), version: z.number().int(), name: z.string() }),
+  /** Durable home for the series-kind comparison dimension (083 research.md §2.2) — survives the run's 90-day prune. */
+  standingSeries: z
+    .object({ id: z.string(), name: z.string(), occurrenceRule: z.enum(["cadence", "dated_list"]) })
+    .nullish(),
   inputs: generationInputsSchema,
   prompt: z.object({
     system: z.string(),
