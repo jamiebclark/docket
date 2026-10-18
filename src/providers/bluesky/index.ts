@@ -15,7 +15,16 @@ export const blueskyProvider: SocialProvider<BlueskySettings, BlueskyState> = {
   connect: {
     strategy: "credentials",
     fields: [
-      { name: "handle", label: "Handle", secret: false, placeholder: "you.bsky.social", help: "Your Bluesky handle, without the @." },
+      {
+        name: "handle",
+        label: "Handle",
+        secret: false,
+        placeholder: "you.bsky.social",
+        help: "Your Bluesky handle, without the @.",
+        // A Bluesky account's display name is its handle (connectAccount and refreshCredentials
+        // both return `res.data.handle` as the display name), so a reconnect can fill this in.
+        prefillOnReconnect: "displayName",
+      },
       {
         name: "appPassword",
         label: "App password",

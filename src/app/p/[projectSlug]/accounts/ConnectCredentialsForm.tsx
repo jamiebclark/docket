@@ -7,8 +7,20 @@ import { Field } from "@/components/ui/Field";
 import type { CredentialField } from "@/providers/types";
 import { connectCredentialsAction } from "./actions";
 
-const initialValues = (fields: CredentialField[]) =>
-  Object.fromEntries(fields.map((f) => [f.name, f.secret ? "" : (f.defaultValue ?? "")]));
+/**
+ * Secrets always start empty — a stored app password exists so the server can reauthenticate
+ * itself, never to be rendered back into a field. A non-secret field may be prefilled from the
+ * account being reconnected when its provider asked for that, so nobody retypes a handle Docket
+ * already knows.
+ */
+const initialValues = (fields: CredentialField[], account?: { displayName: string }) =>
+  Object.fromEntries(
+    fields.map((f) => {
+      if (f.secret) return [f.name, ""];
+      const prefill = account && f.prefillOnReconnect === "displayName" ? account.displayName : undefined;
+      return [f.name, prefill ?? f.defaultValue ?? ""];
+    }),
+  );
 
 /** Connects (or, with `accountId`, reconnects) an account from the fields a provider declares. Secrets never persist here. */
 export function ConnectCredentialsForm({
@@ -17,6 +29,7 @@ export function ConnectCredentialsForm({
   providerName,
   fields,
   accountId,
+  account,
   submitLabel,
 }: {
   slug: string;
@@ -24,12 +37,14 @@ export function ConnectCredentialsForm({
   providerName: string;
   fields: CredentialField[];
   accountId?: string;
+  /** The account being reconnected, for fields their provider marked `prefillOnReconnect`. */
+  account?: { displayName: string };
   submitLabel: string;
 }) {
   const idBase = `connect-${providerKey}-${accountId ?? "new"}`;
   const formRef = useRef<HTMLFormElement>(null);
   const alertRef = useRef<HTMLParagraphElement>(null);
-  const [values, setValues] = useState(() => initialValues(fields));
+  const [values, setValues] = useState(() => initialValues(fields, account));
   const [message, setMessage] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [announcement, setAnnouncement] = useState("");
@@ -53,7 +68,7 @@ export function ConnectCredentialsForm({
     start(async () => {
       const res = await connectCredentialsAction(slug, { providerKey, fields: submitted, ...(accountId ? { accountId } : {}) });
       if (res.ok) {
-        setValues(initialValues(fields));
+        setValues(initialValues(fields, account));
         setAnnouncement(`Connected ${res.data.displayName}`);
         router.push(res.data.landing);
         return;

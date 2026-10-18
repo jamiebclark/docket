@@ -159,6 +159,17 @@ export interface CredentialField {
   /** Used when the submitted value is empty. Requires `optional`; never on a secret field. */
   defaultValue?: string;
   placeholder?: string;
+  /**
+   * On a *reconnect*, prefill this field from the connected account rather than leaving it blank,
+   * so nobody retypes what Docket already knows. The provider names the source, because only it
+   * knows what its display name means — Bluesky's is the handle, and a provider whose display name
+   * is a person's name must not set this.
+   *
+   * **Never on a secret field.** A stored secret exists so the server can reauthenticate itself;
+   * rendering one into a form would send it back to the browser on every page view.
+   * `tests/lint/no-prefilled-secrets.test.ts` enforces that.
+   */
+  prefillOnReconnect?: "displayName";
 }
 
 export type ConnectResult =
