@@ -100,13 +100,13 @@ description: "Task list template for feature implementation"
 
 **Independent Test**: run the full suite with no new environment variable set, accounts whose `granted_scopes` is `NULL`; assert byte-identical authorization URLs, zero Meta/Threads claims, zero failures attributable to them, a reason (not an error) on the panel, and Bluesky unchanged.
 
-- [ ] T039 [P] [US1] `src/providers/meta/oauth.test.ts`: extend — with `META_INSIGHTS_SCOPES` unset, `dialogUrl` equals a **literal** expected string identical to today's (FR-018, US1-AS1) — write first, confirm it fails if T040 regresses it
-- [ ] T040 [US1] Edit `src/providers/meta/oauth.ts`: `dialogUrl` appends `optionalFor(cfg)` to `scope` only in the non-config-id path, per contracts/granted-scopes.md §3 — with the flag unset this is a no-op — depends on T015, T039
-- [ ] T041 [P] [US1] `src/providers/threads/connect-group.test.ts` or `oauth.test.ts`: extend — with `THREADS_INSIGHTS_SCOPES` unset, the authorization URL is byte-identical to today's literal (FR-018, US1-AS1)
-- [ ] T042 [P] [US1] `tests/integration/insights/` (new or extended, e.g. `tests/integration/insights/no-reconnect-safety.test.ts`): insert a pre-081 Instagram account with `granted_scopes IS NULL`, run the insights section, assert it is absent from the claim, its lease is untouched, `getCredentialsCiphertext` was not called for it, and no HTTP request was recorded for it (FR-023, SC-003, US1-AS2) — depends on T030
-- [ ] T043 [P] [US1] `tests/integration/insights/panel.test.tsx` (extend 080's): a Meta account with no permission renders `permission_not_requested` with the guide link and no number, no dash, no zero (US1-AS3) — depends on T034
-- [ ] T044 [P] [US1] Extend T038's accounts-page test: badge unchanged, no reconnect line, publishing unaffected for a pre-081 account (US1-AS4)
-- [ ] T045 [US1] Run 080's whole insights suite untouched and confirm green with no edit required (FR-024, FR-043, US1-AS5) — depends on T030, T034, T012
+- [X] T039 [P] [US1] `src/providers/meta/oauth.test.ts`: extend — with `META_INSIGHTS_SCOPES` unset, `dialogUrl` equals a **literal** expected string identical to today's (FR-018, US1-AS1) — write first, confirm it fails if T040 regresses it
+- [X] T040 [US1] Edit `src/providers/meta/oauth.ts`: `dialogUrl` appends `optionalFor(cfg)` to `scope` only in the non-config-id path, per contracts/granted-scopes.md §3 — with the flag unset this is a no-op — depends on T015, T039
+- [X] T041 [P] [US1] `src/providers/threads/connect-group.test.ts` or `oauth.test.ts`: extend — with `THREADS_INSIGHTS_SCOPES` unset, the authorization URL is byte-identical to today's literal (FR-018, US1-AS1)
+- [X] T042 [P] [US1] `tests/integration/insights/` (new or extended, e.g. `tests/integration/insights/no-reconnect-safety.test.ts`): insert a pre-081 Instagram account with `granted_scopes IS NULL`, run the insights section, assert it is absent from the claim, its lease is untouched, `getCredentialsCiphertext` was not called for it, and no HTTP request was recorded for it (FR-023, SC-003, US1-AS2) — depends on T030
+- [X] T043 [P] [US1] `tests/integration/insights/panel.test.tsx` (extend 080's): a Meta account with no permission renders `permission_not_requested` with the guide link and no number, no dash, no zero (US1-AS3) — depends on T034
+- [X] T044 [P] [US1] Extend T038's accounts-page test: badge unchanged, no reconnect line, publishing unaffected for a pre-081 account (US1-AS4)
+- [X] T045 [US1] Run 080's whole insights suite untouched and confirm green with no edit required (FR-024, FR-043, US1-AS5) — depends on T030, T034, T012
 
 **Checkpoint**: US1 is independently proven — an install that changes nothing sees zero behaviour change.
 

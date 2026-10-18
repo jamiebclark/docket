@@ -102,4 +102,16 @@ describe("accounts page: the insights-need-a-reconnect line (FR-027, US1-AS4, US
     expect(view!.status).toBe("active");
     expect(view!.insightsPermission?.kind).toBe("not_requested");
   });
+
+  it("a pre-081 account (granted_scopes NULL, never asked): badge unchanged, no reconnect line, still publishes (US1-AS4)", async () => {
+    const { env, account } = await connectWith("insights-not-asked", undefined);
+    const html = await renderedHtml(env);
+    expect(html).not.toContain("Insights need a reconnect");
+    const [view] = await accounts.listAccounts(env.scope);
+    expect(view!.status).toBe("active");
+    expect(view!.notes).toEqual([]);
+    expect(view!.publishLimit).toBeNull();
+    expect(view!.insightsPermission?.kind).toBe("not_requested");
+    expect(account.grantedScopes ?? null).toBeNull();
+  });
 });

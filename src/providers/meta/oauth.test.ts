@@ -36,6 +36,15 @@ describe("dialogUrl", () => {
     expect(u.searchParams.get("config_id")).toBe("777");
     expect(u.searchParams.has("scope")).toBe(false);
   });
+
+  // FR-018, US1-AS1: with the flag unset, the URL is byte-identical to today's — compared against a
+  // literal, never a re-computation, so a change to both the test and the code can't hide a regression.
+  it("with META_INSIGHTS_SCOPES unset, the dialog URL is byte-identical to today's", () => {
+    const u = dialogUrl(cfg, { state: "st", redirectUri: "https://x.test/connect/callback" });
+    expect(u).toBe(
+      "https://www.facebook.com/v26.0/dialog/oauth?client_id=12345&redirect_uri=https%3A%2F%2Fx.test%2Fconnect%2Fcallback&state=st&response_type=code&scope=pages_show_list%2Cpages_manage_posts%2Cpages_read_engagement%2Cinstagram_basic%2Cinstagram_content_publish",
+    );
+  });
 });
 
 describe("exchanges", () => {
