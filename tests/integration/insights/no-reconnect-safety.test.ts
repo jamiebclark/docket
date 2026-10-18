@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { mockProvider } from "../../../src/providers/mock";
@@ -12,6 +12,7 @@ import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { registerTestProvider } from "../../helpers/provider-fixtures";
 import { tickConfig } from "../../helpers/tick";
+import { parkAllDueTargets } from "../../helpers/scheduling";
 
 afterAll(closeDb);
 
@@ -46,6 +47,11 @@ const rule: InsightsProviderRule = {
   ephemeralPostTypes: [],
 };
 
+// A whole tick claims across every project, so rows left behind by other files on this worker's
+// database are claimed by this test's tick: `no-reconnect-safety.test.ts` asserts zero HTTP requests
+// and saw 1 then 2 across 3 of 20 repetitions in flake-hunt run 39132854448, the count varying with
+// the shuffled file order. Parking first is what the other 112 tick tests already do.
+beforeEach(parkAllDueTargets);
 describe("a pre-081 install's Instagram account stays untouched (FR-023, SC-003, US1-AS2)", () => {
   it("granted_scopes IS NULL: absent from the claim, no lease, no snapshot, no HTTP request", async () => {
     const ctx = await createProjectWithMembers();

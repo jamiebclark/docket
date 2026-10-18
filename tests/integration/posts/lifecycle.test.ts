@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { ConflictError, NotFoundError } from "../../../src/server/dal/errors";
 import * as media from "../../../src/server/services/media";
 import * as posts from "../../../src/server/services/posts";
@@ -6,6 +6,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
 import { tickConfig } from "../../helpers/tick";
+import { parkAllDueTargets } from "../../helpers/scheduling";
 
 afterAll(async () => {
   await closeDb();
@@ -15,6 +16,11 @@ const NOW = new Date("2026-10-01T12:00:00Z");
 const MON1 = "2026-10-05T09:00:00.000Z";
 const MON2 = "2026-10-12T09:00:00.000Z";
 
+// A whole tick claims across every project, so rows left behind by other files on this worker's
+// database are claimed by this test's tick: `no-reconnect-safety.test.ts` asserts zero HTTP requests
+// and saw 1 then 2 across 3 of 20 repetitions in flake-hunt run 39132854448, the count varying with
+// the shuffled file order. Parking first is what the other 112 tick tests already do.
+beforeEach(parkAllDueTargets);
 describe("post lifecycle", () => {
   it("creates a draft with media and targets and marks the asset used", async () => {
     const env = await postsEnv();

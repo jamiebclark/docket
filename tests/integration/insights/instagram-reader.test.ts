@@ -14,6 +14,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { tickConfig } from "../../helpers/tick";
+import { parkAllDueTargets } from "../../helpers/scheduling";
 
 afterAll(closeDb);
 
@@ -43,6 +44,11 @@ afterEach(() => {
 
 const p = (path: string) => `/v26.0${path}`;
 
+// A whole tick claims across every project, so rows left behind by other files on this worker's
+// database are claimed by this test's tick: `no-reconnect-safety.test.ts` asserts zero HTTP requests
+// and saw 1 then 2 across 3 of 20 repetitions in flake-hunt run 39132854448, the count varying with
+// the shuffled file order. Parking first is what the other 112 tick tests already do.
+beforeEach(parkAllDueTargets);
 describe("US3: the opt-in flag on, a reconnect granting the scope, and Instagram numbers arriving", () => {
   it("the dialog requests the declared scopes while the flag is on (US3-AS1)", () => {
     const requested = metaConnectGroup.optionalScopes?.requested(process.env);

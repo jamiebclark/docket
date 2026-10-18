@@ -1,5 +1,5 @@
 {
-  "id": "b832a1ae-3d23-4ac6-b634-359f978a74ea",
+  "id": "aa2e3ce9-c6ef-4974-96d8-1b37a8e32959",
   "prevId": "cc71ca2c-194b-46e3-ab0c-7479cb1f48da",
   "version": "7",
   "dialect": "postgresql",
@@ -3323,7 +3323,7 @@
         },
         "engagement_drafts_decision_names_person": {
           "name": "engagement_drafts_decision_names_person",
-          "value": "\"engagement_drafts\".\"review_state\" IN ('needs_review', 'discarded') OR (\"engagement_drafts\".\"reviewed_at\" IS NOT NULL AND \"engagement_drafts\".\"reviewed_by_user_id\" IS NOT NULL)"
+          "value": "\"engagement_drafts\".\"review_state\" IN ('needs_review', 'discarded') OR \"engagement_drafts\".\"reviewed_at\" IS NOT NULL"
         },
         "engagement_drafts_model_origin_voice": {
           "name": "engagement_drafts_model_origin_voice",
@@ -6901,12 +6901,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "public_post_id": {
-          "name": "public_post_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "published_at": {
           "name": "published_at",
           "type": "timestamp with time zone",
@@ -7218,10 +7212,6 @@
         "post_targets_lease_pair": {
           "name": "post_targets_lease_pair",
           "value": "(\"post_targets\".\"lease_until\" IS NULL) = (\"post_targets\".\"lease_owner\" IS NULL)"
-        },
-        "post_targets_public_post_id_len": {
-          "name": "post_targets_public_post_id_len",
-          "value": "\"post_targets\".\"public_post_id\" IS NULL OR char_length(\"post_targets\".\"public_post_id\") BETWEEN 1 AND 64"
         },
         "post_targets_live_has_schedule": {
           "name": "post_targets_live_has_schedule",
@@ -11247,18 +11237,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "unavailable_reason": {
-          "name": "unavailable_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unavailable_docs_path": {
-          "name": "unavailable_docs_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11345,18 +11323,6 @@
         "account_metric_poll_states_last_error_len": {
           "name": "account_metric_poll_states_last_error_len",
           "value": "\"account_metric_poll_states\".\"last_error\" IS NULL OR char_length(\"account_metric_poll_states\".\"last_error\") <= 500"
-        },
-        "account_metric_poll_states_unavailable_reason_len": {
-          "name": "account_metric_poll_states_unavailable_reason_len",
-          "value": "\"account_metric_poll_states\".\"unavailable_reason\" IS NULL OR char_length(\"account_metric_poll_states\".\"unavailable_reason\") <= 500"
-        },
-        "account_metric_poll_states_unavailable_docs_pair": {
-          "name": "account_metric_poll_states_unavailable_docs_pair",
-          "value": "\"account_metric_poll_states\".\"unavailable_docs_path\" IS NULL OR \"account_metric_poll_states\".\"unavailable_reason\" IS NOT NULL"
-        },
-        "account_metric_poll_states_unavailable_docs_path_len": {
-          "name": "account_metric_poll_states_unavailable_docs_path_len",
-          "value": "\"account_metric_poll_states\".\"unavailable_docs_path\" IS NULL OR char_length(\"account_metric_poll_states\".\"unavailable_docs_path\") <= 100"
         }
       },
       "isRLSEnabled": false
@@ -11620,18 +11586,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "unavailable_reason": {
-          "name": "unavailable_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unavailable_docs_path": {
-          "name": "unavailable_docs_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11743,18 +11697,6 @@
         "post_metric_poll_states_last_error_len": {
           "name": "post_metric_poll_states_last_error_len",
           "value": "\"post_metric_poll_states\".\"last_error\" IS NULL OR char_length(\"post_metric_poll_states\".\"last_error\") <= 500"
-        },
-        "post_metric_poll_states_unavailable_reason_len": {
-          "name": "post_metric_poll_states_unavailable_reason_len",
-          "value": "\"post_metric_poll_states\".\"unavailable_reason\" IS NULL OR char_length(\"post_metric_poll_states\".\"unavailable_reason\") <= 500"
-        },
-        "post_metric_poll_states_unavailable_docs_pair": {
-          "name": "post_metric_poll_states_unavailable_docs_pair",
-          "value": "\"post_metric_poll_states\".\"unavailable_docs_path\" IS NULL OR \"post_metric_poll_states\".\"unavailable_reason\" IS NOT NULL"
-        },
-        "post_metric_poll_states_unavailable_docs_path_len": {
-          "name": "post_metric_poll_states_unavailable_docs_path_len",
-          "value": "\"post_metric_poll_states\".\"unavailable_docs_path\" IS NULL OR char_length(\"post_metric_poll_states\".\"unavailable_docs_path\") <= 100"
         }
       },
       "isRLSEnabled": false

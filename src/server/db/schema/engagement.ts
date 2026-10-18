@@ -133,9 +133,17 @@ export const engagementDrafts = pgTable(
       .where(sql`${t.reviewState} = 'approved' AND ${t.sendState} IN ('waiting', 'sending')`),
     index("engagement_drafts_item_thread_idx").on(t.projectId, t.engagementItemId, t.createdAt.desc()),
     check("engagement_drafts_send_requires_approved", sql`${t.sendState} = 'none' OR ${t.reviewState} = 'approved'`),
+    // `reviewed_at` is required, the reviewer is not. `reviewed_by_user_id` is ON DELETE SET NULL,
+    // like all 38 other actor columns in this schema, so requiring it NOT NULL here made the two rules
+    // contradict each other: deleting a user whose draft had been decided set the column null and the
+    // check then rejected the delete with 23514, so that user could never be removed at all.
+    // Found via flake-hunt run 39096335776 — `delete from "user"` in security/secret-scan.test.ts,
+    // which had failed 8 to 11 of 20 repetitions across four hunts with the cause swallowed twice over.
+    // The audit intent is kept: a decided draft still records WHEN it was decided, and by whom for as
+    // long as that person exists.
     check(
       "engagement_drafts_decision_names_person",
-      sql`${t.reviewState} IN ('needs_review', 'discarded') OR (${t.reviewedAt} IS NOT NULL AND ${t.reviewedByUserId} IS NOT NULL)`,
+      sql`${t.reviewState} IN ('needs_review', 'discarded') OR ${t.reviewedAt} IS NOT NULL`,
     ),
     check(
       "engagement_drafts_model_origin_voice",
@@ -192,7 +200,14 @@ export const engagementReplyClaims = pgTable(
     ),
     check(
       "engagement_reply_claims_member_decision_named",
-      sql`${t.releaseReason} <> 'member_decision' OR ${t.releasedByUserId} IS NOT NULL`,
+      // `released_at` is required, the person is not — the same correction as 0044 made to
+      // engagement_drafts_decision_names_person, for the same reason. `released_by_user_id` is
+      // ON DELETE SET NULL, so requiring it NOT NULL here made the two rules contradict: deleting a
+      // user who had released a claim by member decision set the column null and this check then
+      // rejected the delete with 23514, leaving that user undeletable.
+      // Measured in flake-hunt run 39132854448, which is where it surfaced after 0044 fixed the
+      // sibling constraint and `delete from "user"` went on failing.
+      sql`${t.releaseReason} <> 'member_decision' OR ${t.releasedAt} IS NOT NULL`,
     ),
     check("engagement_reply_claims_item_external_id_len", sql`char_length(${t.itemExternalId}) BETWEEN 1 AND 200`),
     check("engagement_reply_claims_item_external_id_trimmed", sql`btrim(${t.itemExternalId}) = ${t.itemExternalId}`),

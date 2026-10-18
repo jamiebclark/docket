@@ -1,0 +1,2 @@
+ALTER TABLE "engagement_reply_claims" DROP CONSTRAINT "engagement_reply_claims_member_decision_named";--> statement-breakpoint
+ALTER TABLE "engagement_reply_claims" ADD CONSTRAINT "engagement_reply_claims_member_decision_named" CHECK ("engagement_reply_claims"."release_reason" <> 'member_decision' OR "engagement_reply_claims"."released_at" IS NOT NULL);
