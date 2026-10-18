@@ -200,7 +200,14 @@ export const engagementReplyClaims = pgTable(
     ),
     check(
       "engagement_reply_claims_member_decision_named",
-      sql`${t.releaseReason} <> 'member_decision' OR ${t.releasedByUserId} IS NOT NULL`,
+      // `released_at` is required, the person is not — the same correction as 0044 made to
+      // engagement_drafts_decision_names_person, for the same reason. `released_by_user_id` is
+      // ON DELETE SET NULL, so requiring it NOT NULL here made the two rules contradict: deleting a
+      // user who had released a claim by member decision set the column null and this check then
+      // rejected the delete with 23514, leaving that user undeletable.
+      // Measured in flake-hunt run 39132854448, which is where it surfaced after 0044 fixed the
+      // sibling constraint and `delete from "user"` went on failing.
+      sql`${t.releaseReason} <> 'member_decision' OR ${t.releasedAt} IS NOT NULL`,
     ),
     check("engagement_reply_claims_item_external_id_len", sql`char_length(${t.itemExternalId}) BETWEEN 1 AND 200`),
     check("engagement_reply_claims_item_external_id_trimmed", sql`btrim(${t.itemExternalId}) = ${t.itemExternalId}`),
