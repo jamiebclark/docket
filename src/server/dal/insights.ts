@@ -1,9 +1,11 @@
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import {
   accountMetricPollStates,
+  accountMetricRollups,
   accountMetricSnapshots,
   postMetricPollStates,
+  postMetricRollups,
   postMetricSnapshots,
   type AccountMetricPollStateRow,
   type AccountMetricSnapshotRow,
@@ -12,6 +14,8 @@ import {
   type PostMetricPollStateRow,
   type PostMetricSnapshotRow,
 } from "../db/schema";
+import type { FoldableSnapshotRow, FoldedPoint, ShapeFor } from "../services/insights/fold";
+import { foldRows } from "../services/insights/fold";
 
 export type {
   AccountMetricPollStateRow,
@@ -214,32 +218,110 @@ export function createAccountMetricPollStatesRepo(exec: Database, projectId: str
 }
 
 /** Bounded batch delete, cross-project, after `pruneEngagementItemsBefore` (data-model.md §11). */
-export async function prunePostMetricSnapshotsBefore(before: Date, limit: number): Promise<number> {
-  const db = getDb();
-  const ids = await db
-    .select({ id: postMetricSnapshots.id })
-    .from(postMetricSnapshots)
-    .where(sql`${postMetricSnapshots.capturedAt} < ${before}`)
-    .limit(limit);
-  if (ids.length === 0) return 0;
-  const gone = await db
-    .delete(postMetricSnapshots)
-    .where(inArray(postMetricSnapshots.id, ids.map((r) => r.id)))
-    .returning({ id: postMetricSnapshots.id });
-  return gone.length;
+export interface FoldAndPruneCounts {
+  pointsFolded: number;
+  snapshotsDeleted: number;
 }
 
-export async function pruneAccountMetricSnapshotsBefore(before: Date, limit: number): Promise<number> {
-  const db = getDb();
-  const ids = await db
-    .select({ id: accountMetricSnapshots.id })
-    .from(accountMetricSnapshots)
-    .where(sql`${accountMetricSnapshots.capturedAt} < ${before}`)
-    .limit(limit);
-  if (ids.length === 0) return 0;
-  const gone = await db
-    .delete(accountMetricSnapshots)
-    .where(inArray(accountMetricSnapshots.id, ids.map((r) => r.id)))
-    .returning({ id: accountMetricSnapshots.id });
-  return gone.length;
+/**
+ * One batch of claim→fold→upsert→delete, all in one transaction (contracts/fold.md §1). `FOR UPDATE
+ * SKIP LOCKED` on the snapshot rows themselves gives two schedulers disjoint rows (FR-057); a failed
+ * upsert rolls the whole transaction back, so a prune can never delete a row its fold didn't cover
+ * (FR-052).
+ */
+export async function foldAndPruneAccountSnapshotsBefore(before: Date, limit: number, shapeFor: ShapeFor): Promise<FoldAndPruneCounts> {
+  return getDb().transaction(async (tx) => {
+    const exec = tx as unknown as Database;
+    const rows = await exec
+      .select()
+      .from(accountMetricSnapshots)
+      .where(lt(accountMetricSnapshots.capturedAt, before))
+      .orderBy(accountMetricSnapshots.capturedAt)
+      .limit(limit)
+      .for("update", { of: accountMetricSnapshots, skipLocked: true });
+    if (rows.length === 0) return { pointsFolded: 0, snapshotsDeleted: 0 };
+    const projectBySubject = new Map(rows.map((r) => [r.socialAccountId, r.projectId]));
+    const foldable: FoldableSnapshotRow[] = rows.map((r) => ({
+      subjectId: r.socialAccountId,
+      providerKey: r.providerKey,
+      capturedAt: r.capturedAt,
+      metrics: r.metrics as Record<string, unknown>,
+    }));
+    const points = foldRows(foldable, "account", shapeFor);
+    for (const point of points) {
+      await exec
+        .insert(accountMetricRollups)
+        .values({
+          projectId: projectBySubject.get(point.subjectId)!,
+          socialAccountId: point.subjectId,
+          providerKey: point.providerKey,
+          metricKey: point.metricKey,
+          capturedDay: point.capturedDay,
+          value: point.value,
+          capturedAt: point.capturedAt,
+          kind: point.kind,
+        })
+        .onConflictDoUpdate({
+          target: [accountMetricRollups.projectId, accountMetricRollups.socialAccountId, accountMetricRollups.metricKey, accountMetricRollups.capturedDay],
+          set: { value: sql`excluded.value`, capturedAt: sql`excluded.captured_at`, kind: sql`excluded.kind` },
+          setWhere: sql`excluded.captured_at > ${accountMetricRollups.capturedAt}`,
+        });
+    }
+    const deleted = await exec
+      .delete(accountMetricSnapshots)
+      .where(inArray(accountMetricSnapshots.id, rows.map((r) => r.id)))
+      .returning({ id: accountMetricSnapshots.id });
+    return { pointsFolded: points.length, snapshotsDeleted: deleted.length };
+  });
 }
+
+/** Same as `foldAndPruneAccountSnapshotsBefore`, for post-target snapshots (contracts/fold.md §1, §3). */
+export async function foldAndPrunePostSnapshotsBefore(before: Date, limit: number, shapeFor: ShapeFor): Promise<FoldAndPruneCounts> {
+  return getDb().transaction(async (tx) => {
+    const exec = tx as unknown as Database;
+    const rows = await exec
+      .select()
+      .from(postMetricSnapshots)
+      .where(lt(postMetricSnapshots.capturedAt, before))
+      .orderBy(postMetricSnapshots.capturedAt)
+      .limit(limit)
+      .for("update", { of: postMetricSnapshots, skipLocked: true });
+    if (rows.length === 0) return { pointsFolded: 0, snapshotsDeleted: 0 };
+    const projectBySubject = new Map(rows.map((r) => [r.postTargetId, r.projectId]));
+    const accountBySubject = new Map(rows.map((r) => [r.postTargetId, r.socialAccountId]));
+    const foldable: FoldableSnapshotRow[] = rows.map((r) => ({
+      subjectId: r.postTargetId,
+      providerKey: r.providerKey,
+      capturedAt: r.capturedAt,
+      metrics: r.metrics as Record<string, unknown>,
+    }));
+    const points: readonly FoldedPoint[] = foldRows(foldable, "post", shapeFor);
+    for (const point of points) {
+      await exec
+        .insert(postMetricRollups)
+        .values({
+          projectId: projectBySubject.get(point.subjectId)!,
+          postTargetId: point.subjectId,
+          socialAccountId: accountBySubject.get(point.subjectId)!,
+          providerKey: point.providerKey,
+          metricKey: point.metricKey,
+          capturedDay: point.capturedDay,
+          value: point.value,
+          capturedAt: point.capturedAt,
+          kind: point.kind,
+        })
+        .onConflictDoUpdate({
+          target: [postMetricRollups.projectId, postMetricRollups.postTargetId, postMetricRollups.metricKey, postMetricRollups.capturedDay],
+          set: { value: sql`excluded.value`, capturedAt: sql`excluded.captured_at`, kind: sql`excluded.kind` },
+          setWhere: sql`excluded.captured_at > ${postMetricRollups.capturedAt}`,
+        });
+    }
+    const deleted = await exec
+      .delete(postMetricSnapshots)
+      .where(inArray(postMetricSnapshots.id, rows.map((r) => r.id)))
+      .returning({ id: postMetricSnapshots.id });
+    return { pointsFolded: points.length, snapshotsDeleted: deleted.length };
+  });
+}
+
+export type { MetricSurface, ShapeFor } from "../services/insights/fold";

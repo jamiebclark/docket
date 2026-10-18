@@ -1,21 +1,24 @@
-// services/insights/retention: the housekeeping prune pass (data-model.md §11, FR-073, FR-074).
-import { prunePostMetricSnapshotsBefore, pruneAccountMetricSnapshotsBefore } from "../../dal/insights";
+// services/insights/retention: the fold-and-prune housekeeping pass (contracts/fold.md §1, §5).
+import { foldAndPruneAccountSnapshotsBefore, foldAndPrunePostSnapshotsBefore, type FoldAndPruneCounts } from "../../dal/insights";
 import { crossProject } from "../../dal/scope";
 import { insightsConfig, type SchedulerConfig } from "../../scheduler/config";
+import type { ShapeFor } from "./fold";
 
 /**
- * Deletes post-metric snapshots past `INSIGHTS_RETENTION_DAYS`, one bounded batch, cross-project.
- * Never touches a poll state, target, post or account (FR-074).
+ * Folds and prunes account-metric snapshots past `INSIGHTS_RETENTION_DAYS`, one bounded batch,
+ * cross-project, in a single transaction (US5, FR-050 to FR-057). Replaces the prior prune-only
+ * `pruneAccountMetricSnapshots` — there is no separate fold step to order before it (contracts/fold.md
+ * §1).
  */
-export async function prunePostMetricSnapshots(config: SchedulerConfig, now: Date): Promise<number> {
+export async function foldAndPruneAccountSnapshots(config: SchedulerConfig, now: Date, shapeFor: ShapeFor): Promise<FoldAndPruneCounts> {
   const { retentionDays, pruneBatch } = insightsConfig(config);
   const before = new Date(now.getTime() - retentionDays * 86_400_000);
-  return crossProject("housekeeping: prune post metric snapshots", () => prunePostMetricSnapshotsBefore(before, pruneBatch));
+  return crossProject("housekeeping: fold and prune account metric snapshots", () => foldAndPruneAccountSnapshotsBefore(before, pruneBatch, shapeFor));
 }
 
-/** Same as `prunePostMetricSnapshots`, for account-metric snapshots. */
-export async function pruneAccountMetricSnapshots(config: SchedulerConfig, now: Date): Promise<number> {
+/** Same as `foldAndPruneAccountSnapshots`, for post-target snapshots. Replaces `prunePostMetricSnapshots`. */
+export async function foldAndPrunePostSnapshots(config: SchedulerConfig, now: Date, shapeFor: ShapeFor): Promise<FoldAndPruneCounts> {
   const { retentionDays, pruneBatch } = insightsConfig(config);
   const before = new Date(now.getTime() - retentionDays * 86_400_000);
-  return crossProject("housekeeping: prune account metric snapshots", () => pruneAccountMetricSnapshotsBefore(before, pruneBatch));
+  return crossProject("housekeeping: fold and prune post metric snapshots", () => foldAndPrunePostSnapshotsBefore(before, pruneBatch, shapeFor));
 }

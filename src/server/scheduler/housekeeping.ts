@@ -10,9 +10,10 @@ import { listExpiredUploads, markUploadExpired } from "../dal/uploads-housekeepi
 import { listCollectableVideoVersions, reposForProject } from "../dal/video-housekeeping";
 import { getEnv } from "../env";
 import { pruneEngagementItems } from "../services/engagement/retention";
-import { prunePostMetricSnapshots, pruneAccountMetricSnapshots } from "../services/insights/retention";
+import { foldAndPruneAccountSnapshots, foldAndPrunePostSnapshots } from "../services/insights/retention";
 import { wantedVideoKeys } from "../services/video-versions";
 import { getStorage } from "../storage";
+import { shapeFor } from "../../providers/registry";
 import type { SchedulerConfig } from "./config";
 
 export const HOUSEKEEPING_BATCH = 500;
@@ -42,6 +43,9 @@ export interface HousekeepingCounts {
   engagementItemsPruned: number;
   postMetricSnapshotsPruned: number;
   accountMetricSnapshotsPruned: number;
+  /** data-model.md §8 (US5, FR-055). Rollup points written or advanced by the fold, this pass. */
+  accountMetricPointsFolded: number;
+  postMetricPointsFolded: number;
 }
 
 export function emptyHousekeepingCounts(): HousekeepingCounts {
@@ -56,6 +60,8 @@ export function emptyHousekeepingCounts(): HousekeepingCounts {
     engagementItemsPruned: 0,
     postMetricSnapshotsPruned: 0,
     accountMetricSnapshotsPruned: 0,
+    accountMetricPointsFolded: 0,
+    postMetricPointsFolded: 0,
   };
 }
 
@@ -163,8 +169,8 @@ export async function runHousekeeping(config: SchedulerConfig): Promise<Housekee
   const standingSeriesRunsPruned = await pruneClosedStandingSeriesRuns(await now());
   const standingSeriesOccurrencesPruned = await pruneSettledOccurrences(await now());
   const engagementItemsPruned = await pruneEngagementItems(config, await now());
-  const postMetricSnapshotsPruned = await prunePostMetricSnapshots(config, await now());
-  const accountMetricSnapshotsPruned = await pruneAccountMetricSnapshots(config, await now());
+  const accountFold = await foldAndPruneAccountSnapshots(config, await now(), shapeFor);
+  const postFold = await foldAndPrunePostSnapshots(config, await now(), shapeFor);
   return {
     idempotencyPurged,
     uploadsExpired,
@@ -174,7 +180,9 @@ export async function runHousekeeping(config: SchedulerConfig): Promise<Housekee
     standingSeriesRunsPruned,
     standingSeriesOccurrencesPruned,
     engagementItemsPruned,
-    postMetricSnapshotsPruned,
-    accountMetricSnapshotsPruned,
+    postMetricSnapshotsPruned: postFold.snapshotsDeleted,
+    accountMetricSnapshotsPruned: accountFold.snapshotsDeleted,
+    accountMetricPointsFolded: accountFold.pointsFolded,
+    postMetricPointsFolded: postFold.pointsFolded,
   };
 }

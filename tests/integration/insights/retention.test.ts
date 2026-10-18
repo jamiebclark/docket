@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
-import { accountMetricSnapshots, postMetricPollStates, postMetricSnapshots } from "../../../src/server/db/schema";
+import { accountMetricRollups, accountMetricSnapshots, postMetricPollStates, postMetricRollups, postMetricSnapshots } from "../../../src/server/db/schema";
 import { schedulerConfig } from "../../../src/server/scheduler/config";
 import { runHousekeeping } from "../../../src/server/scheduler/housekeeping";
 import { getEnv } from "../../../src/server/env";
@@ -52,6 +52,13 @@ describe("insights retention (FR-073, FR-074, US4-AS3)", () => {
       .from(postMetricSnapshots)
       .where(and(eq(postMetricSnapshots.projectId, env.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
     expect(rows.map((r) => r.id)).toEqual([recentId]);
+    // 083 US5: the pruned row leaves a rollup point behind rather than vanishing outright.
+    const points = await getDb()
+      .select()
+      .from(postMetricRollups)
+      .where(and(eq(postMetricRollups.projectId, env.project.id), eq(postMetricRollups.postTargetId, target.id)));
+    expect(points).toHaveLength(1);
+    expect(points[0]!.value).toBe(1);
   });
 
   it("prunes an old account-metric snapshot, keeps a recent one, counted apart from post snapshots", async () => {
@@ -79,6 +86,12 @@ describe("insights retention (FR-073, FR-074, US4-AS3)", () => {
       .from(accountMetricSnapshots)
       .where(and(eq(accountMetricSnapshots.projectId, env.project.id), eq(accountMetricSnapshots.socialAccountId, account.id)));
     expect(rows.map((r) => r.id)).toEqual([recentId]);
+    const points = await getDb()
+      .select()
+      .from(accountMetricRollups)
+      .where(and(eq(accountMetricRollups.projectId, env.project.id), eq(accountMetricRollups.socialAccountId, account.id)));
+    expect(points).toHaveLength(1);
+    expect(points[0]!.value).toBe(10);
   });
 
   it("deletes at most one bounded batch per call", async () => {
