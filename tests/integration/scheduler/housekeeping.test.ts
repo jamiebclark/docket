@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { apiIdempotencyKeys, standingSeriesOccurrences } from "../../../src/server/db/schema";
 import { runTick } from "../../../src/server/scheduler";
@@ -12,11 +12,17 @@ import { closeDb, testDb } from "../../helpers/db";
 import { postsEnv } from "../../helpers/posts-env";
 import { standingSeriesEnv } from "../../helpers/standing-series-env";
 import { tickConfig } from "../../helpers/tick";
+import { parkAllDueTargets } from "../../helpers/scheduling";
 
 afterAll(closeDb);
 
 const config = () => schedulerConfig(getEnv());
 
+// A whole tick claims across every project, so rows left behind by other files on this worker's
+// database are claimed by this test's tick: `no-reconnect-safety.test.ts` asserts zero HTTP requests
+// and saw 1 then 2 across 3 of 20 repetitions in flake-hunt run 39132854448, the count varying with
+// the shuffled file order. Parking first is what the other 112 tick tests already do.
+beforeEach(parkAllDueTargets);
 describe("housekeeping", () => {
   it("purges idempotency rows past their retention, across projects, and keeps live ones", async () => {
     const env = await postsEnv();
