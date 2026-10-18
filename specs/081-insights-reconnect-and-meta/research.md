@@ -359,6 +359,34 @@ is exactly the sequencing the spec's "Facts recorded against the research notes"
 
 ---
 
+## §7a Resolved live, 2026-10-17 (see docs/research/meta.md, "Live verification")
+
+| # | Outcome |
+|---|---|
+| **R1** | CLOSED. IG user `views` needs `period=day` + `metric_type=total_value`; every IG interaction metric needs `metric_type=total_value`, which the account read was not sending. |
+| **R2** | CLOSED, and the fallback was too pessimistic. BOTH `post_media_view` (views, 35) and `post_total_media_view_unique` (reach, 4) answer on v26.0. Now declared, and removed from the prohibited list. |
+| **R3** | CLOSED. Threads media enum is views, likes, replies, reposts, quotes, shares. `shares` exists but Meta marks it "in development". |
+| **R4** | CLOSED. Threads `user_insights` enum confirmed; `followers_count` / `follower_demographics` reject since/until. |
+| **R5** | Still open — the call-budget floors remain UNVERIFIED. |
+| **R6** | Still open — Pinterest's token `scope` field, entry 3. |
+
+Three things the live run found that no document states:
+
+1. **A Page token is mandatory** — a user token holding every scope is refused outright
+   (code 190 / subcode 2069032, "the new Pages experience").
+2. **`read_insights` is not granular, and the `analyze` Business-Manager role gates it.**
+   An account can hold every permission Docket asks for and still read nothing, which the
+   "Insights need a reconnect" state would misdiagnose — reconnecting cannot grant a role.
+   **Not yet covered; it needs its own state.**
+3. **Metric values are not uniformly numeric** — `post_reactions_by_type_total` is a map
+   (`{}` when there are none), and the reader silently dropped it.
+
+And one correction: **`profile_views` is deprecated and removed**, yet the plan declared it.
+Graph errors the whole call on an unknown metric name, so it would have taken `reach` and
+`follower_count` down with it.
+
+---
+
 ## §8 Resolution of every unknown the Technical Context could have marked
 
 | Unknown | Resolution |

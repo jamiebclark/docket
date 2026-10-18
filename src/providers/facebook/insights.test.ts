@@ -69,6 +69,48 @@ describe("facebookInsights.readPostMetrics", () => {
     for (const prohibited of FACEBOOK_PROHIBITED_METRICS) expect(metricParam).not.toContain(prohibited);
   });
 
+  it("sums a map-valued metric, and reads an empty map as a real zero", async () => {
+    // Verified live 2026-10-17: `post_reactions_by_type_total` answers with an object, and with
+    // `{}` when the post has no reactions. Reading only numbers dropped it silently.
+    graph.on("GET", p(`/${POST}/insights`), {
+      kind: "ok",
+      body: {
+        data: [
+          { name: "post_reactions_by_type_total", values: [{ value: { like: 7, love: 2, wow: 1 } }] },
+          { name: "post_media_view", values: [{ value: 35 }] },
+        ],
+      },
+    });
+    const r = await facebookInsights.readPostMetrics(postCtx());
+    expect(r).toEqual({
+      kind: "page",
+      entries: [{ externalId: POST, kind: "metrics", metrics: { post_reactions_by_type_total: 10, post_media_view: 35 } }],
+    });
+  });
+
+  it("reads an empty reactions map as zero, not as absent", async () => {
+    graph.on("GET", p(`/${POST}/insights`), {
+      kind: "ok",
+      body: { data: [{ name: "post_reactions_by_type_total", values: [{ value: {} }] }] },
+    });
+    const r = await facebookInsights.readPostMetrics(postCtx());
+    expect(r).toEqual({ kind: "page", entries: [{ externalId: POST, kind: "metrics", metrics: { post_reactions_by_type_total: 0 } }] });
+  });
+
+  it("pins period=lifetime so a day series cannot shadow the lifetime value", async () => {
+    graph.on("GET", p(`/${POST}/insights`), { kind: "ok", body: { data: [] } });
+    await facebookInsights.readPostMetrics(postCtx());
+    expect(graph.requests[0]!.params.period).toBe("lifetime");
+  });
+
+  it("requests the views and reach pair confirmed live on v26.0", async () => {
+    graph.on("GET", p(`/${POST}/insights`), { kind: "ok", body: { data: [] } });
+    await facebookInsights.readPostMetrics(postCtx());
+    const metricParam = graph.requests[0]!.params.metric!;
+    expect(metricParam).toContain("post_media_view");
+    expect(metricParam).toContain("post_total_media_view_unique");
+  });
+
   it("treats a declared metric with an empty values array as absent, not zero (FR-035)", async () => {
     graph.on("GET", p(`/${POST}/insights`), { kind: "ok", body: { data: [{ name: "post_clicks", values: [] }] } });
     const r = await facebookInsights.readPostMetrics(postCtx());

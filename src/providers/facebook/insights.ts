@@ -16,12 +16,27 @@ import type { FacebookSettings } from "./settings";
 
 const PLATFORM = "Facebook";
 
-/** contracts/provider-insights-081.md §2 — both CONFIRMED. */
-export const FACEBOOK_POST_METRICS = ["post_reactions_by_type_total", "post_clicks"] as const;
+/**
+ * contracts/provider-insights-081.md §2. `post_media_view` and `post_total_media_view_unique`
+ * were added once R2 was settled by hand against a live Page on v26.0 (docs/research/meta.md,
+ * "Live verification 2026-10-17"): both answer, giving Facebook the views/reach pair the
+ * research had assumed was unavailable.
+ */
+export const FACEBOOK_POST_METRICS = [
+  "post_media_view",
+  "post_total_media_view_unique",
+  "post_reactions_by_type_total",
+  "post_clicks",
+] as const;
+
+/** Metrics whose value is a map of type -> count rather than a number (verified: an empty `{}` when none). */
+const FACEBOOK_MAP_METRICS: ReadonlySet<string> = new Set(["post_reactions_by_type_total"]);
 export const FACEBOOK_ACCOUNT_METRICS = ["page_post_engagements", "page_follows"] as const;
 /**
  * Deprecated 2025-11-15 (`post_impressions`, `page_impressions`, `page_fans`) or whose v26.0
- * replacement could not be confirmed (research §2, R2); never requested (FR-004).
+ * behaviour is still unverified; never requested (FR-004). `post_media_view` and
+ * `post_total_media_view_unique` were removed from this list once verified live — the remaining
+ * `*_media_view` names have NOT been verified and stay prohibited.
  */
 export const FACEBOOK_PROHIBITED_METRICS = [
   "post_impressions",
@@ -36,7 +51,6 @@ export const FACEBOOK_PROHIBITED_METRICS = [
   "page_fans_online",
   "page_posts_impressions",
   "page_posts_impressions_unique",
-  "post_media_view",
   "page_media_view",
   "post_video_media_view",
   "page_video_media_view",
@@ -44,6 +58,8 @@ export const FACEBOOK_PROHIBITED_METRICS = [
 
 const postMetricsSchema = z
   .object({
+    post_media_view: z.number().optional(),
+    post_total_media_view_unique: z.number().optional(),
     post_reactions_by_type_total: z.number().optional(),
     post_clicks: z.number().optional(),
   })
@@ -82,7 +98,18 @@ function metricsFromBody(body: unknown, keys: readonly string[]): Record<string,
     const values = (item as Record<string, unknown>).values;
     if (!Array.isArray(values) || values.length === 0) continue;
     const value = (values[values.length - 1] as Record<string, unknown> | null)?.value;
-    if (typeof value === "number") out[name] = value;
+    if (typeof value === "number") {
+      out[name] = value;
+      continue;
+    }
+    // A map metric answers with `{type: count}` — and with `{}` when there are none, which is a
+    // real zero, not a missing value. Reading only numbers here silently dropped it (verified
+    // live: `post_reactions_by_type_total` never produced a value at all).
+    if (FACEBOOK_MAP_METRICS.has(name) && typeof value === "object" && value !== null && !Array.isArray(value)) {
+      let total = 0;
+      for (const part of Object.values(value as Record<string, unknown>)) if (typeof part === "number") total += part;
+      out[name] = total;
+    }
   }
   return out;
 }
@@ -143,7 +170,9 @@ async function readPostMetrics(ctx: PostMetricsReadContext<FacebookSettings>): P
     const outcome = await graphRequest(graph, {
       method: "GET",
       path: `/${post.externalId}/insights`,
-      params: { metric: FACEBOOK_POST_METRICS.join(",") },
+      // `period` is pinned: verified live, `post_total_media_view_unique` otherwise answers with a
+      // `lifetime` block AND a `day` series in one array, and the reader would take whichever came last.
+      params: { metric: FACEBOOK_POST_METRICS.join(","), period: "lifetime" },
       token,
       signal: ctx.signal,
     });
@@ -192,6 +221,8 @@ export const facebookInsights: InsightsSupport<FacebookSettings> = {
       docsPath: "meta-setup#insights",
     },
     post: [
+      { key: "post_media_view", label: "Views" },
+      { key: "post_total_media_view_unique", label: "Reach" },
       { key: "post_reactions_by_type_total", label: "Reactions" },
       { key: "post_clicks", label: "Clicks" },
     ],

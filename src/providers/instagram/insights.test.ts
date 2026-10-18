@@ -122,4 +122,16 @@ describe("instagramInsights.readAccountMetrics", () => {
     expect(r).toEqual({ kind: "page", metrics: { reach: 100, follower_count: 5 } });
     expect(graph.requests[0]!.params.period).toBe("day");
   });
+
+  it("sends metric_type=total_value, which user insights require", async () => {
+    graph.on("GET", p(`/${IG}/insights`), { kind: "ok", body: { data: [] } });
+    await instagramInsights.readAccountMetrics(accountCtx());
+    expect(graph.requests[0]!.params.metric_type).toBe("total_value");
+  });
+
+  it("never asks for profile_views, removed by Meta in 2025", async () => {
+    graph.on("GET", p(`/${IG}/insights`), { kind: "ok", body: { data: [] } });
+    await instagramInsights.readAccountMetrics(accountCtx());
+    expect(graph.requests[0]!.params.metric!).not.toContain("profile_views");
+  });
 });

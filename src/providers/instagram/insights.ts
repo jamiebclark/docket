@@ -18,10 +18,21 @@ const PLATFORM = "Instagram";
 
 /** docs/research/meta.md, "Instagram media (post) insights" — all CONFIRMED. */
 export const INSTAGRAM_POST_METRICS = ["views", "reach", "likes", "comments", "saved", "shares", "total_interactions"] as const;
-/** docs/research/meta.md, "Instagram user (account) insights" — the three CONFIRMED keys; account-level `views` is R1, not declared. */
-export const INSTAGRAM_ACCOUNT_METRICS = ["reach", "follower_count", "profile_views"] as const;
-/** Deprecated 2025-11-15 (`impressions`) or never documented for media/user insights; never requested (FR-004). */
-export const INSTAGRAM_PROHIBITED_METRICS = ["impressions", "plays", "clips_replays_count", "ig_reels_aggregated_all_plays_count"] as const;
+/**
+ * docs/research/meta.md, "Instagram user (account) insights". `profile_views` was REMOVED here:
+ * Meta's user-insights reference no longer lists it (it lists `profile_links_taps`), and it was
+ * deprecated in January 2025 and dropped that April. Graph errors the whole request on an unknown
+ * metric name, so leaving it in would have taken `reach` and `follower_count` down with it.
+ */
+export const INSTAGRAM_ACCOUNT_METRICS = ["reach", "follower_count"] as const;
+/** Deprecated (`impressions` 2025-11-15, `profile_views` 2025-01) or never documented for media/user insights; never requested (FR-004). */
+export const INSTAGRAM_PROHIBITED_METRICS = [
+  "impressions",
+  "plays",
+  "clips_replays_count",
+  "ig_reels_aggregated_all_plays_count",
+  "profile_views",
+] as const;
 
 const postMetricsSchema = z
   .object({
@@ -39,7 +50,6 @@ const accountMetricsSchema = z
   .object({
     reach: z.number().optional(),
     follower_count: z.number().optional(),
-    profile_views: z.number().optional(),
   })
   .strict();
 
@@ -139,7 +149,9 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<InstagramSettin
   const outcome = await graphRequest(graph, {
     method: "GET",
     path: `/${ctx.account.externalId}/insights`,
-    params: { metric: INSTAGRAM_ACCOUNT_METRICS.join(","), period: "day" },
+    // `metric_type: total_value` is required for every interaction metric on user insights
+    // (Meta's user-insights reference); without it the request is rejected.
+    params: { metric: INSTAGRAM_ACCOUNT_METRICS.join(","), period: "day", metric_type: "total_value" },
     token,
     signal: ctx.signal,
   });
@@ -171,7 +183,6 @@ export const instagramInsights: InsightsSupport<InstagramSettings> = {
     account: [
       { key: "reach", label: "Reach" },
       { key: "follower_count", label: "New followers" },
-      { key: "profile_views", label: "Profile views" },
     ],
     maxPostsPerRead: 1,
     readBudget: { count: 48_000, windowSeconds: 86_400 }, // interim, UNVERIFIED (research §4)

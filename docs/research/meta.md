@@ -665,3 +665,103 @@ Threads scopes seen in the docs: `threads_basic`, `threads_content_publish`,
 `threads_manage_replies`, `threads_delete`, `threads_location_tagging`
 (https://developers.facebook.com/docs/threads/overview). Docket currently
 requests only the first two (`src/providers/threads/connect-group.ts`).
+
+## Live verification, 2026-10-17 — R1-R4 closed by hand
+
+Run against the real Page `833153016553917` (Weird Glens of Hollywood), post
+`833153016553917_122104848675100128` (published 2025-11-18), in Graph API Explorer on
+**v26.0**, app "Docket" (`1612880213950633`). This closes R1-R4 of
+`specs/081-insights-reconnect-and-meta/research.md` §7 and corrects two things the
+desk research got wrong.
+
+### R2 — CONFIRMED: Facebook does get a views/reach pair
+
+One call, `period=lifetime`, Page token:
+
+```
+/{post-id}/insights?metric=post_media_view,post_total_media_view_unique,post_reactions_by_type_total,post_clicks&period=lifetime
+```
+
+| metric | value | shape | the API's own description |
+|---|---|---|---|
+| `post_media_view` | 35 | number | "The number of times your Page's post entered a person's screen." |
+| `post_total_media_view_unique` | 4 | number | "The number of total unique media viewers for FB post" |
+| `post_reactions_by_type_total` | `{}` | **object** | "Lifetime: Total post reactions by type." |
+| `post_clicks` | 0 | number | "Lifetime: The number of clicks anywhere in your post on News Feed..." |
+
+`post_media_view` is views, `post_total_media_view_unique` is reach. Both were on the
+prohibited list on the assumption R2 could not be answered; both are now declared.
+
+Two facts the metric names do not tell you:
+
+- **Values are not uniformly numeric.** `post_reactions_by_type_total` is a map of
+  type -> count, and `{}` when the post has no reactions — a real zero, not a missing
+  value. The reader kept only `typeof value === "number"`, so this metric was declared,
+  labelled "Reactions" in the panel, and could never produce a number.
+- **Pin `period`.** Without it, `post_total_media_view_unique` answers with a `lifetime`
+  block *and* a `day` series in one array; a reader taking the last entry gets a recent
+  day's zero instead of the lifetime value. `post_media_view` returns `lifetime` only.
+
+Lifetime values still resolve on a post ~11 months old, so insights outlive the poll window.
+
+### A Page access token is mandatory
+
+`GET /{page-id}/posts` with a **user** token holding every scope:
+
+```
+code 190, error_subcode 2069032
+"User Access Token Is Not Supported"
+"A Page access token is required for this call for the new Pages experience."
+```
+
+The reader must use the stored per-Page token. (`readPageToken` already does.)
+
+### `read_insights` is not granular — the `analyze` task gates it
+
+`/debug_token` on a freshly granted user token lists per-Page target ids for
+`pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`,
+`instagram_manage_insights` and `instagram_content_publish` — but `read_insights`
+appears **only in the flat scope list, with no target ids**.
+
+Meta's Pages insights documentation requires `pages_read_engagement` + `read_insights` +
+a Page token whose holder can perform the **`analyze` task** on that Page. That is a
+Business-Manager role, not a scope. An account can therefore hold every permission Docket
+asks for and still read nothing, and "Insights need a reconnect" would misdiagnose it —
+reconnecting cannot grant a role. **This needs its own state; it is not covered yet.**
+
+### `/me/accounts` is empty for portfolio-owned Pages
+
+With `pages_show_list` granted, `/me/accounts` returned `{"data": []}` and the Explorer's
+Page-token picker found nothing. The ids came from `/debug_token` granular scopes —
+exactly the workaround `src/providers/meta/candidates.ts:61-66` already documents.
+`/me/businesses` needs `business_management`, which Docket does not request.
+
+### R1 — CONFIRMED (official docs)
+
+Instagram user-level `views` requires `period=day` **and** `metric_type=total_value`.
+Every IG interaction metric requires `metric_type=total_value`; the account read was not
+sending it.
+
+### R3, R4 — CONFIRMED (developers.facebook.com/docs/threads/insights)
+
+- Threads **media**: `views`, `likes`, `replies`, `reposts`, `quotes`, `shares`.
+  `shares` exists but Meta marks it **"in development"** — declaring it accepts that it
+  may not return data.
+- Threads **user_insights**: `views`, `likes`, `replies`, `reposts`, `quotes`, `clicks`,
+  `followers_count`, `follower_demographics`. `since`/`until` are optional (default: a
+  2-day range, yesterday through today) and are **not supported** by `followers_count`
+  or `follower_demographics`.
+
+### Correction: `profile_views` is gone
+
+Meta's user-insights reference no longer lists `profile_views` (it lists
+`profile_links_taps`); it was deprecated in January 2025 and removed that April. Graph
+errors the whole request on an unknown metric name, so declaring it would have taken
+`reach` and `follower_count` down with it. Removed and added to the prohibited list.
+
+### `threads_manage_insights` is not grantable from the Graph API Explorer
+
+It is absent from that tool's permission list entirely — Threads runs on its own API with
+its own app configuration. A Threads insights grant cannot be exercised the way the
+Facebook/Instagram one can, so the assumption that one reconnect flow covers all three
+Meta surfaces does not hold for Threads.
