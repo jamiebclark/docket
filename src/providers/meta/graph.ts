@@ -1,3 +1,6 @@
+import type { UsageSignal } from "./usage";
+import { parseUsageHeader } from "./usage";
+
 export interface MetaApp {
   graphBase: string;
   /** Null → no version segment in any URL (a product whose Graph host is unversioned). */
@@ -16,10 +19,10 @@ export interface GraphError {
 }
 
 export type GraphOutcome =
-  | { kind: "ok"; status: number; body: unknown }
-  | { kind: "graph_error"; status: number; error: GraphError }
-  | { kind: "http_error"; status: number }
-  | { kind: "unparseable"; status: number }
+  | { kind: "ok"; status: number; body: unknown; usage?: UsageSignal }
+  | { kind: "graph_error"; status: number; error: GraphError; usage?: UsageSignal }
+  | { kind: "http_error"; status: number; usage?: UsageSignal }
+  | { kind: "unparseable"; status: number; usage?: UsageSignal }
   | { kind: "network"; phase: "before_send" | "after_send" };
 
 export interface GraphRequestInput {
@@ -95,6 +98,7 @@ async function send(url: string, init: RequestInit): Promise<GraphOutcome> {
   } catch {
     return { kind: "network", phase: "after_send" };
   }
+  const usage = parseUsageHeader(res.headers.get("x-business-use-case-usage")) ?? undefined;
   let body: unknown;
   let parsed = true;
   try {
@@ -102,12 +106,15 @@ async function send(url: string, init: RequestInit): Promise<GraphOutcome> {
   } catch {
     parsed = false;
   }
-  if (res.ok) return parsed ? { kind: "ok", status: res.status, body } : { kind: "unparseable", status: res.status };
+  if (res.ok)
+    return parsed
+      ? { kind: "ok", status: res.status, body, usage }
+      : { kind: "unparseable", status: res.status, usage };
   if (parsed) {
     const error = parseGraphError(body);
-    if (error) return { kind: "graph_error", status: res.status, error };
+    if (error) return { kind: "graph_error", status: res.status, error, usage };
   }
-  return { kind: "http_error", status: res.status };
+  return { kind: "http_error", status: res.status, usage };
 }
 
 /** One fetch. POST sends a form-urlencoded body (token included); GET sends a query. Never exposes the URL or body. */

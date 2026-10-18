@@ -49,3 +49,31 @@ export function parseUsageHeader(value: string | null): UsageSignal | null {
   if (maxPercent === null) return null;
   return { maxPercent, retryAfterMinutes };
 }
+
+/**
+ * Process-local, per-account backoff set when a response's usage reached the ceiling (contracts/meta-usage.md §3).
+ * Not persisted: a restart, or a later call once `retryAt` has passed, starts clean — this is a request-rate
+ * backoff within the current run, not a stored copy of Meta's percentage.
+ */
+const backoffs = new Map<string, Date>();
+
+/** The still-active backoff for `accountId`, or null when none is set or it has passed (and is cleared). */
+export function activeUsageBackoff(accountId: string, now: Date): Date | null {
+  const until = backoffs.get(accountId);
+  if (!until) return null;
+  if (until <= now) {
+    backoffs.delete(accountId);
+    return null;
+  }
+  return until;
+}
+
+/** Records that further reads for `accountId` should back off until `retryAt`. */
+export function recordUsageBackoff(accountId: string, retryAt: Date): void {
+  backoffs.set(accountId, retryAt);
+}
+
+/** Clears every recorded backoff. Test-only. */
+export function resetUsageBackoffs(): void {
+  backoffs.clear();
+}

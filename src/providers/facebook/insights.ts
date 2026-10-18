@@ -7,10 +7,11 @@ import type {
   PostMetricsReadContext,
   PostMetricsReadResult,
 } from "../types";
-import { graphVersion } from "../meta/config";
+import { graphVersion, metaUsageCeiling } from "../meta/config";
 import { readPageToken } from "../meta/credentials";
 import { classifyGraphError, scrub } from "../meta/errors";
 import { DEFAULT_GRAPH_BASE, graphRequest, type GraphOutcome, type MetaApp } from "../meta/graph";
+import { activeUsageBackoff, recordUsageBackoff, type UsageSignal } from "../meta/usage";
 import type { FacebookSettings } from "./settings";
 
 const PLATFORM = "Facebook";
@@ -118,7 +119,16 @@ function mapOutcome(outcome: Exclude<GraphOutcome, { kind: "ok" }>, secrets: rea
 /** Graph's generic "object does not exist" code for a node that is gone — judgement call, not yet in research.md. */
 const GONE_CODE = 100;
 
+/** contracts/meta-usage.md §3: a ceiling-reaching usage signal backs off this account's *next* read, not this one. */
+function applyUsageSignal(accountId: string, outcome: GraphOutcome, now: Date): void {
+  const usage: UsageSignal | undefined = outcome.kind === "network" ? undefined : outcome.usage;
+  if (!usage || usage.maxPercent < metaUsageCeiling() || usage.retryAfterMinutes === null) return;
+  recordUsageBackoff(accountId, new Date(now.getTime() + usage.retryAfterMinutes * 60_000));
+}
+
 async function readPostMetrics(ctx: PostMetricsReadContext<FacebookSettings>): Promise<PostMetricsReadResult> {
+  const backoff = activeUsageBackoff(ctx.account.id, ctx.now);
+  if (backoff) return { kind: "rate_limited", error: `${PLATFORM} reports this account is near its call budget.`, retryAt: backoff };
   const token = readPageToken(ctx.account.credentials);
   if (!token) return { kind: "credentials_invalid", error: "The stored token is unreadable; reconnect the account." };
   const graph: MetaApp = { graphBase: DEFAULT_GRAPH_BASE, version: graphVersion() };
@@ -137,6 +147,7 @@ async function readPostMetrics(ctx: PostMetricsReadContext<FacebookSettings>): P
       token,
       signal: ctx.signal,
     });
+    applyUsageSignal(ctx.account.id, outcome, ctx.now);
     if (outcome.kind === "ok") {
       entries.push({ externalId: post.externalId, kind: "metrics", metrics: metricsFromBody(outcome.body, FACEBOOK_POST_METRICS) });
       continue;
@@ -151,6 +162,8 @@ async function readPostMetrics(ctx: PostMetricsReadContext<FacebookSettings>): P
 }
 
 async function readAccountMetrics(ctx: AccountMetricsReadContext<FacebookSettings>): Promise<AccountMetricsReadResult> {
+  const backoff = activeUsageBackoff(ctx.account.id, ctx.now);
+  if (backoff) return { kind: "rate_limited", error: `${PLATFORM} reports this account is near its call budget.`, retryAt: backoff };
   const token = readPageToken(ctx.account.credentials);
   if (!token) return { kind: "credentials_invalid", error: "The stored token is unreadable; reconnect the account." };
   const graph: MetaApp = { graphBase: DEFAULT_GRAPH_BASE, version: graphVersion() };
@@ -162,6 +175,7 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<FacebookSetting
     token,
     signal: ctx.signal,
   });
+  applyUsageSignal(ctx.account.id, outcome, ctx.now);
   if (outcome.kind !== "ok") return mapOutcome(outcome, [token]);
   return { kind: "page", metrics: metricsFromBody(outcome.body, FACEBOOK_ACCOUNT_METRICS) };
 }

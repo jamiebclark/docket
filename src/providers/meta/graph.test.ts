@@ -72,6 +72,22 @@ describe("graphRequest", () => {
     expect(await graphRequest(app, { method: "GET", path: "/c", signal: signal() })).toEqual({ kind: "unparseable", status: 200 });
   });
 
+  it("attaches the parsed usage signal from the header when present", async () => {
+    fake.on("GET", "/v26.0/usage", {
+      kind: "ok",
+      body: { id: "1" },
+      headers: { "x-business-use-case-usage": JSON.stringify({ "123": [{ call_count: 85 }] }) },
+    });
+    const r = await graphRequest(app, { method: "GET", path: "/usage", signal: signal() });
+    expect(r).toMatchObject({ kind: "ok", usage: { maxPercent: 85, retryAfterMinutes: null } });
+  });
+
+  it("leaves usage undefined when the header is absent", async () => {
+    fake.on("GET", "/v26.0/me", { kind: "ok", body: { id: "1" } });
+    const r = await graphRequest(app, { method: "GET", path: "/me", token: "T0K", signal: signal() });
+    expect((r as { usage?: unknown }).usage).toBeUndefined();
+  });
+
   it("reports a timeout and a mid-body reset as after_send, a refused connection as before_send", async () => {
     fake.on("GET", "/v26.0/hang", { kind: "hang" });
     const ac = new AbortController();

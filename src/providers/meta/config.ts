@@ -107,3 +107,11 @@ export function graphVersion(): string {
   const v = readEnv(process.env, "META_GRAPH_VERSION");
   return v && GRAPH_VERSION_PATTERN.test(v) ? v : DEFAULT_GRAPH_VERSION;
 }
+
+/** `META_INSIGHTS_USAGE_CEILING` only, so a reader's ceiling check works whenever other Meta config is absent. */
+export function metaUsageCeiling(): number {
+  const raw = readEnv(process.env, "META_INSIGHTS_USAGE_CEILING");
+  if (raw === null) return DEFAULT_INSIGHTS_USAGE_CEILING;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 100 ? n : DEFAULT_INSIGHTS_USAGE_CEILING;
+}

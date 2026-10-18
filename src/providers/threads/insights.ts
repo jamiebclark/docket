@@ -16,6 +16,10 @@ const UNAVAILABLE = {
   docsPath: "insights",
 } as const;
 
+// T080 (contracts/meta-usage.md §3) does not apply to this shape: `unavailable` is never claimed, so no
+// Graph call is ever made here to carry a usage header. `THREADS_INSIGHTS_USAGE_CEILING` is still parsed
+// (threads/config.ts) and takes effect the moment T099 upgrades this file to a real reader.
+
 export const threadsInsights: InsightsSupport<ThreadsSettings> = {
   declaration: {
     post: [],
