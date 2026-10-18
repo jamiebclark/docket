@@ -121,7 +121,11 @@ import { graphVersion } from "../../../src/providers/meta/config";
 import { createFakeTikTok, type FakeTikTok } from "../../helpers/fake-tiktok";
 import { createFakePinterest, type FakePinterest } from "../../helpers/fake-pinterest";
 import { createFakeX, type FakeX } from "../../helpers/fake-x";
-import { postMetricPollStates, accountMetricPollStates, postMetricSnapshots, accountMetricSnapshots } from "../../../src/server/db/schema/insights";
+import { postMetricPollStates, accountMetricPollStates, postMetricSnapshots, accountMetricSnapshots, accountMetricRollups, postMetricRollups, targetFirstEngagement } from "../../../src/server/db/schema/insights";
+import { foldAndPruneAccountSnapshotsBefore, foldAndPrunePostSnapshotsBefore } from "../../../src/server/dal/insights";
+import { runCrossProject } from "../../../src/server/db/cross-project";
+import { shapeFor } from "../../../src/providers/registry";
+import { createKey } from "../../helpers/api";
 
 afterAll(async () => {
   // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
@@ -1097,6 +1101,18 @@ describe("secret scan (FR-020, SC-005)", () => {
     const postMarkup = renderToStaticMarkup((await PostPage(params)) as never);
     session.current = sessionBefore;
 
+    // Fold the just-captured snapshots into rollup points (083): forcing `before` past the capture
+    // time exercises the fold without waiting for `INSIGHTS_RETENTION_DAYS`.
+    const foldBefore = new Date(NOW.getTime() + 7_200_000);
+    await runCrossProject("test: scan fold account snapshots", () => foldAndPruneAccountSnapshotsBefore(foldBefore, 10_000, shapeFor));
+    await runCrossProject("test: scan fold post snapshots", () => foldAndPrunePostSnapshotsBefore(foldBefore, 10_000, shapeFor));
+
+    // The same figures over the API (083, docket_get_insights): a read key, no platform call, scanned
+    // alongside the stored rows.
+    const insightsKey = (await createKey(ctx.scope, ["read"])).secret;
+    const insightsResponse = await api("GET", "/insights?from=2026-08-01&to=2026-09-05", { key: insightsKey });
+    expect(insightsResponse.status).toBe(200);
+
     const db = testDb();
     const pieces: Piece[] = [
       { place: "page: post (tiktok/pinterest/x insights panel)", text: postMarkup },
@@ -1105,6 +1121,10 @@ describe("secret scan (FR-020, SC-005)", () => {
       { place: "account_metric_poll_states", text: JSON.stringify(await db.select().from(accountMetricPollStates).where(eq(accountMetricPollStates.projectId, ctx.project.id))) },
       { place: "post_metric_snapshots", text: JSON.stringify(await db.select().from(postMetricSnapshots).where(eq(postMetricSnapshots.projectId, ctx.project.id))) },
       { place: "account_metric_snapshots", text: JSON.stringify(await db.select().from(accountMetricSnapshots).where(eq(accountMetricSnapshots.projectId, ctx.project.id))) },
+      { place: "account_metric_rollups", text: JSON.stringify(await db.select().from(accountMetricRollups).where(eq(accountMetricRollups.projectId, ctx.project.id))) },
+      { place: "post_metric_rollups", text: JSON.stringify(await db.select().from(postMetricRollups).where(eq(postMetricRollups.projectId, ctx.project.id))) },
+      { place: "target_first_engagement", text: JSON.stringify(await db.select().from(targetFirstEngagement).where(eq(targetFirstEngagement.projectId, ctx.project.id))) },
+      await responsePiece("GET /insights", rebuilt(insightsResponse)),
     ];
 
     const secrets: Secret[] = [
@@ -1114,6 +1134,7 @@ describe("secret scan (FR-020, SC-005)", () => {
       { name: "pinterest refresh token", value: PIN_REFRESH },
       { name: "x access token", value: X_ACCESS },
       { name: "x refresh token", value: X_REFRESH },
+      { name: "insights api key", value: insightsKey },
     ];
     expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
     // The three accounts' poll states are now rescheduled hours or days past this test's fake `NOW`,

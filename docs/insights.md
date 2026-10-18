@@ -9,12 +9,12 @@ it was read stated plainly.
 
 | Platform | Post numbers | Account numbers | Permission needed |
 |---|---|---|---|
-| Bluesky | Yes — likes, reposts, replies, quotes (whichever the response actually contains) | Captured, shown nowhere yet (see "What this deliberately does not do") | None — reuses the account's existing session |
-| Instagram | Yes — reactions-by-type, comments, shares, saves, plus the reel/video family where the post type has one (whichever the response actually contains) | Captured (reach, follower count, profile views), shown nowhere yet | `instagram_manage_insights`, opt-in (see "Reconnecting for insights" below) |
-| Facebook Pages | Yes — reactions by type and post clicks; the views/impressions family is a named gap (see "Named gaps") | Captured (Page follows), shown nowhere yet | `read_insights`, opt-in |
+| Bluesky | Yes — likes, reposts, replies, quotes (whichever the response actually contains) | Trend charted on the Insights page | None — reuses the account's existing session |
+| Instagram | Yes — reactions-by-type, comments, shares, saves, plus the reel/video family where the post type has one (whichever the response actually contains) | Trend charted on the Insights page (reach, follower count, profile views) | `instagram_manage_insights`, opt-in (see "Reconnecting for insights" below) |
+| Facebook Pages | Yes — reactions by type and post clicks; the views/impressions family is a named gap (see "Named gaps") | Captured (Page follows), but its trend is lost — see "The account-trend and post-comparison gaps this entry closes" | `read_insights`, opt-in |
 | Threads | Yes, where research could confirm the metric names; otherwise declared `unavailable` with a reason — see "Named gaps" | Declared `unavailable` for this entry (`account: []`) | `threads_manage_insights`, opt-in |
-| TikTok | Yes — likes, comments, shares, views; a post TikTok's own response omits is `unqueryable` rather than guessed (see "Named gaps") | Yes — followers, likes, video count | `video.list` for post numbers, `user.info.stats` for account numbers, both opt-in (see [tiktok-setup.md#insights](tiktok-setup.md#insights)) |
-| Pinterest | Yes — impressions, pin clicks, outbound clicks, saves | Yes — followers, monthly views, no flag needed (reuses `user_accounts:read` from connecting) | `pins:read` for pin analytics, opt-in (see [pinterest-setup.md#insights](pinterest-setup.md#insights)); needs a business account, and a Trial app's pins are invisible to anyone but their own creator |
+| TikTok | Yes — likes, comments, shares, views; a post TikTok's own response omits is `unqueryable` rather than guessed (see "Named gaps") | Yes — followers, likes, video count, trend charted on the Insights page | `video.list` for post numbers, `user.info.stats` for account numbers, both opt-in (see [tiktok-setup.md#insights](tiktok-setup.md#insights)) |
+| Pinterest | Yes — impressions, pin clicks, outbound clicks, saves | Followers trend charted on the Insights page; monthly views captured but its trend is lost — see "The account-trend and post-comparison gaps this entry closes" | `pins:read` for pin analytics, opt-in (see [pinterest-setup.md#insights](pinterest-setup.md#insights)); needs a business account, and a Trial app's pins are invisible to anyone but their own creator |
 | X | Yes — likes, replies, reposts, quotes, impressions | Not read — the per-user read price is unconfirmed (see "Named gaps") | Reuses `tweet.read`, already requested; metered at $0.001/read and off by default (see [x-setup.md#insights](x-setup.md#insights)) |
 
 A platform with no `insights` module simply never grows these tables and never does any of this
@@ -51,8 +51,10 @@ says so plainly, with no reconnect button offered for a loop that cannot succeed
 - **Facebook Reel targets cannot be read.** A Reel is stored under its video id, not its post id, and
   Docket cannot yet tell the two apart well enough to ask for a Reel's numbers; such a target freezes
   with reason `unqueryable` rather than erroring forever.
-- **No account-metric screen yet.** Every platform's account snapshots (followers and the like) are
-  captured on schedule, as in 080, but no screen shows them.
+- **Facebook's account period and Pinterest's `monthly_views` window are `unknown`-shaped, so neither
+  trends.** A metric key Docket cannot classify as `cumulative` or `windowed` is excluded from the
+  Insights page's account charts; resolving either would need a reader change, out of scope here (see
+  "The account-trend and post-comparison gaps this entry closes").
 - **Unrecoverable TikTok ids show as unavailable, not guessed.** TikTok's publish response holds the
   real post id (`publicaly_available_post_id`) separately from the `publish_id` Docket used to store
   as the target's external id. A target published before this entry, whose real id cannot be
@@ -78,8 +80,9 @@ a fresher number waits for the next scheduled read; there is no "refresh now" ac
 
 A key a platform declares but a particular response did not contain renders **nothing at all** — no
 row, no dash, no `0`. A `0` is a real, reported value; its absence is a fact Docket does not know, and
-the two are never confused. The panel also never shows a delta, a trend, a second number, or more than
-one snapshot at a time — see "What this deliberately does not do" below.
+the two are never confused. A gap in a trend or a comparison is treated the same way: a missing
+reading is a hole in the series, never averaged in as zero and never dropped from the stated sample
+size.
 
 ## The decay schedule
 
@@ -105,21 +108,56 @@ Reading insights never competes with publishing for an account's platform allowa
 account's read budget is reserved for insights, and polling backs off — never fails — when that
 reserve is exhausted, leaving the other half free for a scheduled publish in the same tick.
 
-## Retention
+## Retention and the fold
 
 Snapshots older than the configured retention window (`INSIGHTS_RETENTION_DAYS`, default 400 days)
-are pruned in small batches on the regular housekeeping pass. Pruning only ever touches the snapshot
-tables — the poll-state row that decides when a target or account is next due survives its
-snapshots being pruned, and a frozen target stays frozen.
+are folded and pruned together, in small batches, on the regular housekeeping pass: each snapshot due
+for pruning is first rolled up into one durable point per (subject, metric key, UTC day) — keeping the
+day's last reading — and only then deleted, in the same transaction. A trend or comparison that spans
+a pruned day reads the rollup point instead of the snapshot that produced it, so a year-old account's
+chart stays complete long after its raw snapshots are gone. The poll-state row that decides when a
+target or account is next due survives its snapshots being pruned, and a frozen target stays frozen.
+
+## The Insights page: account trends and comparisons
+
+The project's Insights page (`/p/<project>/insights`) turns the snapshot and rollup history above into
+charts, without making a single new platform call. It never averages or compares across platforms — a
+chart's series are always one platform each, with platforms visually distinguished by more than colour
+alone so the "never sum across platforms" rule holds on screen as well as in the data.
+
+- **Account trends.** One line per connected account, per declared account-metric key, over the
+  selected date range — followers, reach, and whatever else a platform declares. A platform with no
+  declared account metrics gets a stated reason instead of an empty chart; a metric key whose shape
+  cannot be classified (`unknown`) is excluded from the chart with its own reason, rather than plotted
+  as though its readings were comparable over time. Facebook's account period and Pinterest's
+  `monthly_views` window are the two keys this currently excludes (see "Named gaps").
+- **Per-post numbers**, surfaced on the project overview and the posts list as well as the post detail
+  panel, so a member sees a published post's latest reading without clicking into it.
+- **Comparisons**, by slot, by day of week, by series kind (evergreen against date-pegged), by voice
+  profile, and by origin (model-generated against hand-written). Every comparison states its own
+  sample size and its groups' verdicts rather than drawing a conclusion from too few posts:
+  **8 or more** comparable posts is `ranked`, **4 to 7** is `provisional` (shown, but never ranked
+  against another group), and **below 4** is `suppressed` (the count is still stated; no aggregate is
+  shown). Posts excluded from a comparison — no external id, no snapshot yet, the wrong schedule kind,
+  frozen with no reading — are counted and named, never silently dropped.
+- **Time to first engagement**, per published target: the interval from publication to the first
+  observed reaction, joined from the inbox where one exists and the snapshot history otherwise. The
+  figure is written once and never recomputed, so it survives the inbox row that produced it being
+  pruned on its own retention schedule.
+
+One API operation, `docket_get_insights` (`GET /insights`), returns the same figures the page shows —
+see [mcp.md](mcp.md).
 
 ## What this deliberately does not do
 
-- **No chart, trend, delta or comparison of any kind.** The panel shows the one latest reading and
-  nothing else; anything derived from more than one snapshot is out of scope for this entry.
-- **No manual refresh.** Numbers appear on the schedule above, never on demand.
+- **No manual refresh.** Numbers appear on the schedule above, never on demand; the Insights page
+  reads only what the scheduler already captured.
 - **No per-project on/off switch.** A project sees a platform's numbers exactly when that platform's
   provider declares support for them, with no setting to change that.
-- **Account snapshots are captured but shown nowhere.** Docket reads and stores an account's own
-  numbers (followers, and whatever else a platform declares) on the same schedule as post numbers,
-  but no screen displays them yet — that capture exists so a later entry covering account trends
-  does not have to wait for history to accumulate. This is a known, deliberate gap, not an oversight.
+- **No significance test, confidence interval or forecast.** A comparison states a group's mean and
+  median and its sample size; the sample-size floor above is the only honesty mechanism, not a
+  statistical one.
+- **No normalization for post age.** Comparing a 100-day-old post against a 10-day-old one compares
+  different amounts of accrued time for a `cumulative` metric, and a different accrual window for a
+  `windowed` one (Pinterest's four post keys grow with the pin's age before clamping at 90 days). The
+  comparison states the metric's shape and window beside the figure; nothing is normalised or hidden.

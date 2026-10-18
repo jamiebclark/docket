@@ -71,6 +71,26 @@ describe("insights page (quickstart.md §6, FR-070 to FR-074)", () => {
     actAs(env.owner);
     await expect(render(env.project.slug)).resolves.toContain("Insights");
   });
+
+  it("makes no platform HTTP call while rendering, with account trends, comparisons and first-engagement all populated (SC-011)", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    await env.scope.accountMetricSnapshots.insertIfAbsent({ socialAccountId: account.id, providerKey: "mock", capturedAt: new Date(), metrics: { followersCount: 42 } });
+    const post = await env.scope.posts.insert({ baseText: "A post." });
+    const [target] = await env.scope.targets.insertMany([{ postId: post.id, socialAccountId: account.id }]);
+    await env.scope.targets.update(target!.id, { status: "published", externalId: `ext-${post.id}`, publishedAt: new Date() });
+    await env.scope.postMetricSnapshots.insertIfAbsent({ postTargetId: target!.id, socialAccountId: account.id, providerKey: "mock", capturedAt: new Date(), metrics: { likeCount: 5 } });
+    actAs(env.owner);
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      const html = await render(env.project.slug);
+      expect(html).toContain("Followers");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });
 
 describe("insights loading and error states", () => {
