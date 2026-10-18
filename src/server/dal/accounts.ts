@@ -1,4 +1,5 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { normalizeGrantedScopes } from "../../lib/granted-scopes";
 import { listProviders } from "../../providers/registry";
 import type { Database } from "../db/client";
 import { postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
@@ -14,6 +15,8 @@ export interface UpsertConnected {
   credentialsEncrypted: string | null;
   credentialsExpiresAt: Date | null;
   connectedByUserId: string | null;
+  /** From `ConnectCandidate.grantedScopes` (G31). Absent/invalid normalizes to `null`. */
+  grantedScopes?: readonly string[];
 }
 
 export interface RefreshPatch {
@@ -25,6 +28,8 @@ export interface RefreshPatch {
   displayName?: string;
   /** Keeps the account out of the scheduled claim until then (G11); the lease owner stays set to the releasing token because of the table's pair check. Default: released now. */
   refreshLeaseUntil?: Date;
+  /** Already normalized by the caller (FR-011); present only when the refresh reported a list. */
+  grantedScopes?: string[] | null;
 }
 
 export type RefreshLeaseResult =
@@ -170,6 +175,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
           ),
         )
         .limit(1);
+      const grantedScopes = normalizeGrantedScopes(input.grantedScopes);
       if (existing) {
         const [row] = await db
           .update(socialAccounts)
@@ -181,6 +187,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
             status: "active",
             lastError: null,
             connectedByUserId: input.connectedByUserId,
+            grantedScopes,
           })
           .where(mine(existing.id))
           .returning();
@@ -197,6 +204,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
           credentialsEncrypted: input.credentialsEncrypted,
           credentialsExpiresAt: input.credentialsExpiresAt,
           connectedByUserId: input.connectedByUserId,
+          grantedScopes,
         })
         .returning();
       return strip(row!);

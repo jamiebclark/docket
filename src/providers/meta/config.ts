@@ -8,6 +8,10 @@ export interface MetaConfig {
   appSecret: string;
   graphVersion: string;
   loginConfigId: string | null;
+  /** FR-017. Default off: `dialogUrl` requests no extra scope while this is false. */
+  insightsScopes: boolean;
+  /** FR-045. Percent of Meta's own BUC usage at or above which insights reads back off. */
+  insightsUsageCeiling: number;
 }
 
 type Source = Readonly<Record<string, string | undefined>>;
@@ -16,6 +20,7 @@ const APP_ID = /^\d{5,30}$/;
 const SECRET_HEX = /^[0-9a-f]{32}$/i;
 const SECRET_LOOSE = /^\S{16,128}$/;
 const DIGITS = /^\d+$/;
+const DEFAULT_INSIGHTS_USAGE_CEILING = 80;
 
 /** Trimmed value of `name`, or null when unset or blank. */
 export function readEnv(source: Source, name: string): string | null {
@@ -38,6 +43,8 @@ export function parseMetaEnv(source: Source): { config: MetaConfig | null; issue
   const appSecret = readEnv(source, "META_APP_SECRET");
   const version = readEnv(source, "META_GRAPH_VERSION");
   const configId = readEnv(source, "META_LOGIN_CONFIG_ID");
+  const insightsScopesRaw = readEnv(source, "META_INSIGHTS_SCOPES");
+  const usageCeilingRaw = readEnv(source, "META_INSIGHTS_USAGE_CEILING");
 
   if (appSecret && !appId) issues.push({ name: "META_APP_ID", reason: "required when META_APP_SECRET is set" });
   else if (appId && !isAppId(appId)) issues.push({ name: "META_APP_ID", reason: "must be the numeric app id" });
@@ -58,6 +65,20 @@ export function parseMetaEnv(source: Source): { config: MetaConfig | null; issue
     }
   }
 
+  let insightsScopes = false;
+  if (insightsScopesRaw !== null) {
+    const v = insightsScopesRaw.toLowerCase();
+    if (v === "true") insightsScopes = true;
+    else if (v !== "false") issues.push({ name: "META_INSIGHTS_SCOPES", reason: "must be true or false" });
+  }
+
+  let insightsUsageCeiling = DEFAULT_INSIGHTS_USAGE_CEILING;
+  if (usageCeilingRaw !== null) {
+    const n = Number(usageCeilingRaw);
+    if (Number.isInteger(n) && n >= 1 && n <= 100) insightsUsageCeiling = n;
+    else issues.push({ name: "META_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" });
+  }
+
   const valid =
     appId && appSecret && isAppId(appId) && isAppSecret(appSecret);
   if (!valid) return { config: null, issues };
@@ -67,6 +88,8 @@ export function parseMetaEnv(source: Source): { config: MetaConfig | null; issue
       appSecret,
       graphVersion: version && GRAPH_VERSION_PATTERN.test(version) ? version : DEFAULT_GRAPH_VERSION,
       loginConfigId: configId && DIGITS.test(configId) ? configId : null,
+      insightsScopes,
+      insightsUsageCeiling,
     },
     issues,
   };

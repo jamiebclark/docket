@@ -408,12 +408,147 @@ wording). Verdicts: confirmed / contradicted / not determinable.
   calls per post; fine.
 
 ### Code impact notes for the caller (rate limits)
-- Add 80001 and 80002 to the rate-limited set in `src/providers/meta/errors.ts`
-  (and its test); consider the same in `src/providers/threads/oauth.ts`.
+- **Corrected 2026-10-17 (081 research §5.1):** 80001 and 80002 are **already**
+  in the rate-limited set — `GRAPH_ERROR_TABLE.rateLimited` is
+  `[4, 17, 32, 613, 80001, 80002]` (`src/providers/meta/errors.ts:8`), added by
+  commit `3a2626c` and asserted by `src/providers/meta/errors.test.ts:22`. The
+  Threads path already reuses the same table. No code change needed here; this
+  note previously said the codes were missing, which was stale.
 - Optionally read `X-Business-Use-Case-Usage.estimated_time_to_regain_access`
   for backoff in the Meta provider HTTP client.
 - docs/limits.md Facebook publish limit row: the research result is "no
   documented cap"; update the "NEEDS RESEARCH (U2)" note (not edited here).
+
+## Insights (081)
+Checked 2026-10-17. Method: web search tool, result URLs plus a model summary
+of each page (same caveat as "Limits verification, 2026-10-07" above — weaker
+than reading the page). Rule applied strictly throughout (spec FR-003): **only
+a row marked CONFIRMED is declared or requested by provider code.** A row
+marked PARTLY CONFIRMED or NOT CONFIRMED is not declared, not requested, and
+not hoped for.
+
+Does Instagram's `/insights` edge batch multiple media ids in one call? **NOT
+DOCUMENTED, so treated as confirmed-negative-by-absence** — no `ids`-style
+batch parameter appears anywhere in the Instagram insights or IG Media
+reference, so `maxPostsPerRead: 1` is declared (research.md §1).
+
+Instagram's story window: **CONFIRMED, 24 hours.** "Story media metrics are
+only available for 24 hours." (research.md §1, source below.) This is the
+`ephemeralPostTypes` lifetime G34 declares for Instagram stories.
+
+### Instagram media (post) insights — CONFIRMED
+Source: <https://developers.facebook.com/documentation/instagram-platform/reference/instagram-media/insights>,
+<https://developers.facebook.com/docs/instagram-platform/insights/>. Checked 2026-10-17.
+
+| Metric | Required permission | period / metric_type | Media types | Processing delay | Confidence |
+|---|---|---|---|---|---|
+| `views` | `instagram_basic`, `instagram_manage_insights`, `pages_read_engagement` | lifetime (no `period` param) | all | up to 48 h | CONFIRMED |
+| `reach` | same | lifetime | all | up to 48 h | CONFIRMED |
+| `likes` | same | lifetime | all | up to 48 h | CONFIRMED |
+| `comments` | same | lifetime | all | up to 48 h | CONFIRMED |
+| `saved` | same | lifetime | all | up to 48 h | CONFIRMED |
+| `shares` | same | lifetime | all | up to 48 h | CONFIRMED |
+| `total_interactions` | same | lifetime | all | up to 48 h | CONFIRMED |
+
+**`impressions` is a deprecation error, not an omission — CONFIRMED, with a
+date.** Graph API v22.0 deprecated `impressions` on media and user insights
+"applying to all versions April 21, 2025"; requests for media created on or
+after 2024-07-02 return an error after that date. `views` is the documented
+replacement. Also prohibited for the same reason: `clips_replays_count`,
+`ig_reels_aggregated_all_plays_count`, `plays`.
+Source: <https://developers.facebook.com/docs/graph-api/changelog/version22.0/>. Checked 2026-10-17.
+
+### Instagram user (account) insights — CONFIRMED for three, one NOT CONFIRMED
+Source: <https://developers.facebook.com/docs/instagram-platform/insights/>. Checked 2026-10-17.
+
+| Metric | Required permission | period / metric_type | Processing delay | Confidence |
+|---|---|---|---|---|
+| `reach` | `instagram_basic`, `instagram_manage_insights`, `pages_read_engagement` | `period=day` | up to 48 h | CONFIRMED |
+| `follower_count` | same | `period=day`, retained 90 d, at most 30 d of history | up to 48 h | CONFIRMED |
+| `profile_views` | same | `period=day` | up to 48 h | CONFIRMED |
+| `views` (account-level, the `impressions` replacement) | same | **required `period`/`metric_type` combination not captured** | up to 48 h | **R1 — NOT CONFIRMED, not declared** |
+
+### Facebook Page post insights — CONFIRMED (a smaller surface than the roadmap)
+Source: <https://developers.facebook.com/docs/graph-api/reference/insights/>,
+<https://developers.facebook.com/docs/platforminsights/page/>,
+<https://developers.facebook.com/docs/permissions>. Checked 2026-10-17.
+
+| Metric | Required permission | period / metric_type | Post types | Processing delay | Confidence |
+|---|---|---|---|---|---|
+| `post_reactions_by_type_total` | `read_insights`, `pages_read_engagement`, Page token held by a person with the `ANALYZE` task | lifetime | all | not stated | CONFIRMED |
+| `post_clicks` | same | lifetime | all | not stated | CONFIRMED |
+
+**FR-005 disagreement, recorded here and in `docs/decisions.md`.** The
+roadmap's and spec FR-030's names — `post_impressions`, `page_impressions`,
+`page_fans` and their breakdowns — are **deprecated**, announced 2025-08-15,
+effective 2025-11-15 (eleven months before today): "the API will return an
+**invalid metric error** when calling any of these metrics." The documented
+replacements (`post_media_view`, `page_media_view`, `page_follows`) are
+**themselves mid-migration**: `post_media_view`/`page_media_view` are
+documented but flagged for deprecation as part of Graph API v25.0, with a
+"Page Viewer Metric" (`post_total_media_view_unique`,
+`page_total_media_view_unique`) planned "by the end of June 2026". Docket runs
+v26.0 today (2026-10-17), past both dates, and the search summaries cannot say
+which of `post_media_view` / `post_total_media_view_unique` actually answers on
+v26.0 today — guessing costs the whole surface (a wrong metric name fails the
+whole call). **Decision: ship only `post_reactions_by_type_total` and
+`post_clicks` for posts (and `page_post_engagements`/`page_follows` for the
+account, next table); the whole views/impressions/reach family is R2, NOT
+CONFIRMED, not declared.**
+Sources: <https://developers.facebook.com/blog/post/2025/08/15/page-insights-api-updates/>,
+<https://developers.facebook.com/documentation/pages-api/platforminsights/page/deprecated-metrics>,
+<https://developers.facebook.com/blog/post/2026/02/18/introducing-graph-api-v25-and-marketing-api-v25>.
+Checked 2026-10-17.
+
+Prohibited names (test-enforced, not comment-only): `post_impressions*`,
+`page_impressions*`, `page_fans*`, `page_posts_impressions*`, and — until R2 is
+answered — `post_media_view`, `page_media_view`, `post_total_media_view_unique`,
+`page_total_media_view_unique`.
+
+**A third precondition Docket cannot see in `granted_scopes`.** Without
+`read_insights` the endpoint answers with an **empty dataset**, not an error.
+An account may also hold `read_insights` and still get nothing because the
+connecting person lacks the `ANALYZE` task on that Page. Eligibility (G33)
+answers "may Docket call?", never "will Docket get numbers?"; an empty answer
+presents as 080's existing `nothing_reported`, never as a failure. Named gap,
+no code.
+
+### Facebook Page insights (account-level) — CONFIRMED
+Source: same as above.
+
+| Metric | Required permission | period / metric_type | Processing delay | Confidence |
+|---|---|---|---|---|
+| `page_post_engagements` | `read_insights`, `pages_read_engagement`, `ANALYZE` task | day/week/days_28 | not stated | CONFIRMED |
+| `page_follows` | same | not stated (documented replacement for `page_fans`) | not stated | CONFIRMED |
+
+### Threads media (post) insights — PARTLY CONFIRMED (not declared under FR-003 unless the implement phase confirms the official enum)
+Source: <https://developers.facebook.com/documentation/threads/insights>,
+corroborating third-party integration guides. Checked 2026-10-17.
+
+| Metric | Required permission | period / metric_type | Processing delay | Confidence |
+|---|---|---|---|---|
+| `views` | `threads_manage_insights` | daily totals (differs from the rest) | not stated | PARTLY CONFIRMED (third-party corroboration only; official enum not captured) |
+| `likes` | same | lifetime totals | not stated | PARTLY CONFIRMED |
+| `replies` | same | lifetime totals | not stated | PARTLY CONFIRMED |
+| `reposts` | same | lifetime totals | not stated | PARTLY CONFIRMED |
+| `quotes` | same | lifetime totals | not stated | PARTLY CONFIRMED |
+| `shares` (roadmap FR-031) | — | — | — | **R3 — NOT CONFIRMED, no source names it on this edge; dropped** |
+
+Endpoint: `GET /{threads-media-id}/insights?metric=…` on `graph.threads.net`
+(matches Docket's existing Threads transport). Third-party agreement is
+corroboration, not an official source; FR-003 means these are not declared
+unless the implement phase (Phase 11 human task, R3) confirms the enum from
+the official page. If unconfirmed, `src/providers/threads/insights.ts` ships
+`unavailable` instead (research.md §3 decision).
+
+### Threads user (account) insights — NOT CONFIRMED, not declared (`account: []`)
+The Threads *profile* edge (`/{threads-user-id}?fields=…`) exposes
+`follower_count` and 7-day counters `likes_count`, `quotes_count`,
+`reposts_count`, `views_count` — but these are **profile fields, not insight
+metrics**, and are not the `user_insights` metric enum. Declaring a profile
+field as an insights metric key would be a category error. **R4 — NOT
+CONFIRMED.** Account surface stays `account: []` either way.
+Source: <https://developers.facebook.com/documentation/threads/threads-profiles>. Checked 2026-10-17.
 
 ## Limits verification, 2026-10-07
 Checked 2026-10-07. Scope: replace the interim, UNVERIFIED rows in

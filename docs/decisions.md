@@ -3726,3 +3726,58 @@ platform credentials, and real Bluesky numbers flow through the same spine with 
 one open question — whether Bluesky's public AppView answers `getPosts`/`getProfile` unauthenticated —
 stays `NEEDS RESEARCH` until the parked human task runs; until then the Bluesky reader is reported as
 "verified with mocks only" (constitution II).
+
+## 081 — Insights reconnect and Meta/Threads readers (2026-10-17)
+
+### Research decisions
+
+- **Research runs before any reader, and gates only the readers.** The grant-and-eligibility machinery
+  (the `granted_scopes` column, the write boundary, the per-account eligibility predicate, the panel and
+  accounts-page states) needs no platform-metric research at all and is built and tested first; only
+  Instagram's, Facebook's and Threads' `insights.ts` modules wait on `docs/research/meta.md`'s tables
+  (research.md §7, "nothing in the first half of the entry depends on any of these").
+- **Facebook's roadmap metric names are deprecated — FR-005's disagreement.** The roadmap and spec
+  FR-030 named `post_impressions`, `page_impressions` and `page_fans` (plus their paid/organic
+  breakdowns). Meta's Page Insights deprecation, effective 2025-11-15, makes every one of them return an
+  "invalid metric error." Their documented replacements (`post_media_view`, `page_media_view`,
+  `page_follows`, and a further "Page Viewer Metric" planned for June 2026) are themselves mid-migration,
+  and which one answers on Docket's running Graph API version (v26.0, as of 2026-10-17) could not be
+  confirmed from search summaries alone. Decision: ship Facebook with the metrics that are on **no**
+  deprecation list — `post_reactions_by_type_total`, `post_clicks`, `page_post_engagements`,
+  `page_follows` — and leave the whole views/impressions/reach family undeclared as R2, rather than
+  guess and fail the whole surface on one wrong name. Reversal: once R2 is answered (Phase 11 human
+  task), add the confirmed views metric to `src/providers/facebook/insights.ts` and this file.
+- **Six open `NEEDS RESEARCH` rows, each with a stated fallback, none blocking a requirement, default or
+  test (research.md §7):**
+  - **R1** — Instagram's user-level `views` metric's required `period`/`metric_type` combination.
+    Fallback: not declared; `reach`, `follower_count`, `profile_views` are.
+  - **R2** — which Pages views/reach metric answers on v26.0 today (`post_media_view`,
+    `post_total_media_view_unique`, or neither). Fallback: not declared; reactions-by-type and clicks
+    ship instead.
+  - **R3** — Threads' media-insights metric enum from the official page, and whether `shares` exists on
+    that edge. Fallback: declare the third-party-corroborated five (`views`, `likes`, `replies`,
+    `reposts`, `quotes`) only if the implement phase can confirm them officially; otherwise ship
+    `src/providers/threads/insights.ts` as `unavailable`. `shares` is dropped regardless — no source
+    names it.
+  - **R4** — Threads' `user_insights` metric enum (distinct from the profile fields). Fallback:
+    `account: []`.
+  - **R5** — a documented minimum call-budget floor for Facebook Pages and Instagram (Threads already
+    has one: 4800 × an impression floor of 10 = 48,000/24 h). Fallback: the same 48,000/24 h figure,
+    carried as an **interim, UNVERIFIED** stand-in and marked as such in `docs/limits.md`, same as 080's
+    Bluesky row.
+  - **R6** — whether Pinterest's token reply carries a `scope` field. Fallback: `granted_scopes` stays
+    `NULL` for Pinterest; a later entry picks it up.
+- **The declared read-budget floor binds almost nothing on its own, and that is written down rather than
+  left for a reviewer to discover.** 48,000 reads/24 h is three orders of magnitude above what this
+  subsystem ever attempts (`INSIGHTS_TARGETS_PER_RUN` is 50, Instagram's `maxPostsPerRead` is 1), so
+  `reserveFloor` on that number is never reached. The real protection against Meta's own impressions-based
+  limit is the live `X-Business-Use-Case-Usage` header (layer 3), not the declared floor (layer 2); the
+  per-account reserve (layer 1) only bites when an operator has set a per-account publish override. A
+  smaller invented floor would be a fiction with the same shape, so the honest number ships with the
+  honest caveat instead.
+- **Research correction: Meta's rate-limited error codes 80001/80002 were already fixed, and two research
+  notes said otherwise.** The spec's constraint list and FR-046 (and `docs/research/meta.md`'s own "Code
+  impact notes") claimed these codes were missing from `GRAPH_ERROR_TABLE.rateLimited`; commit `3a2626c`
+  already added them, with a passing test. The stale notes are corrected here and in
+  `docs/research/meta.md` rather than carried forward to be "fixed" a second time by a later entry that
+  does not know to check history first.

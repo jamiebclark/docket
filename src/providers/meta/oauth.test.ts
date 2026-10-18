@@ -4,7 +4,14 @@ import { createFakeGraph } from "../../../tests/helpers/fake-graph";
 import type { MetaConfig } from "./config";
 import { dialogUrl, exchangeCode, exchangeLongLived, metaApp } from "./oauth";
 
-const cfg: MetaConfig = { appId: "12345", appSecret: "s3cr3t-app-secret-value", graphVersion: "v26.0", loginConfigId: null };
+const cfg: MetaConfig = {
+  appId: "12345",
+  appSecret: "s3cr3t-app-secret-value",
+  graphVersion: "v26.0",
+  loginConfigId: null,
+  insightsScopes: false,
+  insightsUsageCeiling: 80,
+};
 const app = metaApp(cfg);
 const fake = createFakeGraph();
 const signal = () => new AbortController().signal;

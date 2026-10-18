@@ -86,6 +86,8 @@ export const threadsConnectGroup: OAuthConnectGroup = {
       { name: "THREADS_APP_ID", secret: false, required: false },
       { name: "THREADS_APP_SECRET", secret: true, required: false },
       { name: "THREADS_GRAPH_BASE", secret: false, required: false },
+      { name: "THREADS_INSIGHTS_SCOPES", secret: false, required: false },
+      { name: "THREADS_INSIGHTS_USAGE_CEILING", secret: false, required: false },
     ],
     issues: (source) => parseThreadsEnv(source).issues,
     configured: (source) => parseThreadsEnv(source).config !== null,

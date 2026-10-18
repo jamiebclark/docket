@@ -394,6 +394,16 @@ async function commitPostBatch(input: {
         );
         continue;
       }
+      if (entry.kind === "unqueryable") {
+        // Full counting (targetsUnqueryable) and lastError/consecutiveFailures clearing lands in T083.
+        counts.targetsFrozen++;
+        await tx.postMetricPollStates.update(
+          t.state.postTargetId,
+          { nextPollAt: null, frozenAt: now, frozenReason: "unqueryable" },
+          t.token,
+        );
+        continue;
+      }
       const metrics = validateEntryMetrics(entry.metrics, insights.declaration.post, insights.postMetricsSchema);
       if (metrics === null) {
         counts.failed++;

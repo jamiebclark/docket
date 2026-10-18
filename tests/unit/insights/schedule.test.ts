@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { nextAccountPollAt, nextPostPollAt } from "../../../src/lib/insights/schedule";
+import { nextAccountPollAt, nextPostPollAt, postPollDecision } from "../../../src/lib/insights/schedule";
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -106,5 +106,79 @@ describe("nextAccountPollAt", () => {
   it("is due now when never captured", () => {
     const got = nextAccountPollAt({ lastCapturedAt: null, now: T0, intervalMs: 6 * HOUR, minIntervalMs: 0 });
     expect(got.getTime()).toBe(T0.getTime());
+  });
+});
+
+describe("postPollDecision", () => {
+  const STORY_TYPES = [{ postType: "story", lifetimeMs: 24 * HOUR }];
+
+  it("with no ephemeralPostTypes match is byte-identical to nextPostPollAt, for every existing case", () => {
+    const cases: { publishedAt: Date; lastCapturedAt: Date | null; now: Date; minIntervalMs: number; chosenPostType: string | null }[] = [
+      { publishedAt: T0, lastCapturedAt: at(30 * 60_000), now: at(30 * 60_000), minIntervalMs: 0, chosenPostType: null },
+      { publishedAt: T0, lastCapturedAt: at(3 * DAY), now: at(3 * DAY), minIntervalMs: 0, chosenPostType: "feed" },
+      { publishedAt: T0, lastCapturedAt: at(40 * DAY), now: at(40 * DAY), minIntervalMs: 0, chosenPostType: null },
+      { publishedAt: T0, lastCapturedAt: null, now: at(40 * DAY), minIntervalMs: 0, chosenPostType: null },
+    ];
+    for (const c of cases) {
+      const legacy = nextPostPollAt(c);
+      const decision = postPollDecision({ ...c, ephemeralPostTypes: STORY_TYPES });
+      if (legacy === null) {
+        expect(decision).toEqual({ kind: "frozen", reason: "settled" });
+      } else {
+        expect(decision).toEqual({ kind: "due", at: legacy });
+      }
+    }
+  });
+
+  it("inside an ephemeral window is due on the dense first-band cadence", () => {
+    const now = at(30 * 60_000);
+    const decision = postPollDecision({
+      publishedAt: T0,
+      lastCapturedAt: null,
+      now,
+      minIntervalMs: 0,
+      chosenPostType: "story",
+      ephemeralPostTypes: STORY_TYPES,
+    });
+    expect(decision).toEqual({ kind: "due", at: at(HOUR) });
+  });
+
+  it("at or past publishedAt + lifetimeMs freezes expired", () => {
+    const now = at(24 * HOUR);
+    const decision = postPollDecision({
+      publishedAt: T0,
+      lastCapturedAt: at(23 * HOUR),
+      now,
+      minIntervalMs: 0,
+      chosenPostType: "story",
+      ephemeralPostTypes: STORY_TYPES,
+    });
+    expect(decision).toEqual({ kind: "frozen", reason: "expired" });
+  });
+
+  it("a dense-cadence candidate landing past the boundary freezes expired instead", () => {
+    const now = at(23 * HOUR + 30 * 60_000);
+    const decision = postPollDecision({
+      publishedAt: T0,
+      lastCapturedAt: now,
+      now,
+      minIntervalMs: 0,
+      chosenPostType: "story",
+      ephemeralPostTypes: STORY_TYPES,
+    });
+    expect(decision).toEqual({ kind: "frozen", reason: "expired" });
+  });
+
+  it("a story already past its lifetime when first seen is frozen expired with no catch-up", () => {
+    const now = at(30 * HOUR);
+    const decision = postPollDecision({
+      publishedAt: T0,
+      lastCapturedAt: null,
+      now,
+      minIntervalMs: 0,
+      chosenPostType: "story",
+      ephemeralPostTypes: STORY_TYPES,
+    });
+    expect(decision).toEqual({ kind: "frozen", reason: "expired" });
   });
 });

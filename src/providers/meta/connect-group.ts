@@ -29,6 +29,8 @@ export const metaConnectGroup: OAuthConnectGroup = {
       { name: "META_APP_SECRET", secret: true, required: false },
       { name: "META_GRAPH_VERSION", secret: false, required: false },
       { name: "META_LOGIN_CONFIG_ID", secret: false, required: false },
+      { name: "META_INSIGHTS_SCOPES", secret: false, required: false },
+      { name: "META_INSIGHTS_USAGE_CEILING", secret: false, required: false },
     ],
     issues: (source) => parseMetaEnv(source).issues,
     configured: (source) => parseMetaEnv(source).config !== null,

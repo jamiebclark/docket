@@ -202,6 +202,8 @@ export interface ConnectCandidate {
   /** Shown nested under this candidate in the chooser (e.g. Instagram under its Page). */
   parent?: { providerKey: string; externalId: string };
   notes?: readonly string[];
+  /** Permission identifiers the platform reported granting (G31). Absent = not reported. */
+  grantedScopes?: readonly string[];
 }
 
 export type CandidatesResult =
@@ -221,6 +223,21 @@ export interface OAuthConnectGroup {
     variables: readonly { name: string; secret: boolean; required: boolean }[];
     issues(source: Readonly<Record<string, string | undefined>>): ProviderEnvIssue[];
     configured(source: Readonly<Record<string, string | undefined>>): boolean;
+  };
+  /** G32. The extra permissions this group may request, and whether it is asking for them now. */
+  optionalScopes?: {
+    /** Every extra scope, each with the purpose it serves. Static, non-secret, shown in docs. */
+    declared: readonly { scope: string; purpose: string }[];
+    /** Published guide explaining the opt-in, e.g. `docsUrl("meta-setup", "insights")`. */
+    doc?: string;
+    /** Pure; reads only `source`. The scopes this group will add to its dialog as configured now. */
+    requested(source: Readonly<Record<string, string | undefined>>): readonly string[];
+    /**
+     * Pure. Non-null when the operator opted in but Docket cannot widen the dialog — Facebook
+     * Login for Business takes its permission set from the Meta app's configuration (FR-019).
+     * Reconnecting cannot help, so no reconnect control is offered.
+     */
+    cannotWiden?(source: Readonly<Record<string, string | undefined>>): { reason: string; doc?: string } | null;
   };
   /** Callback-address requirement; a group whose address does not qualify is shown as unavailable (G10). */
   redirectRequirement?: {
@@ -410,7 +427,14 @@ export type StepResult = (
 ) & { summary?: AttemptSummary };
 
 export type RefreshResult =
-  | { ok: true; credentials: unknown; expiresAt: Date | null; displayName?: string }
+  | {
+      ok: true;
+      credentials: unknown;
+      expiresAt: Date | null;
+      displayName?: string;
+      /** G31. Absent leaves the stored grant unchanged (FR-011). */
+      grantedScopes?: readonly string[];
+    }
   | { ok: false; reason: string; transient?: boolean; retryAt?: Date };
 
 export interface PostingOptionView {
@@ -607,6 +631,12 @@ export interface InsightsDeclaration {
    * shows `reason` with a link to `docsPath`.
    */
   unavailable?: { reason: string; docsPath?: string };
+  /** G33. Permissions an account must hold before any read is attempted. Default empty. */
+  requiredScopes?: readonly string[];
+  /** G33. Shown when `requiredScopes` are not held. Required when `requiredScopes` is non-empty. */
+  missingScopes?: { reason: string; docsPath?: string };
+  /** G34. Post types whose numbers die after `lifetimeMs` from publication. */
+  ephemeralPostTypes?: readonly { postType: PostType; lifetimeMs: number }[];
 }
 
 export interface PostMetricsReadContext<Settings = unknown> {
@@ -621,7 +651,9 @@ export type PostMetricEntry =
   /** `metrics` is validated against `postMetricsSchema` by the caller, then filtered to declared keys. */
   | { externalId: string; kind: "metrics"; metrics: unknown }
   /** The platform no longer returns this post. Terminal for this target; **not** a failure (FR-042). */
-  | { externalId: string; kind: "gone" };
+  | { externalId: string; kind: "gone" }
+  /** This id cannot be used against the insights endpoint. Terminal, **not** a failure (FR-036). */
+  | { externalId: string; kind: "unqueryable"; reason: string };
 
 export type PostMetricsReadResult =
   | { kind: "page"; entries: readonly PostMetricEntry[]; summary?: AttemptSummary }

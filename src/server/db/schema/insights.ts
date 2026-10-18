@@ -102,7 +102,7 @@ export const postMetricPollStates = pgTable(
     check("post_metric_poll_states_lease_pair", sql`(${t.pollLeaseUntil} IS NULL) = (${t.pollLeaseOwner} IS NULL)`),
     check("post_metric_poll_states_failures_nonneg", sql`${t.consecutiveFailures} >= 0`),
     check("post_metric_poll_states_frozen_pair", sql`(${t.frozenAt} IS NULL) = (${t.frozenReason} IS NULL)`),
-    check("post_metric_poll_states_frozen_reason_enum", sql`${t.frozenReason} IS NULL OR ${t.frozenReason} IN ('settled', 'gone')`),
+    check("post_metric_poll_states_frozen_reason_enum", sql`${t.frozenReason} IS NULL OR ${t.frozenReason} IN ('settled', 'gone', 'expired', 'unqueryable')`),
     check("post_metric_poll_states_frozen_has_no_next", sql`${t.frozenAt} IS NULL OR ${t.nextPollAt} IS NULL`),
     check("post_metric_poll_states_failing_pair", sql`(${t.consecutiveFailures} = 0) = (${t.failingSince} IS NULL)`),
     check("post_metric_poll_states_last_error_len", sql`${t.lastError} IS NULL OR char_length(${t.lastError}) <= 500`),

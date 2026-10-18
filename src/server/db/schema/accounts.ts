@@ -46,6 +46,12 @@ export const socialAccounts = pgTable(
       onDelete: "set null",
     }),
     removedAt: timestamp("removed_at", { withTimezone: true }),
+    /**
+     * Permission identifiers the platform reported granting for this account (G31).
+     * NULL = Docket has never recorded a grant. `{}` = the platform answered and granted nothing.
+     * Never derived from what Docket requested. Not a secret.
+     */
+    grantedScopes: text("granted_scopes").array(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
@@ -67,6 +73,15 @@ export const socialAccounts = pgTable(
       "social_accounts_refresh_lease_pair",
       sql`(${t.refreshLeaseUntil} IS NULL) = (${t.refreshLeaseOwner} IS NULL)`,
     ),
+    check(
+      "social_accounts_granted_scopes_shape",
+      sql`${t.grantedScopes} IS NULL
+          OR cardinality(${t.grantedScopes}) = 0
+          OR (cardinality(${t.grantedScopes}) <= 40
+              AND octet_length(array_to_string(${t.grantedScopes}, ',')) <= 1000
+              AND array_to_string(${t.grantedScopes}, ',') ~ '^[a-z0-9_.:-]{1,64}(,[a-z0-9_.:-]{1,64})*$')`,
+    ),
+    index("social_accounts_granted_scopes_idx").using("gin", t.grantedScopes),
     uniqueIndex("social_accounts_external_uq")
       .on(t.projectId, t.providerKey, t.externalAccountId)
       .where(sql`${t.removedAt} IS NULL`),
