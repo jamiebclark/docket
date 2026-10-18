@@ -51,6 +51,10 @@ describe("facebookInsights declaration", () => {
   it("declares no ephemeral post types (Facebook Page Stories are out of scope)", () => {
     expect(facebookInsights.declaration.ephemeralPostTypes).toBeUndefined();
   });
+
+  it("declares a 48,000/86,400s read budget, interim and UNVERIFIED (research §4)", () => {
+    expect(facebookInsights.declaration.readBudget).toEqual({ count: 48_000, windowSeconds: 86_400 });
+  });
 });
 
 describe("facebookInsights.readPostMetrics", () => {

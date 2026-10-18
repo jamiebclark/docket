@@ -50,6 +50,10 @@ describe("instagramInsights declaration", () => {
       "pages_read_engagement",
     ]);
   });
+
+  it("declares a 48,000/86,400s read budget, interim and UNVERIFIED (research §4)", () => {
+    expect(instagramInsights.declaration.readBudget).toEqual({ count: 48_000, windowSeconds: 86_400 });
+  });
 });
 
 describe("instagramInsights.readPostMetrics", () => {
