@@ -122,7 +122,23 @@ describe("tick", () => {
 
     const now = new Date(Date.now() + 5000);
     const people = await Promise.all(
-      Array.from({ length: 500 }, (_, i) => seedDuePerson({ nextDueAt: new Date(now.getTime() - i * 10) })),
+      // `- (i + 1) * 10`, never `- i * 10`: every seeded person must be due STRICTLY before `now`.
+      //
+      // This is the whole of the long-standing {claimed: 500, sent: 499, skipped: 1} flake. An
+      // `immediate` person who has just been sent to gets `next_due_at = nextDue(...) = now`, and the
+      // claim takes `next_due_at <= now`, so they are immediately due again and get re-claimed on a
+      // later tick, assemble nothing (their `mailed_seq` has moved), and count as `skipped`. At tick 0
+      // the pinned clock IS `now`, so that re-claim's `next_due_at` tied exactly with the one seeded
+      // person whose own `next_due_at` was `now - 0` — index 0. `claimDuePeople` orders by
+      // `next_due_at` alone, so the tie went to the query plan, and when the re-claim won it took the
+      // last of exactly 500 slots in a loop with zero spare capacity. Index 0 was then never claimed:
+      // every sighting reported it with assembles=yes, lease=none and attempts=none, which is what
+      // "never claimed" looks like.
+      //
+      // Seeding strictly before `now` puts every original ahead of any re-claim, so the 500 fill the
+      // 10 x 50 exactly and SC-009's bound is unchanged. The churn itself is product behaviour, not a
+      // test artefact, and is written up on PR #147 rather than changed here.
+      Array.from({ length: 500 }, (_, i) => seedDuePerson({ nextDueAt: new Date(now.getTime() - (i + 1) * 10) })),
     );
     await Promise.all(people.map((p) => seedProjectWithProblem(p.id)));
 
@@ -170,12 +186,27 @@ describe("tick", () => {
           if (!sentRows.some((r) => r.outcome === "sent")) {
             unserved.push(
               `index=${i} assembles=${assembled ? "yes" : "NO"} cadence=${settings?.cadence ?? "-"}` +
-                ` nextDueAt=${settings?.nextDueAt?.toISOString() ?? "-"} attempts=${sentRows.map((r) => r.outcome).join("|") || "none"}`,
+                ` nextDueAt=${settings?.nextDueAt?.toISOString() ?? "-"} attempts=${sentRows.map((r) => r.outcome).join("|") || "none"}` +
+                // Which of the four `skipped` branches fired. A stale digest and an empty assembly both
+                // call `releaseClaim`, which clears the lease and rolls `next_due_at` forward; a lease
+                // lost at `markInFlight` or `recordAttempt` writes nothing and leaves both as they were.
+                // So a still-held lease with an untouched `next_due_at` means the lease was lost, and
+                // the first sighting (index=0, assembles=yes, attempts=none) said exactly that.
+                ` lease=${settings?.leaseOwner ? "HELD" : "none"} lastOutcome=${settings?.lastOutcome ?? "-"}`,
             );
           }
         }
       });
-      detail = `; unserved: ${unserved.join(" ") || "(none found - the shortfall is not a missing person)"}`;
+      // The decisive fact, and the one the earlier sightings could not give: whether the mailer was
+      // called 500 times or 499. `markInFlight` (step 4) losing the lease means the person was never
+      // sent to, so the mailer saw 499 and the shortfall is benign — they are simply still due. But
+      // `recordAttempt` (step 6) losing it means the mail WAS handed to the mailer and then not
+      // recorded, so the mailer saw 500 and a person could be mailed twice on the retry. Those two
+      // need opposite fixes, and the assertion on `mailer.sent` below never runs because this one
+      // fails first.
+      detail =
+        `; mailerCalls=${mailer.sent.length} (499 => lost before the send, 500 => lost after it)` +
+        `; unserved: ${unserved.join(" ") || "(none found - the shortfall is not a missing person)"}`;
     }
     expect(served, `served ${served} of 500 in ${ticks} ticks; dispositions ${breakdown}${detail}`).toBe(500);
     expect(ticks).toBeLessThanOrEqual(10);
