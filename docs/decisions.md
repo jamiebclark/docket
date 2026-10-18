@@ -3753,3 +3753,61 @@ hand-rolled copies of that same `UPDATE` in the pinterest, threads, tiktok and x
 `drainTicks` direction in this spec and the parking direction now on `main` point opposite ways; the
 baseline is kept here because the measurements are still the right ones to compare against, not because
 Phase 4 is still the plan. See the note on PR #141.
+
+## Making CI flakes legible: four hunts, two real bugs (2026-10-18)
+
+The flake hunt (spec 079 US1, `.github/workflows/flake-hunt.yml`) became usable and was run four
+times, 20 repetitions x 4 shards each, with shuffled file order. What it changed is not the number of
+flakes but the *method*: before, a flake was discovered one red CI run at a time and fixed by
+hypothesis; now it is measured, and the measurement names a rate.
+
+**Two of the four fixes were real product bugs, not test artefacts.**
+
+1. **`engagement_drafts_decision_names_person` vs `ON DELETE SET NULL` (23514).** The check required
+   `reviewed_by_user_id IS NOT NULL` once a draft was decided, while the foreign key set that column
+   null when the user went away. The two rules contradicted each other, so **a user who had ever
+   approved or rejected an engagement draft could not be deleted at all** — every user-deletion path
+   hit 23514. Present since migration 0036. Fixed by requiring `reviewed_at` and letting the reviewer
+   be unknown, which is how the other 38 actor columns in this schema already behave. Audited: across
+   38 `SET NULL` foreign-key columns and 44 `NOT NULL` checks this was the only contradicting pair.
+
+2. **Overlapping queries on one transaction client.** `services/posts/index.ts` ran
+   `Promise.all(targets.map(...))` over a single drizzle transaction, i.e. N concurrent queries on one
+   pooled client; `services/queue/index.ts` did it twice. node-postgres queues the second and warns,
+   and pg@9 will make it an error.
+
+**Why the first one took four hunts.** Its cause was discarded twice over, independently: vitest's
+JSON reporter serialises `failureMessages` (message plus stack) and **drops `error.cause`**, which is
+where drizzle puts the Postgres error; and the lane stderr never sees failures at all, because
+`--reporter=json --outputFile=` writes them to the file. For three hunts the only recorded fact was
+`Failed query: delete from "user"`. `withDbCause` (tests/helpers/db.ts) folds the pg fields into the
+`message`, which is the part that survives serialisation, and the next hunt named the constraint.
+
+The general lesson, and the one worth keeping: **a diagnostic that is not in the `message` does not
+exist.** Three separate layers here defaulted to discarding the cause — the reporter, the stderr
+routing, and a 2000-byte stderr window that 80 repetitions had filled with nothing but a deprecation
+warning.
+
+**The hunt's rates are not the gate's rates.** The hunt passes `--sequence.shuffle.files`; the gate
+does not. `secret-scan` failed 8 to 11 of 20 hunt repetitions and *never once* failed a real gate run,
+because it needs a file that leaves a decided draft behind to be shuffled ahead of it on the same
+worker database. Order-dependence is worth fixing — it found a genuine bug here — but it should not be
+ranked by hunt rate when deciding what is blocking merges.
+
+**Two test-only fixes, both root-caused rather than retried.** The email tick's long-standing
+`{claimed: 500, sent: 499, skipped: 1}` was an `immediate`-cadence person, already sent to, being
+re-claimed because `nextDue` returns `now` for that cadence — tying exactly with the one seeded person
+whose own `next_due_at` was `now`, which is why every sighting named index 0. And
+`project-brand.test.ts` ordered two concurrent writers by `created_at`, which ties, is stamped at
+transaction start rather than at commit, and had no `ORDER BY` to break the tie.
+
+**Still open.** Three of `scheduler/refresh.test.ts`'s five tests flake at about 1 in 20 with three
+different symptoms, which points at one cause: the refresh section intermittently processing nothing.
+Budget starvation, provider-registry timing and connection-pool saturation have each been tested and
+ruled out (pool saturation down to `DATABASE_POOL_MAX=2`, six shuffled local runs). All five
+assertions now carry the section counts, so the next occurrence should name it.
+
+**Left alone deliberately.** `nextDue` returning `now` for `immediate` cadence means every such
+subscriber is claimed, assembled and released on *every* tick for as long as they stay subscribed,
+burning the email section's per-tick claim budget on no-ops. That is the scheduling contract
+(E12, FR-016 to FR-020) and wants a decision, not a drive-by change.
