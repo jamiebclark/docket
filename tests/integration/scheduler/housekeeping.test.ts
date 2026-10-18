@@ -111,6 +111,43 @@ describe("housekeeping", () => {
     expect(await e.scope.datedOccurrences.get(pending.id)).not.toBeNull();
   });
 
+  it("does not prune a closed run whose position a pending occurrence still cites (23514)", async () => {
+    // The sibling of the test above, with the one step it never takes: closing the run, long ago, so
+    // the prune actually matches it. Deleting the run cascades to its positions, which nulls
+    // `position_id` on occurrences, which `standing_series_occurrences_pending_has_position` rejects
+    // for an occurrence with no outcome. Before the fix this threw 23514 out of the prune and failed
+    // the whole housekeeping section.
+    const e = await standingSeriesEnv();
+    const { seriesId } = await createStandingSeries(e.scope, e.create());
+    const row = await e.scope.datedRows.insert(seriesId, {
+      ordinal: 1, month: 6, day: 15, year: null, keyValue: "pinned-row", fields: {},
+      mediaFilename: null, mediaAssetId: null, nextTargetDate: null, sourceLine: 2,
+    });
+    const run = await e.scope.standingSeriesRuns.openRun({
+      seriesId, period: "day", periodStart: "2026-01-02", periodStartAt: new Date(), requestedCount: 1, config: {},
+    });
+    const [position] = await e.scope.standingSeriesPositions.insertMany(run.id, 1, new Date());
+    const old = new Date(Date.now() - (STANDING_SERIES_RUN_RETENTION_DAYS + 1) * 24 * 3600_000);
+    const pending = await e.scope.datedOccurrences.insert({
+      seriesId, rowId: row.id, year: 2019, targetDate: "2019-06-15", positionId: position!.id,
+    });
+    await testDb()
+      .update(standingSeriesOccurrences)
+      .set({ recordedAt: old })
+      .where(and(eq(standingSeriesOccurrences.projectId, e.project.id), eq(standingSeriesOccurrences.id, pending.id)));
+    await e.scope.standingSeriesRuns.close(run.id, "produced_all", old);
+
+    await runHousekeeping(config());
+
+    // The run is kept, not pruned, and the occurrence still has its anchor.
+    expect(await e.scope.standingSeriesRuns.get(run.id), "the run is pinned by its pending occurrence").not.toBeNull();
+    const [after] = await testDb()
+      .select()
+      .from(standingSeriesOccurrences)
+      .where(and(eq(standingSeriesOccurrences.projectId, e.project.id), eq(standingSeriesOccurrences.id, pending.id)));
+    expect(after).toMatchObject({ outcome: null, positionId: position!.id });
+  });
+
   it("is a section of the tick", async () => {
     const summary = await runTick(tickConfig());
     expect(summary.housekeeping.ok).toBe(true);
