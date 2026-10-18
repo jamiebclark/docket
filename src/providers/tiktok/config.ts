@@ -25,6 +25,8 @@ export const TIKTOK_ERROR_DETAIL_MAX = 300;
 export interface TikTokConfig {
   clientKey: string;
   clientSecret: string;
+  /** FR-019. Default off: `authorizationUrl` requests no extra scope while this is false. */
+  insightsScopes: boolean;
 }
 
 type Source = Readonly<Record<string, string | undefined>>;
@@ -42,6 +44,7 @@ export function parseTikTokEnv(source: Source): { config: TikTokConfig | null; a
   const clientKey = readEnv(source, "TIKTOK_CLIENT_KEY");
   const clientSecret = readEnv(source, "TIKTOK_CLIENT_SECRET");
   const auditedRaw = readEnv(source, "TIKTOK_APP_AUDITED");
+  const insightsScopesRaw = readEnv(source, "TIKTOK_INSIGHTS_SCOPES");
 
   if (clientSecret && !clientKey) issues.push({ name: "TIKTOK_CLIENT_KEY", reason: "required when TIKTOK_CLIENT_SECRET is set" });
   else if (clientKey && !valid(clientKey, KEY_MAX)) {
@@ -60,10 +63,17 @@ export function parseTikTokEnv(source: Source): { config: TikTokConfig | null; a
     else if (v !== "false") issues.push({ name: "TIKTOK_APP_AUDITED", reason: "must be true or false" });
   }
 
+  let insightsScopes = false;
+  if (insightsScopesRaw !== null) {
+    const v = insightsScopesRaw.toLowerCase();
+    if (v === "true") insightsScopes = true;
+    else if (v !== "false") issues.push({ name: "TIKTOK_INSIGHTS_SCOPES", reason: "must be true or false" });
+  }
+
   if (!(clientKey && clientSecret && valid(clientKey, KEY_MAX) && valid(clientSecret, SECRET_MAX))) {
     return { config: null, audited, issues };
   }
-  return { config: { clientKey, clientSecret }, audited, issues };
+  return { config: { clientKey, clientSecret, insightsScopes }, audited, issues };
 }
 
 /** Reads process.env each call. Throws a value-free error when not configured. */

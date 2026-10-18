@@ -71,3 +71,30 @@ export function requireXConfig(): XConfig {
   if (!config) throw new Error("X is not configured: set X_CLIENT_ID and X_CLIENT_SECRET");
   return config;
 }
+
+const X_INSIGHTS_READ_CEILING_MIN = 100;
+const X_INSIGHTS_READ_CEILING_MAX = 1_000_000;
+const X_INSIGHTS_READ_CEILING_DEFAULT = 8000;
+
+/** Pure. FR-062. Issues carry names and reasons, never values (contracts/x-metered-reads.md §2). */
+export function parseXInsightsEnv(source: Source): { enabled: boolean; readCeiling: number; issues: ProviderEnvIssue[] } {
+  const issues: ProviderEnvIssue[] = [];
+  const enabledRaw = readEnv(source, "X_INSIGHTS_ENABLED");
+  const ceilingRaw = readEnv(source, "X_INSIGHTS_READ_CEILING");
+
+  let enabled = false;
+  if (enabledRaw !== null) {
+    const v = enabledRaw.toLowerCase();
+    if (v === "true") enabled = true;
+    else if (v !== "false") issues.push({ name: "X_INSIGHTS_ENABLED", reason: "must be true or false" });
+  }
+
+  let readCeiling = X_INSIGHTS_READ_CEILING_DEFAULT;
+  if (ceilingRaw !== null) {
+    const n = Number(ceilingRaw);
+    if (Number.isInteger(n) && n >= X_INSIGHTS_READ_CEILING_MIN && n <= X_INSIGHTS_READ_CEILING_MAX) readCeiling = n;
+    else issues.push({ name: "X_INSIGHTS_READ_CEILING", reason: "must be an integer from 100 to 1,000,000" });
+  }
+
+  return { enabled, readCeiling, issues };
+}
