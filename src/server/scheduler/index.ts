@@ -57,7 +57,7 @@ export async function runTick(options: { config?: Partial<SchedulerConfig> } = {
   const publishingPromise = section("publishing", () => runPublishing({ config, tickId, startedAt }), emptyPublishingCounts());
   const [publishing, tokenRefresh, generation, housekeeping, webhooks, email, standingSeries, engagementRead, insightsPoll, engagementSend] = await Promise.all([
     publishingPromise,
-    section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0, outOfBudget: 0 }),
+    section("token refresh", () => runTokenRefresh({ config, tickId, startedAt }), { refreshed: 0, failed: 0, deferred: 0, outOfBudget: 0, claimed: 0, lost: 0 }),
     section("generation jobs", () => runGenerationJobs({ config, tickId, startedAt }), emptyGenerationCounts()),
     section("housekeeping", () => runHousekeeping(config), emptyHousekeepingCounts()),
     section("webhooks", () => runWebhookDeliveries({ config, tickId, startedAt }), emptyWebhookCounts()),

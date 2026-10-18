@@ -21,6 +21,27 @@ export interface RefreshCounts {
    * the same counts whether the work was done, absent, or never attempted.
    */
   outOfBudget: number;
+  /**
+   * How many accounts the claim returned, work or no work.
+   *
+   * Without this, every other counter reading zero has two unrelated causes that look identical:
+   * nothing was eligible, or something was claimed and then produced no outcome. Measured on
+   * refresh.test.ts, which reported
+   * `{"ok":true,"counts":{"refreshed":0,"failed":0,"deferred":0,"outOfBudget":0}}` and left no way to
+   * tell which had happened.
+   */
+  claimed: number;
+  /**
+   * Claimed, the provider was called, and the lease-guarded write was then skipped because the lease
+   * was no longer held — `applyRefreshResult` returning `lost`.
+   *
+   * This was the fourth outcome of a three-way count: `refreshed`, `failed` and `deferred` are
+   * incremented for `refreshed`/`refused`/`transient`, and `lost` fell through all three and
+   * incremented nothing. So the section could call a provider, discard the result and report every
+   * count at zero with `ok: true` — exactly the ambiguity `outOfBudget` exists to prevent, arriving
+   * by a different door.
+   */
+  lost: number;
 }
 
 /**
@@ -34,7 +55,7 @@ export async function runTokenRefresh(opts: {
   startedAt: Date;
 }): Promise<RefreshCounts> {
   const { config } = opts;
-  const counts: RefreshCounts = { refreshed: 0, failed: 0, deferred: 0, outOfBudget: 0 };
+  const counts: RefreshCounts = { refreshed: 0, failed: 0, deferred: 0, outOfBudget: 0, claimed: 0, lost: 0 };
   const deadline = opts.startedAt.getTime() + config.timeBudgetMs;
   const token = randomUUID();
   const now = await clock.now();
@@ -49,6 +70,8 @@ export async function runTokenRefresh(opts: {
       .map((p) => p.key),
     token,
   });
+
+  counts.claimed = accounts.length;
 
   for (const account of accounts) {
     const repos = forSchedulerProject(account.projectId);
@@ -74,6 +97,7 @@ export async function runTokenRefresh(opts: {
       if (applied.kind === "refreshed") counts.refreshed++;
       else if (applied.kind === "refused") counts.failed++;
       else if (applied.kind === "transient") counts.deferred++;
+      else if (applied.kind === "lost") counts.lost++;
     } catch (error) {
       const message = redact(error instanceof Error ? error.message : "Refreshing credentials failed.", secrets);
       try {
