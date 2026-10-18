@@ -151,9 +151,17 @@ async function detail(tx: Tx, postId: string): Promise<PostDetail> {
   if (!post) throw new NotFoundError();
   const now = await clock.now();
   const targets = await tx.targets.listForPost(postId);
+  // Sequential, not Promise.all: `tx` is a single pooled client and node-postgres cannot run two
+  // queries on one client at a time. It queues the second and warns "Calling client.query() when the
+  // client is already executing a query", which pg@9 will make an error. There is no concurrency to
+  // win here — the client serialises them either way — and overlapping them leaves the transaction's
+  // client in a state the driver calls deprecated. This is the hot one: a post detail with N targets
+  // fired N overlapping queries, which is what flooded every CI log with that warning.
+  const targetViews: Awaited<ReturnType<typeof targetView>>[] = [];
+  for (const t of targets) targetViews.push(await targetView(tx, t, now));
   return {
     post,
-    targets: await Promise.all(targets.map((t) => targetView(tx, t, now))),
+    targets: targetViews,
     mediaIds: await tx.posts.listMediaIds(postId),
   };
 }
