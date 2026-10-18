@@ -33,6 +33,43 @@ export function nextPostPollAt(input: { publishedAt: Date; lastCapturedAt: Date 
   return new Date(candidateMs);
 }
 
+export type PostPollDecision = { kind: "due"; at: Date } | { kind: "frozen"; reason: "settled" | "expired" };
+
+/**
+ * Pure, total, no clock, no database. Delegates to `nextPostPollAt` for a non-ephemeral subject
+ * (`chosenPostType` null, or no declaration matches it) — byte-identical to 080 (FR-043).
+ */
+export function postPollDecision(input: {
+  publishedAt: Date;
+  lastCapturedAt: Date | null;
+  now: Date;
+  minIntervalMs: number;
+  chosenPostType: string | null;
+  ephemeralPostTypes?: readonly { postType: string; lifetimeMs: number }[];
+}): PostPollDecision {
+  const match = input.chosenPostType === null
+    ? undefined
+    : input.ephemeralPostTypes?.find((t) => t.postType === input.chosenPostType);
+
+  if (!match) {
+    const next = nextPostPollAt(input);
+    return next === null ? { kind: "frozen", reason: "settled" } : { kind: "due", at: next };
+  }
+
+  const publishedAtMs = input.publishedAt.getTime();
+  const nowMs = input.now.getTime();
+  const lastCapturedAtMs = input.lastCapturedAt?.getTime() ?? null;
+  const expiresAtMs = publishedAtMs + match.lifetimeMs;
+
+  if (nowMs >= expiresAtMs) return { kind: "frozen", reason: "expired" };
+
+  let candidateMs = (lastCapturedAtMs ?? publishedAtMs) + HOUR_MS;
+  if (lastCapturedAtMs !== null) candidateMs = Math.max(candidateMs, lastCapturedAtMs + input.minIntervalMs);
+
+  if (candidateMs >= expiresAtMs) return { kind: "frozen", reason: "expired" };
+  return { kind: "due", at: new Date(candidateMs) };
+}
+
 /** An account never freezes (FR-029): always due, never `null`. */
 export function nextAccountPollAt(input: { lastCapturedAt: Date | null; now: Date; intervalMs: number; minIntervalMs: number }): Date {
   if (input.lastCapturedAt === null) return new Date(input.now.getTime());

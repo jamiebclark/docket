@@ -82,7 +82,9 @@ Env vars are validated at startup with Zod and documented in `.env.example`.
   comparisons stay out of scope), other platforms, billing, public sign-up,
   Netlify. Inbox/comments shipped in 077 (Bluesky only); see
   `docs/engagement.md`. Post and account insights shipped in 080 (Bluesky
-  only); see `docs/insights.md`.
+  only) and extended in 081 to Instagram, Facebook Pages and (where
+  confirmed) Threads, each gated on an opt-in reconnect; see
+  `docs/insights.md`.
 
 ## Development Workflow
 
@@ -148,4 +150,4 @@ on product behaviour; `docs/research/` wins on external facts. Amendments are
 made by editing this file in a `docs(constitution):` commit with a version
 bump.
 
-**Version**: 1.7.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-17
+**Version**: 1.8.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-18

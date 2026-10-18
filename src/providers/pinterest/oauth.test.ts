@@ -62,7 +62,14 @@ describe("exchangeToken / refreshToken request shapes", () => {
       expiresInSeconds: 2592000,
       refreshExpiresInSeconds: 5184000,
       refreshExpiresAtSeconds: null,
+      scopes: null,
     });
+  });
+
+  it("attaches scopes when the reply carries a scope field, otherwise leaves it null (R6)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ access_token: "a", refresh_token: "r", scope: "user_accounts:read,pins:write" })));
+    const out = await exchangeToken(cfg, { code: "c", redirectUri: "https://example.com/cb", signal: new AbortController().signal });
+    expect(out).toMatchObject({ scopes: ["user_accounts:read", "pins:write"] });
   });
 
   it("is a transient failure on network/unparseable/5xx/429", async () => {

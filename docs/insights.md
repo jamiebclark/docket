@@ -7,14 +7,50 @@ it was read stated plainly.
 
 ## Supported platforms
 
-| Platform | Post numbers | Account numbers |
-|---|---|---|
-| Bluesky | Yes — likes, reposts, replies, quotes (whichever the response actually contains) | Captured, shown nowhere yet (see "What this does not do") |
-| Facebook Pages, Instagram, Threads, TikTok, Pinterest, X | Not yet | Not yet |
+| Platform | Post numbers | Account numbers | Permission needed |
+|---|---|---|---|
+| Bluesky | Yes — likes, reposts, replies, quotes (whichever the response actually contains) | Captured, shown nowhere yet (see "What this deliberately does not do") | None — reuses the account's existing session |
+| Instagram | Yes — reactions-by-type, comments, shares, saves, plus the reel/video family where the post type has one (whichever the response actually contains) | Captured (reach, follower count, profile views), shown nowhere yet | `instagram_manage_insights`, opt-in (see "Reconnecting for insights" below) |
+| Facebook Pages | Yes — reactions by type and post clicks; the views/impressions family is a named gap (see "Named gaps") | Captured (Page follows), shown nowhere yet | `read_insights`, opt-in |
+| Threads | Yes, where research could confirm the metric names; otherwise declared `unavailable` with a reason — see "Named gaps" | Declared `unavailable` for this entry (`account: []`) | `threads_manage_insights`, opt-in |
+| TikTok, Pinterest, X | Not yet | Not yet | — |
 
 A platform with no `insights` module simply never grows these tables and never does any of this
 work — there is nothing to turn off, and nothing changes on screen beyond the panel stating plainly
 that Docket cannot read numbers from that platform yet.
+
+## Reconnecting for insights
+
+Reading Instagram's, Facebook's or Threads' numbers needs a permission Docket does not request by
+default: the deployer opts in with one environment flag per connect group (off by default, so no
+existing install's consent screen changes until someone deliberately turns it on). Turning the flag
+on changes what the *next* connect or reconnect asks for — it does nothing to an account already
+connected.
+
+An account connected before the flag was on, or whose grant did not include the permission, shows a
+line on the Accounts page: *"Insights need a reconnect"*, with the reason and a link to
+[meta-setup.md](meta-setup.md). Reconnecting through the existing "Reconnect" button updates the same
+account in place — it keeps its publish-limit overrides, its posting instructions, its slot
+assignments, its engagement state and its insights poll state and snapshots, and no second account
+appears. Nothing about the account's ability to publish changes while insights permission is missing;
+only the numbers wait.
+
+With `META_LOGIN_CONFIG_ID` set, Docket cannot widen what the dialog asks for on its own — the
+permission has to be added to the Meta Login configuration itself, a deployment act. The accounts page
+says so plainly, with no reconnect button offered for a loop that cannot succeed.
+
+## Named gaps
+
+- **Facebook's views/impressions family is not declared.** Meta deprecated `post_impressions`,
+  `page_impressions` and `page_fans` on 2025-11-15, and which replacement metric answers on Docket's
+  running Graph API version could not be confirmed. Facebook ships with reactions-by-type, clicks,
+  page engagement and page follows instead; the views family is a parked research question
+  (`docs/decisions.md`, 081).
+- **Facebook Reel targets cannot be read.** A Reel is stored under its video id, not its post id, and
+  Docket cannot yet tell the two apart well enough to ask for a Reel's numbers; such a target freezes
+  with reason `unqueryable` rather than erroring forever.
+- **No account-metric screen yet.** Every platform's account snapshots (followers and the like) are
+  captured on schedule, as in 080, but no screen shows them.
 
 ## The snapshot-not-current-value rule
 
@@ -40,6 +76,14 @@ tracked it) is never polled — there is no post to ask the platform about.
 Account numbers (followers and the like) never decay this way: an account's followers keep changing
 for as long as the account is connected, so it is read on its own fixed interval for the account's
 whole life.
+
+A platform may declare a post type that expires — an Instagram Story is gone from the platform 24
+hours after it is published. Such a target is polled on the same dense first-band cadence as any new
+post, but never scheduled past its declared lifetime: it freezes at that boundary with reason
+`expired`, and the panel renders "this story has expired; these numbers are final" beside whatever
+snapshots were captured while it lived. A Story already past its 24-hour window when this entry's
+poller first sees it is frozen immediately, with no call spent reading something that is already
+gone.
 
 Reading insights never competes with publishing for an account's platform allowance: half of every
 account's read budget is reserved for insights, and polling backs off — never fails — when that

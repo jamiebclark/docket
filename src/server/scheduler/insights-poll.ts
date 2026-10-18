@@ -5,14 +5,16 @@ import * as clock from "../dal/clock";
 import {
   claimDueAccountMetricPolls,
   claimDuePostMetricPolls,
+  countAccountsMissingInsightsScopes,
   countPublishedWithoutExternalId,
   type ClaimedAccountMetricPoll,
   type ClaimedPostMetricPoll,
+  type InsightsProviderRule,
 } from "../dal/insights-claims";
 import { forSchedulerProject, type ClaimedAccount } from "../dal/scheduler";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { decryptCredentials } from "../services/accounts";
-import { nextAccountPollAt, nextPostPollAt } from "../../lib/insights/schedule";
+import { nextAccountPollAt, postPollDecision } from "../../lib/insights/schedule";
 import { nextRetryAt } from "./backoff";
 import { insightsConfig, type SchedulerConfig } from "./config";
 import { markInvalidEmitting } from "./credentials";
@@ -25,8 +27,12 @@ export interface InsightsPollCounts {
   postSnapshotsWritten: number;
   accountSnapshotsWritten: number;
   targetsFrozen: number;
+  targetsFrozenExpired: number;
+  targetsFrozenSettled: number;
+  targetsUnqueryable: number;
   postsGone: number;
   targetsSkippedNoExternalId: number;
+  accountsSkippedNoPermission: number;
   deferredForAllowance: number;
   retried: number;
   rateLimited: number;
@@ -42,8 +48,12 @@ export const emptyInsightsPollCounts = (): InsightsPollCounts => ({
   postSnapshotsWritten: 0,
   accountSnapshotsWritten: 0,
   targetsFrozen: 0,
+  targetsFrozenExpired: 0,
+  targetsFrozenSettled: 0,
+  targetsUnqueryable: 0,
   postsGone: 0,
   targetsSkippedNoExternalId: 0,
+  accountsSkippedNoPermission: 0,
   deferredForAllowance: 0,
   retried: 0,
   rateLimited: 0,
@@ -66,11 +76,15 @@ export async function runInsightsPoll(opts: { config: SchedulerConfig; tickId: s
   const deadline = opts.startedAt.getTime() + cfg.timeBudgetMs;
 
   // FR-003: a declared-but-unavailable surface is never claimed, so no call is ever attempted for it.
-  const providerKeys = listProviders()
+  const providers: InsightsProviderRule[] = listProviders()
     .filter((p) => p.insights && !p.insights.declaration.unavailable)
-    .map((p) => p.key);
+    .map((p) => ({
+      providerKey: p.key,
+      requiredScopes: p.insights?.declaration.requiredScopes ?? [],
+      ephemeralPostTypes: p.insights?.declaration.ephemeralPostTypes ?? [],
+    }));
 
-  if (providerKeys.length === 0) {
+  if (providers.length === 0) {
     await writeHeartbeat("insights_poll", await clock.now(), { ...counts });
     return counts;
   }
@@ -82,11 +96,12 @@ export async function runInsightsPoll(opts: { config: SchedulerConfig; tickId: s
     return counts;
   }
 
-  const accounts = await claimDueAccountMetricPolls({ now, limit: cfg.accountsPerRun, leaseMs: opts.config.leaseMs, providerKeys });
-  const targets = await claimDuePostMetricPolls({ now, limit: cfg.targetsPerRun, leaseMs: opts.config.leaseMs, minIntervalMs: cfg.pollMinIntervalMs, providerKeys });
+  const accounts = await claimDueAccountMetricPolls({ now, limit: cfg.accountsPerRun, leaseMs: opts.config.leaseMs, providers });
+  const targets = await claimDuePostMetricPolls({ now, limit: cfg.targetsPerRun, leaseMs: opts.config.leaseMs, minIntervalMs: cfg.pollMinIntervalMs, providers });
   counts.accountsClaimed = accounts.length;
   counts.targetsClaimed = targets.length;
-  counts.targetsSkippedNoExternalId = await countPublishedWithoutExternalId(providerKeys);
+  counts.targetsSkippedNoExternalId = await countPublishedWithoutExternalId(providers);
+  counts.accountsSkippedNoPermission = await countAccountsMissingInsightsScopes(providers);
 
   const targetsByAccount = new Map<string, ClaimedPostMetricPoll[]>();
   for (const t of targets) {
@@ -371,6 +386,11 @@ async function commitPostBatch(input: {
           }
           case "unavailable":
             counts.unavailable++;
+            await repos.postMetricPollStates.update(
+              t.state.postTargetId,
+              { lastError: reason, nextPollAt: nextRetryAt(now, t.state.consecutiveFailures + 1, config) },
+              t.token,
+            );
             break;
         }
       }),
@@ -390,6 +410,16 @@ async function commitPostBatch(input: {
         await tx.postMetricPollStates.update(
           t.state.postTargetId,
           { nextPollAt: null, frozenAt: now, frozenReason: "gone" },
+          t.token,
+        );
+        continue;
+      }
+      if (entry.kind === "unqueryable") {
+        counts.targetsUnqueryable++;
+        counts.targetsFrozen++;
+        await tx.postMetricPollStates.update(
+          t.state.postTargetId,
+          { nextPollAt: null, frozenAt: now, frozenReason: "unqueryable", lastError: null, consecutiveFailures: 0, failingSince: null },
           t.token,
         );
         continue;
@@ -417,8 +447,19 @@ async function commitPostBatch(input: {
         metrics,
       });
       counts.postSnapshotsWritten++;
-      const next = nextPostPollAt({ publishedAt: t.publishedAt, lastCapturedAt: now, now, minIntervalMs: cfg.pollMinIntervalMs });
-      if (next === null) counts.targetsFrozen++;
+      const decision = postPollDecision({
+        publishedAt: t.publishedAt,
+        lastCapturedAt: now,
+        now,
+        minIntervalMs: cfg.pollMinIntervalMs,
+        chosenPostType: t.chosenPostType,
+        ephemeralPostTypes: insights.declaration.ephemeralPostTypes,
+      });
+      if (decision.kind === "frozen") {
+        counts.targetsFrozen++;
+        if (decision.reason === "expired") counts.targetsFrozenExpired++;
+        else counts.targetsFrozenSettled++;
+      }
       await tx.postMetricPollStates.update(
         t.state.postTargetId,
         {
@@ -427,9 +468,9 @@ async function commitPostBatch(input: {
           lastError: null,
           lastPolledAt: now,
           lastCapturedAt: now,
-          nextPollAt: next,
-          frozenAt: next === null ? now : null,
-          frozenReason: next === null ? "settled" : null,
+          nextPollAt: decision.kind === "due" ? decision.at : null,
+          frozenAt: decision.kind === "frozen" ? now : null,
+          frozenReason: decision.kind === "frozen" ? decision.reason : null,
         },
         t.token,
       );
@@ -482,6 +523,11 @@ async function commitAccountResult(input: {
       }
       case "unavailable":
         counts.unavailable++;
+        await repos.accountMetricPollStates.update(
+          accountId,
+          { lastError: reason, nextPollAt: nextRetryAt(now, failures + 1, config) },
+          accountClaimToken,
+        );
         break;
     }
     await releaseAccount();

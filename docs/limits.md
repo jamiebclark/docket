@@ -46,6 +46,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | note: reel size limit | Meta states no file size limit for a Reel |  | docs/research/meta-video.md ("Reels Publishing API" specs table); Docket enforces none, so Facebook may still refuse a very large file | Facebook step machine | `tests/integration/facebook/reel-failures.test.ts` "an upload that never completes fails at 30 minutes after at most 10 checks" |
 | note: reel upload check ceiling | 30 min |  | Docket choice; an upload still in progress after 30 minutes fails with nothing published | Facebook step machine | `tests/integration/facebook/reel-failures.test.ts` "an upload that never completes fails at 30 minutes after at most 10 checks" |
 | note: reel publish check ceiling | 60 min |  | Docket choice; a Reel not confirmed after 60 minutes ends ambiguous, never failed | Facebook step machine | `tests/integration/facebook/reel-failures.test.ts` "never confirming is ambiguous at 60 minutes after at most 16 checks" |
+| note: insights read budget | 48000 / 86400 s |  | interim, UNVERIFIED (research §4): no documented call-budget floor for Pages; the figure binds nothing on its own — the account's reserve and the live `X-Business-Use-Case-Usage` header are the real protection | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/facebook/insights.test.ts` "declares a 48,000/86,400s read budget, interim and UNVERIFIED (research §4)" |
 
 ## Instagram
 
@@ -101,6 +102,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | publish limit | 50 / 86400 s |  | docs/research/meta.md (CONTRADICTORY 50 vs 100; 50 is the `content_publishing_limit` value; the run-time quota is also read) | engine deferral | `tests/integration/limits/enforcement.test.ts` "instagram: publish limit 50 / 86400 s" |
 | note: video processing ceiling | 60 min |  | docs/research/meta-video.md ("Container status and polling"); 5 min is guidance, not a hard stop (019 research D9) | Instagram step machine | `tests/integration/instagram/reels.test.ts` "moves to the 5-minute pace after 5 minutes, and fails at 60 minutes within 16 reads" |
 | note: share to feed | Feed video = Reel with share_to_feed=true |  | docs/research/meta-video.md ("Single video = Reels only") | Instagram step machine | `tests/integration/instagram/reels.test.ts` "switching to Reel before publish restarts at create_container with share_to_feed=false" |
+| note: insights read budget | 48000 / 86400 s |  | interim, UNVERIFIED (research §4): no documented call-budget floor for Instagram; the figure binds nothing on its own — the account's reserve and the live `X-Business-Use-Case-Usage` header are the real protection | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/instagram/insights.test.ts` "declares a 48,000/86,400s read budget, interim and UNVERIFIED (research §4)" |
 
 ## Threads
 
@@ -143,6 +145,7 @@ Nothing here is "unenforced". Media planner rows are adaptations or refusals (de
 | note: video items checked before the carousel | each video item reads FINISHED before `create_carousel` |  | conservative choice, not documented by Meta (D5) | Threads step machine | `tests/integration/threads/video-carousel.test.ts` "reads the second item only after the first finishes" |
 | publish limit | 250 / 86400 s |  | docs/research/meta.md (250 posts / 24 h) | engine deferral | `tests/integration/limits/enforcement.test.ts` "threads: publish limit 250 / 86400 s" |
 | note: carousel minimum | 2 |  | docs/research/meta.md; one image publishes as an image post (D15) | post type inference | `tests/integration/threads/publish-e2e.test.ts` "publishes one image through IN_PROGRESS then FINISHED" |
+| note: insights read budget | 48000 / 86400 s |  | interim, UNVERIFIED (research §4; 4800 × the documented impression floor of 10); the figure binds nothing on its own — the account's reserve and the live `X-Business-Use-Case-Usage` header are the real protection, and the whole reader is currently declared `unavailable` regardless | the account's allowance reserve, half kept for publishing (`src/server/scheduler/insights-budget.ts`) | `src/providers/threads/insights.test.ts` "declares a 48,000/86,400s read budget, interim and UNVERIFIED (research §4)" |
 
 ## Bluesky
 

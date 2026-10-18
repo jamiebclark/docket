@@ -63,6 +63,15 @@ export const mockSettingsSchema = z.object({
   insightsReturnUndeclaredKey: z.boolean().default(false),
   /** A payload over the 2,000-byte size check — must be refused with no partial row. */
   insightsOversizedPayload: z.boolean().default(false),
+  /** 081: drives the eligibility matrix test's `InsightsProviderRule.requiredScopes`, without touching a real provider. */
+  insightsRequiredScopes: z.array(z.string()).default([]),
+  /** 081: drives the ephemeral schedule and the `expired` freeze, end to end, via a test-built `InsightsProviderRule.ephemeralPostTypes`. */
+  insightsEphemeralLifetimeMs: z.number().int().min(60_000).max(30 * 86_400_000).nullable().default(null),
+  /** 081: these post ids come back `kind: "unqueryable"` instead of `metrics` or `gone`. */
+  insightsUnqueryableIds: z.array(z.string()).default([]),
+  /** 081: when set alongside `insightsPostReadBehaviour`/`insightsAccountReadBehaviour: "rate_limited"`, carried into the error message and `retryAt`. */
+  insightsUsagePercent: z.number().min(0).max(100).nullable().default(null),
+  insightsRetryAfterMinutes: z.number().int().min(0).max(1440).nullable().default(null),
 });
 
 export type MockSettings = z.infer<typeof mockSettingsSchema>;

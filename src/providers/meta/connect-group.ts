@@ -4,6 +4,11 @@ import { listPageCandidates } from "./candidates";
 import { parseMetaEnv, requireMetaConfig, type MetaConfig } from "./config";
 import { exchangeCode, exchangeLongLived, dialogUrl, metaApp } from "./oauth";
 
+const INSIGHTS_SCOPES_DECLARED = [
+  { scope: "read_insights", purpose: "Read a Facebook Page's and its posts' numbers" },
+  { scope: "instagram_manage_insights", purpose: "Read an Instagram account's and its posts' numbers" },
+] as const;
+
 async function candidatesFromUserToken(
   cfg: MetaConfig,
   userToken: string,
@@ -29,9 +34,31 @@ export const metaConnectGroup: OAuthConnectGroup = {
       { name: "META_APP_SECRET", secret: true, required: false },
       { name: "META_GRAPH_VERSION", secret: false, required: false },
       { name: "META_LOGIN_CONFIG_ID", secret: false, required: false },
+      { name: "META_INSIGHTS_SCOPES", secret: false, required: false },
+      { name: "META_INSIGHTS_USAGE_CEILING", secret: false, required: false },
     ],
     issues: (source) => parseMetaEnv(source).issues,
     configured: (source) => parseMetaEnv(source).config !== null,
+  },
+  optionalScopes: {
+    declared: INSIGHTS_SCOPES_DECLARED,
+    doc: docsUrl("meta-setup", "insights"),
+    requested: (source) => {
+      const { config } = parseMetaEnv(source);
+      if (!config?.insightsScopes) return [];
+      if (config.loginConfigId) return [];
+      return INSIGHTS_SCOPES_DECLARED.map((s) => s.scope);
+    },
+    cannotWiden: (source) => {
+      const { config } = parseMetaEnv(source);
+      if (!config?.insightsScopes || !config.loginConfigId) return null;
+      return {
+        reason:
+          "Add read_insights and instagram_manage_insights to your Facebook Login for Business "
+          + "configuration in the Meta app dashboard. Docket cannot add them to the login dialog.",
+        doc: docsUrl("meta-setup", "insights"),
+      };
+    },
   },
   authorizationUrl: ({ state, redirectUri }) => dialogUrl(requireMetaConfig(), { state, redirectUri }),
   async exchangeCode({ code, redirectUri, signal }) {

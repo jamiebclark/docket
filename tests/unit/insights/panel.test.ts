@@ -19,6 +19,7 @@ const BASE: BuildTargetInsightsViewInput = {
   externalId: "ext-1",
   declaration: DECLARATION,
   providerName: "Bluesky",
+  permission: null,
   snapshot: null,
   pollState: null,
   now: NOW,
@@ -47,6 +48,32 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
     expect(buildTargetInsightsView({ ...BASE, externalId: null })).toEqual({ state: "no_external_id" });
   });
 
+  it("new row (FR-025): permission_not_requested goes after unavailable and before no_external_id, carrying no number", () => {
+    const permission = { kind: "not_requested" as const, missing: ["read_insights"], reason: "Docket has not been given permission.", docsPath: "meta-setup" };
+    const view = buildTargetInsightsView({ ...BASE, externalId: null, permission });
+    expect(view).toEqual({ state: "permission_not_requested", reason: "Docket has not been given permission.", docsPath: "meta-setup" });
+    const declaration: InsightsDeclaration = { ...DECLARATION, unavailable: { reason: "Not available." } };
+    expect(buildTargetInsightsView({ ...BASE, declaration, permission })).toEqual({ state: "unavailable", reason: "Not available." });
+  });
+
+  it("new row (FR-025): needs_reconnect goes after unavailable and before no_external_id, carrying canReconnect", () => {
+    const permission = {
+      kind: "not_granted" as const,
+      missing: ["instagram_manage_insights"],
+      reason: "Reconnect to grant insights access.",
+      docsPath: "meta-setup",
+      canReconnect: true,
+    };
+    const view = buildTargetInsightsView({ ...BASE, externalId: null, permission });
+    expect(view).toEqual({
+      state: "needs_reconnect",
+      reason: "Reconnect to grant insights access.",
+      docsPath: "meta-setup",
+      canReconnect: true,
+    });
+    expect(JSON.stringify(view)).not.toMatch(/"value"|"rows"/);
+  });
+
   it("row 5: gone wins over failing even with failures recorded", () => {
     const pollState = { nextPollAt: null, consecutiveFailures: 3, failingSince: NOW, lastError: "boom", frozenReason: "gone" };
     expect(buildTargetInsightsView({ ...BASE, pollState })).toEqual({ state: "gone", snapshot: null });
@@ -57,6 +84,21 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
     const snapshot = { capturedAt: NOW, metrics: { likeCount: 4 } };
     expect(buildTargetInsightsView({ ...BASE, pollState, snapshot })).toEqual({
       state: "gone",
+      snapshot: { capturedAt: NOW, rows: [{ label: "Likes", value: 4 }] },
+    });
+  });
+
+  it("new row (FR-036): unqueryable goes after gone and before expired, carrying any surviving snapshot, never a failure", () => {
+    const frozen = { nextPollAt: null, consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: "unqueryable" };
+    expect(buildTargetInsightsView({ ...BASE, pollState: frozen })).toEqual({
+      state: "unqueryable",
+      reason: "This post's stored platform id cannot be used to request its numbers.",
+      snapshot: null,
+    });
+    const snapshot = { capturedAt: NOW, metrics: { likeCount: 4 } };
+    expect(buildTargetInsightsView({ ...BASE, pollState: frozen, snapshot })).toEqual({
+      state: "unqueryable",
+      reason: "This post's stored platform id cannot be used to request its numbers.",
       snapshot: { capturedAt: NOW, rows: [{ label: "Likes", value: 4 }] },
     });
   });

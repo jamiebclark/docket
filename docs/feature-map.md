@@ -87,6 +87,21 @@ spec is written.
   account-level numbers (followers and the like, captured and stored every tick but shown on no screen yet), a
   manual refresh, a per-project on/off switch, any chart/trend/delta/comparison, and `bookmarkCount` (seen in the
   installed package's generated types but not confirmed from Bluesky's own documentation, so left undeclared).
+- **Insights reconnect and Meta/Threads readers (081).** Instagram, Facebook Pages and (where its metric enum
+  could be confirmed) Threads join Bluesky as readable platforms — see `docs/insights.md`. Reading any of them
+  needs a permission Docket does not request by default; the deployer opts in with one environment flag per
+  connect group, and an account connected before the flag was on shows "Insights need a reconnect" on the
+  Accounts page until it reconnects, with its publish state, slots and history otherwise untouched. An Instagram
+  Story's target freezes with reason `expired` at its 24-hour lifetime rather than being polled forever. Meta's
+  own `X-Business-Use-Case-Usage` header backs off a read before it risks a publish's budget, with a conservative
+  declared floor (**interim, UNVERIFIED**, `docs/limits.md`) underneath it. Verified with mocks only until the
+  parked live checks in `docs/meta-setup.md` are done. Not yet owned by any spec: **Facebook video-id targets**
+  (a Reel is stored under its video id, not its post id, so Docket cannot yet ask for a Reel's numbers; such a
+  target freezes `unqueryable` instead), the whole **Facebook views/impressions family** (Meta deprecated the
+  roadmap's named metrics; which replacement answers on Docket's running Graph API version is unconfirmed, R2),
+  **Threads account metrics** (declared `unavailable`; the official metric enum could not be confirmed, R3/R4),
+  and the account-metric screen, manual refresh, per-project toggle and chart/trend/comparison gaps 080 already
+  named, which this entry does not change.
 
 ## Scheduling and composing (not built)
 

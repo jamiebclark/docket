@@ -1,6 +1,7 @@
 import { metaConnectGroup } from "../meta/connect-group";
 import type { SocialProvider } from "../types";
 import { FACEBOOK_REELS_PER_DAY, facebookCapabilities } from "./capabilities";
+import { facebookInsights } from "./insights";
 import { advanceFacebook } from "./publish";
 import { facebookSettingsSchema, type FacebookSettings, type FacebookState } from "./settings";
 import { facebookStepFor } from "./steps";
@@ -16,4 +17,5 @@ export const facebookProvider: SocialProvider<FacebookSettings, FacebookState> =
   validate: validateFacebook,
   stepFor: (state, _settings, content) => facebookStepFor(state, content),
   advance: (ctx) => advanceFacebook(ctx),
+  insights: facebookInsights,
 };
