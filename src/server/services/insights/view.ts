@@ -1,12 +1,14 @@
 // services/insights/view: the Insights page's account-trends and comparisons reads (US1, US3, US4),
 // the one module the page and the future API operation both call.
-import { findProvider } from "../../../providers/registry";
+import { findProvider, listProviders } from "../../../providers/registry";
 import { buildTrendSeries, type TrendSeries } from "../../../lib/insights/trend";
 import { shapeNote } from "../../../lib/insights/shape";
 import { compare, type ComparableRow, type Comparison, type Dimension } from "../../../lib/insights/compare";
+import { firstEngagementFigure, type FirstEngagementFigure } from "../../../lib/insights/first-engagement";
 import {
   accountTrendRows,
   comparableTargetRows,
+  firstEngagementRows,
   type ComparableTargetRow,
   type MetricReadingRow,
 } from "../../dal/insights-read";
@@ -210,4 +212,58 @@ export async function buildComparisons(input: ComparisonsInput): Promise<Compari
     }
   }
   return comparisons;
+}
+
+export interface FirstEngagementEntry {
+  targetId: string;
+  accountName: string;
+  providerKey: string;
+  platform: string;
+  figure: FirstEngagementFigure;
+}
+
+export interface FirstEngagementView {
+  entries: FirstEngagementEntry[];
+  /** FR-045: exact times exist only for platforms with an engagement reader. */
+  exactCapablePlatforms: readonly string[];
+}
+
+function exactCapablePlatformNames(): readonly string[] {
+  return listProviders()
+    .filter((p) => p.engagement)
+    .map((p) => p.displayName);
+}
+
+/**
+ * The first-engagement comparison arm (US6, contracts/first-engagement.md §4). Reuses the same
+ * published-target set `buildComparisons` reads, left-joined against `target_first_engagement`; a
+ * target with no row yet reads as `not_examined`, never as having no engagement.
+ */
+export async function buildFirstEngagement(input: ComparisonsInput): Promise<FirstEngagementView> {
+  const exactCapablePlatforms = exactCapablePlatformNames();
+  const rows = await comparableTargetRows(input.projectId, input.range.from, input.range.to);
+  if (rows.length === 0) return { entries: [], exactCapablePlatforms };
+
+  const byTarget = groupByTarget(rows);
+  const targetIds = [...byTarget.keys()];
+  const firstEngagement = await firstEngagementRows(input.projectId, targetIds);
+  const byTargetId = new Map(firstEngagement.map((r) => [r.postTargetId, r]));
+
+  const entries: FirstEngagementEntry[] = [];
+  for (const [targetId, group] of byTarget) {
+    const base = group.base;
+    const provider = findProvider(base.providerKey);
+    const platform = provider?.displayName ?? base.providerKey;
+    const row = byTargetId.get(targetId);
+    const figure = firstEngagementFigure({
+      publishedAt: base.publishedAt,
+      exactFirstAt: row?.exactFirstAt ?? null,
+      boundBeforeAt: row?.boundBeforeAt ?? null,
+      boundAfterAt: row?.boundAfterAt ?? null,
+      scannedThrough: row?.scannedThrough ?? null,
+      frozenReason: row?.frozenReason ?? null,
+    });
+    entries.push({ targetId, accountName: base.accountName, providerKey: base.providerKey, platform, figure });
+  }
+  return { entries, exactCapablePlatforms };
 }

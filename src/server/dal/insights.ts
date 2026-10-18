@@ -1,12 +1,15 @@
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import {
   accountMetricPollStates,
   accountMetricRollups,
   accountMetricSnapshots,
+  engagementItems,
   postMetricPollStates,
   postMetricRollups,
   postMetricSnapshots,
+  socialAccounts,
+  targetFirstEngagement,
   type AccountMetricPollStateRow,
   type AccountMetricSnapshotRow,
   type NewAccountMetricSnapshot,
@@ -325,3 +328,108 @@ export async function foldAndPrunePostSnapshotsBefore(before: Date, limit: numbe
 }
 
 export type { MetricSurface, ShapeFor } from "../services/insights/fold";
+
+/** A target claimed for `recordFirstEngagement` (contracts/first-engagement.md §1). */
+export interface FirstEngagementCandidate {
+  postTargetId: string;
+  projectId: string;
+  socialAccountId: string;
+  providerKey: string;
+  publishedAt: Date;
+  scannedThrough: Date | null;
+  boundBeforeAt: Date | null;
+}
+
+export interface SnapshotForEngagementScan {
+  capturedAt: Date;
+  providerKey: string;
+  metrics: Record<string, unknown>;
+}
+
+/**
+ * Inserts a `target_first_engagement` row for every published target lacking one, bounded batch
+ * (contracts/first-engagement.md §1). `ON CONFLICT DO NOTHING` makes a concurrent insert harmless.
+ */
+export async function ensureFirstEngagementRows(limit: number): Promise<number> {
+  const result = await getDb().execute(sql`
+    INSERT INTO target_first_engagement (post_target_id, project_id, social_account_id, published_at)
+    SELECT pt.id, pt.project_id, pt.social_account_id, pt.published_at
+      FROM post_targets pt
+     WHERE pt.status = 'published' AND pt.published_at IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM target_first_engagement tfe WHERE tfe.post_target_id = pt.id)
+     LIMIT ${limit}
+    ON CONFLICT (post_target_id) DO NOTHING
+  `);
+  return result.rowCount ?? 0;
+}
+
+/** The oldest-scanned rows still missing an exact figure, joined for the owning account's `providerKey`. */
+export async function claimFirstEngagementBatch(limit: number): Promise<FirstEngagementCandidate[]> {
+  const rows = await getDb()
+    .select({
+      postTargetId: targetFirstEngagement.postTargetId,
+      projectId: targetFirstEngagement.projectId,
+      socialAccountId: targetFirstEngagement.socialAccountId,
+      providerKey: socialAccounts.providerKey,
+      publishedAt: targetFirstEngagement.publishedAt,
+      scannedThrough: targetFirstEngagement.scannedThrough,
+      boundBeforeAt: targetFirstEngagement.boundBeforeAt,
+    })
+    .from(targetFirstEngagement)
+    .innerJoin(socialAccounts, eq(socialAccounts.id, targetFirstEngagement.socialAccountId))
+    .where(isNull(targetFirstEngagement.exactFirstAt))
+    .orderBy(sql`${targetFirstEngagement.scannedThrough} IS NOT NULL`, targetFirstEngagement.scannedThrough, targetFirstEngagement.publishedAt)
+    .limit(limit);
+  return rows;
+}
+
+/** The earliest inbox reply parented to this target, at or after `notBefore` (contracts/first-engagement.md §1). */
+export async function earliestInboxSaidAt(projectId: string, postTargetId: string, notBefore: Date): Promise<Date | null> {
+  const [row] = await getDb()
+    .select({ saidAt: sql<Date | null>`min(${engagementItems.saidAt})` })
+    .from(engagementItems)
+    .where(and(eq(engagementItems.projectId, projectId), eq(engagementItems.parentPostTargetId, postTargetId), gte(engagementItems.saidAt, notBefore)));
+  return row?.saidAt ? new Date(row.saidAt) : null;
+}
+
+/** This target's snapshots after `after`, ascending, for the bound walk (contracts/first-engagement.md §1). */
+export async function postSnapshotsAscendingAfter(projectId: string, postTargetId: string, after: Date): Promise<SnapshotForEngagementScan[]> {
+  const rows = await getDb()
+    .select({ capturedAt: postMetricSnapshots.capturedAt, providerKey: postMetricSnapshots.providerKey, metrics: postMetricSnapshots.metrics })
+    .from(postMetricSnapshots)
+    .where(and(eq(postMetricSnapshots.projectId, projectId), eq(postMetricSnapshots.postTargetId, postTargetId), gt(postMetricSnapshots.capturedAt, after)))
+    .orderBy(postMetricSnapshots.capturedAt);
+  return rows.map((r) => ({ capturedAt: r.capturedAt, providerKey: r.providerKey, metrics: r.metrics as Record<string, unknown> }));
+}
+
+/** Write-once compare-and-set of the inbox-sourced exact figure (data-model.md §4, FR-041, FR-043, FR-057). */
+export async function casFirstEngagementExact(postTargetId: string, projectId: string, exactFirstAt: Date): Promise<void> {
+  await getDb()
+    .update(targetFirstEngagement)
+    .set({ exactFirstAt, firstRecordedAt: sql`coalesce(${targetFirstEngagement.firstRecordedAt}, ${exactFirstAt})` })
+    .where(and(eq(targetFirstEngagement.postTargetId, postTargetId), eq(targetFirstEngagement.projectId, projectId), isNull(targetFirstEngagement.exactFirstAt)));
+}
+
+/** Write-once compare-and-set of the snapshot-sourced bound pair (data-model.md §4, FR-042, FR-043, FR-057). */
+export async function casFirstEngagementBound(postTargetId: string, projectId: string, boundBeforeAt: Date, boundAfterAt: Date | null): Promise<void> {
+  await getDb()
+    .update(targetFirstEngagement)
+    .set({ boundBeforeAt, boundAfterAt, firstRecordedAt: sql`coalesce(${targetFirstEngagement.firstRecordedAt}, ${boundBeforeAt})` })
+    .where(and(eq(targetFirstEngagement.postTargetId, postTargetId), eq(targetFirstEngagement.projectId, projectId), isNull(targetFirstEngagement.boundBeforeAt)));
+}
+
+/** Advances the watermark; never moves it backwards (data-model.md §4). */
+export async function advanceFirstEngagementScannedThrough(postTargetId: string, projectId: string, scannedThrough: Date): Promise<void> {
+  await getDb()
+    .update(targetFirstEngagement)
+    .set({ scannedThrough })
+    .where(
+      and(
+        eq(targetFirstEngagement.postTargetId, postTargetId),
+        eq(targetFirstEngagement.projectId, projectId),
+        sql`${targetFirstEngagement.scannedThrough} IS NULL OR ${targetFirstEngagement.scannedThrough} < ${scannedThrough}`,
+      ),
+    );
+}
+
+export type { TargetFirstEngagementRow } from "../db/schema";

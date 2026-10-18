@@ -10,6 +10,7 @@ import { listExpiredUploads, markUploadExpired } from "../dal/uploads-housekeepi
 import { listCollectableVideoVersions, reposForProject } from "../dal/video-housekeeping";
 import { getEnv } from "../env";
 import { pruneEngagementItems } from "../services/engagement/retention";
+import { recordFirstEngagement } from "../services/insights/first-engagement";
 import { foldAndPruneAccountSnapshots, foldAndPrunePostSnapshots } from "../services/insights/retention";
 import { wantedVideoKeys } from "../services/video-versions";
 import { getStorage } from "../storage";
@@ -46,6 +47,9 @@ export interface HousekeepingCounts {
   /** data-model.md §8 (US5, FR-055). Rollup points written or advanced by the fold, this pass. */
   accountMetricPointsFolded: number;
   postMetricPointsFolded: number;
+  /** data-model.md §8 (US6, FR-055). Figures written, and targets examined, by `recordFirstEngagement` this pass. */
+  firstEngagementRecorded: number;
+  firstEngagementScanned: number;
 }
 
 export function emptyHousekeepingCounts(): HousekeepingCounts {
@@ -62,6 +66,8 @@ export function emptyHousekeepingCounts(): HousekeepingCounts {
     accountMetricSnapshotsPruned: 0,
     accountMetricPointsFolded: 0,
     postMetricPointsFolded: 0,
+    firstEngagementRecorded: 0,
+    firstEngagementScanned: 0,
   };
 }
 
@@ -168,6 +174,9 @@ export async function runHousekeeping(config: SchedulerConfig): Promise<Housekee
   const orphanHoldsPruned = await pruneOrphanHolds();
   const standingSeriesRunsPruned = await pruneClosedStandingSeriesRuns(await now());
   const standingSeriesOccurrencesPruned = await pruneSettledOccurrences(await now());
+  // Strictly before `pruneEngagementItems`, for the same reason the fold runs before its own delete
+  // (contracts/first-engagement.md §1): the figure must be read while the inbox row it came from still exists.
+  const firstEngagement = await recordFirstEngagement(config, await now());
   const engagementItemsPruned = await pruneEngagementItems(config, await now());
   const accountFold = await foldAndPruneAccountSnapshots(config, await now(), shapeFor);
   const postFold = await foldAndPrunePostSnapshots(config, await now(), shapeFor);
@@ -184,5 +193,7 @@ export async function runHousekeeping(config: SchedulerConfig): Promise<Housekee
     accountMetricSnapshotsPruned: accountFold.snapshotsDeleted,
     accountMetricPointsFolded: accountFold.pointsFolded,
     postMetricPointsFolded: postFold.pointsFolded,
+    firstEngagementRecorded: firstEngagement.recorded,
+    firstEngagementScanned: firstEngagement.scanned,
   };
 }

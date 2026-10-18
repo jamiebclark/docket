@@ -244,6 +244,51 @@ export async function comparableTargetRows(projectId: string, from: Date, to: Da
   }));
 }
 
+/** One target's `target_first_engagement` row, joined for the freeze reason read elsewhere (data-model.md §4, research.md §6). */
+export interface FirstEngagementDbRow {
+  postTargetId: string;
+  publishedAt: Date;
+  exactFirstAt: Date | null;
+  boundBeforeAt: Date | null;
+  boundAfterAt: Date | null;
+  scannedThrough: Date | null;
+  frozenReason: "settled" | "gone" | "expired" | "unqueryable" | null;
+}
+
+/**
+ * The first-engagement comparison's one read (US6, research.md §6): the row per target, left-joined
+ * to its poll state for the freeze reason a `never_observed` figure needs. A target with no row at
+ * all (not yet examined by `recordFirstEngagement`) is simply absent.
+ */
+export async function firstEngagementRows(projectId: string, postTargetIds: readonly string[]): Promise<FirstEngagementDbRow[]> {
+  if (postTargetIds.length === 0) return [];
+  const ids = sql.param([...postTargetIds]);
+  const rows = await getDb().execute<{
+    post_target_id: string;
+    published_at: Date;
+    exact_first_at: Date | null;
+    bound_before_at: Date | null;
+    bound_after_at: Date | null;
+    scanned_through: Date | null;
+    frozen_reason: "settled" | "gone" | "expired" | "unqueryable" | null;
+  }>(sql`
+    SELECT tfe.post_target_id, tfe.published_at, tfe.exact_first_at, tfe.bound_before_at, tfe.bound_after_at,
+           tfe.scanned_through, pmps.frozen_reason
+      FROM target_first_engagement tfe
+      LEFT JOIN post_metric_poll_states pmps ON pmps.post_target_id = tfe.post_target_id AND pmps.project_id = tfe.project_id
+     WHERE tfe.project_id = ${projectId} AND tfe.post_target_id = ANY(${ids})
+  `);
+  return rows.rows.map((r) => ({
+    postTargetId: r.post_target_id,
+    publishedAt: new Date(r.published_at),
+    exactFirstAt: r.exact_first_at ? new Date(r.exact_first_at) : null,
+    boundBeforeAt: r.bound_before_at ? new Date(r.bound_before_at) : null,
+    boundAfterAt: r.bound_after_at ? new Date(r.bound_after_at) : null,
+    scannedThrough: r.scanned_through ? new Date(r.scanned_through) : null,
+    frozenReason: r.frozen_reason,
+  }));
+}
+
 /**
  * Buckets ascending `rows` by UTC day and keeps the last (newest `capturedAt`) reading per (subject,
  * metric key, day) — exactly one value per day, a point beating nothing and a surviving snapshot

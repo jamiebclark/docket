@@ -5,10 +5,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { TrendChart } from "@/components/insights/TrendChart";
 import { ComparisonCard } from "@/components/insights/ComparisonCard";
+import { FirstEngagementCard } from "@/components/insights/FirstEngagementCard";
 import { docsUrl } from "@/lib/docs";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
-import { buildAccountTrends, buildComparisons, type TrendNote } from "@/server/services/insights/view";
+import { buildAccountTrends, buildComparisons, buildFirstEngagement, type TrendNote } from "@/server/services/insights/view";
 
 export const metadata: Metadata = { title: "Insights" };
 export const dynamic = "force-dynamic";
@@ -31,9 +32,9 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
   const now = new Date();
   const range = { from: new Date(now.getTime() - RANGE_DAYS * DAY_MS), to: now };
 
-  const [{ series, trendNotes }, comparisons] =
+  const [{ series, trendNotes }, comparisons, firstEngagement] =
     activeAccounts.length === 0
-      ? [{ series: [], trendNotes: [] }, []]
+      ? [{ series: [], trendNotes: [] }, [], { entries: [], exactCapablePlatforms: [] }]
       : await Promise.all([
           buildAccountTrends({
             projectId: scope.project.id,
@@ -43,6 +44,7 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
             accountMetricPollStates: scope.accountMetricPollStates,
           }),
           buildComparisons({ projectId: scope.project.id, timeZone: scope.project.timezone, range }),
+          buildFirstEngagement({ projectId: scope.project.id, timeZone: scope.project.timezone, range }),
         ]);
 
   return (
@@ -69,6 +71,11 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
               <ComparisonCard comparison={c} />
             </Card>
           ))}
+          {firstEngagement.entries.length > 0 ? (
+            <Card>
+              <FirstEngagementCard view={firstEngagement} />
+            </Card>
+          ) : null}
         </div>
       )}
     </div>
