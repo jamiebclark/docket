@@ -92,8 +92,14 @@ jobs:
               --shard="${SHARD}/4" --sequence.shuffle.files --sequence.seed="$rep" \
               --reporter=json --outputFile="$out" 2> "$err"
             exit_code=$?
-            tail -c 2000 "$err" | jq -Rs --argjson exitCode "$exit_code" --argjson seed "$rep" \
-              '{exitCode: $exitCode, seed: $seed, stderrTail: .}' > "$meta"
+            # Drop node's deprecation warnings before taking the tail. Run 39088399743 captured a
+            # 2000-byte window for all 80 of its repetitions and every one held nothing but repeats of
+            # "DeprecationWarning: Calling client.query() when the client is already executing a query",
+            # so the stderr of the failing run — the only reason this file is kept — was never in it.
+            # The window is wider now too: 2000 bytes is about a dozen lines once a stack is in there.
+            { grep -avE "DeprecationWarning|--trace-deprecation" "$err" || true; } | tail -c 6000 \
+              | jq -Rs --argjson exitCode "$exit_code" --argjson seed "$rep" \
+                '{exitCode: $exitCode, seed: $seed, stderrTail: .}' > "$meta"
             rm -f "$err"
           done
       # `if: always()` for the same reason the consolidate job has it: a lane that failed is exactly
