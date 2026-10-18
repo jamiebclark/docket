@@ -231,7 +231,7 @@ description: "Task list template for feature implementation"
 - [X] T092 [P] Edit `docs/feature-map.md`: record what this entry shipped and the named gaps it leaves (Facebook video-id repair, Facebook views/impressions family, Threads account metrics, parked R1–R4) (FR-055)
 - [X] T093 [P] Edit `.specify/memory/constitution.md`'s scope sentence to name this entry alongside 080, with a `docs(constitution):` commit and a version bump (FR-055)
 - [X] T094 [P] Confirm `docs/decisions.md` (started in T006) carries every decision in spec.md's "Decisions made while specifying" and plan.md's "Post-design re-check", each with its reversal (FR-052) — depends on T006
-- [ ] T095 Run the full final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` — depends on every task above except Phase 11
+- [X] T095 Run the full final pass: `pnpm lint && pnpm typecheck && pnpm test && pnpm db:check && pnpm build` — depends on every task above except Phase 11
 
 ---
 
