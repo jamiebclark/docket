@@ -1,3 +1,4 @@
+import { GRANTED_SCOPE_PATTERN } from "../lib/granted-scopes";
 import { UnknownProviderError } from "./errors";
 import { blueskyProvider } from "./bluesky";
 import { facebookProvider } from "./facebook";
@@ -42,7 +43,7 @@ function assertValidMetricKeys(providerKey: string, surface: "post" | "account",
 }
 
 /** Throws on a malformed `insights` declaration, so a bad provider fails at registry load (G30, D1-D6). */
-export function assertInsightsDeclaration(provider: Pick<SocialProvider, "key" | "insights">): void {
+export function assertInsightsDeclaration(provider: Pick<SocialProvider, "key" | "insights" | "capabilities">): void {
   const support = provider.insights;
   if (support === undefined) return;
   const d = support.declaration;
@@ -64,6 +65,31 @@ export function assertInsightsDeclaration(provider: Pick<SocialProvider, "key" |
   if (d.unavailable) {
     const reason = d.unavailable.reason;
     if (reason.length < 1 || reason.length > 300) bad("unavailable.reason must be 1-300 characters");
+  }
+  if (d.unavailable && d.requiredScopes && d.requiredScopes.length > 0) {
+    bad("unavailable and requiredScopes must never both be set");
+  }
+  if (d.requiredScopes && d.requiredScopes.length > 0) {
+    const reason = d.missingScopes?.reason;
+    if (reason === undefined || reason.length < 1 || reason.length > 300) {
+      bad("requiredScopes is non-empty but missingScopes.reason is missing or not 1-300 characters");
+    }
+    for (const scope of d.requiredScopes) {
+      if (!GRANTED_SCOPE_PATTERN.test(scope)) bad(`requiredScopes entry "${scope}" does not match GRANTED_SCOPE_PATTERN`);
+    }
+  }
+  if (d.ephemeralPostTypes) {
+    const seen = new Set<string>();
+    for (const e of d.ephemeralPostTypes) {
+      if (!provider.capabilities.postTypes.includes(e.postType)) {
+        bad(`ephemeralPostTypes.postType "${e.postType}" is not one of this provider's own capabilities.postTypes`);
+      }
+      if (seen.has(e.postType)) bad(`ephemeralPostTypes.postType "${e.postType}" is duplicated`);
+      seen.add(e.postType);
+      if (!Number.isInteger(e.lifetimeMs) || e.lifetimeMs < 60_000 || e.lifetimeMs > 30 * 86_400_000) {
+        bad(`ephemeralPostTypes.lifetimeMs (${e.lifetimeMs}) must be an integer between 60000 and ${30 * 86_400_000}`);
+      }
+    }
   }
   for (const [surface, schema] of [
     ["post", support.postMetricsSchema],

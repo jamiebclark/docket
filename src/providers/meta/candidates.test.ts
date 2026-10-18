@@ -134,6 +134,34 @@ describe("listPageCandidates", () => {
       await run();
       expect(fake.requests.some((q) => q.path === "/v26.0/debug_token")).toBe(false);
     });
+
+    it("attaches the token's granted scopes to both the Page and Instagram candidates (US2-AS1)", async () => {
+      fake.on("GET", "/v26.0/me/accounts", {
+        kind: "ok",
+        body: { data: [{ id: "100", name: "Acme", access_token: "PAGETOK", instagram_business_account: { id: "200" } }] },
+      });
+      fake.on("GET", "/v26.0/debug_token", {
+        kind: "ok",
+        body: { data: { granular_scopes: [], scopes: ["pages_show_list", "read_insights"] } },
+      });
+      const r = await withApp();
+      expect(r.ok && r.candidates.map((c) => c.grantedScopes)).toEqual([
+        ["pages_show_list", "read_insights"],
+        ["pages_show_list", "read_insights"],
+      ]);
+    });
+
+    it("leaves grantedScopes undefined on both candidates when debug_token fails (US2-AS1)", async () => {
+      fake.on("GET", "/v26.0/me/accounts", {
+        kind: "ok",
+        body: { data: [{ id: "100", name: "Acme", access_token: "PAGETOK", instagram_business_account: { id: "200" } }] },
+      });
+      fake.on("GET", "/v26.0/debug_token", { kind: "graph_error", code: 190, status: 401 });
+      const r = await withApp();
+      expect(r.ok).toBe(true);
+      expect(r.ok && r.candidates).toHaveLength(2);
+      expect(r.ok && r.candidates.every((c) => c.grantedScopes === undefined)).toBe(true);
+    });
   });
 
   it("reports Graph failures without the token", async () => {

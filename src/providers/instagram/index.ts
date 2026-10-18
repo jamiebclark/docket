@@ -1,6 +1,7 @@
 import { metaConnectGroup } from "../meta/connect-group";
 import type { SocialProvider } from "../types";
 import { INSTAGRAM_DEFAULT_PUBLISH_LIMIT, instagramCapabilities } from "./capabilities";
+import { instagramInsights } from "./insights";
 import { advanceInstagram } from "./publish";
 import { instagramSettingsSchema, type InstagramSettings } from "./settings";
 import type { InstagramState } from "./state";
@@ -18,4 +19,5 @@ export const instagramProvider: SocialProvider<InstagramSettings, InstagramState
   validate: validateInstagram,
   stepFor: (state, _settings, content) => instagramStepFor(state, content),
   advance: (ctx) => advanceInstagram(ctx),
+  insights: instagramInsights,
 };

@@ -11,7 +11,13 @@ describe("parseThreadsEnv", () => {
   it("accepts an id and secret, defaulting the base", () => {
     const { config, issues } = parseThreadsEnv({ THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET });
     expect(issues).toEqual([]);
-    expect(config).toEqual({ appId: ID, appSecret: SECRET, graphBase: THREADS_DEFAULT_GRAPH_BASE });
+    expect(config).toEqual({
+      appId: ID,
+      appSecret: SECRET,
+      graphBase: THREADS_DEFAULT_GRAPH_BASE,
+      insightsScopes: false,
+      insightsUsageCeiling: 80,
+    });
   });
   it("requires id and secret together", () => {
     expect(parseThreadsEnv({ THREADS_APP_ID: ID }).issues.map((i) => i.name)).toEqual(["THREADS_APP_SECRET"]);
@@ -37,6 +43,34 @@ describe("parseThreadsEnv", () => {
     const { issues } = parseThreadsEnv({ THREADS_APP_ID: "abc", THREADS_APP_SECRET: "short secret" });
     expect(issues).toHaveLength(2);
     expect(JSON.stringify(issues)).not.toMatch(/abc|short secret/);
+  });
+
+  it("parses THREADS_INSIGHTS_SCOPES with its documented default", () => {
+    const base = { THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET };
+    expect(parseThreadsEnv(base).config?.insightsScopes).toBe(false);
+    expect(parseThreadsEnv({ ...base, THREADS_INSIGHTS_SCOPES: "true" }).config?.insightsScopes).toBe(true);
+    expect(parseThreadsEnv({ ...base, THREADS_INSIGHTS_SCOPES: "false" }).config?.insightsScopes).toBe(false);
+  });
+
+  it("rejects a non-boolean THREADS_INSIGHTS_SCOPES as an environment issue, not a crash", () => {
+    const r = parseThreadsEnv({ THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET, THREADS_INSIGHTS_SCOPES: "yes" });
+    expect(r.config).not.toBeNull();
+    expect(r.issues).toEqual([{ name: "THREADS_INSIGHTS_SCOPES", reason: "must be true or false" }]);
+  });
+
+  it("parses THREADS_INSIGHTS_USAGE_CEILING with its documented default", () => {
+    const base = { THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET };
+    expect(parseThreadsEnv(base).config?.insightsUsageCeiling).toBe(80);
+    expect(parseThreadsEnv({ ...base, THREADS_INSIGHTS_USAGE_CEILING: "50" }).config?.insightsUsageCeiling).toBe(50);
+  });
+
+  it("rejects an out-of-range THREADS_INSIGHTS_USAGE_CEILING as an environment issue, not a crash", () => {
+    const base = { THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET };
+    const r = parseThreadsEnv({ ...base, THREADS_INSIGHTS_USAGE_CEILING: "0" });
+    expect(r.config).not.toBeNull();
+    expect(r.issues).toEqual([{ name: "THREADS_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" }]);
+    const r2 = parseThreadsEnv({ ...base, THREADS_INSIGHTS_USAGE_CEILING: "101" });
+    expect(r2.issues).toEqual([{ name: "THREADS_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" }]);
   });
 });
 

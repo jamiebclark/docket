@@ -45,6 +45,30 @@ describe("pinterestConnectGroup.exchangeCode", () => {
     expect(headers.authorization).toBe(`Basic ${Buffer.from("client-id:client-secret").toString("base64")}`);
   });
 
+  it("attaches grantedScopes when the token reply carries a scope field, otherwise leaves it absent (R6, FR-012)", async () => {
+    baseEnv();
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      if (String(url).includes("/oauth/token")) {
+        return jsonResponse({ access_token: "a", refresh_token: "r", scope: "user_accounts:read,boards:read" });
+      }
+      return jsonResponse({ id: "user-3", username: "someone" });
+    });
+    const out = await pinterestConnectGroup.exchangeCode({ code: "c", redirectUri: "https://example.com/cb", state: "s", now: new Date(), signal: new AbortController().signal });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.candidates[0]!.grantedScopes).toEqual(["user_accounts:read", "boards:read"]);
+  });
+
+  it("leaves grantedScopes absent when the token reply carries no scope field", async () => {
+    baseEnv();
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      if (String(url).includes("/oauth/token")) return jsonResponse({ access_token: "a", refresh_token: "r" });
+      return jsonResponse({ id: "user-4", username: "someone" });
+    });
+    const out = await pinterestConnectGroup.exchangeCode({ code: "c", redirectUri: "https://example.com/cb", state: "s", now: new Date(), signal: new AbortController().signal });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.candidates[0]!.grantedScopes).toBeUndefined();
+  });
+
   it("falls back to the username when business_name is absent", async () => {
     baseEnv();
     vi.stubGlobal("fetch", async (url: string | URL) => {

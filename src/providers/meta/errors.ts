@@ -50,6 +50,7 @@ export function graphSummary(outcome: GraphOutcome): Record<string, string | num
     if (e.type) out.graphType = e.type;
     if (e.traceId) out.traceId = e.traceId;
   }
+  if (outcome.usage) out.usagePercent = outcome.usage.maxPercent;
   return out;
 }
 

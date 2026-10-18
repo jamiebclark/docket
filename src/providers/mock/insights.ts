@@ -7,6 +7,8 @@ const mockAccountMetricsSchema = z.object({ followersCount: z.number().int().opt
 
 function stopResult(
   behaviour: MockSettings["insightsPostReadBehaviour"],
+  settings: MockSettings,
+  now: Date,
 ): PostMetricsReadResult | AccountMetricsReadResult | null {
   switch (behaviour) {
     case "page":
@@ -14,7 +16,13 @@ function stopResult(
     case "retryable_error":
       return { kind: "retryable_error", error: "Mock retryable insights failure." };
     case "rate_limited":
-      return { kind: "rate_limited", error: "Mock insights rate limited." };
+      return {
+        kind: "rate_limited",
+        error: `Mock reports this account is at ${settings.insightsUsagePercent ?? 100}% of its call budget.`,
+        ...(settings.insightsRetryAfterMinutes !== null
+          ? { retryAt: new Date(now.getTime() + settings.insightsRetryAfterMinutes * 60_000) }
+          : {}),
+      };
     case "credentials_invalid":
       return { kind: "credentials_invalid", error: "Mock insights credentials invalid." };
     case "fatal_error":
@@ -22,6 +30,24 @@ function stopResult(
     case "unavailable":
       return { kind: "unavailable", reason: "Mock insights set to unavailable for this account." };
   }
+}
+
+/**
+ * Test-only convenience: builds the `InsightsProviderRule` shape (data-model.md §4) a test can pass
+ * to `src/server/dal/insights-claims.ts` from a mock account's own scripted settings, so the
+ * eligibility matrix and ephemeral-schedule tests exercise real rule shapes without a real provider.
+ */
+export function mockInsightsRuleFor(settings: MockSettings): {
+  providerKey: "mock";
+  requiredScopes: readonly string[];
+  ephemeralPostTypes: readonly { postType: string; lifetimeMs: number }[];
+} {
+  return {
+    providerKey: "mock",
+    requiredScopes: settings.insightsRequiredScopes,
+    ephemeralPostTypes:
+      settings.insightsEphemeralLifetimeMs !== null ? [{ postType: "story", lifetimeMs: settings.insightsEphemeralLifetimeMs }] : [],
+  };
 }
 
 function metricsFor(settings: MockSettings): Record<string, number> {
@@ -61,21 +87,25 @@ export const mockInsights: InsightsSupport<MockSettings> = {
   async readPostMetrics(ctx: PostMetricsReadContext<MockSettings>): Promise<PostMetricsReadResult> {
     const settings = mockSettingsSchema.parse(ctx.account.settings ?? {});
     if (settings.insightsUnavailable) return { kind: "unavailable", reason: "Mock insights set to unavailable for this account." };
-    const stop = stopResult(settings.insightsPostReadBehaviour) as PostMetricsReadResult | null;
+    const stop = stopResult(settings.insightsPostReadBehaviour, settings, ctx.now) as PostMetricsReadResult | null;
     if (stop) return stop;
     // `metrics` is typed `unknown` on the wire; an oversized or malformed payload is the caller's
     // job to refuse against `postMetricsSchema` and the 2,000-byte CHECK, never the provider's.
     const metrics: unknown = settings.insightsOversizedPayload ? { padding: "x".repeat(2_200) } : metricsFor(settings);
-    const entries: PostMetricEntry[] = ctx.posts.map((p) =>
-      settings.insightsGoneExternalIds.includes(p.externalId) ? { externalId: p.externalId, kind: "gone" } : { externalId: p.externalId, kind: "metrics", metrics },
-    );
+    const entries: PostMetricEntry[] = ctx.posts.map((p) => {
+      if (settings.insightsUnqueryableIds.includes(p.externalId)) {
+        return { externalId: p.externalId, kind: "unqueryable", reason: "Mock insights scripted this id as unqueryable." };
+      }
+      if (settings.insightsGoneExternalIds.includes(p.externalId)) return { externalId: p.externalId, kind: "gone" };
+      return { externalId: p.externalId, kind: "metrics", metrics };
+    });
     return { kind: "page", entries };
   },
 
   async readAccountMetrics(ctx: AccountMetricsReadContext<MockSettings>): Promise<AccountMetricsReadResult> {
     const settings = mockSettingsSchema.parse(ctx.account.settings ?? {});
     if (settings.insightsUnavailable) return { kind: "unavailable", reason: "Mock insights set to unavailable for this account." };
-    const stop = stopResult(settings.insightsAccountReadBehaviour) as AccountMetricsReadResult | null;
+    const stop = stopResult(settings.insightsAccountReadBehaviour, settings, ctx.now) as AccountMetricsReadResult | null;
     if (stop) return stop;
     const metrics: unknown = settings.insightsOversizedPayload ? { padding: "x".repeat(2_200) } : accountMetricsFor(settings);
     return { kind: "page", metrics };

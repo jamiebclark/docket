@@ -76,6 +76,7 @@ export const pinterestConnectGroup: OAuthConnectGroup = {
           settings: {},
           credentials,
           expiresAt: accountExpiry(credentials),
+          ...(tokens.scopes ? { grantedScopes: tokens.scopes } : {}),
           notes: [PINTEREST_TRIAL_NOTE],
         },
       ],

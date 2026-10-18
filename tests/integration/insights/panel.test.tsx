@@ -11,13 +11,32 @@ vi.mock("next/navigation", async () => ({
 }));
 
 import PostPage from "../../../src/app/p/[projectSlug]/posts/[postId]/page";
+import { mockProvider } from "../../../src/providers/mock";
+import type { SocialProvider } from "../../../src/providers/types";
 import { getDb } from "../../../src/server/db/client";
 import { postMetricPollStates } from "../../../src/server/db/schema";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
+import { registerTestProvider } from "../../helpers/provider-fixtures";
 import { createMockAccount } from "../../helpers/scheduling";
 import { sessionFor } from "../../helpers/connect-group";
+
+// US1-AS3: a provider whose connect group never requests the permission, so a held permission
+// is impossible and the account reads as `permission_not_requested` (contracts/granted-scopes.md §4).
+const notRequestedProvider: SocialProvider = {
+  ...mockProvider,
+  key: "panel-permission-not-requested",
+  insights: {
+    ...mockProvider.insights!,
+    declaration: {
+      ...mockProvider.insights!.declaration,
+      requiredScopes: ["needs_insight_scope"],
+      missingScopes: { reason: "Reconnect to grant insights access.", docsPath: "meta-setup" },
+    },
+  },
+} as SocialProvider;
+registerTestProvider(notRequestedProvider);
 
 afterAll(closeDb);
 let teardown: (() => void) | undefined;
@@ -126,6 +145,47 @@ describe("the performance panel on the post detail page (contracts/panel.md)", (
 
     expect(markup).toContain("no longer on");
     expect(markup).toContain(">2<");
+  });
+
+  it("a frozen-expired target shows every snapshot captured while it lived, with no failure styling (US5-AS4, FR-042)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    const { post, target } = await publishedTarget(ctx.project.id, account.id);
+    const repos = forSchedulerProject(ctx.project.id);
+    await repos.postMetricSnapshots.insertIfAbsent({
+      postTargetId: target.id,
+      socialAccountId: account.id,
+      providerKey: "mock",
+      capturedAt: NOW,
+      metrics: { likeCount: 3 },
+    });
+    await getDb()
+      .insert(postMetricPollStates)
+      .values({ postTargetId: target.id, projectId: ctx.project.id, socialAccountId: account.id, frozenAt: NOW, frozenReason: "expired", nextPollAt: null });
+
+    const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));
+    const markup = await html(page);
+
+    expect(markup).toContain("This story has expired; these numbers are final.");
+    expect(markup).toContain(">3<");
+    expect(markup).toContain("As of");
+    expect(markup).not.toMatch(/failing|Reads have been failing/i);
+  });
+
+  it("a Meta-like account with no permission renders permission_not_requested, with the guide link and no number, dash or zero (US1-AS3)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id, {}, { providerKey: notRequestedProvider.key });
+    const { post } = await publishedTarget(ctx.project.id, account.id);
+
+    const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));
+    const markup = await html(page);
+
+    expect(markup).toContain("Reconnect to grant insights access.");
+    expect(markup).toContain("Learn more");
+    const panelMarkup = markup.slice(markup.indexOf("Performance"));
+    expect(panelMarkup).not.toMatch(/>\d</);
+    expect(panelMarkup).not.toMatch(/>-</);
+    expect(panelMarkup).not.toMatch(/>0</);
   });
 
   it("heading order is unbroken: h2 before the h3 Performance heading, no client component", async () => {

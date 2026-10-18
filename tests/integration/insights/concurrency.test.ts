@@ -14,7 +14,7 @@ beforeEach(parkAllDueTargets);
 
 const NOW = new Date("2026-04-01T00:00:00Z");
 const DUE_AT = new Date(NOW.getTime() + 3_600_000); // the schedule's 1h cadence for a fresh target's first poll
-const CLAIM_OPTS = { leaseMs: 60_000, minIntervalMs: 0, providerKeys: ["mock"] };
+const CLAIM_OPTS = { leaseMs: 60_000, minIntervalMs: 0, providers: [{ providerKey: "mock", requiredScopes: [], ephemeralPostTypes: [] }] };
 
 /** Pre-creates the poll-state rows directly, so a concurrency test exercises only the claim's own
  * `SKIP LOCKED` race and not the separate (and separately tested, T042) lazy-row-creation step. */

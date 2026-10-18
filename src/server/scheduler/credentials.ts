@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizeGrantedScopes } from "../../lib/granted-scopes";
 import type { RefreshResult, SocialProvider } from "../../providers/types";
 import * as clock from "../dal/clock";
 import { forSchedulerProject, type ClaimedAccount } from "../dal/scheduler";
@@ -64,6 +65,7 @@ export async function applyRefreshResult(
   const at = await clock.now();
   if (result.ok) {
     const ciphertext = encryptCredentials(account.id, result.credentials);
+    const normalized = result.grantedScopes !== undefined ? normalizeGrantedScopes(result.grantedScopes) : null;
     const kept = await recordRefreshEmitting(repos, account.id, token, {
       credentialsEncrypted: ciphertext,
       credentialsExpiresAt: result.expiresAt,
@@ -72,6 +74,7 @@ export async function applyRefreshResult(
       ...(result.displayName && result.displayName !== account.displayName
         ? { displayName: redact(result.displayName, secrets) }
         : {}),
+      ...(normalized !== null ? { grantedScopes: normalized } : {}),
     });
     return kept ? { kind: "refreshed", credentials: result.credentials, ciphertext } : { kind: "lost" };
   }

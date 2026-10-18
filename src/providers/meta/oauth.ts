@@ -18,6 +18,11 @@ export function metaApp(cfg: MetaConfig): MetaApp {
   return { graphBase: DEFAULT_GRAPH_BASE, version: cfg.graphVersion };
 }
 
+/** contracts/granted-scopes.md §3. `[]` unless `cfg.insightsScopes` is on (FR-017). */
+export function optionalFor(cfg: MetaConfig): readonly string[] {
+  return cfg.insightsScopes ? ["read_insights", "instagram_manage_insights"] : [];
+}
+
 export function dialogUrl(cfg: MetaConfig, input: { state: string; redirectUri: string }): string {
   const url = new URL(`${META_DIALOG_BASE}/${cfg.graphVersion}/dialog/oauth`);
   url.searchParams.set("client_id", cfg.appId);
@@ -25,7 +30,7 @@ export function dialogUrl(cfg: MetaConfig, input: { state: string; redirectUri: 
   url.searchParams.set("state", input.state);
   url.searchParams.set("response_type", "code");
   if (cfg.loginConfigId) url.searchParams.set("config_id", cfg.loginConfigId);
-  else url.searchParams.set("scope", META_SCOPES.join(","));
+  else url.searchParams.set("scope", [...META_SCOPES, ...optionalFor(cfg)].join(","));
   return url.toString();
 }
 

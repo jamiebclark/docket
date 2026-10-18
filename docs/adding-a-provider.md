@@ -69,6 +69,10 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G23 | `afterPublish`, `credentialsInvalid` on `ambiguous` | 6, 7 |
 | G24 | `continue` may carry `wait`, shown as `lastError` | 7 |
 | G30 | `insights?`, post and account metric capture | 21 |
+| G31 | `grantedScopes` on `ConnectCandidate` and the success arm of `RefreshResult` | 4, 9, 21 |
+| G32 | `optionalScopes` on an `OAuthConnectGroup` | 4 |
+| G33 | `requiredScopes`/`missingScopes` on an `insights` declaration, checked in the claim | 21 |
+| G34 | `ephemeralPostTypes` on an `insights` declaration | 21 |
 
 ## 3. Capabilities and counting rules
 
@@ -181,6 +185,32 @@ Neither exchange saves anything: each returns **candidates** (`ConnectCandidate`
 credentials, expiry), and the `providerKey` says which provider the candidate becomes. A candidate may name a `parent` (an Instagram account sits under its Page) and carry `notes`.
 Candidates are held encrypted in `connect_attempts` until the user picks one in the chooser, which then calls
 `accounts.saveConnectedAccount` (G5).
+
+### Recording what the platform actually granted (G31, G32)
+
+A `ConnectCandidate`, and the success arm of a `RefreshResult`, may carry `grantedScopes`: the permission list
+the platform's own reply named, never a restatement of what Docket asked for. `upsertConnected` and
+`applyRefreshResult` are the only two places that write it to `social_accounts.granted_scopes`; a refresh that
+reports nothing leaves the stored value unchanged. `NULL` means "not known" (never recorded, or the platform's
+reply did not list permissions); `{}` means the platform answered and granted nothing relevant — the two render
+different, honest reasons. A group may also declare `optionalScopes` on itself: the extra scopes it may ask
+for and why, used when one OAuth group backs more than one provider with different insight needs (the Meta
+group backs Facebook and Instagram from a single consent). The per-provider need belongs on that provider's
+`insights` declaration instead (G33), not on the group, because one group's dialog must satisfy every provider
+behind it. Inert for a provider that never sets `grantedScopes` or `optionalScopes`.
+
+`optionalScopes` has four members:
+
+| Member | Meaning |
+|---|---|
+| `declared` | Every extra scope the group may ask for, each as `{ scope, purpose }`. Static and non-secret, so it can be rendered in the UI and the docs. |
+| `doc` | Published guide explaining the opt-in, usually `docsUrl("meta-setup", "insights")`. |
+| `requested(source)` | Pure, reads only `source`: the scopes this group will actually add to its dialog as currently configured. An operator who has not opted in gets `[]`, and the dialog is unchanged. |
+| `cannotWiden(source)` | Pure. Non-null when the operator opted in but Docket *cannot* widen the dialog — Facebook Login for Business takes its permission set from the Meta app's own configuration (FR-019). Reconnecting cannot help, so no reconnect control is offered; the returned `reason` (and optional `doc`) is shown instead. |
+
+The distinction `cannotWiden` draws matters: "you have not asked for this yet" and "asking again cannot
+help, the app configuration decides" are different problems with different fixes, and offering a Reconnect
+button for the second is a dead end.
 
 `pasteToken` is the fallback for when the redirect cannot work: a secret `field`, some `help` text and an `exchange` that returns the
 same candidates. The pasted token is never stored (G6).
@@ -589,3 +619,19 @@ first. `src/providers/bluesky/insights.ts` is the one real implementation so far
 post metrics and `app.bsky.actor.getProfile` for account metrics, reusing the account's existing session with no
 new permission. See `docs/insights.md` for what the feature looks like to a member, and
 `specs/080-insights-core-bluesky/contracts/provider-insights.md` for the full contract.
+
+### Gated permissions and expiring post types (G33, G34)
+
+A provider that needs a permission beyond what it already holds declares `requiredScopes` on its `insights`
+declaration: the exact scopes an account must hold before Docket claims, leases, decrypts or calls it for that
+provider's reads — the check runs as a SQL predicate inside the claim itself (`granted_scopes @> requiredScopes`),
+so an unpermissioned account is never called, not merely refused once inside the reader. `missingScopes` names
+which of those scopes a given account's `granted_scopes` lacks, for the panel's and the accounts page's reason
+text. A provider may also declare `ephemeralPostTypes`: a list of `{ postType, lifetimeMs }` for post types the
+platform deletes on its own schedule (Instagram's `story`, 24 hours). The pure schedule function reads this
+declaration — an ephemeral target is polled on the dense first-band cadence from publication and never scheduled
+past `publishedAt + lifetimeMs`, freezing at that boundary with reason `expired`. The scheduler itself learns
+nothing platform-specific from either hook; a later platform with its own gated permission or its own ephemeral
+post type needs no scheduler change. `src/providers/instagram/insights.ts`, `src/providers/facebook/insights.ts`
+and `src/providers/threads/insights.ts` are the real implementations; `src/providers/mock/insights.ts` can script
+both. See `specs/081-insights-reconnect-and-meta/contracts/provider-insights-081.md` for the full contract.

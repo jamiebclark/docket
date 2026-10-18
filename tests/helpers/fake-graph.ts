@@ -2,7 +2,7 @@ import { vi } from "vitest";
 
 /** One scripted response. */
 export type GraphReply =
-  | { kind: "ok"; body: unknown; status?: number }
+  | { kind: "ok"; body: unknown; status?: number; headers?: Record<string, string> }
   /** A Graph error body: `{ error: { message, type, code, error_subcode? } }`. */
   | { kind: "graph_error"; code: number; message?: string; subcode?: number; type?: string; status?: number }
   | { kind: "http"; status: number; body?: string }
@@ -51,8 +51,8 @@ export interface FakeGraph {
 
 const TOKEN_PARAM = "access_token";
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+function jsonResponse(body: unknown, status = 200, headers?: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
 function abortError(): Error {
@@ -62,7 +62,7 @@ function abortError(): Error {
 function render(reply: GraphReply, signal: AbortSignal | undefined): Promise<Response> {
   switch (reply.kind) {
     case "ok":
-      return Promise.resolve(jsonResponse(reply.body, reply.status ?? 200));
+      return Promise.resolve(jsonResponse(reply.body, reply.status ?? 200, reply.headers));
     case "graph_error":
       return Promise.resolve(
         jsonResponse(

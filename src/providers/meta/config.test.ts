@@ -12,7 +12,14 @@ describe("parseMetaEnv", () => {
   it("parses a full configuration with the default version", () => {
     const { config, issues } = parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET });
     expect(issues).toEqual([]);
-    expect(config).toEqual({ appId: ID, appSecret: SECRET, graphVersion: "v26.0", loginConfigId: null });
+    expect(config).toEqual({
+      appId: ID,
+      appSecret: SECRET,
+      graphVersion: "v26.0",
+      loginConfigId: null,
+      insightsScopes: false,
+      insightsUsageCeiling: 80,
+    });
   });
 
   it("requires id and secret together", () => {
@@ -51,6 +58,40 @@ describe("parseMetaEnv", () => {
     const r = parseMetaEnv({ META_APP_ID: "bad-id-value", META_APP_SECRET: "sec ret" });
     expect(JSON.stringify(r.issues)).not.toContain("bad-id-value");
     expect(JSON.stringify(r.issues)).not.toContain("sec ret");
+  });
+
+  it("parses META_INSIGHTS_SCOPES with its documented default", () => {
+    expect(parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET }).config?.insightsScopes).toBe(false);
+    expect(
+      parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_SCOPES: "true" }).config?.insightsScopes,
+    ).toBe(true);
+    expect(
+      parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_SCOPES: "false" }).config?.insightsScopes,
+    ).toBe(false);
+  });
+
+  it("rejects a non-boolean META_INSIGHTS_SCOPES as an environment issue, not a crash", () => {
+    const r = parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_SCOPES: "yes" });
+    expect(r.config).not.toBeNull();
+    expect(r.issues).toEqual([{ name: "META_INSIGHTS_SCOPES", reason: "must be true or false" }]);
+  });
+
+  it("parses META_INSIGHTS_USAGE_CEILING with its documented default", () => {
+    expect(parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET }).config?.insightsUsageCeiling).toBe(80);
+    expect(
+      parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_USAGE_CEILING: "50" }).config
+        ?.insightsUsageCeiling,
+    ).toBe(50);
+  });
+
+  it("rejects an out-of-range META_INSIGHTS_USAGE_CEILING as an environment issue, not a crash", () => {
+    const r = parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_USAGE_CEILING: "0" });
+    expect(r.config).not.toBeNull();
+    expect(r.issues).toEqual([{ name: "META_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" }]);
+    const r2 = parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_USAGE_CEILING: "101" });
+    expect(r2.issues).toEqual([{ name: "META_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" }]);
+    const r3 = parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_USAGE_CEILING: "abc" });
+    expect(r3.issues).toEqual([{ name: "META_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" }]);
   });
 });
 

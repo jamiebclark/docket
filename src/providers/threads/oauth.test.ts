@@ -3,7 +3,13 @@ import { createFakeGraph } from "../../../tests/helpers/fake-graph";
 import type { ThreadsConfig } from "./config";
 import { exchangeCode, exchangeLongLived, readProfile, refreshLongLived } from "./oauth";
 
-const cfg: ThreadsConfig = { appId: "12345", appSecret: "s3cr3t-app-secret-value", graphBase: "https://graph.threads.test" };
+const cfg: ThreadsConfig = {
+  appId: "12345",
+  appSecret: "s3cr3t-app-secret-value",
+  graphBase: "https://graph.threads.test",
+  insightsScopes: false,
+  insightsUsageCeiling: 80,
+};
 const fake = createFakeGraph();
 const signal = () => new AbortController().signal;
 const REDIRECT = "https://docket.local:3000/connect/callback";

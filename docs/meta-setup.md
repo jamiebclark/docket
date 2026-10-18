@@ -135,6 +135,42 @@ If the redirect cannot work for you, paste a token instead. This needs no callba
 
 The pasted token is exchanged for the Pages' tokens and then thrown away; it is never stored.
 
+## 11a. Reading post and account numbers (optional)
+
+Facebook Pages, Instagram and Threads insights (see [insights.md](insights.md)) need permissions
+beyond the five in step 3, and Docket does not request them until the deployer opts in — widening
+every new connection's consent screen silently is not something Docket does on its own.
+
+**For Facebook and Instagram:**
+
+1. Add `read_insights` (Facebook) and `instagram_manage_insights` (Instagram) to the app, the same way
+   as step 3's five.
+2. Set `META_INSIGHTS_SCOPES=true` in `.env` and restart. The next Facebook/Instagram connect or
+   reconnect then asks for both permissions in the same dialog; an account connected before the flag
+   was on keeps its existing grant until it reconnects.
+3. **If you use a login configuration (`META_LOGIN_CONFIG_ID`, step 2):** the configuration replaces
+   Docket's scope list, so the flag alone changes nothing — add `read_insights` and
+   `instagram_manage_insights` to the login configuration itself in the Meta dashboard. Until you do,
+   Docket shows the accounts page's reason pointing back here and offers no reconnect button, because
+   reconnecting could not succeed.
+
+**For Threads:**
+
+1. In the Threads use case's permissions (see "Threads: add the use case" below), add
+   `threads_manage_insights` alongside `threads_basic` and `threads_content_publish`.
+2. Set `THREADS_INSIGHTS_SCOPES=true` in `.env` and restart. The next Threads connect or reconnect
+   asks for the extra permission too.
+
+Optional: `META_INSIGHTS_USAGE_CEILING` and `THREADS_INSIGHTS_USAGE_CEILING` (each an integer from 1
+to 100, default conservative) set the percentage of Meta's own reported usage
+(`X-Business-Use-Case-Usage`) at which a read backs off instead of calling further. You do not need to
+change these to turn insights reading on.
+
+An account connected before the flag was turned on, or whose last grant did not include the
+permission, shows "Insights need a reconnect" on the Accounts page with a link back here. Reconnecting
+through the existing Reconnect button updates that same account in place — nothing else about it
+changes, and its ability to publish is unaffected either way.
+
 ## 11. Media needs a public bucket
 
 Facebook and Instagram both fetch each image from its URL, so media storage must be a publicly readable bucket. See
@@ -289,3 +325,48 @@ sitting, adapted video is "verified with mocks only". Report all results togethe
 4. **Crop.** Publish a cropped version with a focal point off-centre.
 5. **Trim.** Publish a trimmed version (start and end set).
 6. **Rewrap.** Publish one rewrap (a MOV, or an MP4 whose index is at the end) to Instagram.
+
+## Insights
+
+Reading numbers back from Facebook Pages, Instagram and Threads is **opt-in**. Docket does
+not widen an existing connection on its own: until you turn these on, nothing extra is
+requested and every insight surface shows as unavailable with a reason.
+
+| Variable | Effect |
+|---|---|
+| `META_INSIGHTS_SCOPES=true` | The Meta dialog (Facebook Pages + Instagram) also asks for `read_insights` and `instagram_manage_insights`. |
+| `THREADS_INSIGHTS_SCOPES=true` | The Threads dialog also asks for `threads_manage_insights`. |
+
+Set the variable, restart, then **reconnect the account** — a token already issued does not
+gain permissions retroactively.
+
+### Facebook Login for Business takes its permissions from the app
+
+If your Meta app uses Facebook Login for Business, the consent dialog's permission set comes
+from the *app's own configuration*, not from what Docket asks for. Docket detects this and
+says so rather than offering a Reconnect button that cannot help: add the permissions to the
+app configuration in the Meta dashboard first.
+
+### Page insights also need the `analyze` task — a role, not a permission
+
+Verified live on 2026-10-17 (see `docs/research/meta.md`): Page insights require
+`pages_read_engagement` **and** `read_insights` **and** a Page access token whose holder can
+perform the **`analyze` task** on that Page.
+
+That last one is a Business Manager role, not an OAuth scope. The consequence is worth
+understanding before you debug:
+
+- `read_insights` carries **no granular per-Page target ids**, unlike `pages_manage_posts` or
+  `pages_read_engagement`. You cannot tell from the token which Pages it really covers.
+- A person can grant Docket every permission it asks for and still read nothing, because
+  their role on that Page lacks `analyze`.
+- **Reconnecting will not fix this.** Grant the `analyze` task to the connecting person in
+  Business Manager instead.
+
+### Pages owned by a Business Portfolio
+
+`/me/accounts` does not list a Page owned by a Business Portfolio, so a portfolio Page can be
+absent from the chooser even with `pages_show_list` granted. Docket works around this by
+reading the Page ids out of `/debug_token`'s granular scopes
+(`src/providers/meta/candidates.ts`). If a Page is missing from the chooser entirely, check
+that the person connecting has a role on it in the portfolio.

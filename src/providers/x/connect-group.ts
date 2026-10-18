@@ -83,6 +83,7 @@ export const xConnectGroup: OAuthConnectGroup = {
           settings: { ...(me.username ? { username: me.username } : {}), ...(me.name ? { name: me.name } : {}) },
           credentials,
           expiresAt: accountExpiry(credentials),
+          ...(tokens.scopes ? { grantedScopes: tokens.scopes } : {}),
           ...(notes.length ? { notes } : {}),
         },
       ],

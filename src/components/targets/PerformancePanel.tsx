@@ -35,12 +35,48 @@ function body(view: Exclude<TargetInsightsView, { state: "not_published" }>, pla
           ) : null}
         </p>
       );
+    case "permission_not_requested":
+      return (
+        <p>
+          {view.reason}{" "}
+          {view.docsPath ? (
+            <a href={docsUrl(view.docsPath as DocPage)} target="_blank" rel="noopener noreferrer" className="underline">
+              Learn more
+            </a>
+          ) : null}
+        </p>
+      );
+    case "needs_reconnect":
+      return (
+        <p>
+          {view.reason}{" "}
+          {view.docsPath ? (
+            <a href={docsUrl(view.docsPath as DocPage)} target="_blank" rel="noopener noreferrer" className="underline">
+              Learn more
+            </a>
+          ) : null}
+        </p>
+      );
     case "no_external_id":
       return <p>This was recorded as published by hand, so there is no post on {platform} to read numbers from.</p>;
     case "gone":
       return (
         <>
           <p>This post is no longer on {platform}.</p>
+          {view.snapshot ? <Rows rows={view.snapshot.rows} capturedAt={view.snapshot.capturedAt} timeZone={timeZone} /> : null}
+        </>
+      );
+    case "unqueryable":
+      return (
+        <>
+          <p>{view.reason}</p>
+          {view.snapshot ? <Rows rows={view.snapshot.rows} capturedAt={view.snapshot.capturedAt} timeZone={timeZone} /> : null}
+        </>
+      );
+    case "expired":
+      return (
+        <>
+          <p>This story has expired; these numbers are final.</p>
           {view.snapshot ? <Rows rows={view.snapshot.rows} capturedAt={view.snapshot.capturedAt} timeZone={timeZone} /> : null}
         </>
       );

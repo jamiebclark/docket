@@ -116,6 +116,8 @@ import { renderProblemEmail } from "../../../src/lib/email/render";
 import { mintUnsubscribeToken, unsubscribeUrl } from "../../../src/lib/email/unsubscribe";
 import { getMailer, setMailerForTests } from "../../../src/server/mail";
 import { recordingMailer } from "../../helpers/mailer";
+import { DEFAULT_GRAPH_BASE } from "../../../src/providers/meta/graph";
+import { graphVersion } from "../../../src/providers/meta/config";
 
 afterAll(async () => {
   // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
@@ -765,6 +767,34 @@ describe("secret scan (FR-020, SC-005)", () => {
       await genEnv.scope.standingSeries.update(id, { enabled: false });
     }
 
+    // Granted scopes (T046-T052): one account per provider carrying a scripted grantedScopes value,
+    // plus a token-shaped reply that must normalize to null rather than being stored (FR-015, FR-056).
+    const REJECTED_TOKEN = "EAAscanRejectedTokenShapedValue9Qx7Zc3";
+    const repos = forSchedulerProject(env.project.id);
+    for (const providerKey of ["facebook", "instagram", "threads", "x", "tiktok", "pinterest"] as const) {
+      await repos.accounts.upsertConnected({
+        providerKey,
+        displayName: `Scan ${providerKey}`,
+        externalAccountId: `scan-${providerKey}-${randomUUID()}`,
+        settings: {},
+        credentialsEncrypted: accounts.encryptCredentials(randomUUID(), { token: `scan-${providerKey}-credential` }),
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        grantedScopes: [`${providerKey}_read_insights`],
+      });
+    }
+    const rejected = await repos.accounts.upsertConnected({
+      providerKey: "pinterest",
+      displayName: "Scan pinterest (rejected)",
+      externalAccountId: `scan-pinterest-rejected-${randomUUID()}`,
+      settings: {},
+      credentialsEncrypted: accounts.encryptCredentials(randomUUID(), { token: "scan-pinterest-rejected-credential" }),
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: [REJECTED_TOKEN], // token-shaped: fails GRANTED_SCOPE_PATTERN, so the whole list is rejected
+    });
+    expect((await repos.accounts.get(rejected.id))?.grantedScopes).toBeNull();
+
     // Stored rows.
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });
     pieces.push({ place: "post_targets", text: JSON.stringify(await db.select().from(postTargets).where(eq(postTargets.projectId, env.project.id))) });
@@ -785,11 +815,142 @@ describe("secret scan (FR-020, SC-005)", () => {
       ...[ACCESS, REFRESH, NEW_ACCESS, NEW_REFRESH].map((value, i) => ({ name: `bluesky token ${i + 1}`, value })),
       { name: "setup password", value: SETUP_PASSWORD },
       { name: "session token", value: sessionToken },
+      { name: "rejected token-shaped granted scope", value: REJECTED_TOKEN },
       ...projectLlmSecrets,
     ];
     // Something was captured from every kind of place, so an empty corpus cannot pass.
     expect(new Set(pieces.map((p) => p.place.split(":")[0])).size).toBeGreaterThan(6);
     expect(scan(pieces, [...ENV_SECRETS, ...credentials, ...oneTime])).toEqual([]);
+  });
+
+  it("the Meta insights readers and their panel states never echo a credential (FR-015, SC-010)", async () => {
+    await parkAllDueTargets();
+    const FB_TOKEN = "scan-fb-page-token-7a1c9e3d5b8042f6097a1c2d3e4f5061";
+    const FB_VIDEO_TOKEN = "scan-fb-video-page-token-2b4e6a8c0d1f3759680a1b2c3d4e5f60";
+    const IG_TOKEN = "scan-ig-page-token-9c0b1a2938475665f4e3d2c1b0a9f8e7";
+    const TH_TOKEN = "scan-threads-token-1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60";
+    const GRAPH_ERROR_ECHO = `Rejected for token ${FB_TOKEN}`;
+
+    const ctx = await postsEnv();
+    const repos = forSchedulerProject(ctx.project.id);
+
+    // A normal Facebook Page post: granted the required scopes, a real Graph call is attempted, and
+    // the fake Graph error message echoes the page token — covered because this is the only one of
+    // the five accounts below whose reader actually reaches the network this tick.
+    const fbNormal = await repos.accounts.upsertConnected({
+      providerKey: "facebook",
+      displayName: "Scan FB Page",
+      externalAccountId: "scan-fb-normal",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["pages_read_engagement", "read_insights"],
+    });
+    await repos.accounts.setCredentials(fbNormal.id, accounts.encryptCredentials(fbNormal.id, { pageToken: FB_TOKEN }), null);
+    // A Reel's bare video id: classified `unqueryable` before any request is issued (FR-036) — its
+    // own distinctive token must never be touched this tick, let alone leaked.
+    const fbVideo = await repos.accounts.upsertConnected({
+      providerKey: "facebook",
+      displayName: "Scan FB Reel",
+      externalAccountId: "scan-fb-video",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["pages_read_engagement", "read_insights"],
+    });
+    await repos.accounts.setCredentials(fbVideo.id, accounts.encryptCredentials(fbVideo.id, { pageToken: FB_VIDEO_TOKEN }), null);
+    // No insights scope granted: excluded from the claim before any credential is ever decrypted
+    // (FR-023) — renders `needs_reconnect` or `permission_not_requested`.
+    const fbGated = await repos.accounts.upsertConnected({
+      providerKey: "facebook",
+      displayName: "Scan FB Gated",
+      externalAccountId: "scan-fb-gated",
+      settings: {},
+      credentialsEncrypted: accounts.encryptCredentials(randomUUID(), { pageToken: "scan-fb-gated-token-should-never-be-read" }),
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: [],
+    });
+    // A story already past Instagram's 24h lifetime: born frozen `expired` with no provider call
+    // (FR-041) — its token must never be touched either.
+    const igExpired = await repos.accounts.upsertConnected({
+      providerKey: "instagram",
+      displayName: "Scan IG Story",
+      externalAccountId: "scan-ig-expired",
+      settings: {},
+      credentialsEncrypted: accounts.encryptCredentials(randomUUID(), { pageToken: IG_TOKEN }),
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+    });
+    // Threads still declares `unavailable`: never claimed, never called (080 behaviour, unchanged).
+    const threads = await repos.accounts.upsertConnected({
+      providerKey: "threads",
+      displayName: "Scan Threads",
+      externalAccountId: "scan-threads",
+      settings: {},
+      credentialsEncrypted: accounts.encryptCredentials(randomUUID(), { pageToken: TH_TOKEN }),
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["threads_manage_insights"],
+    });
+
+    const post = await repos.posts.insert({ baseText: "Scan insights" });
+    const FB_PAGE_POST_ID = "100000000000001_200000000000002";
+    const targets = await repos.targets.insertMany([
+      { postId: post.id, socialAccountId: fbNormal.id },
+      { postId: post.id, socialAccountId: fbVideo.id },
+      { postId: post.id, socialAccountId: fbGated.id },
+      { postId: post.id, socialAccountId: igExpired.id },
+      { postId: post.id, socialAccountId: threads.id },
+    ]);
+    const [fbNormalTarget, fbVideoTarget, fbGatedTarget, igTarget, threadsTarget] = targets;
+    const NOW = new Date("2026-08-01T00:00:00Z");
+    await repos.targets.update(fbNormalTarget!.id, { status: "published", externalId: FB_PAGE_POST_ID, publishedAt: NOW });
+    await repos.targets.update(fbVideoTarget!.id, { status: "published", externalId: "987654321", publishedAt: NOW });
+    await repos.targets.update(fbGatedTarget!.id, { status: "published", externalId: "100000000000003_200000000000004", publishedAt: NOW });
+    await repos.targets.update(igTarget!.id, { status: "published", externalId: "scan-ig-story-1", publishedAt: new Date(NOW.getTime() - 30 * 3_600_000), chosenPostType: "story" });
+    await repos.targets.update(threadsTarget!.id, { status: "published", externalId: "scan-threads-media-1", publishedAt: NOW });
+
+    const graph = createFakeGraph();
+    graph.on("GET", `/${graphVersion()}/${FB_PAGE_POST_ID}/insights`, { kind: "graph_error", code: 1, message: GRAPH_ERROR_ECHO });
+    graph.fallback({ kind: "graph_error", code: 803, message: "Unexpected request in the insights panel scan test" });
+    graph.install();
+    try {
+      await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig({})));
+    } finally {
+      graph.uninstall();
+    }
+
+    // The Reel's and the gated account's tokens were never even reached for.
+    expect(graph.requests.some((r) => r.path.includes("scan-fb-video") || r.path.includes(FB_VIDEO_TOKEN))).toBe(false);
+    expect(graph.requests.some((r) => r.path.includes("987654321"))).toBe(false);
+    expect(graph.requests.length).toBeGreaterThanOrEqual(1);
+    expect(graph.requests.every((r) => r.host === new URL(DEFAULT_GRAPH_BASE).host)).toBe(true);
+
+    const sessionBefore = session.current;
+    session.current = { user: { id: ctx.owner.id }, session: { id: "scan-insights-panel-session" } };
+    const params = { params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) };
+    const postMarkup = renderToStaticMarkup((await PostPage(params)) as never);
+    session.current = sessionBefore;
+    const pieces: Piece[] = [{ place: "page: post (meta insights panel states)", text: postMarkup }];
+    // Sanity: the four 081 panel states this entry adds all actually rendered, not just an absence of secrets.
+    expect(postMarkup).toContain("not confirmed"); // threads: unavailable, 080 behaviour
+    expect(postMarkup).toMatch(/read_insights|cannot read its numbers|has not been given permission|Reconnect/);
+    expect(postMarkup).toContain("cannot be used to request its numbers"); // facebook: unqueryable
+    expect(postMarkup).toContain("story has expired"); // instagram: expired
+
+    const secrets: Secret[] = [
+      { name: "facebook page token (normal)", value: FB_TOKEN },
+      { name: "facebook page token (video)", value: FB_VIDEO_TOKEN },
+      { name: "facebook page token (gated)", value: "scan-fb-gated-token-should-never-be-read" },
+      { name: "instagram page token", value: IG_TOKEN },
+      { name: "threads token", value: TH_TOKEN },
+      { name: "graph error echo of the facebook token", value: GRAPH_ERROR_ECHO },
+    ];
+    expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
   });
 
   it("activity events store no secret even when a provider, refresh or connect error echoes one (SC-006)", async () => {
