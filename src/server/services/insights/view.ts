@@ -1,10 +1,15 @@
 // services/insights/view: the Insights page's account-trends and comparisons reads (US1, US3, US4),
-// the one module the page and the future API operation both call.
+// the one module the page and the API operation both call (US7).
+import { Temporal } from "@js-temporal/polyfill";
 import { findProvider, listProviders } from "../../../providers/registry";
 import { buildTrendSeries, type TrendSeries } from "../../../lib/insights/trend";
 import { shapeNote } from "../../../lib/insights/shape";
 import { compare, type ComparableRow, type Comparison, type Dimension } from "../../../lib/insights/compare";
 import { firstEngagementFigure, type FirstEngagementFigure } from "../../../lib/insights/first-engagement";
+import { docsUrl } from "../../../lib/docs";
+import type { ApiInsightsQuery, ApiInsightsResponse } from "../../../lib/api/schemas";
+import { ForbiddenError, ValidationIssuesError } from "../../dal/errors";
+import type { ProjectScope } from "../../dal/scope";
 import {
   accountTrendRows,
   comparableTargetRows,
@@ -266,4 +271,187 @@ export async function buildFirstEngagement(input: ComparisonsInput): Promise<Fir
     entries.push({ targetId, accountName: base.accountName, providerKey: base.providerKey, platform, figure });
   }
   return { entries, exactCapablePlatforms };
+}
+
+const API_RANGE_DAYS = 29; // a 30-day window inclusive, matching the screen's default
+
+function need(scope: ProjectScope): void {
+  if (!scope.can({ post: ["view"] })) throw new ForbiddenError();
+}
+
+function parseDay(value: string): Temporal.PlainDate | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  try {
+    return Temporal.PlainDate.from(value, { overflow: "reject" });
+  } catch {
+    return null;
+  }
+}
+
+interface DayRange {
+  from: Date;
+  to: Date;
+  fromDay: string;
+  toDay: string;
+}
+
+/** `[from, to)` as instants, from calendar days in the project zone (US7, same half-open convention as activity). */
+function resolveRange(
+  query: ApiInsightsQuery,
+  timeZone: string,
+  now: Date,
+  issues: { code: string; field: string; message: string }[],
+): DayRange | null {
+  const today = Temporal.Instant.fromEpochMilliseconds(now.getTime()).toZonedDateTimeISO(timeZone).toPlainDate();
+  let to = today;
+  if (query.to !== undefined) {
+    const parsed = parseDay(query.to);
+    if (!parsed) {
+      issues.push({ code: "invalid_value", field: "to", message: "Use a date like 2026-10-01." });
+      return null;
+    }
+    to = parsed;
+  }
+  let from = to.subtract({ days: API_RANGE_DAYS });
+  if (query.from !== undefined) {
+    const parsed = parseDay(query.from);
+    if (!parsed) {
+      issues.push({ code: "invalid_value", field: "from", message: "Use a date like 2026-10-01." });
+      return null;
+    }
+    from = parsed;
+  }
+  if (Temporal.PlainDate.compare(from, to) > 0) {
+    issues.push({ code: "invalid_value", field: "from", message: "The start date is after the end date." });
+    return null;
+  }
+  const start = (d: Temporal.PlainDate) => new Date(d.toZonedDateTime({ timeZone }).epochMilliseconds);
+  return { from: start(from), to: start(to.add({ days: 1 })), fromDay: from.toString(), toDay: to.toString() };
+}
+
+/** The declared shape of one platform's post metric key, looked up fresh (Comparison carries no shape of its own). */
+function postMetricShape(providerKey: string, metricKey: string): import("../../../providers/types").MetricShape {
+  const declared = findProvider(providerKey)?.insights?.declaration.post.find((d) => d.key === metricKey);
+  return declared?.shape ?? { kind: "unknown", reason: "no longer declared" };
+}
+
+/** Every declared metric key (account + post) a connected account's platform reports. */
+function declaredMetricKeys(accounts: readonly { providerKey: string }[]): Set<string> {
+  const keys = new Set<string>();
+  for (const providerKey of new Set(accounts.map((a) => a.providerKey))) {
+    const provider = findProvider(providerKey);
+    for (const d of provider?.insights?.declaration.account ?? []) keys.add(d.key);
+    for (const d of provider?.insights?.declaration.post ?? []) keys.add(d.key);
+  }
+  return keys;
+}
+
+/**
+ * The API's read (US7, contracts/insights-api.md): the same `buildAccountTrends`/`buildComparisons`/
+ * `buildFirstEngagement` the screen calls, filtered by the query and serialized to the contract's shape.
+ * Throws `ForbiddenError` without `post: view` and `ValidationIssuesError` for a bad field (FR-060 to FR-064).
+ */
+export async function getInsightsForApi(scope: ProjectScope, query: ApiInsightsQuery): Promise<ApiInsightsResponse> {
+  need(scope);
+  const now = new Date();
+  const issues: { code: string; field: string; message: string }[] = [];
+  const range = resolveRange(query, scope.project.timezone, now, issues);
+
+  let accountId: string | null = null;
+  if (query.accountId !== undefined) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query.accountId)) {
+      issues.push({ code: "invalid_value", field: "accountId", message: "The account must be an id." });
+    } else accountId = query.accountId;
+  }
+
+  const dimensions = DIMENSIONS;
+  let dimension: Dimension | null = null;
+  if (query.dimension !== undefined) {
+    if ((dimensions as readonly string[]).includes(query.dimension)) dimension = query.dimension as Dimension;
+    else issues.push({ code: "invalid_value", field: "dimension", message: `"${query.dimension}" is not a dimension. Use ${dimensions.join(", ")}.` });
+  }
+
+  const activeAccounts = (await scope.accounts.list()).filter((a) => a.removedAt === null);
+  if (query.metricKey !== undefined && !declaredMetricKeys(activeAccounts).has(query.metricKey)) {
+    issues.push({ code: "invalid_value", field: "metricKey", message: `"${query.metricKey}" is not a metric key any connected platform declares.` });
+  }
+
+  if (issues.length > 0 || !range) throw new ValidationIssuesError(issues, "The request is not valid.");
+
+  const accountsForTrends = accountId ? activeAccounts.filter((a) => a.id === accountId) : activeAccounts;
+  const [{ series, trendNotes }, allComparisons, firstEngagement] =
+    activeAccounts.length === 0
+      ? [{ series: [], trendNotes: [] }, [], { entries: [], exactCapablePlatforms: [] }]
+      : await Promise.all([
+          buildAccountTrends({
+            projectId: scope.project.id,
+            timeZone: scope.project.timezone,
+            accounts: accountsForTrends.map((a) => ({ id: a.id, displayName: a.displayName, providerKey: a.providerKey })),
+            range,
+            accountMetricPollStates: scope.accountMetricPollStates,
+          }),
+          buildComparisons({ projectId: scope.project.id, timeZone: scope.project.timezone, range }),
+          buildFirstEngagement({ projectId: scope.project.id, timeZone: scope.project.timezone, range }),
+        ]);
+
+  const trends = series.filter((s) => query.metricKey === undefined || s.metricKey === query.metricKey);
+  const comparisons = allComparisons.filter(
+    (c) => (dimension === null || c.dimension === dimension) && (query.metricKey === undefined || c.metricKey === query.metricKey),
+  );
+
+  return {
+    range: { from: range.fromDay, to: range.toDay, timeZone: scope.project.timezone },
+    trends: trends.map((s) => ({
+      accountId: s.accountId,
+      accountName: s.accountName,
+      platform: s.platform,
+      providerKey: s.providerKey,
+      metricKey: s.metricKey,
+      label: s.label,
+      shape: s.shape,
+      points: s.points.map((p) => ({ day: p.day, value: p.value, capturedAt: p.capturedAt.toISOString() })),
+      asOf: s.asOf?.toISOString() ?? null,
+      lastSuccessfulReadAt: s.lastSuccessfulReadAt?.toISOString() ?? null,
+    })),
+    trendNotes: trendNotes.map((n) =>
+      n.kind === "platform_no_account_metrics"
+        ? { providerKey: n.providerKey, platform: n.platform, reason: `${n.platform} reports no account numbers.`, docsPath: docsUrl("insights") }
+        : { providerKey: n.providerKey, platform: n.platform, reason: n.reason, docsPath: docsUrl("insights") },
+    ),
+    comparisons: comparisons.map((c) => ({
+      dimension: c.dimension,
+      platform: c.platform,
+      providerKey: c.providerKey,
+      metricKey: c.metricKey,
+      label: c.label,
+      shape: postMetricShape(c.providerKey, c.metricKey),
+      conclusion: c.conclusion,
+      groups: c.groups.map((g) => ({
+        key: g.key,
+        label: g.label,
+        removed: g.removed,
+        sampleSize: g.sampleSize,
+        mean: g.mean,
+        median: g.median,
+        verdict: g.verdict,
+        singleAccount: g.singleAccount,
+      })),
+      suppressedGroupCount: c.suppressedGroupCount,
+      exclusions: c.exclusions,
+      asOf: c.asOf?.toISOString() ?? null,
+    })),
+    firstEngagement: {
+      entries: firstEngagement.entries.map((e) => ({
+        targetId: e.targetId,
+        accountName: e.accountName,
+        providerKey: e.providerKey,
+        platform: e.platform,
+        figure:
+          e.figure.kind === "none_yet" || e.figure.kind === "never_observed"
+            ? { ...e.figure, asOf: e.figure.asOf.toISOString() }
+            : e.figure,
+      })),
+      exactCapablePlatforms: [...firstEngagement.exactCapablePlatforms],
+    },
+  };
 }

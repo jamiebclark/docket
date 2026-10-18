@@ -217,14 +217,14 @@ the fold, the trend reader, the comparison reader and `shape.ts`.
 
 ### Tests for User Story 7
 
-- [ ] T069 [US7] Write the seven assertions from [contracts/insights-api.md](contracts/insights-api.md) §6 across `tests/integration/api/` and `tests/unit/mcp/`: body matches the screen's figures (US7.1); project isolation (US7.2); missing `read` permission refused (US7.3); a below-floor comparison returns counts plus `conclusion: "not_enough_posts"` with no ordering (US7.4); the operation appears in REST, OpenAPI and MCP consistently (US7.5, SC-008); the secret scan finds nothing in the response (US7.6); no platform HTTP call is made while serving it (SC-011)
+- [X] T069 [US7] Write the seven assertions from [contracts/insights-api.md](contracts/insights-api.md) §6 across `tests/integration/api/` and `tests/unit/mcp/`: body matches the screen's figures (US7.1); project isolation (US7.2); missing `read` permission refused (US7.3); a below-floor comparison returns counts plus `conclusion: "not_enough_posts"` with no ordering (US7.4); the operation appears in REST, OpenAPI and MCP consistently (US7.5, SC-008); the secret scan finds nothing in the response (US7.6); no platform HTTP call is made while serving it (SC-011)
 
 ### Implementation for User Story 7
 
-- [ ] T070 [US7] Finish `src/server/services/insights/view.ts` as the one service both the page and the API call, returning trends, comparisons and the first-engagement arm together
-- [ ] T071 [US7] Create `src/server/api/operations/insights.ts`: `getInsights`, `GET /insights`, `permission: "read"`, `ApiInsightsQuerySchema` (`from`, `to`, `accountId`, `dimension`, `metricKey`, unknown params rejected, `from` after `to` a 400), `mcp: { expose: true }`, `run` calling the one service function, per [contracts/insights-api.md](contracts/insights-api.md) §1-§4
-- [ ] T072 [US7] Register the operation once in `OPERATIONS` (`src/server/api/operations/index.ts`), after `activityOperations`, per [contracts/insights-api.md](contracts/insights-api.md) §1
-- [ ] T073 [US7] Update the five enumerated places together in one commit per [contracts/insights-api.md](contracts/insights-api.md) §5: `src/server/mcp/naming.ts` (`PUBLISHED_TOOL_NAMES`, add `"docket_get_insights"` after `"docket_list_activity"`); `tests/unit/mcp/naming.test.ts` (list plus "frozen twenty-one"); `tests/helpers/api-fixtures.ts` (a `getInsights` fixture); `tests/integration/api/setup-permission.test.ts` (`OTHER_FIXTURES`); `docs/mcp.md` (tool table and "## 3. The 20 exposed tools" → 21)
+- [X] T070 [US7] Finish `src/server/services/insights/view.ts` as the one service both the page and the API call, returning trends, comparisons and the first-engagement arm together
+- [X] T071 [US7] Create `src/server/api/operations/insights.ts`: `getInsights`, `GET /insights`, `permission: "read"`, `ApiInsightsQuerySchema` (`from`, `to`, `accountId`, `dimension`, `metricKey`, unknown params rejected, `from` after `to` a 400), `mcp: { expose: true }`, `run` calling the one service function, per [contracts/insights-api.md](contracts/insights-api.md) §1-§4
+- [X] T072 [US7] Register the operation once in `OPERATIONS` (`src/server/api/operations/index.ts`), after `activityOperations`, per [contracts/insights-api.md](contracts/insights-api.md) §1
+- [X] T073 [US7] Update the five enumerated places together in one commit per [contracts/insights-api.md](contracts/insights-api.md) §5: `src/server/mcp/naming.ts` (`PUBLISHED_TOOL_NAMES`, add `"docket_get_insights"` after `"docket_list_activity"`); `tests/unit/mcp/naming.test.ts` (list plus "frozen twenty-one"); `tests/helpers/api-fixtures.ts` (a `getInsights` fixture); `tests/integration/api/setup-permission.test.ts` (`OTHER_FIXTURES`); `docs/mcp.md` (tool table and "## 3. The 20 exposed tools" → 21)
 
 **Checkpoint**: `pnpm vitest run tests/unit/mcp tests/integration/api tests/integration/docs` is green. All seven user stories are independently functional.
 

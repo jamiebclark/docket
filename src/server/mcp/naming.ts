@@ -3,7 +3,7 @@ export function toolNameFor(operationId: string): string {
   return `docket_${operationId.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`;
 }
 
-/** The frozen nineteen (FR-004): renaming an operation id breaks this list, not a client. */
+/** The frozen twenty-one (FR-004): renaming an operation id breaks this list, not a client. */
 export const PUBLISHED_TOOL_NAMES: readonly string[] = [
   "docket_list_accounts",
   "docket_set_account_posting_instructions",
@@ -22,6 +22,7 @@ export const PUBLISHED_TOOL_NAMES: readonly string[] = [
   "docket_update_slot",
   "docket_delete_slot",
   "docket_list_activity",
+  "docket_get_insights",
   "docket_create_project",
   "docket_create_voice_profile",
   "docket_update_voice_profile",

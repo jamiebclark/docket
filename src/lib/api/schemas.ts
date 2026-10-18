@@ -510,4 +510,112 @@ export type ApiSlot = z.infer<typeof SlotSchema>;
 export type ApiWeekSlotsResult = z.infer<typeof WeekSlotsResultSchema>;
 export type ApiVoiceProfileRef = z.infer<typeof VoiceProfileRefSchema>;
 export type ApiAccountPostingInstructions = z.infer<typeof AccountPostingInstructionsSchema>;
+
+// ---------------------------------------------------------------- insights (083)
+
+const MetricShapeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("cumulative") }),
+  z.object({ kind: z.literal("windowed"), windowMs: z.number().nullable() }),
+  z.object({ kind: z.literal("unknown"), reason: z.string() }),
+]);
+
+const ApiTrendPointSchema = z.object({ day: z.string(), value: z.number(), capturedAt: iso });
+
+const ApiTrendSeriesSchema = z
+  .object({
+    accountId: z.uuid(),
+    accountName: z.string(),
+    platform: z.string(),
+    providerKey: z.string(),
+    metricKey: z.string(),
+    label: z.string(),
+    shape: MetricShapeSchema,
+    points: z.array(ApiTrendPointSchema).meta({ description: "Ascending by day; a day with no reading is simply absent, never a zero." }),
+    asOf: isoOrNull,
+    lastSuccessfulReadAt: isoOrNull,
+  })
+  .meta({ id: "ApiInsightsTrend" });
+
+const ApiTrendNoteSchema = z
+  .object({ providerKey: z.string(), platform: z.string(), reason: z.string(), docsPath: z.string() })
+  .meta({ id: "ApiInsightsTrendNote" });
+
+const ApiComparisonGroupSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  removed: z.boolean(),
+  sampleSize: z.number().int(),
+  mean: z.number(),
+  median: z.number(),
+  verdict: z.enum(["ranked", "provisional"]),
+  singleAccount: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+});
+
+const ApiExclusionSchema = z.object({ reason: z.string(), count: z.number().int() });
+
+const ApiComparisonSchema = z
+  .object({
+    dimension: z.enum(["slot", "day_of_week", "series_kind", "voice_profile", "origin"]),
+    platform: z.string(),
+    providerKey: z.string(),
+    metricKey: z.string(),
+    label: z.string(),
+    shape: MetricShapeSchema,
+    conclusion: z.enum(["ranked", "not_enough_posts"]).meta({
+      description: '"not_enough_posts": groups are in label order and carry no ranking (FR-063).',
+    }),
+    groups: z.array(ApiComparisonGroupSchema),
+    suppressedGroupCount: z.number().int(),
+    exclusions: z.array(ApiExclusionSchema),
+    asOf: isoOrNull,
+  })
+  .meta({ id: "ApiInsightsComparison" });
+
+const ApiFirstEngagementFigureSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("exact"), afterMs: z.number() }),
+  z.object({ kind: z.literal("bounded"), afterAtLeastMs: z.number(), afterAtMostMs: z.number() }),
+  z.object({ kind: z.literal("within_first_reading"), afterAtMostMs: z.number() }),
+  z.object({ kind: z.literal("none_yet"), asOf: iso }),
+  z.object({ kind: z.literal("never_observed"), asOf: iso, frozenReason: z.string() }),
+  z.object({ kind: z.literal("not_examined") }),
+]);
+
+const ApiFirstEngagementEntrySchema = z.object({
+  targetId: z.uuid(),
+  accountName: z.string(),
+  providerKey: z.string(),
+  platform: z.string(),
+  figure: ApiFirstEngagementFigureSchema,
+});
+
+const ApiFirstEngagementSchema = z
+  .object({
+    entries: z.array(ApiFirstEngagementEntrySchema),
+    exactCapablePlatforms: z.array(z.string()),
+  })
+  .meta({ id: "ApiInsightsFirstEngagement" });
+
+export const ApiInsightsResponseSchema = z
+  .object({
+    range: z.object({ from: z.string(), to: z.string(), timeZone: z.string() }),
+    trends: z.array(ApiTrendSeriesSchema),
+    trendNotes: z.array(ApiTrendNoteSchema),
+    comparisons: z.array(ApiComparisonSchema),
+    firstEngagement: ApiFirstEngagementSchema,
+  })
+  .meta({ id: "ApiInsightsResponse" });
+
+const insightsParam = (description: string, example?: string) =>
+  z.string().optional().meta({ description, ...(example ? { example } : {}) });
+
+/** Strict: an unknown parameter is a 400. Values are checked by `getInsightsForApi`, which reports each bad field. */
+export const ApiInsightsQuerySchema = z.strictObject({
+  from: insightsParam("First day, YYYY-MM-DD, in the project time zone. Inclusive. Defaults to 29 days before to.", "2026-09-19"),
+  to: insightsParam("Last day, YYYY-MM-DD, in the project time zone. Inclusive. Defaults to today.", "2026-10-18"),
+  accountId: insightsParam("Restrict to one connected account."),
+  dimension: insightsParam("Restrict comparisons to one dimension: slot, day_of_week, series_kind, voice_profile or origin.", "slot"),
+  metricKey: insightsParam("Restrict to one metric key, declared by the platform(s) in scope."),
+});
+export type ApiInsightsQuery = z.infer<typeof ApiInsightsQuerySchema>;
+export type ApiInsightsResponse = z.infer<typeof ApiInsightsResponseSchema>;
 export type ApiActivityPage = z.infer<typeof ApiActivityPageSchema>;
