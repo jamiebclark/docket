@@ -14,6 +14,8 @@ export type TargetInsightsView =
   | { state: "permission_not_requested"; reason: string; docsPath?: string }
   | { state: "needs_reconnect"; reason: string; docsPath?: string; canReconnect: boolean }
   | { state: "no_external_id" }
+  /** FR-036. Terminal: the stored external id cannot be queried; snapshots captured before this was known are kept, never a failure. */
+  | { state: "unqueryable"; reason: string; snapshot: Snapshot | null }
   | { state: "gone"; snapshot: Snapshot | null }
   /** FR-042. Terminal for an ephemeral subject past its lifetime; numbers captured while it lived are final, never a failure. */
   | { state: "expired"; snapshot: Snapshot | null }
@@ -73,6 +75,9 @@ export function buildTargetInsightsView(input: BuildTargetInsightsViewInput): Ta
   }
   if (externalId === null) return { state: "no_external_id" };
   if (pollState?.frozenReason === "gone") return { state: "gone", snapshot: snapshotFor(declaration, snapshot) };
+  if (pollState?.frozenReason === "unqueryable") {
+    return { state: "unqueryable", reason: "This post's stored platform id cannot be used to request its numbers.", snapshot: snapshotFor(declaration, snapshot) };
+  }
   if (pollState?.frozenReason === "expired") return { state: "expired", snapshot: snapshotFor(declaration, snapshot) };
   if (pollState && pollState.consecutiveFailures > 0) {
     return { state: "failing", since: pollState.failingSince!, reason: pollState.lastError ?? "", snapshot: snapshotFor(declaration, snapshot) };

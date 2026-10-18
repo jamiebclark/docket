@@ -5,6 +5,7 @@ import * as clock from "../dal/clock";
 import {
   claimDueAccountMetricPolls,
   claimDuePostMetricPolls,
+  countAccountsMissingInsightsScopes,
   countPublishedWithoutExternalId,
   type ClaimedAccountMetricPoll,
   type ClaimedPostMetricPoll,
@@ -28,8 +29,10 @@ export interface InsightsPollCounts {
   targetsFrozen: number;
   targetsFrozenExpired: number;
   targetsFrozenSettled: number;
+  targetsUnqueryable: number;
   postsGone: number;
   targetsSkippedNoExternalId: number;
+  accountsSkippedNoPermission: number;
   deferredForAllowance: number;
   retried: number;
   rateLimited: number;
@@ -47,8 +50,10 @@ export const emptyInsightsPollCounts = (): InsightsPollCounts => ({
   targetsFrozen: 0,
   targetsFrozenExpired: 0,
   targetsFrozenSettled: 0,
+  targetsUnqueryable: 0,
   postsGone: 0,
   targetsSkippedNoExternalId: 0,
+  accountsSkippedNoPermission: 0,
   deferredForAllowance: 0,
   retried: 0,
   rateLimited: 0,
@@ -96,6 +101,7 @@ export async function runInsightsPoll(opts: { config: SchedulerConfig; tickId: s
   counts.accountsClaimed = accounts.length;
   counts.targetsClaimed = targets.length;
   counts.targetsSkippedNoExternalId = await countPublishedWithoutExternalId(providers);
+  counts.accountsSkippedNoPermission = await countAccountsMissingInsightsScopes(providers);
 
   const targetsByAccount = new Map<string, ClaimedPostMetricPoll[]>();
   for (const t of targets) {
@@ -380,6 +386,11 @@ async function commitPostBatch(input: {
           }
           case "unavailable":
             counts.unavailable++;
+            await repos.postMetricPollStates.update(
+              t.state.postTargetId,
+              { lastError: reason, nextPollAt: nextRetryAt(now, t.state.consecutiveFailures + 1, config) },
+              t.token,
+            );
             break;
         }
       }),
@@ -404,11 +415,11 @@ async function commitPostBatch(input: {
         continue;
       }
       if (entry.kind === "unqueryable") {
-        // Full counting (targetsUnqueryable) and lastError/consecutiveFailures clearing lands in T083.
+        counts.targetsUnqueryable++;
         counts.targetsFrozen++;
         await tx.postMetricPollStates.update(
           t.state.postTargetId,
-          { nextPollAt: null, frozenAt: now, frozenReason: "unqueryable" },
+          { nextPollAt: null, frozenAt: now, frozenReason: "unqueryable", lastError: null, consecutiveFailures: 0, failingSince: null },
           t.token,
         );
         continue;
@@ -512,6 +523,11 @@ async function commitAccountResult(input: {
       }
       case "unavailable":
         counts.unavailable++;
+        await repos.accountMetricPollStates.update(
+          accountId,
+          { lastError: reason, nextPollAt: nextRetryAt(now, failures + 1, config) },
+          accountClaimToken,
+        );
         break;
     }
     await releaseAccount();

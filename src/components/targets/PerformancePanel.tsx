@@ -66,6 +66,13 @@ function body(view: Exclude<TargetInsightsView, { state: "not_published" }>, pla
           {view.snapshot ? <Rows rows={view.snapshot.rows} capturedAt={view.snapshot.capturedAt} timeZone={timeZone} /> : null}
         </>
       );
+    case "unqueryable":
+      return (
+        <>
+          <p>{view.reason}</p>
+          {view.snapshot ? <Rows rows={view.snapshot.rows} capturedAt={view.snapshot.capturedAt} timeZone={timeZone} /> : null}
+        </>
+      );
     case "expired":
       return (
         <>

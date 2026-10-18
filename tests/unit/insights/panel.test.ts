@@ -88,6 +88,21 @@ describe("buildTargetInsightsView (contracts/panel.md §2)", () => {
     });
   });
 
+  it("new row (FR-036): unqueryable goes after gone and before expired, carrying any surviving snapshot, never a failure", () => {
+    const frozen = { nextPollAt: null, consecutiveFailures: 0, failingSince: null, lastError: null, frozenReason: "unqueryable" };
+    expect(buildTargetInsightsView({ ...BASE, pollState: frozen })).toEqual({
+      state: "unqueryable",
+      reason: "This post's stored platform id cannot be used to request its numbers.",
+      snapshot: null,
+    });
+    const snapshot = { capturedAt: NOW, metrics: { likeCount: 4 } };
+    expect(buildTargetInsightsView({ ...BASE, pollState: frozen, snapshot })).toEqual({
+      state: "unqueryable",
+      reason: "This post's stored platform id cannot be used to request its numbers.",
+      snapshot: { capturedAt: NOW, rows: [{ label: "Likes", value: 4 }] },
+    });
+  });
+
   it("row 6: failing with no earlier snapshot", () => {
     const since = new Date("2025-12-01T00:00:00Z");
     const pollState = { nextPollAt: null, consecutiveFailures: 1, failingSince: since, lastError: "Reads have been failing.", frozenReason: null };
