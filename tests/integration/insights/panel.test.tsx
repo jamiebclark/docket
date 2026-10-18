@@ -251,9 +251,9 @@ describe("the performance panel on the post detail page (contracts/panel.md)", (
       socialAccountId: account.id,
       providerKey: "tiktok",
       capturedAt: NOW,
-      // like_count and share_count present; comment_count and view_count omitted, as TikTok's
+      // tiktok_like_count and share_count present; comment_count and view_count omitted, as TikTok's
       // response would when it does not report them.
-      metrics: { like_count: 10, share_count: 2 },
+      metrics: { tiktok_like_count: 10, share_count: 2 },
     });
 
     const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));

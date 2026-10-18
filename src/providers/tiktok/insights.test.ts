@@ -45,13 +45,13 @@ const error = (code: string, status = 200, message = "") => ({ kind: "error" as 
 describe("tiktokInsights.declaration", () => {
   it("declares the post, account and shared fields of contracts/platform-readers-082.md §1", () => {
     expect(tiktokInsights.declaration.post).toEqual([
-      { key: "like_count", label: "Likes" },
+      { key: "tiktok_like_count", label: "Likes" },
       { key: "comment_count", label: "Comments" },
       { key: "share_count", label: "Shares" },
       { key: "view_count", label: "Views" },
     ]);
     expect(tiktokInsights.declaration.account).toEqual([
-      { key: "follower_count", label: "Followers" },
+      { key: "tiktok_follower_count", label: "Followers" },
       { key: "likes_count", label: "Likes" },
       { key: "video_count", label: "Videos" },
     ]);
@@ -70,7 +70,7 @@ describe("tiktokInsights.readPostMetrics", () => {
   it("maps a happy page of the documented shape, requesting exactly the declared fields (contracts/platform-readers-082.md §1, §4)", async () => {
     fake.on("POST", VIDEO_QUERY, ok({ data: { videos: [{ id: "v1", like_count: 10, comment_count: 2, share_count: 1, view_count: 100 }] }, error: { code: "ok", message: "", log_id: "l1" } }));
     const r = await tiktokInsights.readPostMetrics(postCtx());
-    expect(r).toEqual({ kind: "page", entries: [{ externalId: "v1", kind: "metrics", metrics: { like_count: 10, comment_count: 2, share_count: 1, view_count: 100 } }] });
+    expect(r).toEqual({ kind: "page", entries: [{ externalId: "v1", kind: "metrics", metrics: { tiktok_like_count: 10, comment_count: 2, share_count: 1, view_count: 100 } }] });
     const req = fake.requests[0]!;
     expect(req.path).toBe(VIDEO_QUERY);
     expect(req.query.fields).toBe("like_count,comment_count,share_count,view_count,id");
@@ -80,7 +80,7 @@ describe("tiktokInsights.readPostMetrics", () => {
   it("omits a key the response did not report, instead of storing a zero (FR-024, §4)", async () => {
     fake.on("POST", VIDEO_QUERY, ok({ data: { videos: [{ id: "v1", like_count: 5 }] }, error: { code: "ok" } }));
     const r = await tiktokInsights.readPostMetrics(postCtx());
-    expect(r).toEqual({ kind: "page", entries: [{ externalId: "v1", kind: "metrics", metrics: { like_count: 5 } }] });
+    expect(r).toEqual({ kind: "page", entries: [{ externalId: "v1", kind: "metrics", metrics: { tiktok_like_count: 5 } }] });
   });
 
   it("an id the response omits a videos entry for becomes one unqueryable entry naming both possibilities (FR-022)", async () => {
@@ -174,14 +174,14 @@ describe("tiktokInsights.readAccountMetrics", () => {
   it("maps the documented shape, requesting exactly the declared fields", async () => {
     fake.on("GET", USER_INFO, ok({ data: { user: { follower_count: 50, likes_count: 200, video_count: 12 } }, error: { code: "ok" } }));
     const r = await tiktokInsights.readAccountMetrics(accountCtx());
-    expect(r).toEqual({ kind: "page", metrics: { follower_count: 50, likes_count: 200, video_count: 12 } });
+    expect(r).toEqual({ kind: "page", metrics: { tiktok_follower_count: 50, likes_count: 200, video_count: 12 } });
     expect(fake.requests[0]!.query.fields).toBe("follower_count,likes_count,video_count");
   });
 
   it("omits a key the response did not report", async () => {
     fake.on("GET", USER_INFO, ok({ data: { user: { follower_count: 50 } }, error: { code: "ok" } }));
     const r = await tiktokInsights.readAccountMetrics(accountCtx());
-    expect(r).toEqual({ kind: "page", metrics: { follower_count: 50 } });
+    expect(r).toEqual({ kind: "page", metrics: { tiktok_follower_count: 50 } });
   });
 
   it("rate_limit_exceeded -> rate_limited", async () => {

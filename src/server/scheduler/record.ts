@@ -57,6 +57,7 @@ export function applyStepResult(input: {
           status: "published",
           externalId: result.externalId,
           externalUrl: result.url ?? null,
+          publicPostId: result.publicPostId ?? null,
           publishedAt: now,
           stepState: null,
           nextAttemptAt: null,

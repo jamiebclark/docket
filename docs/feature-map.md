@@ -102,6 +102,26 @@ spec is written.
   **Threads account metrics** (declared `unavailable`; the official metric enum could not be confirmed, R3/R4),
   and the account-metric screen, manual refresh, per-project toggle and chart/trend/comparison gaps 080 already
   named, which this entry does not change.
+- **TikTok and Pinterest numbers, and a priced opt-in for X (082).** TikTok, Pinterest and X join Bluesky,
+  Instagram, Facebook and Threads as readable platforms, each under its own words with nothing summed,
+  averaged or compared across platforms — see `docs/insights.md`. A repair ships alongside TikTok's reader:
+  the publish step had been storing a `publish_id` as the target's identifier, not the video id TikTok's
+  numbers API needs, so a new `post_targets.public_post_id` column now carries the real id, written forward
+  from every future publish and backfilled from surviving attempt records for existing targets; a target
+  whose id could not be recovered shows insights as unavailable rather than guessing. A run-time
+  `unavailable` a reader returns (the X opt-in off, a Pinterest `PINNER_DATA_ACCESS_DENIED`) now persists on
+  the poll-state row and survives a page reload, instead of being recomputed from scratch each time (the
+  FR-050 honesty fix). Pinterest's account numbers (followers, monthly views) begin accruing for every
+  connected account with no reconnect and no flag — the one feature in this entry no operator has to opt
+  into. X ships **behind a priced opt-in, off by default** (`X_INSIGHTS_ENABLED`): X charges $0.001 per
+  post read, so Docket makes no X insights call at all until an operator turns it on and accepts the
+  worked estimate in `docs/x-setup.md`. Verified with mocks only until the parked live checks
+  (`docs/research/tiktok.md`, `docs/research/pinterest.md`, `docs/research/x.md`) are done. Not yet owned by
+  any spec: whether `public_metrics` on an X post the app itself published actually bills at the owned
+  $0.001 rate rather than a standard read (the cost estimate's load-bearing assumption), TikTok's and
+  Pinterest's account-metric numbers on any screen (captured every tick, same gap 080 left for Bluesky),
+  and the account-metric screen, manual refresh, per-project toggle and chart/trend/comparison gaps every
+  prior insights entry has already named, which this entry does not change.
 
 ## Scheduling and composing (not built)
 

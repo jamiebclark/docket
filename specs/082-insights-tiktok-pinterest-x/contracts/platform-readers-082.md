@@ -22,7 +22,7 @@ and never read a clock other than `ctx.now`.
 | Identifier | `postIdSource: "publicPostId"` (G35) — so every id in the body is a video id, and every id belongs to the one account the call is made for |
 | Scope | `postScopes: ["video.list"]` |
 | Response | `{ data: { videos: [ { id, like_count, comment_count, share_count, view_count } ] } }` |
-| Keys declared | `like_count`, `comment_count`, `share_count`, `view_count` → Likes, Comments, Shares, Views |
+| Keys declared | `tiktok_like_count`, `comment_count`, `share_count`, `view_count` → Likes, Comments, Shares, Views — `like_count` is read from the response as-is but stored under `tiktok_like_count`: the raw name collides with X's declared `like_count` (FR-018, constitution V) |
 
 **Per-id outcome**: for each requested id, `metrics` if the response carried a `videos` entry for
 it; otherwise **one `unqueryable` entry** whose reason names both possibilities — "TikTok did not
@@ -43,8 +43,10 @@ id." No entry is invented for an id the response omitted *and* that Docket did n
 ### Account read — FR-023
 
 `GET /v2/user/info/?fields=follower_count,likes_count,video_count`, scope
-`accountScopes: ["user.info.stats"]`. Keys `follower_count`, `likes_count`, `video_count` →
-Followers, Likes, Videos. Same error table.
+`accountScopes: ["user.info.stats"]`. Keys `tiktok_follower_count`, `likes_count`, `video_count` →
+Followers, Likes, Videos — `follower_count` is read from the response as-is but stored under
+`tiktok_follower_count`: the raw name collides with Instagram's and Pinterest's declared
+`follower_count` (FR-018, constitution V). Same error table.
 
 ### Declaration
 
@@ -106,8 +108,10 @@ characters.
 `GET /v5/user_account`, **`accountScopes: []`** — `user_accounts:read` is in `PINTEREST_SCOPES`
 (`src/providers/pinterest/oauth.ts:6`) and every connected account granted it, so account snapshots
 begin accruing with **no reconnect and no flag** (the entry's one intended behaviour change for an
-install that sets nothing, spec FR-055). Keys `follower_count`, `monthly_views` → Followers,
-Monthly views; a field the response omitted is absent.
+install that sets nothing, spec FR-055). Keys `pinterest_follower_count`, `monthly_views` →
+Followers, Monthly views; a field the response omitted is absent. `follower_count` is read from the
+response as-is but stored under `pinterest_follower_count`: the raw name collides with Instagram's
+declared `follower_count` (FR-018, constitution V).
 
 An account whose stored `granted_scopes` is **null** still qualifies for the account surface
 (`accountScopes` is empty, so there is nothing to check) and still does **not** qualify for pin

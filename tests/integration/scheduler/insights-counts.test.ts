@@ -34,10 +34,44 @@ const gatedProvider: SocialProvider = {
   displayName: "Gated (test)",
   insights: {
     ...mockProvider.insights!,
-    declaration: { ...mockProvider.insights!.declaration, requiredScopes: REQUIRED, missingScopes: { reason: "Reconnect to grant insights access." } },
+    declaration: { ...mockProvider.insights!.declaration, postScopes: REQUIRED, missingPostScopes: { reason: "Reconnect to grant insights access." } },
   },
 } as SocialProvider;
 registerTestProvider(gatedProvider);
+
+// Stands in for a TikTok-like reader (G35): post metrics keyed off publicPostId, so a target
+// published without that column back-filled is skipped rather than claimed (FR-053).
+const publicIdProvider: SocialProvider = {
+  ...mockProvider,
+  key: "insights-counts-public-id",
+  displayName: "Public-id reader (test)",
+  insights: {
+    ...mockProvider.insights!,
+    declaration: { ...mockProvider.insights!.declaration, postIdSource: "publicPostId", missingPostId: { reason: "No public post id yet." } },
+  },
+} as SocialProvider;
+registerTestProvider(publicIdProvider);
+
+// Declares both post and account scopes so a single ungranted account should still only be
+// counted once by accountsSkippedNoPermission, not once per surface (FR-053).
+const BOTH_SURFACES = ["counts_both_post_scope"];
+const BOTH_SURFACES_ACCOUNT = ["counts_both_account_scope"];
+const gatedBothSurfacesProvider: SocialProvider = {
+  ...mockProvider,
+  key: "insights-counts-gated-both",
+  displayName: "Gated both surfaces (test)",
+  insights: {
+    ...mockProvider.insights!,
+    declaration: {
+      ...mockProvider.insights!.declaration,
+      postScopes: BOTH_SURFACES,
+      accountScopes: BOTH_SURFACES_ACCOUNT,
+      missingPostScopes: { reason: "Reconnect to grant insights access." },
+      missingAccountScopes: { reason: "Reconnect to grant insights access." },
+    },
+  },
+} as SocialProvider;
+registerTestProvider(gatedBothSurfacesProvider);
 
 // Stands in for a story-like ephemeral surface (US7-AS2), local to this file so its fixtures don't
 // interact with ephemeral.test.ts's own account/provider.
@@ -97,6 +131,50 @@ describe("the counts the panel reads (contracts/scheduler-insights-081.md ยง2, ย
     expect(summary.insightsPoll.counts.accountsSkippedNoPermission).toBeGreaterThanOrEqual(1);
     expect(summary.insightsPoll.counts.failed).toBe(0);
     expect(summary.insightsPoll.counts.credentialsInvalid).toBe(0);
+  });
+
+  it("a target whose provider keys post metrics off publicPostId is counted targetsSkippedNoPublicPostId, distinct from targetsSkippedNoExternalId and from a failure (FR-053)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id, {}, { providerKey: publicIdProvider.key });
+    await publishedTarget(ctx.project.id, account.id, { externalId: "counts-no-public-id-1", publishedAt: NOW });
+
+    const summary = await atTime(new Date(NOW.getTime() + HOUR_MS), () => runTick(tickConfig()));
+    expect(summary.insightsPoll.counts.targetsSkippedNoPublicPostId).toBeGreaterThanOrEqual(1);
+    expect(summary.insightsPoll.counts.targetsSkippedNoExternalId).toBe(0);
+    expect(summary.insightsPoll.counts.failed).toBe(0);
+  });
+
+  it("an account missing both a post-surface and an account-surface scope is counted accountsSkippedNoPermission exactly once (FR-053)", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    await repos.accounts.upsertConnected({
+      providerKey: gatedBothSurfacesProvider.key,
+      displayName: "Ungranted both",
+      externalAccountId: "counts-ungranted-both",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: [],
+    });
+
+    const before = await atTime(NOW, () => runTick(tickConfig()));
+    const baseline = before.insightsPoll.counts.accountsSkippedNoPermission;
+
+    const ctx2 = await createProjectWithMembers();
+    const repos2 = forSchedulerProject(ctx2.project.id);
+    await repos2.accounts.upsertConnected({
+      providerKey: gatedBothSurfacesProvider.key,
+      displayName: "Ungranted both 2",
+      externalAccountId: "counts-ungranted-both-2",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: [],
+    });
+    const after = await atTime(NOW, () => runTick(tickConfig()));
+    expect(after.insightsPoll.counts.accountsSkippedNoPermission).toBe(baseline + 1);
   });
 
   it("a target frozen expired and another frozen settled are each counted under their own reason, both under targetsFrozen (US7-AS2)", async () => {

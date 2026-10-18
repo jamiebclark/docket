@@ -1,5 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { insightsPermissionFor } from "../../../src/lib/insights/eligibility";
+import { pinterestConnectGroup } from "../../../src/providers/pinterest/connect-group";
+import { pinterestInsights } from "../../../src/providers/pinterest/insights";
 import {
   claimDueAccountMetricPolls,
   claimDuePostMetricPolls,
@@ -14,6 +16,7 @@ import { schedulerConfig } from "../../../src/server/scheduler/config";
 import { runInsightsPoll } from "../../../src/server/scheduler/insights-poll";
 import * as accountsService from "../../../src/server/services/accounts";
 import { createFakeTikTok } from "../../helpers/fake-tiktok";
+import { createFakeX } from "../../helpers/fake-x";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
@@ -262,6 +265,95 @@ describe("the eligibility matrix is pinned to the SQL (contracts/granted-scopes.
 
       const decryptSpy = vi.spyOn(accountsService, "decryptCredentials");
       const fake = createFakeTikTok().install();
+      const config = schedulerConfig(getEnv(), tickConfig().config);
+      try {
+        await atTime(NOW, () => runInsightsPoll({ config, tickId: randomUUID(), startedAt: NOW }));
+      } finally {
+        fake.uninstall();
+      }
+      expect(fake.requests).toHaveLength(0);
+      expect(decryptSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("a Pinterest account with only today's three scopes (US3-AS1/2, FR-028, FR-035)", () => {
+    it("gets an account snapshot with no pin-analytics call attempted; the post panel names the missing pins:read", async () => {
+      const ctx = await createProjectWithMembers();
+      const repos = forSchedulerProject(ctx.project.id);
+      const account = await repos.accounts.upsertConnected({
+        providerKey: "pinterest",
+        displayName: "Ada's Pinterest",
+        externalAccountId: "pinterest-user-1",
+        settings: {},
+        credentialsEncrypted: null,
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        grantedScopes: ["user_accounts:read", "boards:read", "pins:write"],
+      });
+
+      const rule: InsightsProviderRule = {
+        providerKey: "pinterest",
+        postScopes: pinterestInsights.declaration.postScopes ?? [],
+        accountScopes: pinterestInsights.declaration.accountScopes ?? [],
+        postIdSource: pinterestInsights.declaration.postIdSource ?? "externalId",
+        missingPostId: null,
+        postMetricsDeclared: true,
+        accountMetricsDeclared: true,
+        ephemeralPostTypes: [],
+      };
+
+      const claimedAccounts = await claimDueAccountMetricPolls({ now: NOW, limit: 100, leaseMs: 60_000, providers: [rule] });
+      expect(claimedAccounts.some((c) => c.account.id === account.id)).toBe(true);
+
+      const post = await repos.posts.insert({ baseText: "Hello" });
+      const [target] = await repos.targets.insertMany([{ postId: post.id, socialAccountId: account.id }]);
+      await repos.targets.update(target!.id, { status: "published", externalId: "ext-pin-1", publishedAt: NOW });
+      const claimedPosts = await claimDuePostMetricPolls({ now: NOW, limit: 100, leaseMs: 60_000, minIntervalMs: 0, providers: [rule] });
+      expect(claimedPosts.some((c) => c.state.postTargetId === target!.id)).toBe(false);
+
+      const permission = insightsPermissionFor({
+        requiredScopes: pinterestInsights.declaration.postScopes ?? [],
+        grantedScopes: ["user_accounts:read", "boards:read", "pins:write"],
+        requestedScopes: pinterestConnectGroup.optionalScopes?.requested({}) ?? [],
+        cannotWiden: null,
+        missingScopes: pinterestInsights.declaration.missingPostScopes ?? null,
+      });
+      expect(permission.kind).not.toBe("ok");
+      if (permission.kind !== "ok") {
+        expect(permission.missing).toEqual(["pins:read"]);
+        expect(permission.reason).toContain("pins:read");
+        expect(permission.docsPath).toBe("pinterest-setup#insights");
+      }
+    });
+  });
+
+  describe("an X account with the opt-in off (contracts/x-metered-reads.md §1, SC-005)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllEnvs();
+    });
+
+    it("is never claimed, never leased, its credentials never decrypted, and zero fetch calls are recorded for it in a full tick", async () => {
+      await parkAllDueTargets();
+      vi.stubEnv("X_INSIGHTS_ENABLED", "false");
+      const ctx = await createProjectWithMembers();
+      const repos = forSchedulerProject(ctx.project.id);
+      const account = await repos.accounts.upsertConnected({
+        providerKey: "x",
+        displayName: "Ada's X",
+        externalAccountId: "x-user-1",
+        settings: {},
+        credentialsEncrypted: "not-decryptable-if-ever-read",
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        grantedScopes: ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
+      });
+      const post = await repos.posts.insert({ baseText: "Hello" });
+      const [target] = await repos.targets.insertMany([{ postId: post.id, socialAccountId: account.id }]);
+      await repos.targets.update(target!.id, { status: "published", externalId: "1001", publishedAt: NOW });
+
+      const decryptSpy = vi.spyOn(accountsService, "decryptCredentials");
+      const fake = createFakeX().install();
       const config = schedulerConfig(getEnv(), tickConfig().config);
       try {
         await atTime(NOW, () => runInsightsPoll({ config, tickId: randomUUID(), startedAt: NOW }));

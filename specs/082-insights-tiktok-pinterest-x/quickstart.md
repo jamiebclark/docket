@@ -60,7 +60,7 @@ pnpm vitest run src/providers/pinterest/window.test.ts \
 ```
 
 Expect: an account whose stored grant is exactly `user_accounts:read, boards:read, pins:write`
-gets an **account** snapshot with `follower_count` and `monthly_views` and **no** pin-analytics call;
+gets an **account** snapshot with `pinterest_follower_count` and `monthly_views` and **no** pin-analytics call;
 the same account's pin panel names the missing `pins:read` with a link to
 `docs/pinterest-setup.md`; an account whose `granted_scopes` is **null** still gets account numbers
 and still gets no pin analytics; the 403 `PINNER_DATA_ACCESS_DENIED` becomes a stated reason, does

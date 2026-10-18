@@ -10,6 +10,15 @@ const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const X_VAR = /\bX_[A-Z0-9_]+\b/g;
 const varsIn = (text: string) => new Set(text.match(X_VAR) ?? []);
 
+/** GitHub-style slugs of every heading in a markdown file. */
+function slugs(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/^#{1,6}\s+(.+?)\s*$/gm)) {
+    out.add(m[1]!.toLowerCase().replace(/`/g, "").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-"));
+  }
+  return out;
+}
+
 describe("X setup documentation", () => {
   const doc = read("docs/x-setup.md");
   const envExample = read(".env.example");
@@ -64,5 +73,14 @@ describe("X setup documentation", () => {
 
   it("is in the published navigation", () => {
     expect(read("mkdocs.yml")).toContain("x-setup.md");
+  });
+
+  it("has the insights heading, states the X_INSIGHTS_ENABLED flag and the read ceiling, with defaults matching .env.example", () => {
+    expect(slugs(doc), "insights").toContain("insights");
+    expect(doc).toMatch(/X_INSIGHTS_ENABLED=true/);
+    expect(doc).toMatch(/X_INSIGHTS_READ_CEILING/);
+    expect(doc).toMatch(/default \*\*8000\*\*/);
+    expect(envExample).toMatch(/# X_INSIGHTS_ENABLED=false/);
+    expect(envExample).toMatch(/# X_INSIGHTS_READ_CEILING=8000/);
   });
 });

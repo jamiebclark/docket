@@ -3931,3 +3931,70 @@ hand-rolled copies of that same `UPDATE` in the pinterest, threads, tiktok and x
 `drainTicks` direction in this spec and the parking direction now on `main` point opposite ways; the
 baseline is kept here because the measurements are still the right ones to compare against, not because
 Phase 4 is still the plan. See the note on PR #141.
+
+## 082 — TikTok and Pinterest numbers, and a priced opt-in for X (2026-10-18)
+
+- **`PINNER_DATA_ACCESS_DENIED` is matched by a message token, a deliberate, narrow exception to the
+  publishing path's "status only, never a numeric code" rule.** Every other reader in this codebase,
+  publishing included, classifies a platform's refusal by HTTP status alone, because a numeric or string
+  `code` is not documented to be stable and matching on one has previously meant guessing at an
+  undocumented contract. Pinterest's `PINNER_DATA_ACCESS_DENIED` is different: it is the one documented
+  way to tell "this account needs a business account with pinner-data access" (a stated, actionable
+  reason, never flagging the account) apart from any other HTTP 403 (a generic `fatal_error`), and
+  Pinterest ships no other signal for the distinction — not a separate status code, not a response
+  header. The match lives in exactly one place, `src/providers/pinterest/insights.ts`, is read once per
+  call, and is never reused for publishing's own 403 handling, which stays status-only. Reversal: if
+  Pinterest ever starts returning a dedicated status or header for this refusal, drop the message match
+  for that signal and keep the rest of the status table unchanged.
+- **Pinterest's pin-analytics window always requests the full allowed 90 days, because the reader is not
+  given the pin's real publish date.** `pinterestAnalyticsWindow({ publishedAt, now })` is pure and
+  unit-tested against an arbitrary `publishedAt`, but `PostMetricsReadContext` (G35) deliberately carries
+  "nothing new" beyond `posts[].externalId` — adding a publish timestamp to every provider's context for
+  one platform's one reader was judged not worth the shared-surface cost. `readPostMetrics` therefore
+  calls the window function with a fixed, far-past `publishedAt`, which — because the function clamps to
+  `end − 90 days` — always yields the widest allowed window ending today. This costs nothing: Pinterest
+  simply reports no activity for days before a pin existed, so a wider-than-necessary window never
+  invents a number. Reversal: if a later entry plumbs a real publish date into the shared context for
+  some other reason, pass it through here too for a tighter window on young pins.
+- **G35 — a declared identifier source, because TikTok's publish result returns the wrong id for
+  reading numbers back.** `postIdSource: "externalId" | "publicPostId"` on an `insights` declaration
+  says which stored column a provider's post reader needs; the post claim requires that column
+  non-null in its own SQL, so a target without one is never claimed, leased or decrypted for — it is
+  instead inserted already frozen `unqueryable` with zero calls spent. Default is `"externalId"`,
+  so Bluesky, Instagram, Facebook and Threads are unaffected. Reversal: drop the field and the column
+  check if TikTok ever starts returning a usable video id from the publish call itself.
+- **G36 — `publicPostId` on `StepResult`'s `{ kind: "done" }`, persisted by the generic publish
+  path.** The only write path for `post_targets.public_post_id` going forward, parallel to how
+  `externalId` and `url` already travel on the same result; no scheduler or engine code names
+  TikTok. A one-off migration backfill (`drizzle/0044_*.sql`) recovers the id for targets published
+  before this column existed, from `publish_attempts.response_summary.publicPostIds` wherever
+  attempt retention still holds it. Reversal: drop the field if a future provider's post reader can
+  always use `externalId` instead.
+- **G37 — per-surface eligibility, replacing G33's one set of scopes for both surfaces.** Pinterest
+  needs `pins:read` for pins and nothing new for the account; TikTok needs `video.list` for posts
+  and `user.info.stats` for the account; X declares no account metrics at all. `postScopes`/
+  `missingPostScopes` and `accountScopes`/`missingAccountScopes` replace the single
+  `requiredScopes`/`missingScopes` pair, each checked by its own claim's SQL predicate. An account
+  missing either surface's scopes is still counted exactly once by `accountsSkippedNoPermission`,
+  not once per surface. Reversal: collapse back to one shared scope set if a future review judges
+  the per-surface split not worth the extra declaration fields.
+- **FR-050's four new columns (`unavailable_reason`/`unavailable_docs_path` on both poll-state
+  tables) over inferring "unavailable" from `last_error` plus `consecutive_failures = 0`.** That
+  inference is exactly the shape the `unqueryable` freeze already uses for a different reason, so
+  reusing it for a run-time `unavailable` would make the two indistinguishable on screen — a member
+  would see the same "not read yet, and will not be" wording for "this post's id cannot be queried"
+  and "Pinterest needs a business account", which are different, actionable messages. A run-time
+  `unavailable` a reader returns is instead persisted at commit time and cleared on the next success
+  or freeze, so it survives a page reload rather than being recomputed from scratch. Pinterest's
+  `PINNER_DATA_ACCESS_DENIED` is the first reader this matters for in practice: the account is never
+  flagged, but the post surface's stated reason now holds between ticks. Reversal: drop the two
+  columns and fall back to the inference if a later review finds the distinction not worth the
+  schema cost.
+- **X's read ceiling defaults to 8000 reads per account per 30 days (`X_INSIGHTS_READ_CEILING`),
+  realising to 4,000 after the publishing reserve — about $4.00/month at the confirmed $0.001 Owned
+  Read rate.** The opt-in itself (`X_INSIGHTS_ENABLED`, default `false`) is the bigger decision —
+  no existing install starts spending money it did not ask for — but the ceiling needed a concrete
+  starting number rather than an unbounded one, and 8000 is the figure `docs/x-setup.md`'s worked
+  estimate is built from. Reversal: raise or lower the default once an operator's real usage pattern
+  suggests a different starting point; the env var already makes it a one-line change with no code
+  edit.

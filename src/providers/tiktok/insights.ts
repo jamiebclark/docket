@@ -20,9 +20,12 @@ const UNQUERYABLE_REASON =
 const MISSING_SCOPE_REASON = "A TikTok account needs the video.list permission before Docket can read its post numbers.";
 const MISSING_ACCOUNT_SCOPE_REASON = "A TikTok account needs the user.info.stats permission before Docket can read its account numbers.";
 
+// `tiktok_like_count` and `tiktok_follower_count`, not TikTok's own raw field names (used as-is in the
+// request below): those two collide with X's `like_count` and Instagram's/Pinterest's `follower_count`
+// (FR-018, constitution V — a declared metric key must stay disjoint across providers).
 const postMetricsSchema = z
   .object({
-    like_count: z.number().optional(),
+    tiktok_like_count: z.number().optional(),
     comment_count: z.number().optional(),
     share_count: z.number().optional(),
     view_count: z.number().optional(),
@@ -31,7 +34,7 @@ const postMetricsSchema = z
 
 const accountMetricsSchema = z
   .object({
-    follower_count: z.number().optional(),
+    tiktok_follower_count: z.number().optional(),
     likes_count: z.number().optional(),
     video_count: z.number().optional(),
   })
@@ -111,9 +114,9 @@ async function readPostMetrics(ctx: PostMetricsReadContext<unknown>): Promise<Po
       continue;
     }
     const metrics: Record<string, number> = {};
-    for (const key of ["like_count", "comment_count", "share_count", "view_count"]) {
-      const value = video[key];
-      if (typeof value === "number") metrics[key] = value;
+    for (const [rawKey, storedKey] of [["like_count", "tiktok_like_count"], ["comment_count", "comment_count"], ["share_count", "share_count"], ["view_count", "view_count"]] as const) {
+      const value = video[rawKey];
+      if (typeof value === "number") metrics[storedKey] = value;
     }
     entries.push({ externalId: id, kind: "metrics", metrics });
   }
@@ -140,9 +143,9 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<unknown>): Prom
 
   const user = r.data && typeof r.data.user === "object" && r.data.user !== null ? (r.data.user as Record<string, unknown>) : r.data;
   const metrics: Record<string, number> = {};
-  for (const key of ["follower_count", "likes_count", "video_count"]) {
-    const value = user?.[key];
-    if (typeof value === "number") metrics[key] = value;
+  for (const [rawKey, storedKey] of [["follower_count", "tiktok_follower_count"], ["likes_count", "likes_count"], ["video_count", "video_count"]] as const) {
+    const value = user?.[rawKey];
+    if (typeof value === "number") metrics[storedKey] = value;
   }
   return { kind: "page", metrics };
 }
@@ -155,13 +158,13 @@ export const tiktokInsights: InsightsSupport<unknown> = {
     accountScopes: ["user.info.stats"],
     missingAccountScopes: { reason: MISSING_ACCOUNT_SCOPE_REASON, docsPath: SETUP },
     post: [
-      { key: "like_count", label: "Likes" },
+      { key: "tiktok_like_count", label: "Likes" },
       { key: "comment_count", label: "Comments" },
       { key: "share_count", label: "Shares" },
       { key: "view_count", label: "Views" },
     ],
     account: [
-      { key: "follower_count", label: "Followers" },
+      { key: "tiktok_follower_count", label: "Followers" },
       { key: "likes_count", label: "Likes" },
       { key: "video_count", label: "Videos" },
     ],

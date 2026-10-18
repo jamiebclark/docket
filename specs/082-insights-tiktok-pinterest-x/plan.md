@@ -12,7 +12,13 @@ platforms, and it is **one repair, three readers and three generic hooks**, in t
 **The repair comes first, because nothing else can work.** TikTok's published post is addressed by
 a video id. What Docket stores in `post_targets.external_id` is the `publish_id` — an upload
 receipt (`src/providers/tiktok/publish.ts:439`). The real id *is* read one line earlier and thrown
-into an attempt row that retention eventually prunes. So: a nullable
+into an attempt row. Those rows are **never pruned** — `publish_attempts` has no retention anywhere
+(housekeeping prunes allowance uses, standing-series runs, settled occurrences, orphan credit holds,
+engagement items and metric snapshots, and `src/server/dal/attempts.ts` only inserts and selects);
+an attempt disappears only by cascade when its post target or project is deleted, and a deleted
+target has no insights to show. So the backfill reaches every historical publish whose status fetch
+returned ids, and "unrecoverable" is a genuine edge case — a publish that never reached the status
+fetch, or one predating `publicPostIds` being written at all — not an unknown fraction. So: a nullable
 `post_targets.public_post_id` column, a write-forward through the generic publish result (**G36**),
 a backfill from `publish_attempts.response_summary.publicPostIds` inside the same migration, and —
 for the targets where the id is gone or was never issued — an honest frozen state rather than a

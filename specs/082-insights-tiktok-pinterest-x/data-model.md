@@ -188,10 +188,10 @@ averaged or compared across the three blocks** (FR-047, SC-009).
 
 | Provider | Surface | Keys (platform's own names) | Labels |
 |---|---|---|---|
-| TikTok | post | `like_count`, `comment_count`, `share_count`, `view_count` | Likes, Comments, Shares, Views |
-| TikTok | account | `follower_count`, `likes_count`, `video_count` | Followers, Likes, Videos |
+| TikTok | post | `tiktok_like_count`, `comment_count`, `share_count`, `view_count` | Likes, Comments, Shares, Views |
+| TikTok | account | `tiktok_follower_count`, `likes_count`, `video_count` | Followers, Likes, Videos |
 | Pinterest | post | `IMPRESSION`, `PIN_CLICK`, `OUTBOUND_CLICK`, `SAVE` | Impressions, Pin clicks, Outbound clicks, Saves |
-| Pinterest | account | `follower_count`, `monthly_views` | Followers, Monthly views |
+| Pinterest | account | `pinterest_follower_count`, `monthly_views` | Followers, Monthly views |
 | X | post | `like_count`, `reply_count`, `retweet_count`, `quote_count`, `bookmark_count`, `impression_count` | Likes, Replies, Reposts, Quotes, Bookmarks, Impressions |
 | X | account | **none** — `account: []` | — (price UNVERIFIED, FR-043) |
 
@@ -200,3 +200,10 @@ why the keys stay provider-local and why no constant leaves a provider folder �
 rule, which this entry only has to not break. Every value is a `z.number().optional()` in the
 provider's own schema, so a metric the response omitted is **absent**: no row, no dash, no zero
 (FR-024, FR-034, SC-003).
+
+TikTok's and Pinterest's account readers request the platform's own `follower_count` field (shown
+above and in contracts/platform-readers-082.md §1/§2) but store it under `tiktok_follower_count` /
+`pinterest_follower_count`: the raw field name collides with Instagram's existing declared
+`follower_count` key, and TikTok's raw `like_count` collides with X's declared `like_count` — a
+declared key must stay disjoint across every provider, not just within one (FR-018, constitution V,
+caught by `tests/integration/insights/provider-seam.test.ts`).

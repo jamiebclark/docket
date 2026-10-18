@@ -26,7 +26,8 @@ matters — it needs an identifier it does not store. TikTok's published post is
 id**; what Docket keeps in `post_targets.external_id` is the `publish_id` from the Content Posting API
 (`src/providers/tiktok/publish.ts:439`). The real public id *is* read at `publish.ts:438` and then
 thrown into an attempt row (`publish_attempts.response_summary.publicPostIds`,
-`src/server/db/schema/attempts.ts:45`) that retention eventually prunes. So TikTok insights have
+`src/server/db/schema/attempts.ts:45`) — which is never pruned: `publish_attempts` has no retention
+anywhere, and an attempt disappears only by cascade when its post target or project is deleted. So TikTok insights have
 nothing to query with, and the repair comes first: a dedicated column, a backfill from whatever
 attempt rows survive, a write-forward at publish time, and — for the targets where the id is simply
 gone or was never issued — an honest "Docket cannot read this post's numbers" rather than a guess
@@ -206,7 +207,7 @@ action at all, and the account history it starts accruing is what entry 4 needs.
 P1 because no screen displays account numbers yet (080's known gap).
 
 **Independent Test**: With a mocked `/v5/user_account`, run the account poll for a Pinterest account
-whose stored grant contains only today's three scopes, and assert a snapshot row with `follower_count`
+whose stored grant contains only today's three scopes, and assert a snapshot row with `pinterest_follower_count`
 and `monthly_views`. Separately, with `pins:read` absent, assert no pin analytics call is made and the
 post panel names the missing permission.
 
@@ -670,9 +671,15 @@ carrying no scope and assert the stored grant is left untouched.
   exact maximum span allowed is a research item (FR-002) and the window is clamped to whatever it says.
 - **Account metric snapshots remain displayed nowhere** — that is 080's deliberate gap, and entry 4
   owns the screen. Pinterest account capture is still worth shipping now so entry 4 inherits history.
-- **Attempt retention limits the backfill.** `publish_attempts` are pruned by the existing housekeeping
-  retention, so an unknown fraction of older TikTok targets is unrecoverable. The spec requires honesty
-  about them, not recovery of them.
+- **The backfill reaches every historical publish, not a retention window.** `publish_attempts` is
+  **never pruned** — housekeeping prunes allowance uses, standing-series runs, settled occurrences,
+  orphan credit holds, engagement items and metric snapshots, and `src/server/dal/attempts.ts` only
+  inserts and selects. An attempt row disappears only by cascade when its post target or project is
+  deleted, and a deleted target has no insights to show. So every TikTok target whose status fetch
+  returned ids is recoverable, and the honest-frozen state is for a true edge case — a publish that
+  never reached the status fetch, or one predating `publicPostIds` being written into the summary —
+  rather than an unknown fraction. Do not design a partial-recovery story around a window that does
+  not exist; do assert the edge case, and count it.
 - **No live platform call happens in any phase.** Everything is proved with mocked HTTP; the facts that
   genuinely need a live call are parked (below) and the features that depend on them are declared
   unavailable until the answers land.

@@ -232,6 +232,8 @@ export const postTargets = pgTable(
     lastError: text("last_error"),
     externalId: text("external_id"),
     externalUrl: text("external_url"),
+    /** TikTok's queryable post id (G35); independent of `externalId`, which stays the publish receipt. */
+    publicPostId: text("public_post_id"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     resolvedByUserId: uuid("resolved_by_user_id").references(() => user.id, { onDelete: "set null" }),
     resolvedByApiKeyId: uuid("resolved_by_api_key_id"),
@@ -260,6 +262,10 @@ export const postTargets = pgTable(
       sql`(${t.consentAt} IS NULL) = (${t.consentFingerprint} IS NULL) AND (${t.consentDetails} IS NULL OR ${t.consentFingerprint} IS NOT NULL)`,
     ),
     check("post_targets_lease_pair", sql`(${t.leaseUntil} IS NULL) = (${t.leaseOwner} IS NULL)`),
+    check(
+      "post_targets_public_post_id_len",
+      sql`${t.publicPostId} IS NULL OR char_length(${t.publicPostId}) BETWEEN 1 AND 64`,
+    ),
     check(
       "post_targets_live_has_schedule",
       sql`${t.status} NOT IN ('scheduled','publishing') OR (${t.nextAttemptAt} IS NOT NULL AND ${t.scheduledAt} IS NOT NULL AND ${t.scheduleKind} IS NOT NULL)`,

@@ -214,6 +214,16 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
           expect(row!.source).not.toContain("UNVERIFIED");
         });
       }
+
+      if (provider.key === "pinterest") {
+        it("documents the 1000/86400s insights read budget as CONFIRMED, not UNVERIFIED (082 T073)", () => {
+          const row = rows.find((r) => r.category === "note: insights read budget");
+          expect(row).toBeDefined();
+          expect(row!.value).toBe("1000 / 86400 s");
+          expect(row!.source).toContain("CONFIRMED");
+          expect(row!.source).not.toContain("UNVERIFIED");
+        });
+      }
     });
   }
 });

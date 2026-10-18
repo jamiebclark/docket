@@ -126,6 +126,31 @@ pins and nothing that creates or edits boards. The account is named after its bu
 username if no business name is set. Access tokens are renewed automatically; **Needs reconnecting** means Pinterest
 rejected the refresh token.
 
+## Insights
+
+Every connected account's followers and monthly views (see [insights.md](insights.md)) begin
+reading automatically — no reconnect, no flag — because `user_accounts:read` is already part of
+step 3's scopes.
+
+A pin's analytics (impressions, pin clicks, outbound clicks, saves) need one more permission,
+`pins:read`, which Docket does not request until the deployer opts in:
+
+1. Add `pins:read` to the app's scopes, the same way as step 3's.
+2. Set `PINTEREST_INSIGHTS_SCOPES=true` in `.env` and restart. The next Pinterest connect or
+   reconnect then asks for `pins:read` in the same dialog; an account connected before the flag
+   was on keeps its existing grant until it reconnects.
+
+**Trial access and pin analytics.** While the app has Trial access, every pin it creates is
+visible only to its own creator (see [Trial rate limits](#trial-rate-limits) below). Whether a
+Trial app's own pins return analytics to their own creator is an owed live check; either way, a
+pin whose analytics come back with no declared metric is **not an error** — Docket shows "reports
+no numbers for this post" and nothing else, the same honest state a pin too new to have any
+numbers would show.
+
+**`PINNER_DATA_ACCESS_DENIED`.** Pinterest refuses pin analytics for a non-business account on an
+app registered on or after 2026-09-14 with this error. Docket shows it on the post as "needs a
+business account with pinner-data access", never flags the account, and never retries tightly.
+
 ## Trial rate limits
 
 While the app has Trial access, Pinterest caps the whole app at **300 a day** for pin creations (`org_write`,
@@ -149,9 +174,10 @@ Pinterest's real API. The steps above follow Pinterest's published documentation
 
 ## What this entry does not do
 
-Video pins, carousel pins, board management (creating or editing boards), secret or protected boards, analytics,
-product/rich pins, catalogs, ads, Pinterest Business Access, AI-disclosure labels, automatic detection of Trial vs.
-Standard access, and modelling the shared Trial daily cap as an enforced limit.
+Video pins, carousel pins, board management (creating or editing boards), secret or protected boards, lifetime
+metrics or video metrics on pin analytics, product/rich pins, catalogs, ads, Pinterest Business Access,
+AI-disclosure labels, automatic detection of Trial vs. Standard access, and modelling the shared Trial daily cap as
+an enforced limit.
 
 ## Owed live checks
 
