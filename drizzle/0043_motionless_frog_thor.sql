@@ -1,2 +1,0 @@
-ALTER TABLE "engagement_drafts" DROP CONSTRAINT "engagement_drafts_decision_names_person";--> statement-breakpoint
-ALTER TABLE "engagement_drafts" ADD CONSTRAINT "engagement_drafts_decision_names_person" CHECK ("engagement_drafts"."review_state" IN ('needs_review', 'discarded') OR "engagement_drafts"."reviewed_at" IS NOT NULL);

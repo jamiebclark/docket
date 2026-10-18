@@ -302,13 +302,6 @@
       "when": 1792269164976,
       "tag": "0042_yummy_swordsman",
       "breakpoints": true
-    },
-    {
-      "idx": 43,
-      "version": "7",
-      "when": 1792328726659,
-      "tag": "0043_motionless_frog_thor",
-      "breakpoints": true
     }
   ]
 }
