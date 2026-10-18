@@ -138,6 +138,7 @@ export const threadsConnectGroup: OAuthConnectGroup = {
           settings: {},
           credentials,
           expiresAt: new Date(expiresAt),
+          ...(short.granted ? { grantedScopes: short.granted } : {}),
           ...(notes ? { notes } : {}),
         },
       ],

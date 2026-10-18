@@ -2,8 +2,11 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// FR-010: grantedScopes is written in exactly two places — the connect write boundary and the
-// refresh write boundary — never anywhere else (data-model.md §2).
+// FR-010: the grantedScopes *column* is written in exactly two places — the connect write boundary
+// and the refresh write boundary — never anywhere else (data-model.md §2). Providers under
+// `src/providers/` legitimately assign `grantedScopes` on their own `ConnectCandidate`/`RefreshResult`
+// value (contracts/granted-scopes.md §1, T046-T052): that is the field flowing *into* the write
+// boundary, not a write of the column itself, so those files are excluded from this scan.
 
 const ROOT = process.cwd();
 const SRC = join(ROOT, "src");
@@ -11,8 +14,10 @@ const SRC = join(ROOT, "src");
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.ts$/.test(name) && !/\.test\.ts$/.test(name)) out.push(p);
+    if (statSync(p).isDirectory()) {
+      if (relative(SRC, p).replace(/\\/g, "/") === "providers") continue;
+      walk(p, out);
+    } else if (/\.ts$/.test(name) && !/\.test\.ts$/.test(name)) out.push(p);
   }
   return out;
 }

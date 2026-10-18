@@ -1,3 +1,4 @@
+import { GRANTED_SCOPE_PATTERN } from "../../lib/granted-scopes";
 import type { CandidatesResult, ConnectCandidate } from "../types";
 import { graphStepError } from "./errors";
 import { graphList, graphRequest, type MetaApp } from "./graph";
@@ -62,12 +63,13 @@ function candidatesForPage(raw: unknown): ConnectCandidate[] {
  * (docs/accounts.md). Those Pages still resolve by id, so the ids are taken from `/debug_token`,
  * which needs an app token rather than a user token.
  *
- * Best effort: any failure returns no ids and leaves the `/me/accounts` listing as the only source.
+ * Best effort: any failure returns no ids and no granted scopes, leaving the `/me/accounts`
+ * listing as the only source and `grantedScopes` unset (contracts/granted-scopes.md §2).
  */
-async function grantedPageIds(
+async function grantedPageAccess(
   app: MetaApp,
   input: { userToken: string; appId: string; appSecret: string; signal: AbortSignal },
-): Promise<string[]> {
+): Promise<{ ids: string[]; scopes: readonly string[] | undefined }> {
   const outcome = await graphRequest(app, {
     method: "GET",
     path: "/debug_token",
@@ -75,19 +77,25 @@ async function grantedPageIds(
     token: `${input.appId}|${input.appSecret}`,
     signal: input.signal,
   });
-  if (outcome.kind !== "ok") return [];
-  const scopes = (outcome.body as { data?: { granular_scopes?: unknown } } | null)?.data?.granular_scopes;
-  if (!Array.isArray(scopes)) return [];
+  if (outcome.kind !== "ok") return { ids: [], scopes: undefined };
+  const data = (outcome.body as { data?: { granular_scopes?: unknown; scopes?: unknown } } | null)?.data;
+  const granular = data?.granular_scopes;
   const ids = new Set<string>();
-  for (const entry of scopes) {
-    const scope = (entry as { scope?: unknown } | null)?.scope;
-    if (typeof scope !== "string" || !PAGE_SCOPES.has(scope)) continue;
-    // No `target_ids` means the scope was granted for everything, which the listing already covers.
-    const targets = (entry as { target_ids?: unknown }).target_ids;
-    if (!Array.isArray(targets)) continue;
-    for (const t of targets) if (typeof t === "string" && ID.test(t)) ids.add(t);
+  if (Array.isArray(granular)) {
+    for (const entry of granular) {
+      const scope = (entry as { scope?: unknown } | null)?.scope;
+      if (typeof scope !== "string" || !PAGE_SCOPES.has(scope)) continue;
+      // No `target_ids` means the scope was granted for everything, which the listing already covers.
+      const targets = (entry as { target_ids?: unknown }).target_ids;
+      if (!Array.isArray(targets)) continue;
+      for (const t of targets) if (typeof t === "string" && ID.test(t)) ids.add(t);
+    }
   }
-  return [...ids];
+  const flat = data?.scopes;
+  const scopes = Array.isArray(flat)
+    ? flat.filter((s): s is string => typeof s === "string" && GRANTED_SCOPE_PATTERN.test(s))
+    : undefined;
+  return { ids: [...ids], scopes };
 }
 
 /** One Page by id, for an id the listing did not return. Null when it cannot be read. */
@@ -134,7 +142,7 @@ export async function listPageCandidates(
     return { ok: false, message: err?.error ?? "Could not list Facebook Pages." };
   }
 
-  const candidates: ConnectCandidate[] = [];
+  let candidates: ConnectCandidate[] = [];
   const seen = new Set<string>();
   for (const raw of res.items) {
     const mapped = candidatesForPage(raw);
@@ -145,13 +153,13 @@ export async function listPageCandidates(
 
   // Pages the listing omits (Business Portfolio-owned) still resolve by id.
   if (input.appId && input.appSecret) {
-    const granted = await grantedPageIds(app, {
+    const granted = await grantedPageAccess(app, {
       userToken: input.userToken,
       appId: input.appId,
       appSecret: input.appSecret,
       signal: input.signal,
     });
-    for (const id of granted.filter((g) => !seen.has(g)).slice(0, MAX_GRANTED_LOOKUPS)) {
+    for (const id of granted.ids.filter((g) => !seen.has(g)).slice(0, MAX_GRANTED_LOOKUPS)) {
       const body = await pageById(app, { id, userToken: input.userToken, signal: input.signal });
       if (!body) continue;
       const mapped = candidatesForPage(body);
@@ -159,6 +167,10 @@ export async function listPageCandidates(
       if (!page) continue;
       seen.add(page.externalId);
       candidates.push(...mapped);
+    }
+    // One login granted the token's scopes; every candidate it produced carries the same list.
+    if (granted.scopes) {
+      candidates = candidates.map((c) => ({ ...c, grantedScopes: granted.scopes }));
     }
   }
 

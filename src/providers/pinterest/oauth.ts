@@ -38,6 +38,8 @@ export interface PinterestRawTokens {
   refreshExpiresInSeconds: number | null;
   /** Epoch seconds (refresh replies only), or null when the reply gave none. */
   refreshExpiresAtSeconds: number | null;
+  /** Null when the reply does not carry a `scope` field (R6 is open). */
+  scopes: string[] | null;
 }
 
 export type PinterestTokenResult = ({ ok: true } & PinterestRawTokens) | PinterestOAuthFailure;
@@ -87,12 +89,14 @@ function tokensFrom(body: unknown): PinterestRawTokens | null {
   if (!accessToken) return null;
   const refreshToken = typeof data.refresh_token === "string" && data.refresh_token ? data.refresh_token : null;
   const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const scope = typeof data.scope === "string" && data.scope ? data.scope : null;
   return {
     accessToken,
     refreshToken,
     expiresInSeconds: num(data.expires_in),
     refreshExpiresInSeconds: num(data.refresh_token_expires_in),
     refreshExpiresAtSeconds: num(data.refresh_token_expires_at),
+    scopes: scope ? scope.split(/[,\s]+/).filter(Boolean) : null,
   };
 }
 

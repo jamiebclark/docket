@@ -93,6 +93,14 @@ describe("exchangeCode", () => {
     });
     expect(c!.expiresAt).toEqual(new Date(NOW.getTime() + 31_536_000_000));
     expect(c!.notes).toBeUndefined();
+    expect(c!.grantedScopes).toEqual(["user.info.basic", "video.publish"]);
+  });
+
+  it("falls back to the token reply's scope for grantedScopes when the callback has none (FR-012)", async () => {
+    fake.on("POST", TOKEN, { kind: "ok", body: tokenReply({ scope: "user.info.basic,video.publish" }) });
+    fake.on("POST", CREATOR, { kind: "ok", body: creatorReply() });
+    const r = await run({});
+    expect(r.ok && r.candidates[0]?.grantedScopes).toEqual(["user.info.basic", "video.publish"]);
   });
 
   it("adds the unaudited note on an unaudited install and estimates a missing refresh expiry", async () => {

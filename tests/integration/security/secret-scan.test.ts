@@ -762,6 +762,34 @@ describe("secret scan (FR-020, SC-005)", () => {
       await genEnv.scope.standingSeries.update(id, { enabled: false });
     }
 
+    // Granted scopes (T046-T052): one account per provider carrying a scripted grantedScopes value,
+    // plus a token-shaped reply that must normalize to null rather than being stored (FR-015, FR-056).
+    const REJECTED_TOKEN = "EAAscanRejectedTokenShapedValue9Qx7Zc3";
+    const repos = forSchedulerProject(env.project.id);
+    for (const providerKey of ["facebook", "instagram", "threads", "x", "tiktok", "pinterest"] as const) {
+      await repos.accounts.upsertConnected({
+        providerKey,
+        displayName: `Scan ${providerKey}`,
+        externalAccountId: `scan-${providerKey}-${randomUUID()}`,
+        settings: {},
+        credentialsEncrypted: accounts.encryptCredentials(randomUUID(), { token: `scan-${providerKey}-credential` }),
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        grantedScopes: [`${providerKey}_read_insights`],
+      });
+    }
+    const rejected = await repos.accounts.upsertConnected({
+      providerKey: "pinterest",
+      displayName: "Scan pinterest (rejected)",
+      externalAccountId: `scan-pinterest-rejected-${randomUUID()}`,
+      settings: {},
+      credentialsEncrypted: accounts.encryptCredentials(randomUUID(), { token: "scan-pinterest-rejected-credential" }),
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: [REJECTED_TOKEN], // token-shaped: fails GRANTED_SCOPE_PATTERN, so the whole list is rejected
+    });
+    expect((await repos.accounts.get(rejected.id))?.grantedScopes).toBeNull();
+
     // Stored rows.
     pieces.push({ place: "publish_attempts", text: JSON.stringify(await db.select().from(publishAttempts).where(eq(publishAttempts.projectId, env.project.id))) });
     pieces.push({ place: "post_targets", text: JSON.stringify(await db.select().from(postTargets).where(eq(postTargets.projectId, env.project.id))) });
@@ -782,6 +810,7 @@ describe("secret scan (FR-020, SC-005)", () => {
       ...[ACCESS, REFRESH, NEW_ACCESS, NEW_REFRESH].map((value, i) => ({ name: `bluesky token ${i + 1}`, value })),
       { name: "setup password", value: SETUP_PASSWORD },
       { name: "session token", value: sessionToken },
+      { name: "rejected token-shaped granted scope", value: REJECTED_TOKEN },
       ...projectLlmSecrets,
     ];
     // Something was captured from every kind of place, so an empty corpus cannot pass.
