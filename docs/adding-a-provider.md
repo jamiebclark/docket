@@ -68,6 +68,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G18 | the group's own message in the accounts banner | 4 |
 | G23 | `afterPublish`, `credentialsInvalid` on `ambiguous` | 6, 7 |
 | G24 | `continue` may carry `wait`, shown as `lastError` | 7 |
+| G30 | `insights?`, post and account metric capture | 21 |
 
 ## 3. Capabilities and counting rules
 
@@ -544,3 +545,43 @@ refresh path `publish.ts` already has. `src/providers/mock/index.ts` declares al
 variant, so the inbox's capability seam is testable with no platform credentials at all — read that one first. See
 `docs/engagement.md` for what the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md`
 for the full contract.
+
+## 21. Reading post and account metrics (`insights`, 080)
+
+`insights` is one more optional member on `SocialProvider`, the same shape as `engagement`: a provider opts in by
+declaring the post and account keys it reports, with the platform's own name and label for each, and nothing
+outside its own folder changes — not the poller, the panel, the schema, or the retention pass.
+
+```ts
+insights?: {
+  declaration: {
+    post: readonly { key: string; label: string }[];   // the platform's own field names and labels
+    account: readonly { key: string; label: string }[];
+    maxPostsPerRead: number;                            // most posts answered in one readPostMetrics call
+    readBudget: { count: number; windowSeconds: number }; // the per-account allowance, shared with publishing
+    unavailable?: { reason: string; docsPath?: string }; // declared but not readable on this install
+  };
+  postMetricsSchema: z.ZodType;    // your own closed shape of a post snapshot's `metrics`
+  accountMetricsSchema: z.ZodType; // your own closed shape of an account snapshot's `metrics`
+  readPostMetrics(ctx): Promise<PostMetricsReadResult>;
+  readAccountMetrics(ctx): Promise<AccountMetricsReadResult>;
+};
+```
+
+**Rules, in addition to the usual ones (section 11, no secrets; section 10, mocked HTTP only):**
+
+- A key is stored verbatim under its declared name; its label is rendered as given, never translated or grouped.
+  A key a response did not contain renders nothing — no row, no dash, no `0` — so never invent a zero.
+- `maxPostsPerRead` caps one call's batch; `readBudget` is split with publishing, not added on top of it.
+- `unavailable` means the surface is **never claimed**: no call is ever attempted, and the panel shows `reason`
+  with a link to `docsPath`.
+- `readPostMetrics`/`readAccountMetrics` never throw: every platform failure maps to one of the non-`page` result
+  kinds (`retryable_error`, `fatal_error`, `rate_limited`, `credentials_invalid`), the same vocabulary `advance()`
+  uses, with no credential or token anywhere in the returned message.
+
+`src/providers/mock/insights.ts` declares both post and account keys plus every scripted failure shape and an
+`unavailable` variant, so the whole subsystem is testable with no platform credentials at all — read that one
+first. `src/providers/bluesky/insights.ts` is the one real implementation so far: `app.bsky.feed.getPosts` for
+post metrics and `app.bsky.actor.getProfile` for account metrics, reusing the account's existing session with no
+new permission. See `docs/insights.md` for what the feature looks like to a member, and
+`specs/080-insights-core-bluesky/contracts/provider-insights.md` for the full contract.

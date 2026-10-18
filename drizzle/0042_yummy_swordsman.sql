@@ -1,0 +1,1 @@
+CREATE INDEX "post_targets_no_external_id_idx" ON "post_targets" USING btree ("social_account_id") WHERE "post_targets"."status" = 'published' AND "post_targets"."external_id" IS NULL AND "post_targets"."resolved_at" IS NOT NULL;

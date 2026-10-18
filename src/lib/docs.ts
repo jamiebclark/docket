@@ -9,6 +9,7 @@ export type DocPage =
   | "deployment"
   | "generator"
   | "getting-started"
+  | "insights"
   | "limits"
   | "meta-setup"
   | "n8n"

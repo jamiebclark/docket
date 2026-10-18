@@ -17,6 +17,7 @@ export type MockEngagementItem = z.infer<typeof mockEngagementItemSchema>;
 
 export const mockEngagementSendBehaviours = ["sent", "duplicate", "ambiguous", "fatal_error", "credentials_invalid"] as const;
 export const mockEngagementReadBehaviours = ["page", "retryable_error", "rate_limited", "credentials_invalid", "cursor_lost", "fatal_error"] as const;
+export const mockInsightsReadBehaviours = ["page", "retryable_error", "rate_limited", "credentials_invalid", "fatal_error", "unavailable"] as const;
 
 export const mockBehaviours = [
   "succeed",
@@ -48,6 +49,20 @@ export const mockSettingsSchema = z.object({
   engagementReadBehaviour: z.enum(mockEngagementReadBehaviours).default("page"),
   /** Serves pages normally through this many pages, then returns `engagementReadBehaviour` instead — so a run can insert items on one page and stop on the next. */
   engagementReadFailAfterPages: z.number().int().min(1).max(100).optional(),
+  /** The insights surface is declared but unavailable, with a reason and no call ever made (FR-003). */
+  insightsUnavailable: z.boolean().default(false),
+  /** The values a post metrics read returns, for every requested id not listed in `insightsGoneExternalIds`. */
+  insightsPostMetrics: z.record(z.string(), z.number()).default({ likeCount: 4, repostCount: 1 }),
+  /** The values an account metrics read returns. */
+  insightsAccountMetrics: z.record(z.string(), z.number()).default({ followersCount: 100 }),
+  /** These post ids come back `kind: "gone"` instead of `metrics`. */
+  insightsGoneExternalIds: z.array(z.string()).default([]),
+  insightsPostReadBehaviour: z.enum(mockInsightsReadBehaviours).default("page"),
+  insightsAccountReadBehaviour: z.enum(mockInsightsReadBehaviours).default("page"),
+  /** A response holding a key the declaration omits — must be dropped before storage. */
+  insightsReturnUndeclaredKey: z.boolean().default(false),
+  /** A payload over the 2,000-byte size check — must be refused with no partial row. */
+  insightsOversizedPayload: z.boolean().default(false),
 });
 
 export type MockSettings = z.infer<typeof mockSettingsSchema>;

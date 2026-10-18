@@ -283,10 +283,50 @@ Use a paid always-on service or another host for real use.
 - If it is stale, check: the worker container logs; that `TICK_SECRET` is set when cron is the trigger; and the cron schedule.
 - If `TICK_SECRET` is unset and cron is the only trigger, every call is refused and the banner appears.
 
-## 11. Behind a TLS-intercepting proxy (build only)
+## 11. Nobody can sign in
+
+Password reset needs two things that are not always available at the same time: a working mail server,
+and a working path back into the app. If either is missing — or if a proxy in front of Docket is
+refusing requests — every route back in is closed at once. `BOOTSTRAP_ADMIN_EMAIL` does not help,
+because first-run bootstrap only runs on an install with no accounts at all.
+
+Set a password directly instead. Run it on the host, with `DATABASE_URL` pointing at the live database:
+
+```sh
+pnpm set-password --list                             # the accounts that exist
+pnpm set-password --email you@example.com            # prompts for the new password
+```
+
+It prints the database name first. **Check that line.** An environment variable already set in the
+shell beats `--env-file`, so this can address a different database than `.env` names — and a tool that
+truthfully reports "no accounts" for a database you did not mean to ask about is hard to argue with.
+
+Existing sessions are left alone, so anyone already signed in stays signed in. Change the password
+again from `/account` afterwards if it passed through a shell history, a chat window or a ticket.
+
+**If you are editing the database by hand instead**, two columns matter and only one is obvious.
+`sign_in` matches a credential account on `provider_id = 'credential'` **and `account_id = user_id`**,
+while the password-reset path looks one up by `user_id` alone. The two can disagree: a row whose
+`account_id` does not equal the user id resets happily and can never sign in, and looks perfectly
+normal in a casual `SELECT`. Always read back the affected row count — `UPDATE 0` and `UPDATE 1` look
+identical if nobody checks.
+
+**Before assuming the password is wrong**, check that requests are arriving at all. A proxy that
+forwards `GET` but not request bodies takes sign-in and reset down together while every page still
+loads, which reads exactly like a bad password:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3000/api/health -d 'x=1'   # expect 405
+```
+
+`405` means Docket is answering. A `502` means something in front of it is not forwarding the body,
+and no password will work until that is fixed (seen in production from a cloudflared connector four
+years out of date).
+
+## 12. Behind a TLS-intercepting proxy (build only)
 
 If your network intercepts TLS, build with `--secret id=extra_ca,src=<pem>`. This is machine-specific and not needed elsewhere.
 
-## 12. Netlify
+## 13. Netlify
 
 Netlify is **not supported**: Docket needs an always-on worker or cron and long-running Node processes. No instructions are given.

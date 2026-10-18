@@ -12,6 +12,7 @@ import { groupAttemptRuns } from "@/server/services/failures";
 import { preparingVideoLabel } from "@/server/services/posts/view";
 import { AnnounceProvider } from "@/components/ui/Announce";
 import { AttemptLog } from "@/components/targets/AttemptLog";
+import { PerformancePanel } from "@/components/targets/PerformancePanel";
 import { TargetResolution } from "@/components/targets/TargetResolution";
 import { safeExternalHref } from "@/lib/safe-redirect";
 import { DeletePostButton } from "./DeletePostButton";
@@ -172,6 +173,8 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
               <AttemptLog runs={groupAttemptRuns(t.attempts)} timeZone={tz} caption={`Attempts for ${t.accountName}`} />
             </div>
           )}
+
+          <PerformancePanel view={t.insights} platform={t.providerName} timeZone={tz} />
         </section>
       ))}
     </article>

@@ -1,0 +1,49 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { listProviders } from "../../../src/providers/registry";
+
+// After tests/integration/engagement/provider-seam.test.ts (FR-061, SC-013): the generic insights
+// layer must be writable for a second platform by adding one provider folder and nothing else, so
+// it must never name a provider key or a platform metric key.
+
+const PROVIDER_KEYS = listProviders().map((p) => p.key);
+
+const METRIC_KEYS = [
+  ...new Set(
+    listProviders().flatMap((p) => [
+      ...(p.insights?.declaration.post?.map((k) => k.key) ?? []),
+      ...(p.insights?.declaration.account?.map((k) => k.key) ?? []),
+    ]),
+  ),
+];
+
+const SEAM_MODULES = [
+  "src/lib/insights/schedule.ts",
+  "src/lib/insights/panel.ts",
+  "src/server/scheduler/insights-poll.ts",
+  "src/server/scheduler/insights-budget.ts",
+  "src/server/dal/insights.ts",
+  "src/server/dal/insights-claims.ts",
+  "src/server/services/insights/retention.ts",
+  "src/server/services/posts/view.ts",
+  "src/components/targets/PerformancePanel.tsx",
+];
+
+describe("provider insights seam (FR-061, SC-013)", () => {
+  it("names at least one provider key and one metric key (the scan itself works)", () => {
+    expect(PROVIDER_KEYS.length).toBeGreaterThan(0);
+    expect(METRIC_KEYS.length).toBeGreaterThan(0);
+  });
+
+  it("keeps every provider key and every platform metric key out of the generic insights modules", () => {
+    for (const path of SEAM_MODULES) {
+      const source = readFileSync(path, "utf8");
+      for (const key of PROVIDER_KEYS) {
+        expect(source.includes(`"${key}"`), `${path} must not mention the provider key ${key}`).toBe(false);
+      }
+      for (const key of METRIC_KEYS) {
+        expect(source.includes(key), `${path} must not mention the platform metric key ${key}`).toBe(false);
+      }
+    }
+  });
+});
