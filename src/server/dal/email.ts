@@ -230,7 +230,10 @@ export async function claimDuePeople(db: Database, opts: { limit: number; leaseS
         .select()
         .from(s)
         .where(and(sql`${s.cadence} <> 'off'`, isNull(s.pausedAt), isNull(s.leaseOwner), lte(s.nextDueAt, opts.now)))
-        .orderBy(asc(s.nextDueAt))
+        // `next_due_at` alone is not a total order: two people due in the same millisecond tie, and the
+        // claim is `limit`-bounded, so which of them is claimed would be left to the plan. Ordering by
+        // the user id as well makes a tie resolve the same way every time.
+        .orderBy(asc(s.nextDueAt), asc(s.userId))
         .limit(opts.limit)
         .for("update", { skipLocked: true });
       const claimed: ClaimedPerson[] = [];
