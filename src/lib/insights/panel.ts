@@ -15,6 +15,8 @@ export type TargetInsightsView =
   | { state: "needs_reconnect"; reason: string; docsPath?: string; canReconnect: boolean }
   | { state: "no_external_id" }
   | { state: "gone"; snapshot: Snapshot | null }
+  /** FR-042. Terminal for an ephemeral subject past its lifetime; numbers captured while it lived are final, never a failure. */
+  | { state: "expired"; snapshot: Snapshot | null }
   | { state: "failing"; since: Date; reason: string; snapshot: Snapshot | null }
   | { state: "not_polled_yet"; firstReadDueAt: Date | null }
   | { state: "nothing_reported"; capturedAt: Date }
@@ -71,6 +73,7 @@ export function buildTargetInsightsView(input: BuildTargetInsightsViewInput): Ta
   }
   if (externalId === null) return { state: "no_external_id" };
   if (pollState?.frozenReason === "gone") return { state: "gone", snapshot: snapshotFor(declaration, snapshot) };
+  if (pollState?.frozenReason === "expired") return { state: "expired", snapshot: snapshotFor(declaration, snapshot) };
   if (pollState && pollState.consecutiveFailures > 0) {
     return { state: "failing", since: pollState.failingSince!, reason: pollState.lastError ?? "", snapshot: snapshotFor(declaration, snapshot) };
   }

@@ -147,6 +147,31 @@ describe("the performance panel on the post detail page (contracts/panel.md)", (
     expect(markup).toContain(">2<");
   });
 
+  it("a frozen-expired target shows every snapshot captured while it lived, with no failure styling (US5-AS4, FR-042)", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    const { post, target } = await publishedTarget(ctx.project.id, account.id);
+    const repos = forSchedulerProject(ctx.project.id);
+    await repos.postMetricSnapshots.insertIfAbsent({
+      postTargetId: target.id,
+      socialAccountId: account.id,
+      providerKey: "mock",
+      capturedAt: NOW,
+      metrics: { likeCount: 3 },
+    });
+    await getDb()
+      .insert(postMetricPollStates)
+      .values({ postTargetId: target.id, projectId: ctx.project.id, socialAccountId: account.id, frozenAt: NOW, frozenReason: "expired", nextPollAt: null });
+
+    const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));
+    const markup = await html(page);
+
+    expect(markup).toContain("This story has expired; these numbers are final.");
+    expect(markup).toContain(">3<");
+    expect(markup).toContain("As of");
+    expect(markup).not.toMatch(/failing|Reads have been failing/i);
+  });
+
   it("a Meta-like account with no permission renders permission_not_requested, with the guide link and no number, dash or zero (US1-AS3)", async () => {
     const ctx = await createProjectWithMembers();
     const account = await createMockAccount(ctx.project.id, {}, { providerKey: notRequestedProvider.key });

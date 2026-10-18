@@ -13,7 +13,7 @@ import {
 import { forSchedulerProject, type ClaimedAccount } from "../dal/scheduler";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { decryptCredentials } from "../services/accounts";
-import { nextAccountPollAt, nextPostPollAt } from "../../lib/insights/schedule";
+import { nextAccountPollAt, postPollDecision } from "../../lib/insights/schedule";
 import { nextRetryAt } from "./backoff";
 import { insightsConfig, type SchedulerConfig } from "./config";
 import { markInvalidEmitting } from "./credentials";
@@ -26,6 +26,8 @@ export interface InsightsPollCounts {
   postSnapshotsWritten: number;
   accountSnapshotsWritten: number;
   targetsFrozen: number;
+  targetsFrozenExpired: number;
+  targetsFrozenSettled: number;
   postsGone: number;
   targetsSkippedNoExternalId: number;
   deferredForAllowance: number;
@@ -43,6 +45,8 @@ export const emptyInsightsPollCounts = (): InsightsPollCounts => ({
   postSnapshotsWritten: 0,
   accountSnapshotsWritten: 0,
   targetsFrozen: 0,
+  targetsFrozenExpired: 0,
+  targetsFrozenSettled: 0,
   postsGone: 0,
   targetsSkippedNoExternalId: 0,
   deferredForAllowance: 0,
@@ -432,8 +436,19 @@ async function commitPostBatch(input: {
         metrics,
       });
       counts.postSnapshotsWritten++;
-      const next = nextPostPollAt({ publishedAt: t.publishedAt, lastCapturedAt: now, now, minIntervalMs: cfg.pollMinIntervalMs });
-      if (next === null) counts.targetsFrozen++;
+      const decision = postPollDecision({
+        publishedAt: t.publishedAt,
+        lastCapturedAt: now,
+        now,
+        minIntervalMs: cfg.pollMinIntervalMs,
+        chosenPostType: t.chosenPostType,
+        ephemeralPostTypes: insights.declaration.ephemeralPostTypes,
+      });
+      if (decision.kind === "frozen") {
+        counts.targetsFrozen++;
+        if (decision.reason === "expired") counts.targetsFrozenExpired++;
+        else counts.targetsFrozenSettled++;
+      }
       await tx.postMetricPollStates.update(
         t.state.postTargetId,
         {
@@ -442,9 +457,9 @@ async function commitPostBatch(input: {
           lastError: null,
           lastPolledAt: now,
           lastCapturedAt: now,
-          nextPollAt: next,
-          frozenAt: next === null ? now : null,
-          frozenReason: next === null ? "settled" : null,
+          nextPollAt: decision.kind === "due" ? decision.at : null,
+          frozenAt: decision.kind === "frozen" ? now : null,
+          frozenReason: decision.kind === "frozen" ? decision.reason : null,
         },
         t.token,
       );

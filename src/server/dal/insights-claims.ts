@@ -24,6 +24,7 @@ export interface ClaimedPostMetricPoll {
   state: PostMetricPollStateRow;
   externalId: string;
   publishedAt: Date;
+  chosenPostType: string | null;
   token: string;
 }
 
@@ -187,7 +188,7 @@ export function claimDuePostMetricPolls(opts: {
           .onConflictDoNothing({ target: postMetricPollStates.postTargetId });
       }
       const rows = await exec
-        .select({ state: postMetricPollStates, externalId: postTargets.externalId, publishedAt: postTargets.publishedAt })
+        .select({ state: postMetricPollStates, externalId: postTargets.externalId, publishedAt: postTargets.publishedAt, chosenPostType: postTargets.chosenPostType })
         .from(postMetricPollStates)
         .innerJoin(postTargets, eq(postTargets.id, postMetricPollStates.postTargetId))
         .innerJoin(socialAccounts, eq(socialAccounts.id, postMetricPollStates.socialAccountId))
@@ -214,7 +215,7 @@ export function claimDuePostMetricPolls(opts: {
           .set({ pollLeaseUntil: leaseUntil, pollLeaseOwner: token })
           .where(eq(postMetricPollStates.postTargetId, row.state.postTargetId))
           .returning();
-        claimed.push({ state: updated!, externalId: row.externalId!, publishedAt: row.publishedAt!, token });
+        claimed.push({ state: updated!, externalId: row.externalId!, publishedAt: row.publishedAt!, chosenPostType: row.chosenPostType, token });
       }
       return claimed;
     });
