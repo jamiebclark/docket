@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { TargetMetrics } from "@/components/insights/TargetMetrics";
 import { ProblemsCallout } from "@/components/notifications/ProblemsCallout";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -157,6 +158,7 @@ export default async function PostsPage({ params, searchParams }: Props) {
                             {t.accountName}: {statusLabel(t.status)}
                             {t.note ? ` · ${t.note}` : ""}
                           </Badge>
+                          <TargetMetrics view={t.insights} platform={t.providerName} timeZone={tz} />
                         </li>
                       ))}
                     </ul>

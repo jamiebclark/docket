@@ -114,21 +114,21 @@ the fold, the trend reader, the comparison reader and `shape.ts`.
 
 ### Tests for User Story 1
 
-- [ ] T032 [P] [US1] Write `src/lib/insights/trend.test.ts`: a `cumulative` series rises and falls (US1.1); a `windowed` series collapses to at most one value per project-local day (US1.2, FR-013); a gap where no snapshot exists is absent, never interpolated or zeroed (US1.5, FR-014); an `unknown`-shaped key is absent entirely (US1.6, FR-004)
-- [ ] T033 [P] [US1] Write `tests/integration/insights/trends.test.ts` per [quickstart.md](quickstart.md) §2: all six assertions in that table, seeded against real Postgres
+- [X] T032 [P] [US1] Write `src/lib/insights/trend.test.ts`: a `cumulative` series rises and falls (US1.1); a `windowed` series collapses to at most one value per project-local day (US1.2, FR-013); a gap where no snapshot exists is absent, never interpolated or zeroed (US1.5, FR-014); an `unknown`-shaped key is absent entirely (US1.6, FR-004)
+- [X] T033 [P] [US1] Write `tests/integration/insights/trends.test.ts` per [quickstart.md](quickstart.md) §2: all six assertions in that table, seeded against real Postgres
 
 ### Implementation for User Story 1
 
-- [ ] T034 [US1] Create `src/lib/insights/trend.ts`: pure `rows + tz + range -> TrendSeries`, applying FR-013's "newest reading per project-local day" for `windowed` metrics and preserving gaps for `cumulative` ones, per [data-model.md](data-model.md) §7.1 (depends on T023, T028)
-- [ ] T035 [US1] Extend `src/server/dal/insights-read.ts` with `accountTrendRows(accountIds, from, to)`: the `UNION ALL` of `account_metric_snapshots` (via `jsonb_each`, filtered to `jsonb_typeof(value) = 'number'`) and `account_metric_rollups`, both arms pinned on `project_id = $1`, per [research.md](research.md) §6 and [contracts/fold.md](contracts/fold.md) §4
-- [ ] T036 [US1] Create `src/server/services/insights/view.ts`'s account-trends half: the one service function the page and the future API operation both call, producing `TrendSeries[]` plus `trendNotes` for platforms with no account metrics (FR-015) and for `unknown`-shaped keys (US1.3, US1.6)
-- [ ] T037 [P] [US1] Create `src/components/insights/TrendChart.tsx`: server component, inline SVG line/bar-per-period, its accompanying `<table>`, per [contracts/charts.md](contracts/charts.md) §1-§4
-- [ ] T038 [US1] Add `insights: "chart-line"` to `ICONS` in `scripts/generate-icons.mjs`, then run `pnpm icons` from inside this worktree
-- [ ] T039 [US1] Add one `NAV_SECTIONS` entry for Insights under the left nav's `Project` group in `src/components/shell/LeftNav.tsx`
-- [ ] T040 [US1] Create `src/app/p/[projectSlug]/insights/page.tsx`, `loading.tsx` and `error.tsx`: the page shell reachable at `/p/{slug}/insights`, requiring `scope.can({ post: ["view"] })`, rendering account trend charts with their date-range and "as of" text (FR-016), and an `EmptyState` naming what has to happen for a project with no data
-- [ ] T041 [US1] Append the chart-conventions section to `docs/design-system.md` per [contracts/charts.md](contracts/charts.md) §7 (appended at the end, never inserted — renumbering breaks inbound anchors)
-- [ ] T042 [US1] Run `node scripts/check-contrast.mjs`, confirm no new colour pair is reported (still 27)
-- [ ] T043 [US1] Write `tests/integration/insights/page.test.tsx`: the page's states, its tables, its `loading.tsx`/`error.tsx`, no chart component carrying `"use client"`, per [quickstart.md](quickstart.md) §6
+- [X] T034 [US1] Create `src/lib/insights/trend.ts`: pure `rows + tz + range -> TrendSeries`, applying FR-013's "newest reading per project-local day" for `windowed` metrics and preserving gaps for `cumulative` ones, per [data-model.md](data-model.md) §7.1 (depends on T023, T028)
+- [X] T035 [US1] Extend `src/server/dal/insights-read.ts` with `accountTrendRows(accountIds, from, to)`: the `UNION ALL` of `account_metric_snapshots` (via `jsonb_each`, filtered to `jsonb_typeof(value) = 'number'`) and `account_metric_rollups`, both arms pinned on `project_id = $1`, per [research.md](research.md) §6 and [contracts/fold.md](contracts/fold.md) §4
+- [X] T036 [US1] Create `src/server/services/insights/view.ts`'s account-trends half: the one service function the page and the future API operation both call, producing `TrendSeries[]` plus `trendNotes` for platforms with no account metrics (FR-015) and for `unknown`-shaped keys (US1.3, US1.6)
+- [X] T037 [P] [US1] Create `src/components/insights/TrendChart.tsx`: server component, inline SVG line/bar-per-period, its accompanying `<table>`, per [contracts/charts.md](contracts/charts.md) §1-§4
+- [X] T038 [US1] Add `insights: "chart-line"` to `ICONS` in `scripts/generate-icons.mjs`, then run `pnpm icons` from inside this worktree
+- [X] T039 [US1] Add one `NAV_SECTIONS` entry for Insights under the left nav's `Project` group in `src/components/shell/LeftNav.tsx`
+- [X] T040 [US1] Create `src/app/p/[projectSlug]/insights/page.tsx`, `loading.tsx` and `error.tsx`: the page shell reachable at `/p/{slug}/insights`, requiring `scope.can({ post: ["view"] })`, rendering account trend charts with their date-range and "as of" text (FR-016), and an `EmptyState` naming what has to happen for a project with no data
+- [X] T041 [US1] Append the chart-conventions section to `docs/design-system.md` per [contracts/charts.md](contracts/charts.md) §7 (appended at the end, never inserted — renumbering breaks inbound anchors)
+- [X] T042 [US1] Run `node scripts/check-contrast.mjs`, confirm no new colour pair is reported (still 27)
+- [X] T043 [US1] Write `tests/integration/insights/page.test.tsx`: the page's states, its tables, its `loading.tsx`/`error.tsx`, no chart component carrying `"use client"`, per [quickstart.md](quickstart.md) §6
 
 **Checkpoint**: `pnpm vitest run src/lib/insights/trend.test.ts tests/integration/insights/trends.test.ts tests/integration/insights/page.test.tsx` is green; `pnpm build` succeeds with the new route. User Story 1 is independently functional — this is the MVP.
 
@@ -142,15 +142,15 @@ the fold, the trend reader, the comparison reader and `shape.ts`.
 
 ### Tests for User Story 2
 
-- [ ] T044 [P] [US2] Write `tests/integration/insights/surfaces.test.tsx` per [quickstart.md](quickstart.md) §3: all thirteen `buildTargetInsightsView` states read identically on the overview, the posts list and the detail panel (FR-021); a no-external-id target states Docket has no post to read (US2.4); a project with no insights data issues no extra per-row query (US2.5); a 25-row, 3-target-per-post page's query count does not grow with rows (US2.6, SC-002)
+- [X] T044 [P] [US2] Write `tests/integration/insights/surfaces.test.tsx` per [quickstart.md](quickstart.md) §3: all thirteen `buildTargetInsightsView` states read identically on the overview, the posts list and the detail panel (FR-021); a no-external-id target states Docket has no post to read (US2.4); a project with no insights data issues no extra per-row query (US2.5); a 25-row, 3-target-per-post page's query count does not grow with rows (US2.6, SC-002)
 
 ### Implementation for User Story 2
 
-- [ ] T045 [US2] Create `src/components/insights/TargetMetrics.tsx`: one target's numbers for a list row or overview card, per-target and per-platform, each with its own label and "as of" (FR-022), rendering nothing (no row, no dash, no `0`) for an absent metric (FR-023)
-- [ ] T046 [US2] Hoist the two batched reads (`postMetricSnapshots.latestForTargets`, `postMetricPollStates.getMany`) that `getPostView` already makes into `src/server/services/posts/list.ts`, so the posts list gains the same two calls, bounded regardless of row count (FR-024)
-- [ ] T047 [US2] Hoist the same two batched reads into `src/server/services/overview.ts` for the project overview's recent published posts
-- [ ] T048 [US2] Wire `TargetMetrics` into the posts-list row rendering and the overview card rendering, both reusing `buildTargetInsightsView` from `src/lib/insights/panel.ts` unchanged (FR-021)
-- [ ] T049 [US2] Confirm neither the overview nor the posts list breaks or goes blank when insights data is unavailable or a read fails (FR-024, FR-074)
+- [X] T045 [US2] Create `src/components/insights/TargetMetrics.tsx`: one target's numbers for a list row or overview card, per-target and per-platform, each with its own label and "as of" (FR-022), rendering nothing (no row, no dash, no `0`) for an absent metric (FR-023)
+- [X] T046 [US2] Hoist the two batched reads (`postMetricSnapshots.latestForTargets`, `postMetricPollStates.getMany`) that `getPostView` already makes into `src/server/services/posts/list.ts`, so the posts list gains the same two calls, bounded regardless of row count (FR-024)
+- [X] T047 [US2] Hoist the same two batched reads into `src/server/services/overview.ts` for the project overview's recent published posts
+- [X] T048 [US2] Wire `TargetMetrics` into the posts-list row rendering and the overview card rendering, both reusing `buildTargetInsightsView` from `src/lib/insights/panel.ts` unchanged (FR-021)
+- [X] T049 [US2] Confirm neither the overview nor the posts list breaks or goes blank when insights data is unavailable or a read fails (FR-024, FR-074)
 
 **Checkpoint**: `pnpm vitest run tests/integration/insights/surfaces.test.tsx` is green, including the query-count assertion. User Stories 1 and 2 both work independently.
 

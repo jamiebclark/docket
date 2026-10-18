@@ -1,24 +1,73 @@
+import { findProvider } from "@/providers/registry";
+import { buildTargetInsightsView } from "@/lib/insights/panel";
 import { resolveLlmForProject } from "../llm/resolve";
 import * as clock from "../dal/clock";
 import { ForbiddenError } from "../dal/errors";
 import type { ProjectScope } from "../dal/scope";
-import { listAccounts } from "./accounts";
+import { insightsPermissionForAccount, listAccounts } from "./accounts";
 import { listConnectGroups } from "./connect";
 import { countNeedsDecision } from "./failures";
 import * as invitations from "./invitations";
 import * as members from "./members";
 import { listMedia, mediaStatus } from "./media";
-import { listPosts } from "./posts";
+import { listPosts, excerptOf } from "./posts";
 import { countReviewQueue } from "./review";
 import { getSchedulerHealth } from "./scheduler-health";
 import { listSlotCounts } from "./slots";
 import { listVoiceProfiles } from "./voice";
 import { managersOf } from "@/lib/roles/names";
-import { countsTowardFirstPost, type OverviewAccount, type OverviewFacts, type PostStatusKey, type UpcomingPost } from "@/lib/overview/derive";
+import {
+  countsTowardFirstPost,
+  type OverviewAccount,
+  type OverviewFacts,
+  type PostStatusKey,
+  type RecentPublishedPost,
+  type UpcomingPost,
+} from "@/lib/overview/derive";
 
 export type * from "@/lib/overview/derive";
 
 const UPCOMING_MAX = 5;
+const RECENT_PUBLISHED_MAX = 5;
+
+/**
+ * Recent published posts with their latest per-target numbers (FR-020, FR-024): one query for the
+ * post page, plus the same two batched reads `getPostView` and the posts list already make — bounded
+ * by `RECENT_PUBLISHED_MAX`, never by the project's total post count.
+ */
+async function getRecentPublished(scope: ProjectScope, now: Date): Promise<RecentPublishedPost[]> {
+  const { rows } = await scope.posts.list({ status: "published", limit: RECENT_PUBLISHED_MAX, offset: 0 });
+  const accounts = new Map((await scope.accounts.list()).map((a) => [a.id, a]));
+  const targetIds = rows.flatMap((r) => r.targets.map((t) => t.id));
+  const [latestSnapshots, pollStates] = await Promise.all([
+    scope.postMetricSnapshots.latestForTargets(targetIds),
+    scope.postMetricPollStates.getMany(targetIds),
+  ]);
+  return rows.map((r) => ({
+    id: r.post.id,
+    excerpt: excerptOf(r.post.baseText),
+    publishedAt: r.relevantAt,
+    targets: r.targets.map((t) => {
+      const account = accounts.get(t.socialAccountId);
+      const providerName = account ? (findProvider(account.providerKey)?.displayName ?? account.providerKey) : "";
+      return {
+        id: t.id,
+        accountName: account?.displayName ?? "Removed account",
+        providerName,
+        insights: buildTargetInsightsView({
+          status: t.status,
+          externalId: t.externalId,
+          declaration: (account ? findProvider(account.providerKey)?.insights?.declaration : undefined) ?? null,
+          providerName,
+          permission: account ? insightsPermissionForAccount(account, findProvider(account.providerKey), "post") : null,
+          snapshot: (latestSnapshots.get(t.id) as { capturedAt: Date; metrics: Record<string, unknown> } | undefined) ?? null,
+          pollState: pollStates.get(t.id) ?? null,
+          now,
+        }),
+      };
+    }),
+  }));
+}
 
 /** Read-only: whether any post counts toward the overview's first-post step. Requires view. */
 export async function hasFirstPost(scope: ProjectScope): Promise<boolean> {
@@ -52,7 +101,8 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
       media.enabled ? listMedia(scope, { limit: 1 }) : Promise.resolve(null),
     ]);
 
-  const slotCounts = new Map((await listSlotCounts(scope)).map((c) => [c.accountId, c]));
+  const [slotCountsRaw, recentPublished] = await Promise.all([listSlotCounts(scope), getRecentPublished(scope, now)]);
+  const slotCounts = new Map(slotCountsRaw.map((c) => [c.accountId, c]));
   const overviewAccounts: OverviewAccount[] = accounts.map((a) => ({
     id: a.id,
     providerKey: a.providerKey,
@@ -102,6 +152,7 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
     accounts: overviewAccounts,
     postCounts: postCounts as Partial<Record<PostStatusKey, number>>,
     upcoming,
+    recentPublished,
     reviewCount,
     needsDecisionCount,
     ai: { configured: llm.ok, voiceProfiles: voices ? voices.length : null },

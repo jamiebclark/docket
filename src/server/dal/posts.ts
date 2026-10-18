@@ -55,6 +55,7 @@ export interface PostListRow {
     scheduledAt: Date | null;
     publishedAt: Date | null;
     postingFields: unknown | null;
+    externalId: string | null;
   }[];
 }
 
@@ -127,6 +128,7 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
               scheduledAt: postTargets.scheduledAt,
               publishedAt: postTargets.publishedAt,
               postingFields: postTargets.postingFields,
+              externalId: postTargets.externalId,
             })
             .from(postTargets)
             .where(and(eq(postTargets.projectId, projectId), inArray(postTargets.postId, ids)))
@@ -150,6 +152,7 @@ export function createPostsRepo(db: Database, projectId: string): PostsRepo {
             scheduledAt: t.scheduledAt,
             publishedAt: t.publishedAt,
             postingFields: t.postingFields ?? null,
+            externalId: t.externalId,
           })),
         };
       });
