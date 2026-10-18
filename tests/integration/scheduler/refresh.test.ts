@@ -49,7 +49,7 @@ describe("token refresh", () => {
     const { account, repos } = await expiring(project.id);
     const tick = await runTick({ config: { timeBudgetMs: TICK_BUDGET_MS } });
     expect(tick.tokenRefresh.ok).toBe(true);
-    expect(tick.tokenRefresh.counts.refreshed).toBeGreaterThanOrEqual(1);
+    expect(tick.tokenRefresh.counts.refreshed, `tokenRefresh ${JSON.stringify(tick.tokenRefresh)}`).toBeGreaterThanOrEqual(1);
     const after = await repos.accounts.get(account.id);
     expect(after!.credentialsExpiresAt!.getTime()).toBeGreaterThan(Date.now() + 30 * 86_400_000);
     expect(after!.lastRefreshedAt).not.toBeNull();
@@ -94,7 +94,7 @@ describe("token refresh", () => {
     const made = [];
     for (let i = 0; i < 7; i++) made.push(await expiring(project.id));
     const tick = await runTick({ config: { refreshMaxAccounts: 5, timeBudgetMs: TICK_BUDGET_MS } });
-    expect(tick.tokenRefresh.counts.refreshed).toBeLessThanOrEqual(5);
+    expect(tick.tokenRefresh.counts.refreshed, `tokenRefresh ${JSON.stringify(tick.tokenRefresh)}`).toBeLessThanOrEqual(5);
     const refreshed = (
       await Promise.all(made.map((m) => m.repos.accounts.get(m.account.id)))
     ).filter((a) => a!.lastRefreshedAt !== null);
@@ -117,7 +117,7 @@ describe("token refresh", () => {
     // concern with its own tests.
     const tickConfig = { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS };
     const first = await runTick({ config: tickConfig });
-    expect(first.tokenRefresh.counts.deferred).toBeGreaterThanOrEqual(1);
+    expect(first.tokenRefresh.counts.deferred, `tokenRefresh ${JSON.stringify(first.tokenRefresh)}`).toBeGreaterThanOrEqual(1);
     const after = await repos.accounts.get(account.id);
     expect(after).toMatchObject({ status: "active" });
     expect(after!.lastError).toContain("PDS unreachable");
@@ -125,7 +125,7 @@ describe("token refresh", () => {
 
     scripted.delete(account.id);
     const second = await runTick({ config: tickConfig });
-    expect(second.tokenRefresh.counts.refreshed).toBeGreaterThanOrEqual(1);
+    expect(second.tokenRefresh.counts.refreshed, `tokenRefresh ${JSON.stringify(second.tokenRefresh)}`).toBeGreaterThanOrEqual(1);
     expect(await repos.accounts.get(account.id)).toMatchObject({ status: "active", lastError: null });
   });
 

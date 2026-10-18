@@ -34,7 +34,6 @@ beforeEach(async () => {
   await parkAllDueTargets();
   // T0 is in 2030 and refresh is global: push every account other files left on this worker's
   // database past T0, so each case sees only the accounts it creates.
-  await testDb().update(socialAccounts).set({ credentialsExpiresAt: new Date("2100-01-01T00:00:00Z") });
   clearRecordedQueries(); // deliberately cross-project test setup, not code under test
   vi.stubEnv("X_CLIENT_ID", "CLIENT-ID");
   vi.stubEnv("X_CLIENT_SECRET", "CLIENT-SECRET-XYZ");
