@@ -2,8 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb } from "../../../src/server/db/client";
 import { runCrossProject } from "../../../src/server/db/cross-project";
-import { emailProjectState, emailSettings, member, user } from "../../../src/server/db/schema";
-import { claimDuePeople, emailDb, markInFlight } from "../../../src/server/dal/email";
+import { emailDeliveryAttempts, emailProjectState, emailSettings, member, user } from "../../../src/server/db/schema";
+import { claimDuePeople, emailDb, markInFlight, readSettings } from "../../../src/server/dal/email";
 import { setMailerForTests } from "../../../src/server/mail";
 import { resetInProcessGuard, startInProcessLoop } from "../../../src/server/scheduler/in-process";
 import { runTick } from "../../../src/server/scheduler";
@@ -149,9 +149,35 @@ describe("tick", () => {
       ticks++;
     }
     // The breakdown is in the message because a bare "499 is not 500" says nothing about which
-    // disposition took the missing person.
+    // disposition took the missing person. When one is missing, say WHICH one: three CI sightings and
+    // one local have all reported exactly `{claimed: 500, sent: 499, skipped: 1}`, identical every
+    // time, which is too consistent to be random — so the useful next fact is whether it is always the
+    // same person, and what is wrong with them. `assembleForPerson` returning null is the skip, so
+    // asking it directly says whether they are still ineligible and their index says whether the
+    // position in the seeded run matters (index 0 has `nextDueAt` exactly equal to `now`).
     const breakdown = JSON.stringify(tally);
-    expect(served, `served ${served} of 500 in ${ticks} ticks; dispositions ${breakdown}`).toBe(500);
+    let detail = "";
+    if (served < 500) {
+      const unserved: string[] = [];
+      await runCrossProject("test: identify unserved people", async () => {
+        for (const [i, person] of people.entries()) {
+          const assembled = await assembleForPerson({ userId: person.id, cadence: "immediate", zone: "UTC", now });
+          const settings = await readSettings(emailDb(), person.id);
+          const sentRows = await getDb()
+            .select({ outcome: emailDeliveryAttempts.outcome })
+            .from(emailDeliveryAttempts)
+            .where(eq(emailDeliveryAttempts.userId, person.id));
+          if (!sentRows.some((r) => r.outcome === "sent")) {
+            unserved.push(
+              `index=${i} assembles=${assembled ? "yes" : "NO"} cadence=${settings?.cadence ?? "-"}` +
+                ` nextDueAt=${settings?.nextDueAt?.toISOString() ?? "-"} attempts=${sentRows.map((r) => r.outcome).join("|") || "none"}`,
+            );
+          }
+        }
+      });
+      detail = `; unserved: ${unserved.join(" ") || "(none found - the shortfall is not a missing person)"}`;
+    }
+    expect(served, `served ${served} of 500 in ${ticks} ticks; dispositions ${breakdown}${detail}`).toBe(500);
     expect(ticks).toBeLessThanOrEqual(10);
     // Only freshly sent messages reach the mailer; a recovered lease is an assumed send, not a new one.
     expect(mailer.sent, breakdown).toHaveLength(500 - tally.recovered);
