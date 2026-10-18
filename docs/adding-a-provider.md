@@ -161,7 +161,11 @@ These are the `ConnectStrategy` values.
 Whatever the flow, it ends by calling `accounts.saveConnectedAccount`. Credentials are encrypted at rest.
 The engine decrypts them and passes them to `advance` as `ctx.account.credentials`; a provider never touches storage.
 
-Each `CredentialField` has a `name`, a `label`, `secret` and optional `help`. A field may also be `optional`, with a `defaultValue` and `placeholder`. When the app password (or any one-time secret) must
+Each `CredentialField` has a `name`, a `label`, `secret` and optional `help`. A field may also be `optional`, with a `defaultValue` and `placeholder`. A non-secret field may set
+`prefillOnReconnect: "displayName"`, which fills it from the account being reconnected instead of leaving it blank — so nobody retypes a handle Docket already knows. Only the provider can say whether
+that is right: Bluesky's display name is its handle, but a provider whose display name is a person's name must leave it unset. **Never set it on a secret**, and never give a secret a `defaultValue`: a
+stored credential exists so the server can reauthenticate itself, and rendering one into a form would send it to the browser on every page view. `tests/lint/no-prefilled-secrets.test.ts` enforces both.
+When the app password (or any one-time secret) must
 not be kept, implement `connectAccount({ fields, ... })`: it exchanges the fields for what should be stored (for Bluesky, session
 tokens) and returns `{ ok: true, account: { externalId, displayName, settings, credentials, expiresAt } }` or `{ ok: false, message, field?, retryAt? }`.
 The generic accounts form and `connectWithCredentials` call it; the typed fields themselves are never saved.

@@ -226,6 +226,7 @@ export default async function AccountsPage({
                               providerName={p.displayName}
                               fields={p.fields}
                               accountId={account.id}
+                              account={{ displayName: account.displayName }}
                               submitLabel="Reconnect"
                             />
                           </div>
