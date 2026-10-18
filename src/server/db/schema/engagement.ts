@@ -133,9 +133,17 @@ export const engagementDrafts = pgTable(
       .where(sql`${t.reviewState} = 'approved' AND ${t.sendState} IN ('waiting', 'sending')`),
     index("engagement_drafts_item_thread_idx").on(t.projectId, t.engagementItemId, t.createdAt.desc()),
     check("engagement_drafts_send_requires_approved", sql`${t.sendState} = 'none' OR ${t.reviewState} = 'approved'`),
+    // `reviewed_at` is required, the reviewer is not. `reviewed_by_user_id` is ON DELETE SET NULL,
+    // like all 38 other actor columns in this schema, so requiring it NOT NULL here made the two rules
+    // contradict each other: deleting a user whose draft had been decided set the column null and the
+    // check then rejected the delete with 23514, so that user could never be removed at all.
+    // Found via flake-hunt run 39096335776 — `delete from "user"` in security/secret-scan.test.ts,
+    // which had failed 8 to 11 of 20 repetitions across four hunts with the cause swallowed twice over.
+    // The audit intent is kept: a decided draft still records WHEN it was decided, and by whom for as
+    // long as that person exists.
     check(
       "engagement_drafts_decision_names_person",
-      sql`${t.reviewState} IN ('needs_review', 'discarded') OR (${t.reviewedAt} IS NOT NULL AND ${t.reviewedByUserId} IS NOT NULL)`,
+      sql`${t.reviewState} IN ('needs_review', 'discarded') OR ${t.reviewedAt} IS NOT NULL`,
     ),
     check(
       "engagement_drafts_model_origin_voice",
