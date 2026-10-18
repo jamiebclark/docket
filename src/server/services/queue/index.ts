@@ -165,10 +165,14 @@ export async function swapQueuedTargets(scope: ProjectScope, targetIdA: string, 
   if (idA === idB) throw new ConflictError("Pick two different posts to swap.");
   await scope.transaction(async (tx) => {
     need(tx, { post: ["schedule"] });
-    const [ra, rb] = await Promise.all([tx.targets.get(idA), tx.targets.get(idB)]);
+    // One client per transaction, so these are serialised by the driver regardless — see the note in
+    // services/posts/index.ts. Awaiting them in turn is the same cost without the deprecation.
+    const ra = await tx.targets.get(idA);
+    const rb = await tx.targets.get(idB);
     if (!ra || !rb) throw new NotFoundError();
     await lockPostsOf(tx, [ra, rb]);
-    const [a, b] = await Promise.all([tx.targets.get(idA), tx.targets.get(idB)]);
+    const a = await tx.targets.get(idA);
+    const b = await tx.targets.get(idB);
     if (!a || !b) throw new NotFoundError();
     if (a.socialAccountId !== b.socialAccountId) throw new ConflictError("Posts can only be swapped within the same account.");
     const queued = (t: typeof a) => t.status === "scheduled" && t.scheduleKind === "slot" && t.slotOccurrenceAt !== null && t.slotId !== null;
