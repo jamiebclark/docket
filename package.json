@@ -49,7 +49,8 @@
     "build:storage-init": "esbuild scripts/storage-init.mjs --bundle --platform=node --target=node24 --format=esm --outfile=.next/standalone/scripts/storage-init.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "db:test:clean": "esbuild scripts/test-db-clean.ts --bundle --platform=node --target=node24 --format=esm --outfile=node_modules/.cache/test-db-clean.mjs --external:pg-native --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node node_modules/.cache/test-db-clean.mjs",
     "db:migrate": "drizzle-kit migrate",
-    "set-password": "esbuild scripts/set-password.ts --bundle --platform=node --target=node24 --format=esm --outfile=node_modules/.cache/docket-set-password.mjs --external:pg-native --external:sharp --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node --env-file-if-exists=.env node_modules/.cache/docket-set-password.mjs"
+    "set-password": "esbuild scripts/set-password.ts --bundle --platform=node --target=node24 --format=esm --outfile=node_modules/.cache/docket-set-password.mjs --external:pg-native --external:sharp --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node --env-file-if-exists=.env node_modules/.cache/docket-set-password.mjs",
+    "flake:report": "esbuild scripts/flake-report.ts --bundle --platform=node --target=node24 --format=esm --outfile=node_modules/.cache/flake-report.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node node_modules/.cache/flake-report.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
