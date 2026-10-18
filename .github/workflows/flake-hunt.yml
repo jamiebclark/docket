@@ -76,6 +76,11 @@ jobs:
           SHARD: ${{ matrix.shard }}
           LANE: ${{ matrix.lane }}
         run: |
+          # GitHub runs this with `bash -e`, and `set -uo pipefail` does not clear that. Without
+          # `set +e` the first failing repetition kills the step: `exit_code=$?` never runs, the
+          # remaining repetitions never happen, and a hunt for intermittent failures stops at the
+          # first one it finds. Failing runs are the data here, not an error.
+          set +e
           set -uo pipefail
           mkdir -p .flake
           for rep in $(seq 1 "$REPETITIONS"); do
@@ -91,7 +96,12 @@ jobs:
               '{exitCode: $exitCode, seed: $seed, stderrTail: .}' > "$meta"
             rm -f "$err"
           done
-      - uses: actions/upload-artifact@v7
+      # `if: always()` for the same reason the consolidate job has it: a lane that failed is exactly
+      # the lane worth reading. Without this the artifacts are skipped on failure and the
+      # consolidator reads an empty directory — observed on run 39084229935, where nine of sixteen
+      # lanes failed and the report could not be produced at all.
+      - if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: flake-${{ matrix.shard }}-${{ matrix.lane }}
           path: .flake/
