@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
@@ -16,7 +16,20 @@ import { clearRecordedQueries } from "../../setup/scope-recorder";
 
 afterAll(closeDb);
 
-const MIGRATION_PATH = join(__dirname, "..", "..", "..", "drizzle", "0044_funny_lockheed.sql");
+// Found by content, not by name: drizzle names a migration with random words and renumbers it
+// whenever main lands one first, so a hard-coded filename breaks on any rebase (it did — this file
+// pointed at `0044_funny_lockheed.sql` until the migration became `0046`).
+const MIGRATION_DIR = join(__dirname, "..", "..", "..", "drizzle");
+const BACKFILL_MIGRATIONS = readdirSync(MIGRATION_DIR)
+  .filter((name) => name.endsWith(".sql"))
+  .filter((name) => {
+    const sqlText = readFileSync(join(MIGRATION_DIR, name), "utf8");
+    return sqlText.includes("UPDATE post_targets") && sqlText.includes("public_post_id");
+  });
+if (BACKFILL_MIGRATIONS.length !== 1) {
+  throw new Error(`expected exactly one migration backfilling public_post_id, found ${BACKFILL_MIGRATIONS.length}: ${BACKFILL_MIGRATIONS.join(", ")}`);
+}
+const MIGRATION_PATH = join(MIGRATION_DIR, BACKFILL_MIGRATIONS[0]!);
 const MIGRATION_SQL = readFileSync(MIGRATION_PATH, "utf8");
 const BACKFILL_SQL = MIGRATION_SQL.split("--> statement-breakpoint").pop()!.trim();
 
