@@ -95,7 +95,7 @@ import { createApiKey } from "../../../src/server/services/api-keys";
 import { setStorageForTests } from "../../../src/server/storage";
 import { api } from "../../helpers/api";
 import { POST as mcpPost } from "../../../src/app/api/mcp/route";
-import { closeDb, testDb } from "../../helpers/db";
+import { closeDb, testDb, withDbCause } from "../../helpers/db";
 import { addMember, csvBuilder, createVoiceProfile } from "../../helpers/factories";
 import { createFakeGraph } from "../../helpers/fake-graph";
 import { createFakeLlm } from "../../helpers/fake-llm";
@@ -242,8 +242,11 @@ describe("secret scan (FR-020, SC-005)", () => {
     captureOutput(pieces);
 
     // First-run setup through the setup service. Files run serially per database, and setup needs it empty of accounts.
-    await db.delete(user);
-    await db.delete(installState);
+    // Wrapped so a failure names the Postgres error. This delete cascades across the 36 foreign keys
+    // that reference "user" and has been the suite's biggest flake; see withDbCause for why neither the
+    // JSON report nor the lane stderr ever recorded the cause.
+    await withDbCause("wipe users for first-run setup", () => db.delete(user));
+    await withDbCause("wipe install state", () => db.delete(installState));
     expect(await setup.isAvailable()).toBe(true);
     const created = await setup.createFirstUser({ name: "Scan Owner", email: SETUP_EMAIL, password: SETUP_PASSWORD });
     pieces.push({ place: "service result: setup", text: JSON.stringify(created) });

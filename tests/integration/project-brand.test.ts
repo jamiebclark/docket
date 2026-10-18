@@ -152,11 +152,28 @@ describe("project brand fields", () => {
       projectsService.updateSettings(await as(ctx, ctx.owner), valid({ slug: ctx.project.slug, tagline: "B" })),
       projectsService.updateSettings(await as(ctx, ctx.owner), valid({ slug: ctx.project.slug, tagline: "C" })),
     ]);
-    const rows = (await brandRows(ctx.project.id)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const rows = await brandRows(ctx.project.id);
     expect(rows).toHaveLength(3);
-    const [, second, third] = rows;
-    expect((second!.details as { previous: string }).previous).toBe("A");
-    expect((third!.details as { previous: unknown }).previous).toBe((second!.details as { next: unknown }).next);
+    // Follow the chain, do not sort by the clock. `created_at` cannot order two concurrent writers:
+    // both transactions can stamp the same instant, and the stamp is taken when each transaction
+    // starts rather than when it commits, so it can even invert the real serialisation order. There is
+    // no ORDER BY in `brandRows` either, so a tie left the order to the plan. This test failed 2 of 20
+    // repetitions in flake-hunt run 39088399743 with "expected 'C' to be 'A'" — the C row sorted into
+    // the middle, so a perfectly truthful chain read as a stale one.
+    //
+    // What the test is actually about survives intact: exactly one of the two concurrent rows must
+    // continue from "A", and the other must continue from whatever that one wrote. If both had read a
+    // stale "A" — the bug this guards — two rows would claim previous "A" and the second assertion
+    // would fail, which is the point.
+    const chain = rows.map((r) => r.details as { field: string; previous: unknown; next: unknown });
+    const show = JSON.stringify(chain);
+    const opening = chain.filter((d) => d.previous === null && d.next === "A");
+    expect(opening, `expected one row opening the chain at "A"; chain was ${show}`).toHaveLength(1);
+    const concurrent = chain.filter((d) => d !== opening[0]);
+    const continues = concurrent.filter((d) => d.previous === "A");
+    expect(continues, `expected exactly one row continuing from "A"; chain was ${show}`).toHaveLength(1);
+    const last = concurrent.find((d) => d !== continues[0])!;
+    expect(last.previous, `the later row should continue from the earlier one; chain was ${show}`).toBe(continues[0]!.next);
   });
 
   it("a slug conflict leaves the tagline unchanged and writes no brand row", async () => {

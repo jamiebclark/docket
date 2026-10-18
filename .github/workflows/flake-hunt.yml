@@ -1,0 +1,148 @@
+name: Flake hunt
+
+# Never pull_request or push (FR-006, contracts/flake-report.md): this runs the gate's own command
+# `repetitions` times to surface non-determinism, which is diagnostic work, not a required check.
+on:
+  workflow_dispatch:
+    inputs:
+      repetitions:
+        description: How many repetitions of the full sharded suite to run
+        default: "20"
+      lanes:
+        description: How many parallel lanes to split the repetitions across, per shard
+        default: "4"
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+# `inputs.*` is empty on the weekly `schedule` trigger (it only exists for workflow_dispatch), so
+# every job reads these instead — `|| '…'` falls back to the dispatch defaults above.
+env:
+  REPETITIONS: ${{ inputs.repetitions || '20' }}
+  LANES: ${{ inputs.lanes || '4' }}
+
+jobs:
+  # Computes the lane index list from the `lanes` input so the matrix below can be sized dynamically;
+  # the shard list stays the literal [1,2,3,4] the gate itself shards on.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      lanes: ${{ steps.plan.outputs.lanes }}
+    steps:
+      - id: plan
+        run: |
+          lanes=$(node -e "console.log(JSON.stringify(Array.from({ length: Number(process.env.LANES) }, (_, i) => i + 1)))")
+          echo "lanes=$lanes" >> "$GITHUB_OUTPUT"
+
+  # Each (shard, lane) cell runs its share of the repetitions through the gate's own command, never
+  # failing the job on a test failure — a red repetition is the data being collected (FR-001).
+  run:
+    needs: [plan]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        lane: ${{ fromJson(needs.plan.outputs.lanes) }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: docket
+          POSTGRES_PASSWORD: docket
+          POSTGRES_DB: docket_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U docket"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://docket:docket@localhost:5432/docket_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install ffmpeg (the video suites skip without it)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Run this lane's repetitions
+        env:
+          SHARD: ${{ matrix.shard }}
+          LANE: ${{ matrix.lane }}
+        run: |
+          # GitHub runs this with `bash -e`, and `set -uo pipefail` does not clear that. Without
+          # `set +e` the first failing repetition kills the step: `exit_code=$?` never runs, the
+          # remaining repetitions never happen, and a hunt for intermittent failures stops at the
+          # first one it finds. Failing runs are the data here, not an error.
+          set +e
+          set -uo pipefail
+          mkdir -p .flake
+          for rep in $(seq 1 "$REPETITIONS"); do
+            if [ $(( (rep - 1) % LANES )) -ne $(( LANE - 1 )) ]; then continue; fi
+            out=".flake/rep${rep}-shard${SHARD}.json"
+            meta=".flake/rep${rep}-shard${SHARD}.meta.json"
+            err=".flake/rep${rep}-shard${SHARD}.stderr"
+            DOCKET_SKIP_PERF_TESTS=1 pnpm exec vitest run \
+              --shard="${SHARD}/4" --sequence.shuffle.files --sequence.seed="$rep" \
+              --reporter=json --outputFile="$out" 2> "$err"
+            exit_code=$?
+            # Drop node's deprecation warnings before taking the tail. Run 39088399743 captured a
+            # 2000-byte window for all 80 of its repetitions and every one held nothing but repeats of
+            # "DeprecationWarning: Calling client.query() when the client is already executing a query",
+            # so the stderr of the failing run — the only reason this file is kept — was never in it.
+            # The window is wider now too: 2000 bytes is about a dozen lines once a stack is in there.
+            { grep -avE "DeprecationWarning|--trace-deprecation" "$err" || true; } | tail -c 6000 \
+              | jq -Rs --argjson exitCode "$exit_code" --argjson seed "$rep" \
+                '{exitCode: $exitCode, seed: $seed, stderrTail: .}' > "$meta"
+            rm -f "$err"
+          done
+      # `if: always()` for the same reason the consolidate job has it: a lane that failed is exactly
+      # the lane worth reading. Without this the artifacts are skipped on failure and the
+      # consolidator reads an empty directory — observed on run 39084229935, where nine of sixteen
+      # lanes failed and the report could not be produced at all.
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flake-${{ matrix.shard }}-${{ matrix.lane }}
+          path: .flake/
+          if-no-files-found: ignore
+          # `.flake` is dot-prefixed, so upload-artifact treats everything under it as hidden and
+          # silently uploads nothing — "No files were found with the provided path", with the step
+          # still green. Observed on run 39086120968: every lane wrote its reports, every upload
+          # found none of them, and the consolidator read an empty directory.
+          include-hidden-files: true
+          retention-days: 7
+
+  # `if: always()` so a lane that failed outright still contributes to the report: a dead or empty
+  # lane is recorded as a LaneFailure, never attributed to a test (FR-004).
+  consolidate:
+    needs: [run]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          path: .flake/in
+          pattern: flake-*
+          merge-multiple: true
+      - run: pnpm flake:report --input .flake/in --out .flake/out --repetitions "$REPETITIONS"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flake-report
+          path: .flake/out
+          include-hidden-files: true
+          retention-days: 90
+      - run: cat .flake/out/flake-report.md >> "$GITHUB_STEP_SUMMARY"

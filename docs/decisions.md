@@ -3905,3 +3905,29 @@ is entry 4's business); the Facebook `ANALYZE`-task precondition is invisible to
 eligibility answers "may Docket call?" and never "will Docket get numbers?" (research §2 — an empty answer
 correctly renders as 080's `nothing_reported`); and repairing Facebook's stored external id for Reel
 targets, which no entry owns.
+
+## Flake-proof test architecture: pre-change baseline (2026-10-17)
+
+Spec 079's success criteria (SC-002, SC-004, SC-007) are each a before/after comparison. Recorded here
+before any code in this feature changes, so the comparison has a fixed starting point:
+
+1. **Slowest CI shard wall-clock time: 304 s** (run `39036348302`; shard times 5:04/4:45/3:50/4:38). The
+   SC-007 comparison point — Phase 10's final verification must come in at or under ~334 s (10%
+   allowance) on the gating CI run.
+2. **`parkAll*` call-site count: 150 files, 311 call sites** —
+   `grep -rln "parkAll" --include='*.ts' --include='*.tsx' src tests | wc -l` → 150;
+   `grep -rn "parkAll" --include='*.ts' --include='*.tsx' src tests | wc -l` → 311. The SC-004
+   comparison point — Phase 4 drives both counts to zero.
+3. **`vitest.config.ts`'s `setupFiles` order**: `tests/setup/worker-db.ts` runs first, ahead of
+   `tests/setup/scope-recorder.ts` and `tests/setup/webhook-loopback.ts`. `tests/setup/reset-database.ts`
+   (Phase 4) must be inserted immediately after `worker-db.ts` and before `scope-recorder.ts` — the
+   ordering invariant R2 depends on this being true before the new file is added.
+
+**Addendum (2026-10-18).** Items 1 and 3 stand as recorded. Item 2's target does not: `parkAll*` grew
+rather than went to zero. `claimRefreshAccounts` turned out to have the same squeeze the engagement and
+insights claims had — cross-project, ordered by a timestamp every test sets to roughly the same hour,
+capped at five — so `parkAllRefreshAccounts` was added beside the others, which also absorbed four
+hand-rolled copies of that same `UPDATE` in the pinterest, threads, tiktok and x refresh tests. The
+`drainTicks` direction in this spec and the parking direction now on `main` point opposite ways; the
+baseline is kept here because the measurements are still the right ones to compare against, not because
+Phase 4 is still the plan. See the note on PR #141.

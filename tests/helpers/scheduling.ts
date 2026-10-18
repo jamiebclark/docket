@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
 import { accountMetricPollStates, engagementAccountStates, postMetricPollStates, postTargets, socialAccounts } from "../../src/server/db/schema";
@@ -176,6 +176,37 @@ export async function parkAllInsightsPolls(): Promise<void> {
 }
 
 /**
+ * Pushes every account's credential expiry out of reach of a token-refresh claim, so a tick under
+ * test refreshes only the accounts the test itself creates afterwards.
+ *
+ * Why it matters: `claimRefreshAccounts` is cross-project and unscoped, ordered by
+ * `credentials_expires_at ASC, id ASC`, and capped at `refreshMaxAccounts` — **5** by default
+ * (src/server/scheduler/config.ts). Tests that need a refresh-due account all give it an expiry about
+ * an hour out, so the timestamps land within milliseconds of each other and the real tiebreak is
+ * `id ASC` — effectively random uuid order. Once six such accounts exist, a test's own account loses
+ * a coin flip and is silently squeezed out of the claim; the section then reports every count as
+ * zero, or the account's row is simply never written.
+ *
+ * It bites within a single file as readily as across two: `scheduler/refresh.test.ts` has a test that
+ * creates seven expiring accounts to prove the cap, and before this helper nothing parked them, so
+ * every later test in that file ran against seven leftover rivals. Two consecutive CI runs failed
+ * there on two different tests — `counts.deferred: 0`, then a display name that was never updated —
+ * and both passed in isolation. `pinterest`, `threads`, `tiktok` and `x`'s own refresh tests had each
+ * hand-rolled this same update locally; this is that line, in one place, for every caller.
+ *
+ * Rows with a null expiry are left alone: the claim's `lte(credentials_expires_at, …)` never matches
+ * them, so they are already unclaimable and rewriting them would only disturb fixtures.
+ */
+export async function parkAllRefreshAccounts(): Promise<void> {
+  await runCrossProject("test: park token refreshes", async () => {
+    await getDb()
+      .update(socialAccounts)
+      .set({ credentialsExpiresAt: PARKED_UNTIL })
+      .where(isNotNull(socialAccounts.credentialsExpiresAt));
+  });
+}
+
+/**
  * Pushes every live target in the (shared) test database out of reach, so a tick under test claims
  * only the targets the test itself created afterwards. Call it first in a scheduler test.
  */
@@ -191,4 +222,7 @@ export async function parkAllDueTargets(): Promise<void> {
   // active during this test's tick.
   await parkAllEngagementReads();
   await parkAllInsightsPolls();
+  // Token refresh is claimed across every project too, capped at 5 accounts and ordered by an expiry
+  // that every test sets to roughly the same hour — see parkAllRefreshAccounts above.
+  await parkAllRefreshAccounts();
 }
