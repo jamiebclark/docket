@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { TrendChart } from "@/components/insights/TrendChart";
+import { ComparisonCard } from "@/components/insights/ComparisonCard";
 import { docsUrl } from "@/lib/docs";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
-import { buildAccountTrends, type TrendNote } from "@/server/services/insights/view";
+import { buildAccountTrends, buildComparisons, type TrendNote } from "@/server/services/insights/view";
 
 export const metadata: Metadata = { title: "Insights" };
 export const dynamic = "force-dynamic";
@@ -30,16 +31,19 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
   const now = new Date();
   const range = { from: new Date(now.getTime() - RANGE_DAYS * DAY_MS), to: now };
 
-  const { series, trendNotes } =
+  const [{ series, trendNotes }, comparisons] =
     activeAccounts.length === 0
-      ? { series: [], trendNotes: [] }
-      : await buildAccountTrends({
-          projectId: scope.project.id,
-          timeZone: scope.project.timezone,
-          accounts: activeAccounts.map((a) => ({ id: a.id, displayName: a.displayName, providerKey: a.providerKey })),
-          range,
-          accountMetricPollStates: scope.accountMetricPollStates,
-        });
+      ? [{ series: [], trendNotes: [] }, []]
+      : await Promise.all([
+          buildAccountTrends({
+            projectId: scope.project.id,
+            timeZone: scope.project.timezone,
+            accounts: activeAccounts.map((a) => ({ id: a.id, displayName: a.displayName, providerKey: a.providerKey })),
+            range,
+            accountMetricPollStates: scope.accountMetricPollStates,
+          }),
+          buildComparisons({ projectId: scope.project.id, timeZone: scope.project.timezone, range }),
+        ]);
 
   return (
     <div>
@@ -58,6 +62,11 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
           {trendNotes.map((note, i) => (
             <Card key={i}>
               <TrendNoteCard note={note} />
+            </Card>
+          ))}
+          {comparisons.map((c) => (
+            <Card key={`${c.dimension}-${c.providerKey}-${c.metricKey}`}>
+              <ComparisonCard comparison={c} />
             </Card>
           ))}
         </div>
