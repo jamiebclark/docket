@@ -67,11 +67,11 @@ the fold, the trend reader, the comparison reader and `shape.ts`.
 
 **⚠️ CRITICAL**: Blocks the fold (Phase 4), the per-post numbers reads, the comparisons reads, the first-engagement recorder, and the API operation.
 
-- [ ] T018 Add `metricKind` pgEnum (`cumulative`, `windowed`, `unknown`), `accountMetricRollups` and `postMetricRollups` tables (columns, CHECKs, unique constraints and indexes per [data-model.md](data-model.md) §1-§3) to `src/server/db/schema/insights.ts`
-- [ ] T019 Add `targetFirstEngagement` table (columns, CHECKs including the write-once-shape CHECKs, and index per [data-model.md](data-model.md) §4) to `src/server/db/schema/insights.ts`
-- [ ] T020 Add the three new tables with `scopeColumn: "project_id"` to `src/server/db/project-owned.ts`
-- [ ] T021 Run `pnpm db:generate`, verify the generated migration number against `drizzle/` (do not assume `0047` — 082 had to renumber), and verify its contents match [data-model.md](data-model.md) §9 exactly (one enum, three `CREATE TABLE`, no backfill statement)
-- [ ] T022 Run `pnpm db:migrate` and `pnpm db:check`, confirm both green
+- [X] T018 Add `metricKind` pgEnum (`cumulative`, `windowed`, `unknown`), `accountMetricRollups` and `postMetricRollups` tables (columns, CHECKs, unique constraints and indexes per [data-model.md](data-model.md) §1-§3) to `src/server/db/schema/insights.ts`
+- [X] T019 Add `targetFirstEngagement` table (columns, CHECKs including the write-once-shape CHECKs, and index per [data-model.md](data-model.md) §4) to `src/server/db/schema/insights.ts`
+- [X] T020 Add the three new tables with `scopeColumn: "project_id"` to `src/server/db/project-owned.ts`
+- [X] T021 Run `pnpm db:generate`, verify the generated migration number against `drizzle/` (do not assume `0047` — 082 had to renumber), and verify its contents match [data-model.md](data-model.md) §9 exactly (one enum, three `CREATE TABLE`, no backfill statement)
+- [X] T022 Run `pnpm db:migrate` and `pnpm db:check`, confirm both green
 
 **Checkpoint**: Schema exists, is scoped, and `pnpm db:check` is green. Fold, DAL and service work can now begin.
 
