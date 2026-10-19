@@ -17,8 +17,8 @@ declaration: {
   unavailable: {
     reason:
       "Docket cannot read Threads replies or mentions yet: Threads does not publish a confirmed "
-      + "read endpoint for either surface, so there is nothing to call. This is not a permission "
-      + "you can grant or a setting you can change.",
+      + "read endpoint for either surface, so there is nothing to call. This is not a setting "
+      + "you can change or a step that would fix it.",
     docsPath: "meta-setup#engagement",
   },
 }
@@ -29,7 +29,7 @@ declaration: {
 | `reads` | `["reply", "mention"]` | FR-002 | The two kinds Bluesky already emits (`src/providers/bluesky/engagement.ts`, `REASONS`), so `ENGAGEMENT_ITEM_KINDS`, the inbox filter's options and every stored value gain nothing new. Both are named even though neither is readable: naming one would under-declare the surface, and naming none is forbidden (`reads.length === 0` throws). |
 | `canReply` | `false` | FR-007 | Reply sending is out of scope for the whole roadmap. `replyableVerdict` (`services/engagement/inbox.ts:109`) and the send gate (`scheduler/engagement-send.ts:76`) both read this, so the composer is absent rather than present-and-failing. |
 | `writeBudget` | **absent** | FR-007 | `assertEngagementDeclaration` throws on `canReply: false` with a `writeBudget` set: an allowance on a surface that cannot be written is dead configuration taken from the publishing reserve. |
-| `unavailable.reason` | the three sentences above | FR-003, FR-004 | Sentence 1 names both surfaces and the cause (no confirmed read endpoint). Sentence 2 forecloses the two wrong readings FR-004 names — a permission to grant, a setting to change. Length is inside `assertEngagementDeclaration`'s 1–300 bound. |
+| `unavailable.reason` | the two sentences above | FR-003, FR-004 | Sentence 1 names both surfaces and the cause (no confirmed read endpoint). Sentence 2 forecloses the wrong reading FR-004 names — a setting to change or a step to take — without using any of the forbidden words below. Length is inside `assertEngagementDeclaration`'s 1–300 bound. |
 | `unavailable.docsPath` | `"meta-setup#engagement"` | FR-003 | The same `page#anchor` shape every other provider uses; `docs/meta-setup.md`'s `## Engagement` section is where the Threads opt-in is documented. Rendered through §4's helper, never raw. |
 | `readScopes` | **absent** | FR-005 | `assertEngagementDeclaration` throws on `unavailable` together with a non-empty `readScopes`. The two are different claims: "not readable here at all" versus "this account has not granted it yet". Threads is the first. |
 | `missingReadScopes` | **absent** | FR-005 | Only meaningful with `readScopes`. |

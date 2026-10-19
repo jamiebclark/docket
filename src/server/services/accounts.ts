@@ -47,6 +47,8 @@ export interface AccountView {
   insightsAccountPermission: InsightsPermission | null;
   /** G40. Null when this provider declares no engagement read scopes or needs no permission. */
   engagementReadPermission: ScopePermission | null;
+  /** FR-055. Set when the provider declares its engagement surface unavailable; null otherwise. */
+  engagementUnavailable: { reason: string; docsPath?: string } | null;
 }
 
 /** G37: the one decision per surface, computed from the stored grant, the provider's declaration
@@ -161,6 +163,7 @@ function view(a: AccountRecord, timeZone: string, now?: Date): AccountView {
     insightsPostPermission: insightsPermissionForAccount(a, provider, "post"),
     insightsAccountPermission: insightsPermissionForAccount(a, provider, "account"),
     engagementReadPermission: engagementPermissionForAccount(a, provider),
+    engagementUnavailable: provider?.engagement?.declaration.unavailable ?? null,
   };
 }
 

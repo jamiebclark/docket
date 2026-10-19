@@ -18,6 +18,7 @@ import { ConnectLanding } from "./ConnectLanding";
 import { ConnectGroupSection } from "./ConnectGroupSection";
 import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
+import { docsHref } from "@/lib/docs";
 import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
 import { PostingInstructionsForm } from "./PostingInstructionsForm";
@@ -205,7 +206,7 @@ export default async function AccountsPage({
                         {permission.docsPath ? (
                           <>
                             {" "}
-                            <a href={permission.docsPath} className="underline">
+                            <a href={docsHref(permission.docsPath)} className="underline">
                               Set up insights →
                             </a>
                           </>
@@ -219,7 +220,23 @@ export default async function AccountsPage({
                     </div>
                   ) : null,
                 )}
-                {account.engagementReadPermission && account.engagementReadPermission.kind !== "ok" ? (
+                {account.engagementUnavailable ? (
+                  <div className="flex flex-wrap items-end gap-3">
+                    <p className="text-sm">
+                      <span className="font-medium text-foreground">Inbox is not available.</span>{" "}
+                      {account.engagementUnavailable.reason}
+                      {account.engagementUnavailable.docsPath ? (
+                        <>
+                          {" "}
+                          <a href={docsHref(account.engagementUnavailable.docsPath)} className="underline">
+                            Learn more →
+                          </a>
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
+                ) : null}
+                {account.engagementUnavailable === null && account.engagementReadPermission && account.engagementReadPermission.kind !== "ok" ? (
                   <div className="flex flex-wrap items-end gap-3">
                     <p className="text-sm">
                       <span className="font-medium text-foreground">Inbox needs a reconnect.</span>{" "}
@@ -227,7 +244,7 @@ export default async function AccountsPage({
                       {account.engagementReadPermission.docsPath ? (
                         <>
                           {" "}
-                          <a href={account.engagementReadPermission.docsPath} className="underline">
+                          <a href={docsHref(account.engagementReadPermission.docsPath)} className="underline">
                             Set up comments →
                           </a>
                         </>

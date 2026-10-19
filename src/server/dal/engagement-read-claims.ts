@@ -129,3 +129,15 @@ export function countAccountsMissingEngagementScopes(rules: readonly EngagementP
     return row?.n ?? 0;
   });
 }
+
+/** research.md §3 Finding D3. Active accounts on a provider whose engagement is declared `unavailable`. */
+export function countAccountsOnUnavailableEngagement(providerKeys: readonly string[]): Promise<number> {
+  return crossProject("scheduler: count unavailable-engagement accounts", async () => {
+    if (providerKeys.length === 0) return 0;
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(socialAccounts)
+      .where(and(isNull(socialAccounts.removedAt), eq(socialAccounts.status, "active"), or(...providerKeys.map((key) => eq(socialAccounts.providerKey, key)))));
+    return row?.n ?? 0;
+  });
+}

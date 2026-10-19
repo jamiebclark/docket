@@ -3,7 +3,13 @@ import { findProvider, listProviders } from "../../providers/registry";
 import type { EngagementReadResult } from "../../providers/types";
 import { directionFor, nextBackfillState, shouldReadAnotherPage } from "../../lib/engagement/paging";
 import * as clock from "../dal/clock";
-import { claimDueEngagementReads, countAccountsMissingEngagementScopes, type ClaimedEngagementAccount, type EngagementProviderRule } from "../dal/engagement-read-claims";
+import {
+  claimDueEngagementReads,
+  countAccountsMissingEngagementScopes,
+  countAccountsOnUnavailableEngagement,
+  type ClaimedEngagementAccount,
+  type EngagementProviderRule,
+} from "../dal/engagement-read-claims";
 import { forSchedulerProject } from "../dal/scheduler";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { decryptCredentials } from "../services/accounts";
@@ -54,6 +60,10 @@ export async function runEngagementRead(opts: { config: SchedulerConfig; tickId:
   const providers: EngagementProviderRule[] = listProviders()
     .filter((p) => p.engagement && !p.engagement.declaration.unavailable)
     .map((p) => ({ providerKey: p.key, readScopes: p.engagement!.declaration.readScopes ?? [] }));
+  const unavailableProviderKeys = listProviders()
+    .filter((p) => p.engagement?.declaration.unavailable)
+    .map((p) => p.key);
+  counts.unavailable += await countAccountsOnUnavailableEngagement(unavailableProviderKeys);
 
   if (providers.length > 0) {
     const now = await clock.now();

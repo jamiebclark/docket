@@ -59,7 +59,7 @@ is claimed and no Threads credential is decrypted.
 
 ### Implementation for User Story 1
 
-- [ ] T005 [P] [US1] Create `src/providers/threads/engagement.ts`: `threadsEngagement` export with
+- [X] T005 [P] [US1] Create `src/providers/threads/engagement.ts`: `threadsEngagement` export with
   `declaration` (`reads: ["reply", "mention"]`, `canReply: false`, `unavailable.reason` naming both
   surfaces and the unconfirmed-endpoint cause with none of *reconnect/grant/permission needed/opt
   in/enable*, `unavailable.docsPath: "meta-setup#engagement"`, no `readScopes`, no
@@ -68,39 +68,39 @@ is claimed and no Threads credential is decrypted.
   `{ kind: "unavailable", reason, docsPath }` without touching `_ctx`, `send()` returning
   `{ kind: "fatal_error", error: "Threads replies cannot be sent through Docket." }` without
   touching `_ctx`. Imports only `zod`, `../types`, `./settings` (contracts/threads-engagement.md §1-3)
-- [ ] T006 [US1] Wire `engagement: threadsEngagement` onto `threadsProvider` in
+- [X] T006 [US1] Wire `engagement: threadsEngagement` onto `threadsProvider` in
   `src/providers/threads/index.ts` (depends on T005)
-- [ ] T007 [P] [US1] Write `src/providers/threads/engagement.test.ts`: `reads` is exactly
+- [X] T007 [P] [US1] Write `src/providers/threads/engagement.test.ts`: `reads` is exactly
   `["reply", "mention"]`; `canReply` is `false`; no `readScopes`/`missingReadScopes`/`writeBudget`
   key; `unavailable.reason` contains none of the forbidden words (FR-004); `read()` returns
   `kind: "unavailable"`; `send()` returns `kind: "fatal_error"` with no `flagAccount`; neither
   function reads any property off its context argument
-- [ ] T008 [P] [US1] Add FR-035 declaration-refusal tests to `src/providers/registry.test.ts`:
+- [X] T008 [P] [US1] Add FR-035 declaration-refusal tests to `src/providers/registry.test.ts`:
   the shipped `threadsEngagement.declaration` passes `assertEngagementDeclaration`; the same
   declaration plus `readScopes: ["threads_manage_replies"]` throws
   `unavailable and readScopes must never both be set`; the same declaration plus a `writeBudget`
   throws
-- [ ] T009 [US1] Add `countAccountsOnUnavailableEngagement(providerKeys: readonly string[]):
+- [X] T009 [US1] Add `countAccountsOnUnavailableEngagement(providerKeys: readonly string[]):
   Promise<number>` to `src/server/dal/engagement-read-claims.ts`, mirroring
   `countAccountsMissingEngagementScopes`'s predicate shape (`removedAt IS NULL`,
   `status = 'active'`) (research.md §3 Finding D3)
-- [ ] T010 [US1] In `src/server/scheduler/engagement-read.ts`, compute the unavailable provider keys
+- [X] T010 [US1] In `src/server/scheduler/engagement-read.ts`, compute the unavailable provider keys
   alongside the existing rule list and add `countAccountsOnUnavailableEngagement`'s result to
   `counts.unavailable`, called unconditionally outside the `providers.length > 0` guard (depends on
   T009; FR-016)
-- [ ] T011 [US1] Update `src/app/p/[projectSlug]/inbox/page.tsx`: render the unavailable-accounts
+- [X] T011 [US1] Update `src/app/p/[projectSlug]/inbox/page.tsx`: render the unavailable-accounts
   notice's link through `docsHref` instead of the raw `docsPath` (line 82); render the engagement
   permission notice only for accounts with `!a.unavailable` (precedence guard, FR-015) (depends on
   T001)
-- [ ] T012 [P] [US1] Add `engagementUnavailable: { reason: string; docsPath?: string } | null` to
+- [X] T012 [P] [US1] Add `engagementUnavailable: { reason: string; docsPath?: string } | null` to
   `AccountView` in `src/server/services/accounts.ts`, filled in `view()` from
   `findProvider(a.providerKey)?.engagement?.declaration.unavailable ?? null` (data-model.md §4)
-- [ ] T013 [US1] Update `src/app/p/[projectSlug]/accounts/page.tsx`: render
+- [X] T013 [US1] Update `src/app/p/[projectSlug]/accounts/page.tsx`: render
   `account.engagementUnavailable` in the same place as the engagement permission block, with the
   declared reason verbatim and a docs link through `docsHref`, no reconnect control; render the
   existing `engagementReadPermission` block only when `account.engagementUnavailable === null`
   (precedence guard, FR-015) (depends on T001, T012)
-- [ ] T014 [P] [US1] Write `tests/integration/engagement/threads-unavailable.test.ts`: with a
+- [X] T014 [P] [US1] Write `tests/integration/engagement/threads-unavailable.test.ts`: with a
   connected Threads account, a real `runEngagementRead` tick reports `counts.claimed` excluding it
   and `counts.unavailable === 1` and `counts.failed === 0`; no `engagement_account_states` row
   exists for it; the credential-decrypt function is spied and never called; `fetch` is stubbed to
@@ -108,7 +108,7 @@ is claimed and no Threads credential is decrypted.
   `docsPath`; the account filter's options exclude it; then with `granted_scopes` set to both
   Threads engagement permissions, the member is still told reading is not built and is not offered a
   reconnect (US1 scenario 5, FR-015)
-- [ ] T015 [P] [US1] Write `tests/integration/accounts/accounts-page-engagement.test.ts`: render the
+- [X] T015 [P] [US1] Write `tests/integration/accounts/accounts-page-engagement.test.ts`: render the
   real accounts page (`renderToStaticMarkup`, the `accounts-page-insights.test.ts` shape) with a
   connected Threads account and assert the card carries the declared reason verbatim, a
   documentation link, and no Reconnect control for engagement
