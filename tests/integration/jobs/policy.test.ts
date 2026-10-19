@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { setLlmForTests } from "../../../src/server/llm";
-import { runTick } from "../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import * as accounts from "../../../src/server/services/accounts";
 import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, TICK_BUDGET_MS } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -20,7 +22,7 @@ type Env = Awaited<ReturnType<typeof jobsEnv>>;
 
 async function drain(e: Env, jobId: string) {
   for (let i = 0; i < 15; i++) {
-    await runTick(tickConfig({ jobMaxItems: 1 }));
+    await drainOnce({ jobMaxItems: 1 });
     const counts = await e.scope.jobItems.countByStatus(jobId);
     if (counts.queued + counts.running === 0) break;
   }
@@ -38,6 +40,15 @@ async function outcomes(e: Env, jobId: string) {
 
 const APPROVALS = ["review_required", "auto_approve"] as const;
 const SCHEDULINGS = ["leave_as_draft", "add_to_queue"] as const;
+
+// Drains the generation section, not whole ticks. `runTick` runs ten sections concurrently and nine
+// are incidental to a job drain, which is the exposure that killed sibling files on a test timeout -
+// see docs/decisions.md, "What the block-shaped CI flakes are not", for why the two database
+// explanations were excluded by measurement and the remedy is to ask for less.
+const DRAIN_CONFIG = (over: Record<string, unknown> = {}) =>
+  schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, ...over });
+const drainOnce = (over: Record<string, unknown> = {}) =>
+  runGenerationJobs({ config: DRAIN_CONFIG(over), tickId: "test-drain", startedAt: new Date() });
 
 describe("the policy matrix in a job (SC-005)", () => {
   for (const approval of APPROVALS) {

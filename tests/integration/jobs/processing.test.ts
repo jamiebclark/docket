@@ -5,13 +5,15 @@ import { runCrossProject } from "../../../src/server/db/cross-project";
 import { createVoiceProfilesRepo, createVoiceVersionsRepo } from "../../../src/server/dal/voice";
 import { user } from "../../../src/server/db/schema";
 import { setLlmForTests } from "../../../src/server/llm";
-import { runTick } from "../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import { removeAccount } from "../../../src/server/services/accounts";
 import { createJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, TICK_BUDGET_MS } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -33,8 +35,8 @@ type Env = Awaited<ReturnType<typeof setup>>;
 async function drain(e: Env, jobId: string, config: Record<string, number> = {}) {
   const claims: number[] = [];
   for (let i = 0; i < 15; i++) {
-    const tick = await runTick(tickConfig({ jobMaxItems: 2, ...config }));
-    claims.push(tick.generation.counts.claimed);
+    const generationCounts = await drainOnce({ jobMaxItems: 2, ...config });
+    claims.push(generationCounts.claimed);
     const counts = await e.scope.jobItems.countByStatus(jobId);
     if (counts.queued + counts.running === 0) break;
   }
@@ -47,6 +49,15 @@ const postsOf = async (e: Env, jobId: string) => {
   for (const item of items) out.push({ item, post: await e.scope.posts.findByJobItemId(item.id) });
   return out;
 };
+
+// Drains the generation section, not whole ticks. `runTick` runs ten sections concurrently and nine
+// are incidental to a job drain, which is the exposure that killed sibling files on a test timeout -
+// see docs/decisions.md, "What the block-shaped CI flakes are not", for why the two database
+// explanations were excluded by measurement and the remedy is to ask for less.
+const DRAIN_CONFIG = (over: Record<string, unknown> = {}) =>
+  schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, ...over });
+const drainOnce = (over: Record<string, unknown> = {}) =>
+  runGenerationJobs({ config: DRAIN_CONFIG(over), tickId: "test-drain", startedAt: new Date() });
 
 describe("processing a media job in the tick (US1)", () => {
   it("runs to completion: a post per unused image, at most jobMaxItems per tick", async () => {
@@ -85,7 +96,7 @@ describe("processing a media job in the tick (US1)", () => {
     const e = await setup([modelOk("A", 1), modelOk("B", 1), modelOk("C", 1)]);
     await e.assets(3);
     const { jobId } = await createJob(e.scope, e.input());
-    await runTick(tickConfig({ jobMaxItems: 1 }));
+    await drainOnce({ jobMaxItems: 1 });
 
     const versions = createVoiceVersionsRepo(getDb(), e.project.id);
     const v1 = (await versions.getByNumber(e.profile.id, 1))!;

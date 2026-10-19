@@ -1,13 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { setLlmForTests } from "../../../src/server/llm";
 import type { LlmProvider } from "../../../src/server/llm/types";
-import { runTick } from "../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import { createJob } from "../../../src/server/services/jobs/create";
 import { retryFailedItems } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, parkAllJobs, TICK_BUDGET_MS } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -36,6 +38,15 @@ function sideEffectLlm(fake: FakeLlm, onCall: () => Promise<void>): LlmProvider 
   } as LlmProvider;
 }
 
+// Drains the generation section, not whole ticks. `runTick` runs ten sections concurrently and nine
+// are incidental to a job drain, which is the exposure that killed sibling files on a test timeout -
+// see docs/decisions.md, "What the block-shaped CI flakes are not", for why the two database
+// explanations were excluded by measurement and the remedy is to ask for less.
+const DRAIN_CONFIG = (over: Record<string, unknown> = {}) =>
+  schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, ...over });
+const drainOnce = (over: Record<string, unknown> = {}) =>
+  runGenerationJobs({ config: DRAIN_CONFIG(over), tickId: "test-drain", startedAt: new Date() });
+
 describe("a late external-id claim caught by the runner (US2)", () => {
   it("skips the item, no post, job completes (not with_failures), and retry-failed ignores it (FR-021, FR-022, AS2.7)", async () => {
     const e = await setup();
@@ -47,7 +58,7 @@ describe("a late external-id claim caught by the runner (US2)", () => {
     await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "glen-1", postId: (await e.scope.posts.insert({ baseText: "Other" })).id, claimedAt: new Date() });
 
     for (let i = 0; i < 20; i++) {
-      await runTick(tickConfig({ jobMaxItems: 5 }));
+      await drainOnce({ jobMaxItems: 5 });
       const counts = await e.scope.jobItems.countByStatus(jobId);
       if (counts.skipped + counts.failed + counts.done > 0) break;
       await new Promise((r) => setTimeout(r, 50));
@@ -76,7 +87,7 @@ describe("a late external-id claim caught by the runner (US2)", () => {
     setLlmForTests(llm);
 
     for (let i = 0; i < 20; i++) {
-      await runTick(tickConfig({ jobMaxItems: 5 }));
+      await drainOnce({ jobMaxItems: 5 });
       const counts = await e.scope.jobItems.countByStatus(jobId);
       if (counts.skipped + counts.failed + counts.done > 0) break;
       await new Promise((r) => setTimeout(r, 50));

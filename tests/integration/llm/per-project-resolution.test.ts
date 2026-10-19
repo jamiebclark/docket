@@ -6,7 +6,9 @@ import { createProjectLlmRepo } from "../../../src/server/dal/project-llm";
 import { setLlmFactoryForTests, setLlmForTests } from "../../../src/server/llm";
 import type { LlmConfig } from "../../../src/server/llm/config";
 import type { LlmProvider, LlmRequest, LlmResult } from "../../../src/server/llm/types";
-import { runTick } from "../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import { generateSingle } from "../../../src/server/services/generation/single";
 import { planSeries } from "../../../src/server/services/generation/series";
 import { regeneratePost } from "../../../src/server/services/generation/regenerate";
@@ -15,7 +17,7 @@ import { createJob } from "../../../src/server/services/jobs";
 import { api, createKey } from "../../helpers/api";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
-import { clearHolds, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { clearHolds, parkAllJobs, TICK_BUDGET_MS } from "../../helpers/jobs-env";
 import { createVoiceProfile } from "../../helpers/factories";
 import { png } from "../../helpers/images";
 import { postsEnv } from "../../helpers/posts-env";
@@ -106,6 +108,15 @@ async function setupProject(apiKey: string, storage: MemoryStorage) {
   return { ...env, profile, account, asset, input };
 }
 
+// Drains the generation section, not whole ticks. `runTick` runs ten sections concurrently and nine
+// are incidental to a job drain, which is the exposure that killed sibling files on a test timeout -
+// see docs/decisions.md, "What the block-shaped CI flakes are not", for why the two database
+// explanations were excluded by measurement and the remedy is to ask for less.
+const DRAIN_CONFIG = (over: Record<string, unknown> = {}) =>
+  schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, ...over });
+const drainOnce = (over: Record<string, unknown> = {}) =>
+  runGenerationJobs({ config: DRAIN_CONFIG(over), tickId: "test-drain", startedAt: new Date() });
+
 describe("per-project resolution (US1, AS2)", () => {
   it("resolves each generation path to the calling project's own stored credential", async () => {
     await parkAllJobs();
@@ -178,7 +189,7 @@ describe("per-project resolution (US1, AS2)", () => {
     for (let i = 0; i < 10; i++) {
       const [ia, ib] = await Promise.all([a.scope.jobItems.countByStatus(jobIdA), b.scope.jobItems.countByStatus(jobIdB)]);
       if (ia.queued + ia.running === 0 && ib.queued + ib.running === 0) break;
-      await runTick(tickConfig({ jobMaxItems: 5 }));
+      await drainOnce({ jobMaxItems: 5 });
     }
 
     const byKey = (key: string) => calls.filter((c) => c.apiKey === key);
