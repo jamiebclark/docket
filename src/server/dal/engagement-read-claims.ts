@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { engagementAccountStates, socialAccounts, type EngagementAccountStateRow, type SocialAccountRow } from "../db/schema";
-import { accountHoldsScopes } from "./scope-predicates";
+import { accountHoldsScopes, accountMissingScopes } from "./scope-predicates";
 import { crossProject } from "./scope";
 import type { ClaimedAccount } from "./scheduler";
 
@@ -104,5 +104,28 @@ export function claimDueEngagementReads(opts: {
       }
       return claimed;
     });
+  });
+}
+
+/**
+ * Companion count for `accountsSkippedNoPermission` (contracts/engagement-read-scopes.md §4, G40):
+ * the claim excludes an ineligible account, so the claim cannot report it. Counts an account
+ * missing its declared scopes, deduplicated by account id, over providers that declare any.
+ */
+export function countAccountsMissingEngagementScopes(rules: readonly EngagementProviderRule[]): Promise<number> {
+  return crossProject("scheduler: count engagement-ineligible accounts", async () => {
+    const declared = rules.filter((r) => r.readScopes.length > 0);
+    if (declared.length === 0) return 0;
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(socialAccounts)
+      .where(
+        and(
+          isNull(socialAccounts.removedAt),
+          eq(socialAccounts.status, "active"),
+          or(...declared.map((r) => and(eq(socialAccounts.providerKey, r.providerKey), accountMissingScopes(r.readScopes)))),
+        ),
+      );
+    return row?.n ?? 0;
   });
 }

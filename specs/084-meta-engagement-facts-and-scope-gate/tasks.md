@@ -298,17 +298,17 @@ recorded counts, including that an account missing two declared scopes is counte
 
 Depends on Phase 4 (US3 — `EngagementProviderRule` and the claim it feeds).
 
-- [ ] T037 [P] [US6] Add `accountsSkippedNoPermission: number` to `EngagementReadCounts` in
+- [X] T037 [P] [US6] Add `accountsSkippedNoPermission: number` to `EngagementReadCounts` in
       `src/server/scheduler/engagement-read.ts`
-- [ ] T038 [P] [US6] Add `countAccountsMissingEngagementScopes(rules)` (beside
+- [X] T038 [P] [US6] Add `countAccountsMissingEngagementScopes(rules)` (beside
       `src/server/dal/engagement-read-claims.ts` or `scope-predicates.ts`), considering only rules with
       a non-empty `readScopes`, returning `0` with **no query issued** when there are none, using
       `accountMissingScopes` (T004) in an `OR` over per-provider arms, wrapped in
       `crossProject("scheduler: count engagement-ineligible accounts", …)` (data-model.md §6)
-- [ ] T039 [US6] Wire T038 into `runEngagementRead` right after the claim, setting
+- [X] T039 [US6] Wire T038 into `runEngagementRead` right after the claim, setting
       `accountsSkippedNoPermission` on the run's counts, mirroring where `runInsightsPoll` sets its own
       (`src/server/scheduler/insights-poll.ts:113`)
-- [ ] T040 [US6] Integration test `tests/integration/engagement/scope-gate.test.ts -t "skipped"`:
+- [X] T040 [US6] Integration test `tests/integration/engagement/scope-gate.test.ts -t "skipped"`:
       `accountsSkippedNoPermission` equals the number of accounts missing their declared scopes; an
       account missing two declared scopes is counted exactly once; the count is `0` with no extra query
       when no provider declares read scopes; it is distinct from `unavailable`, `failed` and

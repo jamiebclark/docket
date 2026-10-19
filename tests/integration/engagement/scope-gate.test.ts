@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertEngagementDeclaration } from "../../../src/providers/registry";
+import { mockProvider } from "../../../src/providers/mock";
 import { mockEngagement } from "../../../src/providers/mock/engagement";
 import type { EngagementDeclaration } from "../../../src/providers/types";
-import { claimDueEngagementReads, type EngagementProviderRule } from "../../../src/server/dal/engagement-read-claims";
+import { claimDueEngagementReads, countAccountsMissingEngagementScopes, type EngagementProviderRule } from "../../../src/server/dal/engagement-read-claims";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { forProject } from "../../../src/server/dal/scope";
 import { getEnv } from "../../../src/server/env";
@@ -15,8 +16,28 @@ import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
+import { registerTestProvider } from "../../helpers/provider-fixtures";
 import { parkAllEngagementReads } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
+
+/**
+ * Its own provider key *and* its own declaration object — `mockProvider.engagement` is the shared
+ * `mockEngagement` singleton, so reusing it here would mean `withReadScopes` (which mutates that
+ * singleton's `declaration`) leaks the same `readScopes` onto the real "mock" key's accounts too,
+ * defeating the isolation a global, cross-project count otherwise needs.
+ */
+const skipCountProvider = registerTestProvider({
+  ...mockProvider,
+  key: "skip-count-test",
+  engagement: {
+    ...mockEngagement,
+    declaration: {
+      ...mockEngagement.declaration,
+      readScopes: ["read_comments", "read_insights"],
+      missingReadScopes: { reason: "Reconnect and grant read_comments to read comments." },
+    },
+  },
+});
 
 afterAll(closeDb);
 
@@ -27,9 +48,9 @@ beforeEach(parkAllEngagementReads);
 const AT = new Date("2026-10-19T12:00:00Z");
 const NO_WAIT = { engagementReadMinIntervalMs: 0 };
 
-async function runSection(): Promise<void> {
+async function runSection() {
   const config = schedulerConfig(getEnv(), tickConfig(NO_WAIT).config);
-  await atTime(AT, () => runEngagementRead({ config, tickId: randomUUID(), startedAt: AT }));
+  return atTime(AT, () => runEngagementRead({ config, tickId: randomUUID(), startedAt: AT }));
 }
 
 const originalDeclaration: EngagementDeclaration = mockEngagement.declaration;
@@ -355,5 +376,49 @@ describe("the inbox notice and accounts-page line (US4, FR-034–FR-037)", () =>
     expect(views.find((v) => v.id === account.id)?.readPermission).toEqual({ kind: "ok" });
     const accountViews = await accountsService.listAccounts(scope);
     expect(accountViews.find((a) => a.id === account.id)?.engagementReadPermission).toEqual({ kind: "ok" });
+  });
+});
+
+describe("the accountsSkippedNoPermission count (US6, FR-049-FR-050)", () => {
+  it("counts accounts skipped for missing permission, deduplicated, and keeps it distinct from unavailable, failed and rateLimited", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    // Missing both declared scopes — counted once, not twice.
+    await repos.accounts.upsertConnected({
+      providerKey: skipCountProvider.key,
+      displayName: "Missing both scopes",
+      externalAccountId: "skipped-missing-both",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: [],
+    });
+    // Eligible — read normally, not counted.
+    await repos.accounts.upsertConnected({
+      providerKey: skipCountProvider.key,
+      displayName: "Eligible",
+      externalAccountId: "skipped-eligible",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["read_comments", "read_insights"],
+    });
+
+    const counts = await runSection();
+    expect(counts.accountsSkippedNoPermission).toBe(1);
+    expect(counts.unavailable).toBe(0);
+    expect(counts.failed).toBe(0);
+    expect(counts.rateLimited).toBe(0);
+  });
+
+  it("is 0 with no extra query when no provider declares read scopes", async () => {
+    const rules: EngagementProviderRule[] = [
+      { providerKey: "mock", readScopes: [] },
+      { providerKey: "bluesky", readScopes: [] },
+    ];
+    await expect(countAccountsMissingEngagementScopes(rules)).resolves.toBe(0);
+    await expect(countAccountsMissingEngagementScopes([])).resolves.toBe(0);
   });
 });

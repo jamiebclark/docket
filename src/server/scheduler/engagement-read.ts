@@ -3,7 +3,7 @@ import { findProvider, listProviders } from "../../providers/registry";
 import type { EngagementReadResult } from "../../providers/types";
 import { directionFor, nextBackfillState, shouldReadAnotherPage } from "../../lib/engagement/paging";
 import * as clock from "../dal/clock";
-import { claimDueEngagementReads, type ClaimedEngagementAccount, type EngagementProviderRule } from "../dal/engagement-read-claims";
+import { claimDueEngagementReads, countAccountsMissingEngagementScopes, type ClaimedEngagementAccount, type EngagementProviderRule } from "../dal/engagement-read-claims";
 import { forSchedulerProject } from "../dal/scheduler";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { decryptCredentials } from "../services/accounts";
@@ -22,6 +22,7 @@ export interface EngagementReadCounts {
   cursorLost: number;
   unavailable: number;
   failed: number;
+  accountsSkippedNoPermission: number;
 }
 
 export const emptyEngagementReadCounts = (): EngagementReadCounts => ({
@@ -34,6 +35,7 @@ export const emptyEngagementReadCounts = (): EngagementReadCounts => ({
   cursorLost: 0,
   unavailable: 0,
   failed: 0,
+  accountsSkippedNoPermission: 0,
 });
 
 const ACCOUNTS_PER_RUN = 20;
@@ -63,6 +65,7 @@ export async function runEngagementRead(opts: { config: SchedulerConfig; tickId:
       providers,
     });
     counts.claimed = claimed.length;
+    counts.accountsSkippedNoPermission = await countAccountsMissingEngagementScopes(providers);
     await Promise.all(claimed.map((claim) => processAccount(claim, { config: opts.config, cfg, deadline, counts })));
   }
 
