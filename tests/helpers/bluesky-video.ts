@@ -4,6 +4,7 @@ import { createSchedulingRepos } from "../../src/server/dal/scope";
 import { mediaAssets } from "../../src/server/db/schema/media";
 import { postTargets } from "../../src/server/db/schema/posts";
 import { runTick } from "../../src/server/scheduler";
+import { tickConfig } from "./tick";
 import * as accounts from "../../src/server/services/accounts";
 import { setStorageForTests } from "../../src/server/storage";
 import { testDb } from "./db";
@@ -176,7 +177,7 @@ export async function blueskyVideoSetup(opts: BlueskyVideoOptions = {}) {
 
   /** One scheduler tick, optionally with the engine clock fixed at `at`. */
   const tick = async (at?: Date) => {
-    const run = async () => (await runTick({ config: {} })).publishing.counts;
+    const run = async () => (await runTick(tickConfig())).publishing.counts;
     return at ? atTime(at, run) : run();
   };
   const row = async () => (await testDb().select().from(postTargets).where(and(eq(postTargets.projectId, env.project.id), eq(postTargets.id, target.id))))[0]!;
