@@ -98,6 +98,16 @@ export async function createDueTarget(
 
 /** Far enough out that no test's `now` reaches it. */
 const PARKED_UNTIL = new Date("2100-01-01T00:00:00Z");
+/**
+ * The lease owner a parked video version gets: the nil uuid, i.e. leased to nobody.
+ *
+ * It has to be a uuid, not a label. `video_versions.lease_token` is a uuid column - the only one any
+ * parker writes - and a readable string fails the update with 22P02 from `string_to_uuid`. That is not
+ * hypothetical: it shipped in #172 and only failed on CI, because the video tests that exercise this
+ * are skipped locally without ffmpeg. The same mistake with `publish_attempts.tick_id` was caught
+ * locally an hour earlier, where the test did run.
+ */
+const PARKED_BY_TESTS = "00000000-0000-0000-0000-000000000000";
 
 /**
  * Pushes every account out of reach of an engagement read claim, so a claim under test returns only
@@ -199,7 +209,7 @@ export async function parkAllVideoVersions(): Promise<void> {
   await runCrossProject("test: park video versions", async () => {
     await getDb()
       .update(videoVersions)
-      .set({ state: "building", leaseUntil: PARKED_UNTIL, leaseToken: "parked-by-tests" })
+      .set({ state: "building", leaseUntil: PARKED_UNTIL, leaseToken: PARKED_BY_TESTS })
       .where(
         or(
           eq(videoVersions.state, "queued"),
