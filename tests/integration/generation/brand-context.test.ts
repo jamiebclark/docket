@@ -9,12 +9,14 @@ import { regeneratePost } from "../../../src/server/services/generation/regenera
 import { generateSingle } from "../../../src/server/services/generation/single";
 import { tryVoice } from "../../../src/server/services/voice";
 import { setLlmForTests } from "../../../src/server/llm";
-import { runTick } from "../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../helpers/fake-llm";
 import { createVoiceProfile } from "../../helpers/factories";
-import { jobsEnv, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, parkAllJobs, TICK_BUDGET_MS } from "../../helpers/jobs-env";
 import { postsEnv } from "../../helpers/posts-env";
 import { createMemoryStorage } from "../../helpers/storage";
 
@@ -104,8 +106,20 @@ describe("brand context reaches every generation entry point", () => {
     setLlmForTests(llm);
     await e.assets(1);
     const { jobId } = await createJob(e.scope, e.input());
+    // Drain the generation section, not fifteen whole ticks.
+    //
+    // This loop used to call `runTick`, which runs ten sections concurrently, up to fifteen times - to
+    // assert that brand text reaches an LLM prompt. The other nine sections are incidental to that and
+    // were most of the cost: the test takes 663ms locally and died on vitest's 20s `testTimeout` in 1-2
+    // of 20 repetitions across flake-hunt runs 39136066573 and 39195627319, a 30x blowup that neither
+    // of the database deadlines could explain (hunt 39195627319 ran with `lock_timeout` at 15s and
+    // recorded no lock timeout anywhere, and a 10s pool-connect timeout did not fire either).
+    //
+    // Calling the section directly is the same correction #162 made to scheduler/refresh.test.ts, and
+    // `jobs/budget.test.ts` already does it this way.
+    const config = schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, jobMaxItems: 2 });
     for (let i = 0; i < 15; i++) {
-      await runTick(tickConfig({ jobMaxItems: 2 }));
+      await runGenerationJobs({ config, tickId: "test-brand-context", startedAt: new Date() });
       const counts = await e.scope.jobItems.countByStatus(jobId);
       if (counts.queued + counts.running === 0) break;
     }
