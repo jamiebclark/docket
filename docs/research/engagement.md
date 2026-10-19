@@ -72,7 +72,7 @@ domains (`developers.facebook.com`), plus `docs/research/meta.md`'s own
 accounts" note, which read the Graph API access-levels page directly. Four
 surfaces, answered separately — Threads replies and Threads mentions are two
 different APIs with two different permissions, never merged. Evidence grade
-follows [contracts/research-section-2.md](../../specs/084-meta-engagement-facts-and-scope-gate/contracts/research-section-2.md)
+follows `specs/084-meta-engagement-facts-and-scope-gate/contracts/research-section-2.md`
 §3: `page` means the official page's own text was read; `search-summary`
 means an official-domain search result quoted the fact verbatim.
 
@@ -151,8 +151,8 @@ permission, a different API shape, answered independently (contract §1).
 | 5 | Reply at this access level? (recorded, not built — FR-015) | **unverified** — tried: not confirmed whether replying to a mention uses the reply endpoint/permission above or a separate one. |  |  |  |
 | 6 | Pagination | **unverified** — same reason as Q1. |  |  |  |
 | 7 | Read rate limits | **unverified** — no mentions-specific limit found; not assumed to share the replies publish limit above without confirmation. |  |  |  |
-| 8 | Deleted/edited presentation | **unverified** — no field found. |  |  |  |
-| 9 | Per-account or per-post listable? | **unverified** — no endpoint confirmed under Q1. |  |  |  |
+| 8 | Deleted/edited presentation | **unverified** — tried: searched the Threads mention object reference for a deletion or edit indicator (an `is_deleted`, `edited_time` or status-style field); no field list for the mention object was quoted back by any search, so nothing confirms how a removed or edited mention presents on a later read. |  |  |  |
+| 9 | Per-account or per-post listable? | **unverified** — same reason as Q1: no mentions-listing endpoint was confirmed, so there is nothing to classify as per-account or per-post. |  |  |  |
 
 **Consequence:** must ship declared-but-`unavailable`. Only the permission
 name is confirmed; the endpoint and identity shape are not. `ENGAGEMENT_SCOPES_DECLARED`
