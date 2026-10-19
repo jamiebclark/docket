@@ -357,16 +357,29 @@ mark it unachievable here with the reason, rather than leaving it silently open.
 - [ ] T047 [P] **Needs a live Meta app, a real Facebook Page, a real Instagram Business account and a
       browser.** Approve the engagement comment permission on a live Meta consent screen and confirm the
       grant Meta reports back matches what T025 declared
+      **Unachievable this pass** — the implement pipeline runs headless: no browser, no live Meta app
+      credentials, no real Facebook Page or Instagram Business account. Not required to ship (FR-005);
+      left open for whoever next holds those resources.
 - [ ] T048 [P] **Needs a live Threads account and a browser.** Same approval and confirmation on a live
       Threads consent screen, against what T026 declared
+      **Unachievable this pass** — same reason as T047: no browser, no live Threads account available to
+      a headless pipeline run. Not required to ship (FR-005).
 - [ ] T049 [P] **Needs a signed-in browser session.** Walk through the accounts page's
       inbox-needs-a-reconnect line and its reconnect control in both the can-widen and cannot-widen
       states (T034), confirming the rendered reason and button match the fixture-driven tests from T035
+      **Unachievable this pass** — no browser or signed-in session is available to a headless pipeline
+      run. T035's fixture-driven tests already exercise both states offline; this task only remains open
+      to confirm the same behaviour in a real browser. Not required to ship (FR-005).
 - [ ] T050 [P] **Conditional — only if any §2 cell from T006 is still `unverified`; needs a live session,
       a second person to comment, and a browser.** Attempt live confirmation of that answer (most likely
       candidate: whether a commenter's identifier is stable across two comments). Not required for this
       entry to ship (FR-005) — if the resources are unavailable, record that here rather than leaving it
       open
+      **Condition is met** — `docs/research/engagement.md` §2 still records every commenter/replier/
+      mentioner identity question as `unverified` for all four Meta/Threads surfaces (see also its
+      "Phase 9 human task" note on T083/T084). **Unachievable this pass** for the same reason as
+      T047–T049: no live session, no second person to comment, no browser. Left open; §2 stays
+      `unverified` until a later entry runs this live.
 
 ---
 
