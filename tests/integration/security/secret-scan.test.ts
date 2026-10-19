@@ -961,6 +961,54 @@ describe("secret scan (FR-020, SC-005)", () => {
     expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
   });
 
+  it("the engagement scope-gate notice, reason and count never echo a credential or token (FR-039)", async () => {
+    await parkAllDueTargets();
+    const GATED_TOKEN = "scan-mock-engagement-gated-token-6f3a19c2d8e4506097a1b2c3d4e5f607";
+
+    const ctx = await postsEnv();
+    const repos = forSchedulerProject(ctx.project.id);
+    const { mockEngagement } = await import("../../../src/providers/mock/engagement");
+    const originalDeclaration = mockEngagement.declaration;
+    mockEngagement.declaration = {
+      ...originalDeclaration,
+      readScopes: ["read_comments"],
+      missingReadScopes: { reason: "Reconnect and grant read_comments to read comments." },
+    };
+    try {
+      const gated = await repos.accounts.upsertConnected({
+        providerKey: "mock",
+        displayName: "Scan Mock Gated",
+        externalAccountId: "scan-mock-engagement-gated",
+        settings: {},
+        credentialsEncrypted: null,
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        // grantedScopes omitted: NULL, never holding the declared scope.
+      });
+      await repos.accounts.setCredentials(gated.id, accounts.encryptCredentials(gated.id, { token: GATED_TOKEN }), null);
+
+      const sessionBefore = session.current;
+      session.current = { user: { id: ctx.owner.id }, session: { id: "scan-engagement-gate-session" } };
+      const params = { params: Promise.resolve({ projectSlug: ctx.project.slug }) };
+      const accountsMarkup = renderToStaticMarkup((await AccountsPage(params)) as never);
+      const inboxMarkup = renderToStaticMarkup((await InboxPage({ ...params, searchParams: Promise.resolve({}) })) as never);
+      session.current = sessionBefore;
+
+      // Sanity: the notice actually rendered on both pages, not just an absence of secrets.
+      expect(accountsMarkup).toContain("Inbox needs a reconnect.");
+      expect(inboxMarkup).toMatch(/needs a reconnect to read its comments/);
+
+      const pieces: Piece[] = [
+        { place: "page: accounts (engagement scope gate)", text: accountsMarkup },
+        { place: "page: inbox (engagement scope gate)", text: inboxMarkup },
+      ];
+      const secrets: Secret[] = [{ name: "mock engagement gated token", value: GATED_TOKEN }];
+      expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
+    } finally {
+      mockEngagement.declaration = originalDeclaration;
+    }
+  });
+
   it("the TikTok, Pinterest and X insights readers and their poll-state/snapshot rows never echo a credential (FR-013, FR-054)", async () => {
     await parkAllDueTargets();
     process.env.X_INSIGHTS_ENABLED = "true";

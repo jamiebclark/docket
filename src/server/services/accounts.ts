@@ -3,6 +3,7 @@ import { z } from "zod";
 import { findProvider, listProviders } from "@/providers/registry";
 import type { CredentialField, ProviderCapabilities, PublishLimit, SocialProvider } from "@/providers/types";
 import { insightsPermissionFor, type InsightsPermission } from "@/lib/insights/eligibility";
+import { scopePermissionFor, type ScopePermission } from "@/lib/scope-permission";
 import {
   connectMockSchema,
   publishLimitSchema,
@@ -44,6 +45,8 @@ export interface AccountView {
   insightsPostPermission: InsightsPermission | null;
   /** G37. Null when this provider declares no account-surface insights or needs no permission. */
   insightsAccountPermission: InsightsPermission | null;
+  /** G40. Null when this provider declares no engagement read scopes or needs no permission. */
+  engagementReadPermission: ScopePermission | null;
 }
 
 /** G37: the one decision per surface, computed from the stored grant, the provider's declaration
@@ -67,8 +70,25 @@ export function insightsPermissionForAccount(
     // and judging it on the opt-ins alone reported "not requested" for scopes the dialog does ask
     // for — leaving the operator no reconnect control at all.
     requestedScopes: [...(group?.baseScopes ?? []), ...(group?.optionalScopes?.requested(process.env) ?? [])],
-    cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env) ?? null,
+    cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env, "insights") ?? null,
     missingScopes,
+  });
+}
+
+/** G40: the same decision as `insightsPermissionForAccount`, for the engagement surface. */
+export function engagementPermissionForAccount(
+  a: Pick<AccountRecord, "grantedScopes">,
+  provider: SocialProvider | undefined,
+): ScopePermission | null {
+  const requiredScopes = provider?.engagement?.declaration.readScopes ?? [];
+  if (requiredScopes.length === 0) return null;
+  const group = provider?.connect.strategy === "oauth" ? provider.connect.group : undefined;
+  return scopePermissionFor({
+    requiredScopes,
+    grantedScopes: a.grantedScopes ?? null,
+    requestedScopes: [...(group?.baseScopes ?? []), ...(group?.optionalScopes?.requested(process.env) ?? [])],
+    cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env, "engagement") ?? null,
+    missingScopes: provider?.engagement?.declaration.missingReadScopes ?? null,
   });
 }
 
@@ -140,6 +160,7 @@ function view(a: AccountRecord, timeZone: string, now?: Date): AccountView {
     postingInstructions: a.postingInstructions,
     insightsPostPermission: insightsPermissionForAccount(a, provider, "post"),
     insightsAccountPermission: insightsPermissionForAccount(a, provider, "account"),
+    engagementReadPermission: engagementPermissionForAccount(a, provider),
   };
 }
 

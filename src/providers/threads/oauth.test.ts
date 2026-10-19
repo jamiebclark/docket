@@ -9,6 +9,7 @@ const cfg: ThreadsConfig = {
   graphBase: "https://graph.threads.test",
   insightsScopes: false,
   insightsUsageCeiling: 80,
+  engagementScopes: false,
 };
 const fake = createFakeGraph();
 const signal = () => new AbortController().signal;

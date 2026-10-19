@@ -219,6 +219,27 @@ export default async function AccountsPage({
                     </div>
                   ) : null,
                 )}
+                {account.engagementReadPermission && account.engagementReadPermission.kind !== "ok" ? (
+                  <div className="flex flex-wrap items-end gap-3">
+                    <p className="text-sm">
+                      <span className="font-medium text-foreground">Inbox needs a reconnect.</span>{" "}
+                      {account.engagementReadPermission.reason}
+                      {account.engagementReadPermission.docsPath ? (
+                        <>
+                          {" "}
+                          <a href={account.engagementReadPermission.docsPath} className="underline">
+                            Set up comments →
+                          </a>
+                        </>
+                      ) : null}
+                    </p>
+                    {canManage && account.engagementReadPermission.kind === "not_granted" && account.engagementReadPermission.canReconnect
+                      ? groups
+                          .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
+                          .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
+                      : null}
+                  </div>
+                ) : null}
                 {canManage && isMock ? (
                   <div className="flex flex-wrap items-end gap-4">
                     {account.status === "needs_reauth" ? <ReconnectMockButton slug={projectSlug} id={account.id} /> : null}

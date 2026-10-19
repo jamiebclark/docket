@@ -8,17 +8,18 @@ member draft and send a reply. Nothing is ever sent without a person approving i
 | Platform | Reading comments/mentions | Replying | Direct messages |
 |---|---|---|---|
 | Bluesky | Yes — replies and mentions | Yes | Not yet |
-| Facebook Pages | Not yet | Not yet | Not yet |
-| Instagram | Not yet | Not yet | Not yet |
-| Threads | Not yet | Not yet | Not yet |
+| Facebook Pages | Not yet — would need `pages_read_engagement` (already requested by every connection) | Not yet | Not yet |
+| Instagram | Not yet — would need `instagram_manage_comments` | Not yet | Not yet |
+| Threads | Not yet — would need `threads_manage_replies` (replies) and `threads_manage_mentions` (mentions), two independent permissions | Not yet | Not yet |
 
 Bluesky is supported because the facts the inbox needs — how a comment identifies who posted it, how a
 reply addresses its parent, and the write cost of sending one — are all confirmed from the installed
-Bluesky library and Docket's own Bluesky research (see `docs/research/engagement.md`). The same
-questions for Facebook Pages, Instagram and Threads are still unverified, so no Meta surface is built
-yet: nothing here will show a commenter's name or identifier unless it traces to a confirmed answer.
-Direct messages are specified but not built on any platform, for the same reason — no platform's
-message facts are confirmed yet.
+Bluesky library and Docket's own Bluesky research (see `docs/research/engagement.md`). The permission
+and access level needed to *read* each Meta/Threads surface are now confirmed (`docs/research/engagement.md`
+§2), but the commenter/replier/mentioner identity shape is not, on any of the four surfaces — so none of
+them is built yet: nothing here will show a commenter's name or identifier unless it traces to a
+confirmed answer. Direct messages are specified but not built on any platform, for the same reason — no
+platform's message facts are confirmed yet.
 
 ## Nothing sends without a person
 
@@ -69,6 +70,16 @@ Each supported surface needs only the access it already has for publishing:
 
 - **Bluesky**: the same app-password session used for publishing is used to read notifications and
   send replies. No extra permission is requested.
+- **Facebook Pages and Instagram**: opt in with `META_ENGAGEMENT_SCOPES=true` so the connect dialog also
+  asks for `instagram_manage_comments` (`pages_read_engagement` is already requested by every
+  connection). If your Meta app uses a login configuration (`META_LOGIN_CONFIG_ID`), the permission must
+  be added to that configuration in the Meta dashboard instead — the flag alone cannot widen it there.
+  See [meta-setup.md](meta-setup.md#engagement). A missing permission never affects publishing; nothing
+  is read on either surface yet regardless of this flag (`docs/research/engagement.md` §2).
+- **Threads**: opt in with `THREADS_ENGAGEMENT_SCOPES=true` so the connect dialog also asks for
+  `threads_manage_replies` and `threads_manage_mentions`. See
+  [meta-setup.md](meta-setup.md#engagement). A missing permission never affects publishing; nothing is
+  read on either surface yet regardless of this flag (`docs/research/engagement.md` §2).
 
 ## What this does not do yet
 

@@ -1,5 +1,7 @@
 // services/engagement/inbox: the read side of the engagement inbox (contracts/services.md §2).
 import { findProvider } from "../../../providers/registry";
+import { engagementPermissionForAccount } from "../accounts";
+import type { ScopePermission } from "../../../lib/scope-permission";
 import type { EngagementDraftRow, EngagementItemRow } from "../../dal";
 import { NotFoundError } from "../../dal/errors";
 import { requirePermission, type ProjectScope } from "../../dal/scope";
@@ -187,6 +189,7 @@ export interface EngagementAccountView {
   providerKey: string;
   providerDisplayName: string;
   unavailable: { reason: string; docsPath?: string } | null;
+  readPermission: ScopePermission | null;
 }
 
 /** Only accounts whose provider declares `engagement`; a provider with no member is simply absent (FR-053). */
@@ -204,6 +207,7 @@ export async function listEngagementAccounts(scope: ProjectScope): Promise<Engag
       providerKey: account.providerKey,
       providerDisplayName: provider.displayName,
       unavailable: provider.engagement.declaration.unavailable ?? null,
+      readPermission: engagementPermissionForAccount(account, provider),
     });
   }
   return out;

@@ -59,10 +59,11 @@ describe("threadsConnectGroup.exchangeCode", () => {
   });
 });
 
-// FR-018, US1-AS1: with THREADS_INSIGHTS_SCOPES unset, the authorization URL is byte-identical to
+// FR-018, FR-029, US1-AS1, US2-AS1: with both engagement flags unset (they don't exist yet —
+// Phase 6 adds them) and THREADS_INSIGHTS_SCOPES unset, the authorization URL is byte-identical to
 // today's — compared against a literal, never a re-computation.
 describe("threadsConnectGroup.authorizationUrl", () => {
-  it("with THREADS_INSIGHTS_SCOPES unset, the URL is byte-identical to today's", () => {
+  it("with both engagement flags and THREADS_INSIGHTS_SCOPES unset, the URL is byte-identical to today's", () => {
     const url = threadsConnectGroup.authorizationUrl({ state: "st", redirectUri: "https://x.test/connect/callback" });
     expect(url).toBe(
       "https://threads.com/oauth/authorize?client_id=12345&redirect_uri=https%3A%2F%2Fx.test%2Fconnect%2Fcallback&scope=threads_basic%2Cthreads_content_publish&response_type=code&state=st",
@@ -79,26 +80,73 @@ describe("threadsConnectGroup.authorizationUrl", () => {
       delete process.env.THREADS_INSIGHTS_SCOPES;
     }
   });
+
+  it("with THREADS_ENGAGEMENT_SCOPES=true, the dialog carries threads_manage_replies and threads_manage_mentions in addition to today's scopes", () => {
+    process.env.THREADS_ENGAGEMENT_SCOPES = "true";
+    try {
+      const url = new URL(threadsConnectGroup.authorizationUrl({ state: "st", redirectUri: "https://x.test/connect/callback" }));
+      expect(url.searchParams.get("scope")).toBe(
+        "threads_basic,threads_content_publish,threads_manage_replies,threads_manage_mentions",
+      );
+    } finally {
+      delete process.env.THREADS_ENGAGEMENT_SCOPES;
+    }
+  });
+
+  it("with both flags on, the dialog carries the full union in insights-then-engagement order", () => {
+    process.env.THREADS_INSIGHTS_SCOPES = "true";
+    process.env.THREADS_ENGAGEMENT_SCOPES = "true";
+    try {
+      const url = new URL(threadsConnectGroup.authorizationUrl({ state: "st", redirectUri: "https://x.test/connect/callback" }));
+      expect(url.searchParams.get("scope")).toBe(
+        "threads_basic,threads_content_publish,threads_manage_insights,threads_manage_replies,threads_manage_mentions",
+      );
+    } finally {
+      delete process.env.THREADS_INSIGHTS_SCOPES;
+      delete process.env.THREADS_ENGAGEMENT_SCOPES;
+    }
+  });
 });
 
 describe("threadsConnectGroup.optionalScopes", () => {
-  it("declares threads_manage_insights and has no cannotWiden", () => {
+  it("declares threads_manage_insights, threads_manage_replies and threads_manage_mentions, and has no cannotWiden", () => {
     expect(threadsConnectGroup.optionalScopes?.declared).toEqual([
       { scope: "threads_manage_insights", purpose: "Read a Threads account's and its posts' numbers" },
+      { scope: "threads_manage_replies", purpose: "Read replies to a Threads post" },
+      { scope: "threads_manage_mentions", purpose: "Read mentions of a Threads account" },
     ]);
     expect(threadsConnectGroup.optionalScopes?.cannotWiden).toBeUndefined();
   });
 
-  it("requests nothing when the flag is off", () => {
+  it("requests nothing when both flags are off", () => {
     expect(threadsConnectGroup.optionalScopes?.requested({ THREADS_APP_ID: "12345", THREADS_APP_SECRET: "a".repeat(32) })).toEqual([]);
   });
 
-  it("requests threads_manage_insights when the flag is on (FR-018, FR-020)", () => {
+  it("requests threads_manage_insights when the insights flag is on (FR-018, FR-020)", () => {
     const requested = threadsConnectGroup.optionalScopes?.requested({
       THREADS_APP_ID: "12345",
       THREADS_APP_SECRET: "a".repeat(32),
       THREADS_INSIGHTS_SCOPES: "true",
     });
     expect(requested).toEqual(["threads_manage_insights"]);
+  });
+
+  it("requests threads_manage_replies and threads_manage_mentions when the engagement flag is on", () => {
+    const requested = threadsConnectGroup.optionalScopes?.requested({
+      THREADS_APP_ID: "12345",
+      THREADS_APP_SECRET: "a".repeat(32),
+      THREADS_ENGAGEMENT_SCOPES: "true",
+    });
+    expect(requested).toEqual(["threads_manage_replies", "threads_manage_mentions"]);
+  });
+
+  it("requests the union, in insights-then-engagement order, when both flags are on", () => {
+    const requested = threadsConnectGroup.optionalScopes?.requested({
+      THREADS_APP_ID: "12345",
+      THREADS_APP_SECRET: "a".repeat(32),
+      THREADS_INSIGHTS_SCOPES: "true",
+      THREADS_ENGAGEMENT_SCOPES: "true",
+    });
+    expect(requested).toEqual(["threads_manage_insights", "threads_manage_replies", "threads_manage_mentions"]);
   });
 });

@@ -11,6 +11,7 @@ const cfg: MetaConfig = {
   loginConfigId: null,
   insightsScopes: false,
   insightsUsageCeiling: 80,
+  engagementScopes: false,
 };
 const app = metaApp(cfg);
 const fake = createFakeGraph();
