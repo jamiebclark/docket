@@ -10,7 +10,8 @@ member draft and send a reply. Nothing is ever sent without a person approving i
 | Bluesky | Yes — replies and mentions | Yes | Not yet |
 | Facebook Pages | Yes — comments on the Page's own posts | Not yet — Meta has no confirmed reply-to-comment endpoint at this access level | Not yet |
 | Instagram | Yes — comments on the account's own posts | Not yet — same reason as Facebook | Not yet |
-| Threads | Not yet — would need `threads_manage_replies` (replies) and `threads_manage_mentions` (mentions), two independent permissions | Not yet | Not yet |
+| Threads — replies | Not yet — the `threads_manage_replies` permission is confirmed and already requestable, but Threads publishes no confirmed read endpoint for replies, so there is nothing to call | Not yet | Not yet |
+| Threads — mentions | Not yet — same: the `threads_manage_mentions` permission is confirmed, the read endpoint is not | Not yet | Not yet |
 
 Bluesky is supported because the facts the inbox needs — how a comment identifies who posted it, how a
 reply addresses its parent, and the write cost of sending one — are all confirmed from the installed
@@ -18,9 +19,10 @@ Bluesky library and Docket's own Bluesky research (see `docs/research/engagement
 Instagram comments are supported for reading only: the permission, the endpoint and the commenter
 identity shape are all confirmed (`docs/research/engagement.md` §2), but no reply-to-comment endpoint is
 confirmed at this access level on either surface, so a Facebook or Instagram comment in the inbox shows no
-reply composer — it can only be dismissed or marked handled. Threads is not built yet for the same reason
-insights Facebook/Instagram once were: the commenter/mention identity shape is not confirmed. Direct
-messages are specified but not built on any platform — no platform's message facts are confirmed yet.
+reply composer — it can only be dismissed or marked handled. Threads is not built yet because neither
+surface has a confirmed read endpoint — the permissions for both are already confirmed and requestable,
+but there is nothing to call (see `docs/research/engagement.md` §2). Direct messages are specified but
+not built on any platform — no platform's message facts are confirmed yet.
 
 ## Nothing sends without a person
 
@@ -83,8 +85,9 @@ Each supported surface needs only the access it already has for publishing:
   publish.
 - **Threads**: opt in with `THREADS_ENGAGEMENT_SCOPES=true` so the connect dialog also asks for
   `threads_manage_replies` and `threads_manage_mentions`. See
-  [meta-setup.md](meta-setup.md#engagement). A missing permission never affects publishing; nothing is
-  read on either surface yet regardless of this flag (`docs/research/engagement.md` §2).
+  [meta-setup.md](meta-setup.md#engagement). A missing permission never affects publishing; granting
+  these permissions does not cause anything to be read — the reader is not built, and the permission and
+  the reader are separate pieces of work (`docs/research/engagement.md` §2).
 
 ## What this does not do yet
 

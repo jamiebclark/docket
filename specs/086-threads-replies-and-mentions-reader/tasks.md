@@ -195,28 +195,28 @@ names a current example of each of the two reader shapes.
 
 ### Implementation for User Story 4
 
-- [ ] T021 [P] [US4] Edit `docs/engagement.md`: split the Threads row into **Threads — replies** and
+- [X] T021 [P] [US4] Edit `docs/engagement.md`: split the Threads row into **Threads — replies** and
   **Threads — mentions**, each naming its own permission and attributing the block to the
   unconfirmed read endpoint rather than the permission (FR-026); remove the sentence attributing
   Threads' absence to the commenter/mention identity shape; state that granting the Threads
   engagement permissions does not cause anything to be read (FR-028) (contracts/documentation.md §1-2)
-- [ ] T022 [P] [US4] Edit `docs/meta-setup.md`: replace "Nothing is read on any Meta or Threads
+- [X] T022 [P] [US4] Edit `docs/meta-setup.md`: replace "Nothing is read on any Meta or Threads
   surface yet in this release" (now false since 085) with language stating Facebook and Instagram
   comments are read once the permission is granted, and Threads replies and mentions are not read at
   all yet (FR-028) (contracts/documentation.md §2)
-- [ ] T023 [P] [US4] Edit `docs/adding-a-provider.md` §20: replace the stale "one real
+- [X] T023 [P] [US4] Edit `docs/adding-a-provider.md` §20: replace the stale "one real
   implementation so far" pointer with both reader shapes named by file path —
   `src/providers/bluesky/engagement.ts` (account-level) and `src/providers/meta/engagement-sweep.ts`
   with `src/providers/facebook/engagement.ts` / `src/providers/instagram/engagement.ts` (per-post) —
   and which platform shape each suits (FR-029); add the "has not published" vs "has not granted"
   distinction sentence naming `src/providers/threads/engagement.ts` as the current example of the
   first (FR-030) (contracts/documentation.md §3)
-- [ ] T024 [P] [US4] Edit `docs/decisions.md`: append one `## 086 — …` section recording the three
+- [X] T024 [P] [US4] Edit `docs/decisions.md`: append one `## 086 — …` section recording the three
   judgement calls — both surfaces unverified means no reader and the entry is the declaration;
   `docsHref` and the shipped broken link fixed in passing; `countAccountsOnUnavailableEngagement`
   as a count query rather than letting `processAccount` claim the account (contracts/documentation.md
   §5)
-- [ ] T025 [US4] Write `tests/integration/docs/engagement-roadmap-docs.test.ts` (reads the docs files
+- [X] T025 [US4] Write `tests/integration/docs/engagement-roadmap-docs.test.ts` (reads the docs files
   as text, the `engagement-scope.test.ts` pattern): the table has a row for Threads replies and a row
   for Threads mentions each naming its own permission; every "Not yet" cell in the reading column has
   more than the words "Not yet"; the Threads reading cells mention an endpoint and do not present the

@@ -421,6 +421,8 @@ turn on the other. See step 11b for how to add the permission and the flag.
 
 The Facebook Login for Business caveat above applies here too: if your Meta app uses a login
 configuration, add the permission to the configuration itself, not just to the app, or Docket
-offers no reconnect button for this surface either. Nothing is read on any Meta or Threads
-surface yet in this release — see [docs/research/engagement.md](research/engagement.md) §2 for
-which permissions are confirmed buildable and which are not.
+offers no reconnect button for this surface either. Facebook and Instagram comments are read once
+the permission is granted; Threads replies and mentions are not read at all yet — the flag only
+makes the permissions requestable for when a reader exists. See
+[docs/research/engagement.md](research/engagement.md) §2 for which permissions are confirmed
+buildable and which are not.
