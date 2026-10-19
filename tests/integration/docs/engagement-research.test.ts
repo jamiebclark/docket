@@ -36,17 +36,26 @@ describe("docs/research/engagement.md (FR-001, FR-002, FR-003, SC-010)", () => {
     expect(meta).not.toBe("");
 
     // Threads mentions are a distinct surface from Threads replies and are answered as one.
-    for (const surface of ["Facebook Page comments", "Instagram comments", "Threads replies", "Threads mentions"]) {
+    const surfaces = ["Facebook Page comments", "Instagram comments", "Threads replies", "Threads mentions"];
+    for (const surface of surfaces) {
       expect(meta, surface).toContain(`### ${surface}`);
     }
 
-    const sections = meta.split(/^### /m).slice(1);
-    expect(sections.length, "one section per surface").toBe(4);
+    // §2 may carry subsections that are not surfaces — 085 added one recording what the
+    // implementation assumed beyond what the research gave. Select the surfaces by name rather
+    // than counting headings, so prose can be added without this test deciding it is a surface.
+    const sections = meta
+      .split(/^### /m)
+      .slice(1)
+      .filter((section) => surfaces.includes(section.split("\n")[0]!.trim()));
+    expect(sections.length, "one section per surface").toBe(surfaces.length);
 
     for (const section of sections) {
       const name = section.split("\n")[0]!.trim();
       const rows = section.split("\n").filter((line) => /^\| \d+ \|/.test(line));
-      expect(rows.length, `${name}: nine questions`).toBe(9);
+      // Nine is the floor, not a fixed count: 085 added a tenth question (how to list the brand's
+      // own recent posts) because building the sweep needed a fact the original nine never asked for.
+      expect(rows.length, `${name}: at least the nine questions`).toBeGreaterThanOrEqual(9);
 
       const cellsOf = (row: string) => row.split("|").map((c) => c.trim());
       const sourceByNumber = new Map(rows.map((row) => [cellsOf(row)[1] ?? "", cellsOf(row)[4] ?? ""]));

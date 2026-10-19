@@ -79,7 +79,7 @@ describe("instagramEngagement.declaration", () => {
       missingReadScopes: {
         reason:
           "This Instagram account needs the instagram_manage_comments permission before Docket can read "
-          + "the comments people leave on its posts. Reconnect the account to grant it.",
+          + "the comments people leave on its posts.",
         docsPath: "meta-setup#engagement",
       },
     });

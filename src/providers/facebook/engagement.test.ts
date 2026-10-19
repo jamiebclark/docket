@@ -42,7 +42,7 @@ describe("facebookEngagement.declaration", () => {
       missingReadScopes: {
         reason:
           "A Facebook Page needs the pages_read_user_content permission before Docket can read the "
-          + "comments people leave on its posts. Reconnect the Page to grant it.",
+          + "comments people leave on its posts.",
         docsPath: "meta-setup#engagement",
       },
     });
