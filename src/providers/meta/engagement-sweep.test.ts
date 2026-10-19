@@ -160,6 +160,58 @@ describe("metaEngagementRead — fresh step", () => {
   });
 });
 
+describe("metaEngagementRead — catch-up step (US3, FR-011, FR-015, SC-004)", () => {
+  it("sends the previous response's after cursor on each of three successive read()s, rather than restarting", async () => {
+    fake.on("GET", "/v26.0/1001/posts", [
+      { kind: "ok", body: { data: [{ id: "post-1", created_time: "2026-09-01T00:00:00+0000" }], paging: { cursors: { after: "A1" }, next: "https://graph/next" } } },
+      { kind: "ok", body: { data: [{ id: "post-2", created_time: "2026-08-01T00:00:00+0000" }], paging: { cursors: { after: "A2" }, next: "https://graph/next" } } },
+      { kind: "ok", body: { data: [], paging: {} } },
+    ]);
+
+    const first = await metaEngagementRead(facebookSurface, baseCtx({ direction: "older" }));
+    if (first.kind !== "page") throw new Error("expected page");
+    // A step that stopped at the bound with a cursor still in hand never reports exhaustion.
+    expect(first.exhausted).toBe(false);
+
+    const second = await metaEngagementRead(facebookSurface, baseCtx({ direction: "older", providerState: first.providerState }));
+    if (second.kind !== "page") throw new Error("expected page");
+    expect(second.exhausted).toBe(false);
+
+    const third = await metaEngagementRead(facebookSurface, baseCtx({ direction: "older", providerState: second.providerState }));
+    if (third.kind !== "page") throw new Error("expected page");
+    expect(third.exhausted).toBe(true);
+    expect((third.providerState as { done?: boolean }).done).toBe(true);
+
+    expect(fake.requests[0]?.params.after).toBeUndefined();
+    expect(fake.requests[1]?.params.after).toBe("A1");
+    expect(fake.requests[2]?.params.after).toBe("A2");
+  });
+
+  it("resumes from a killed run's mid-catch-up state rather than restarting from the newest post", async () => {
+    fake.on("GET", "/v26.0/1001/posts", { kind: "ok", body: { data: [], paging: {} } });
+    const killedState = { v: 1 as const, catchUp: { postsAfter: "MID-RUN-CURSOR" }, lastStep: "catchUp" as const };
+
+    const result = await metaEngagementRead(facebookSurface, baseCtx({ direction: "older", providerState: killedState }));
+    if (result.kind !== "page") throw new Error("expected page");
+    expect(fake.requests[0]?.params.after).toBe("MID-RUN-CURSOR");
+  });
+
+  it("writes exhausted/done true only once the listing has no further page and pending is empty, and never resumes catch-up afterward", async () => {
+    fake.on("GET", "/v26.0/1001/posts", { kind: "ok", body: { data: [], paging: {} } });
+    const first = await metaEngagementRead(facebookSurface, baseCtx({ direction: "older" }));
+    if (first.kind !== "page") throw new Error("expected page");
+    expect(first.exhausted).toBe(true);
+    expect((first.providerState as { done?: boolean }).done).toBe(true);
+
+    fake.reset();
+    fake.on("GET", "/v26.0/1001/posts", { kind: "ok", body: { data: [{ id: "post-3", created_time: "2026-10-01T00:00:00+0000" }] } });
+    const second = await metaEngagementRead(facebookSurface, baseCtx({ direction: "older", providerState: first.providerState }));
+    if (second.kind !== "page") throw new Error("expected page");
+    // `done: true` is terminal: the next read falls through to a fresh step, which sends no `after`.
+    expect(fake.requests[0]?.params.after).toBeUndefined();
+  });
+});
+
 /** A minimal Instagram-shaped surface, per contracts/meta-comment-surface.md §4. */
 const instagramSurface: MetaCommentSurface = {
   platform: "Instagram",

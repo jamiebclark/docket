@@ -256,7 +256,7 @@ good once the platform has nothing older.
 `read()` calls each reach further back, a killed run resumes from the last committed position, and
 exhaustion is reported once and never revisited.
 
-- [ ] T026 [US3] Extend `src/providers/meta/engagement-sweep.ts`'s step chooser and catch-up step (if
+- [X] T026 [US3] Extend `src/providers/meta/engagement-sweep.ts`'s step chooser and catch-up step (if
       not already complete from T011) to satisfy contracts/meta-engagement-sweep.md §4.2 and §4.5 in
       full: `state.lastStep === "fresh"` triggers a catch-up step on the *next* read even when
       `direction` is `"newest"`; the catch-up advances `catchUp.postsAfter` from the response's own
@@ -264,7 +264,7 @@ exhaustion is reported once and never revisited.
       page **and** `pending` is empty after the step; a step that stopped at `POSTS_PER_PAGE` with a
       cursor in hand returns `exhausted: false` even though it examined its full bound (FR-011,
       FR-015) — depends on T011
-- [ ] T027 [US3] Extend `src/providers/meta/engagement-sweep.test.ts` with the catch-up suite: three
+- [X] T027 [US3] Extend `src/providers/meta/engagement-sweep.test.ts` with the catch-up suite: three
       successive `read()` calls against a scripted three-page listing each send the previous response's
       `after` cursor rather than restarting; a `read()` given the provider state from a killed run
       (mid-catch-up) resumes from that state rather than from the newest post; the final page (no
@@ -272,7 +272,7 @@ exhaustion is reported once and never revisited.
       `read()` issues no further catch-up call; a step that hits its bound with a cursor still in hand
       explicitly asserts `exhausted: false` (US3 scenarios 1–3, FR-011, FR-015, SC-004) — depends on
       T026
-- [ ] T028 [P] [US3] Extend `src/providers/meta/engagement-sweep.test.ts` (or
+- [X] T028 [P] [US3] Extend `src/providers/meta/engagement-sweep.test.ts` (or
       `engagement-errors.test.ts`, whichever holds the cursor_lost mapping) with the rejected-position
       case: a Graph error code 100 on a request carrying `catchUp.postsAfter` or a `pending[].after`
       maps to `cursor_lost`; a scheduler-level test (extend
@@ -280,7 +280,7 @@ exhaustion is reported once and never revisited.
       handler resets `provider_state` to `{}` with a `gap_at` and the next read restarts from the
       newest post, losing no already-stored item and re-notifying nothing (US3 scenario 4, FR-020) —
       depends on T007, T019
-- [ ] T029 [P] [US3] Extend `tests/integration/engagement/meta-read.test.ts` with a retention case: a
+- [X] T029 [P] [US3] Extend `tests/integration/engagement/meta-read.test.ts` with a retention case: a
       scripted catch-up comment older than `ENGAGEMENT_RETENTION_DAYS` is read by the sweep (the
       provider does not filter it) but is not stored by the existing scheduler retention check, so a
       later restart cannot resurrect it (US3 scenario 5, spec Edge Cases) — depends on T019; this

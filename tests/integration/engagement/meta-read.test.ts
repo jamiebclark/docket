@@ -150,3 +150,113 @@ describe("Instagram comments reach the inbox (US2, FR-026, FR-029)", () => {
     expect(item?.authorIdentityStable).toBe(false);
   });
 });
+
+describe("Catch-up position lost mid-run resets cleanly (US3 scenario 4, FR-020)", () => {
+  it("resets provider_state to {} with gap_at on a rejected catch-up cursor, keeps already-stored items, and restarts from the newest post next run", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "facebook",
+      displayName: "Test Page",
+      externalAccountId: PAGE_ID,
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["pages_read_engagement", "pages_read_user_content"],
+    });
+    await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { pageToken: TOKEN }), null);
+
+    const { target } = await createDueTarget(ctx.project.id, account.id);
+    const postExternalId = `${PAGE_ID}_555`;
+    await repos.targets.update(target.id, { status: "published", externalId: postExternalId, resolvedAt: AT });
+
+    fake.on("GET", `/v26.0/${PAGE_ID}/posts`, {
+      kind: "ok",
+      body: {
+        data: [
+          { id: postExternalId, created_time: "2026-10-18T00:00:00+0000", comments: { data: [{ id: "comment-1", message: "Nice post!", created_time: "2026-10-18T01:00:00+0000", from: { name: "A Commenter", id: "user-9" } }] } },
+        ],
+      },
+    });
+    await runSection();
+    const stored = await repos.engagementItems.getByExternalId(account.id, "comment-1");
+    expect(stored).not.toBeNull();
+
+    // Simulate a mid-catch-up position, as a killed run would leave behind.
+    await repos.engagementAccountStates.update(account.id, {
+      backfilling: true,
+      providerState: { v: 1, catchUp: { postsAfter: "MID-RUN-CURSOR" }, lastStep: "catchUp" },
+    });
+
+    fake.reset();
+    fake.on("GET", `/v26.0/${PAGE_ID}/posts`, { kind: "graph_error", code: 100, message: "Unsupported get request." });
+    await runSection();
+
+    const afterGap = await repos.engagementAccountStates.get(account.id);
+    expect(afterGap?.providerState).toEqual({});
+    expect(afterGap?.cursor).toBeNull();
+    expect(afterGap?.backfilling).toBe(false);
+    expect(afterGap?.gapAt).not.toBeNull();
+
+    const stillThere = await repos.engagementItems.getByExternalId(account.id, "comment-1");
+    expect(stillThere?.id).toBe(stored?.id);
+
+    fake.reset();
+    fake.on("GET", `/v26.0/${PAGE_ID}/posts`, { kind: "ok", body: { data: [] } });
+    await runSection();
+    const restartRequest = fake.requests.find((r) => r.path === `/v26.0/${PAGE_ID}/posts`);
+    expect(restartRequest?.params.after).toBeUndefined();
+  });
+});
+
+describe("Retention prunes a catch-up comment older than the window (US3 scenario 5, spec Edge Cases)", () => {
+  it("reads but does not store a comment older than ENGAGEMENT_RETENTION_DAYS, so a later restart cannot resurrect it", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "facebook",
+      displayName: "Test Page",
+      externalAccountId: PAGE_ID,
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["pages_read_engagement", "pages_read_user_content"],
+    });
+    await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { pageToken: TOKEN }), null);
+
+    const { target } = await createDueTarget(ctx.project.id, account.id);
+    const postExternalId = `${PAGE_ID}_999`;
+    await repos.targets.update(target.id, { status: "published", externalId: postExternalId, resolvedAt: AT });
+
+    await repos.engagementAccountStates.ensure(account.id);
+    await repos.engagementAccountStates.update(account.id, {
+      backfilling: true,
+      providerState: { v: 1, catchUp: {}, lastStep: "catchUp" },
+    });
+
+    const ancientTime = "2024-01-01T00:00:00+0000"; // far beyond the 90-day default retention window
+    fake.on("GET", `/v26.0/${PAGE_ID}/posts`, {
+      kind: "ok",
+      body: {
+        data: [
+          { id: postExternalId, created_time: ancientTime, comments: { data: [{ id: "ancient-comment", message: "old", created_time: ancientTime, from: { name: "Old Commenter", id: "user-old" } }] } },
+        ],
+      },
+    });
+
+    await runSection();
+
+    const item = await repos.engagementItems.getByExternalId(account.id, "ancient-comment");
+    expect(item).toBeNull();
+
+    // A later restart (e.g. after a gap resets provider_state) still cannot resurrect it.
+    await repos.engagementAccountStates.update(account.id, { providerState: {}, backfilling: false, cursor: null });
+    await runSection();
+    const stillNothing = await repos.engagementItems.getByExternalId(account.id, "ancient-comment");
+    expect(stillNothing).toBeNull();
+  });
+});
