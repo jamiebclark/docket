@@ -45,14 +45,23 @@ const analyticsBody = (overrides: Record<string, unknown> = {}) => ({
 describe("pinterestInsights.declaration", () => {
   it("declares the post, account and shared fields of contracts/platform-readers-082.md §2", () => {
     expect(pinterestInsights.declaration.post).toEqual([
-      { key: "IMPRESSION", label: "Impressions" },
-      { key: "PIN_CLICK", label: "Pin clicks" },
-      { key: "OUTBOUND_CLICK", label: "Outbound clicks" },
-      { key: "SAVE", label: "Saves" },
+      { key: "IMPRESSION", label: "Impressions", shape: { kind: "windowed", windowMs: null } },
+      { key: "PIN_CLICK", label: "Pin clicks", shape: { kind: "windowed", windowMs: null } },
+      { key: "OUTBOUND_CLICK", label: "Outbound clicks", shape: { kind: "windowed", windowMs: null } },
+      { key: "SAVE", label: "Saves", shape: { kind: "windowed", windowMs: null } },
     ]);
     expect(pinterestInsights.declaration.account).toEqual([
-      { key: "pinterest_follower_count", label: "Followers" },
-      { key: "monthly_views", label: "Monthly views" },
+      { key: "pinterest_follower_count", label: "Followers", shape: { kind: "cumulative" } },
+      {
+        key: "monthly_views",
+        label: "Monthly views",
+        // Pinterest does not document the window this covers, so it is declared `unknown` and the
+        // trend builder renders no series for it rather than implying a comparable line.
+        shape: {
+          kind: "unknown",
+          reason: "Pinterest does not document the window this number covers, so Docket cannot plot it over time.",
+        },
+      },
     ]);
     expect(pinterestInsights.declaration.maxPostsPerRead).toBe(1);
     expect(pinterestInsights.declaration.postIdSource).toBe("externalId");
