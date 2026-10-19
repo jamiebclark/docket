@@ -186,6 +186,24 @@ contract's "endpoint is unconfirmed" reason. `ENGAGEMENT_SCOPES_DECLARED` may
 list `threads_manage_replies`; no code reads or displays a Threads replier
 identity in this entry.
 
+**Re-checked 2026-10-19 (086).** Official Meta documentation was searched again for this surface's
+read endpoint path, object field list and pagination shape. Results named the capability and the
+permission and quoted neither a path, a field list nor a cursor shape. The verdict is unchanged.
+Also found and **rejected**: Keyword Search returns reply-shaped fields and a
+`threads_keyword_search` permission that can sort a user's own mentioned threads — a different
+endpoint with a different permission, so its shape is not evidence for this surface's
+(constitution I).
+
+**Still missing, and all that is missing — confirming these three unblocks a reader:**
+1. the read endpoint path (and whether it hangs off the account or off a post);
+2. the returned object's field list, including every author identity field the inbox would show
+   and whether its identifier is stable across two items;
+3. the pagination shape — the cursor parameter, the cursor's own field, and how exhaustion is
+   signalled.
+
+Confirmed and **not** missing: the permission name and that it sits inside the access level a
+self-hosted install can hold.
+
 ### Threads mentions
 
 Threads mentions is a separate surface from Threads replies — a different
@@ -207,6 +225,24 @@ permission, a different API shape, answered independently (contract §1).
 name is confirmed; the endpoint and identity shape are not. `ENGAGEMENT_SCOPES_DECLARED`
 may list `threads_manage_mentions`; no code reads or displays a Threads
 mention in this entry.
+
+**Re-checked 2026-10-19 (086).** Official Meta documentation was searched again for this surface's
+read endpoint path, object field list and pagination shape. Results named the capability and the
+permission and quoted neither a path, a field list nor a cursor shape. The verdict is unchanged.
+Also found and **rejected**: Keyword Search returns reply-shaped fields and a
+`threads_keyword_search` permission that can sort a user's own mentioned threads — a different
+endpoint with a different permission, so its shape is not evidence for this surface's
+(constitution I).
+
+**Still missing, and all that is missing — confirming these three unblocks a reader:**
+1. the read endpoint path (and whether it hangs off the account or off a post);
+2. the returned object's field list, including every author identity field the inbox would show
+   and whether its identifier is stable across two items;
+3. the pagination shape — the cursor parameter, the cursor's own field, and how exhaustion is
+   signalled.
+
+Confirmed and **not** missing: the permission name and that it sits inside the access level a
+self-hosted install can hold.
 
 **Code impact.** The confirmed cells above (permission names and access
 levels for all four surfaces) are the only facts this entry's code may use —

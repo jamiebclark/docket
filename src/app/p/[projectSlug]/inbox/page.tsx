@@ -14,6 +14,7 @@ import { buttonStyles } from "@/components/ui/Button";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { listEngagementAccounts, listInbox, type InboxItemView } from "@/server/services/engagement/inbox";
+import { docsHref } from "@/lib/docs";
 
 export const metadata: Metadata = { title: "Inbox" };
 export const dynamic = "force-dynamic";
@@ -79,7 +80,7 @@ export default async function InboxPage({ params, searchParams }: Props) {
                   {a.unavailable!.docsPath ? (
                     <>
                       {" "}
-                      <Link href={a.unavailable!.docsPath} className="underline">
+                      <Link href={docsHref(a.unavailable!.docsPath)} className="underline">
                         Learn more
                       </Link>
                     </>
@@ -89,18 +90,18 @@ export default async function InboxPage({ params, searchParams }: Props) {
           </div>
         ) : null}
 
-        {accounts.some((a) => a.readPermission && a.readPermission.kind !== "ok") ? (
+        {accounts.some((a) => !a.unavailable && a.readPermission && a.readPermission.kind !== "ok") ? (
           <div className="mt-4 space-y-2">
             {accounts.flatMap((a) => {
               const permission = a.readPermission;
-              if (!permission || permission.kind === "ok") return [];
+              if (a.unavailable || !permission || permission.kind === "ok") return [];
               return [
                 <p key={a.id} role="status" className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
                   {a.displayName} ({a.providerDisplayName}) needs a reconnect to read its comments: {permission.reason}
                   {permission.docsPath ? (
                     <>
                       {" "}
-                      <Link href={permission.docsPath} className="underline">
+                      <Link href={docsHref(permission.docsPath)} className="underline">
                         Learn more
                       </Link>
                     </>

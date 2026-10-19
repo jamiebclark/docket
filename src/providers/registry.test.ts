@@ -254,6 +254,26 @@ describe("provider registry", () => {
     // canReply: false forbids a writeBudget on the same declaration.
     expect(() => withDecl({ canReply: false, writeBudget: { count: 1, windowSeconds: 60 } })).toThrow(/writeBudget/);
   });
+  it("accepts the shipped threadsEngagement declaration and refuses it with readScopes or writeBudget added (FR-035)", async () => {
+    const { threadsEngagement } = await import("./threads/engagement");
+    expect(() =>
+      assertEngagementDeclaration({ key: "threads", engagement: threadsEngagement, connect: getProvider("threads").connect }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertEngagementDeclaration({
+        key: "threads",
+        engagement: { declaration: { ...threadsEngagement.declaration, readScopes: ["threads_manage_replies"] } },
+      }),
+    ).toThrow(/unavailable and readScopes must never both be set/);
+
+    expect(() =>
+      assertEngagementDeclaration({
+        key: "threads",
+        engagement: { declaration: { ...threadsEngagement.declaration, writeBudget: { count: 1, windowSeconds: 60 } } },
+      }),
+    ).toThrow(/writeBudget/);
+  });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {
       if (p.connectAccount) {

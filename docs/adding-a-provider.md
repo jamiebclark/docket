@@ -602,13 +602,23 @@ engagement?: {
   means "not known", never "holds everything") is never claimed, leased, decrypted or called —
   `claimDueEngagementReads` checks `readScopes` against the account's `granted_scopes` before it claims, not
   after. Items already read stay readable; losing eligibility never withdraws them.
+- A surface blocked on something **the platform has not published** — no confirmed read endpoint, no confirmed
+  object shape — is `unavailable`: no account can make it readable, so it declares no `readScopes`.
+  `src/providers/threads/engagement.ts` is the current example. A surface blocked on something **this account
+  has not granted** declares `readScopes` and no `unavailable`, and becomes readable the moment the account
+  reconnects. Naming both would tell a member to go and fix something that is not theirs to fix.
 
-`src/providers/bluesky/engagement.ts` is the one real implementation so far: `app.bsky.notification.listNotifications`
-for reading (never calling `updateSeen`), and `com.atproto.repo.createRecord` for sending, reusing the session and
-refresh path `publish.ts` already has. `src/providers/mock/index.ts` declares all four kinds plus an `unavailable`
-variant, so the inbox's capability seam is testable with no platform credentials at all — read that one first. See
-`docs/engagement.md` for what the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md`
-for the full contract.
+There are two reader shapes, each with one real example:
+
+| Shape | Current real example | Suits |
+|---|---|---|
+| **Account-level reader** — the platform hands the account a feed of inbound items; one call per read, the cursor is the platform's own | `src/providers/bluesky/engagement.ts` (`app.bsky.notification.listNotifications` for reading, never calling `updateSeen`; `com.atproto.repo.createRecord` for sending, reusing the session and refresh path `publish.ts` already has) | platforms with a notifications or mentions feed scoped to the account |
+| **Per-post reader** — the platform lists comments per post, so the provider must discover its own recent posts and walk them, keeping the walk's position in `provider_state` under its own `stateSchema` | `src/providers/meta/engagement-sweep.ts` with `src/providers/facebook/engagement.ts` and `src/providers/instagram/engagement.ts` as the thin per-platform surfaces | platforms whose comment edge hangs off a post, not an account |
+
+`src/providers/mock/index.ts` declares all four kinds plus an `unavailable` variant, so the inbox's capability
+seam is testable with no platform credentials at all — read that one first. See `docs/engagement.md` for what
+the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md` for the
+full contract.
 
 ## 21. Reading post and account metrics (`insights`, 080)
 

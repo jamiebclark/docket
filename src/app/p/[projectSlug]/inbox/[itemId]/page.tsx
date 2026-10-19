@@ -60,12 +60,23 @@ export default async function InboxItemPage({ params }: Props) {
           <Badge tone={item.state === "answered" ? "success" : item.state === "dismissed" ? "neutral" : "info"}>{item.state}</Badge>
         </div>
 
-        {item.parent ? (
-          <div className="mt-4 rounded-lg border border-border bg-muted px-3 py-2 text-sm">
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">On</p>
-            <p className="mt-1">{item.parent.text ?? item.parent.externalId ?? "—"}</p>
+        {item.parent === null ? (
+          <div className="mt-4 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            <p>This is not about one of your posts.</p>
           </div>
-        ) : null}
+        ) : item.parent.kind === "docket_post" ? (
+          <div className="mt-4 rounded-lg border border-border bg-muted px-3 py-2 text-sm">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">On your post</p>
+            <p className="mt-1">{item.parent.text}</p>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-lg border border-border bg-muted px-3 py-2 text-sm">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              On a post that is not one of yours
+            </p>
+            <p className="mt-1">{item.parent.externalId}</p>
+          </div>
+        )}
 
         <div className="mt-4 rounded-lg border border-border px-3 py-3 text-sm">
           <p>{item.text || "(no text)"}</p>

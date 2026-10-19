@@ -4176,3 +4176,34 @@ what these tests assert, and it is the part exposed to the contention.
   controls; a brand-new interval setting would have been a number invented for this entry rather than
   a fact traced to anything, which Constitution I forbids. **Reversal:** none needed — there is no
   setting to remove, only a setting that was deliberately not added.
+
+## 086 — Threads replies and mentions stay a declaration, three judgement calls (2026-10-19)
+
+- **Both surfaces unverified ⇒ no reader, and the entry itself is the declaration.** The feature
+  description's "if a research unknown can't be closed within the entry, declare `unavailable`
+  honestly rather than guessing" rule applied twice — once per Threads surface — rather than once per
+  entry, because the two surfaces (`reply`, `mention`) have independent permissions and independent
+  unconfirmed endpoints; collapsing them into one verdict would have hidden that mentions could in
+  principle ship before replies do, or vice versa, the moment either endpoint is confirmed. Shipping
+  nothing at all was rejected: the account already exists on connected installs, the engagement
+  system already claims and leases accounts on a tick, and leaving Threads undeclared would mean a
+  silent miss rather than an honest, visible `unavailable` with a reason. **Reversal:** none needed —
+  the declaration is the entry; a future entry that confirms either endpoint edits
+  `threadsEngagement.declaration` to add `readScopes` for that surface.
+- **`docsHref`, and a shipped broken link fixed in passing.** FR-003's notice link could not be
+  delivered without a function that turns a declared `docsPath` into a real URL — the two existing
+  render sites (`TargetMetrics.tsx`, `PerformancePanel.tsx`) were already casting `docsPath as
+  DocPage` and calling `docsUrl` directly, which breaks the moment a `docsPath` carries an anchor or
+  names a page `docsUrl` does not recognize; both call sites have been wrong since 085. Fixing the
+  cast at its two live sites alongside adding `docsHref` means no `as DocPage` cast survives anywhere
+  in the tree, not just at this entry's two new call sites. **Reversal:** delete `docsHref` from
+  `src/lib/docs.ts` and restore the `as DocPage` cast at all four render sites — not recommended, it
+  reintroduces the shipped defect.
+- **`countAccountsOnUnavailableEngagement` is a count query, not a `processAccount` side effect.**
+  FR-016 needs `counts.unavailable` to include Threads accounts, but computing that count inside
+  `processAccount` would mean claiming, leasing and decrypting the account first — exactly what
+  FR-010 forbids for an account whose engagement is declared `unavailable`. A standalone count query
+  mirroring `countAccountsMissingEngagementScopes`'s predicate shape gets the number into the tick's
+  report with no claim, lease or decrypt anywhere in its path. **Reversal:** delete the function and
+  its call in `src/server/scheduler/engagement-read.ts`; `counts.unavailable` undercounts by the
+  number of Threads accounts, which is wrong but not unsafe.
