@@ -25,6 +25,32 @@ export const VIDEO = {
   finish: "/xrpc/app.bsky.video.finishUpload",
   job: "/xrpc/app.bsky.video.getJobStatus",
 } as const;
+/**
+ * Paths a tick visits for reasons that have nothing to do with the target being published.
+ *
+ * `runTick` runs its sections concurrently over the same accounts, so the Bluesky account under test
+ * is also swept, in that same tick, by the engagement read and by the insights poll. Bluesky is the
+ * only platform where this shows up: its reads need no granted scope, so nothing holds those
+ * sections back the way an unconnected permission does elsewhere.
+ *
+ * Add a line here when a new section starts sweeping — twice now a test has counted another
+ * section's traffic as evidence that a publish was attempted.
+ */
+const SWEEP_PATHS = [
+  "com.atproto.server.createSession", // authentication, for whichever section needed it
+  "app.bsky.notification.listNotifications", // engagement reads
+  "app.bsky.actor.getProfile", // insights: account metrics
+  "app.bsky.feed.getPosts", // insights: post metrics
+] as const;
+
+/**
+ * The requests the publish attempt itself made. A deny list on purpose: anything the publish path
+ * does that is not listed above still counts, so asserting an empty result keeps meaning "it went
+ * nowhere near Bluesky" rather than "it did nothing I thought to look for".
+ */
+export const publishRequests = (requests: readonly RecordedRequest[]): RecordedRequest[] =>
+  requests.filter((r) => !SWEEP_PATHS.some((path) => new URL(r.url).pathname.includes(path)));
+
 export const VIDEO_HOST = "video.bsky.app";
 export const DID = "did:plc:ewvi7nxzyoun6zhxrhs64oiz";
 export const CID = "bafyreib2rxk3rybk3aobmv5cjuql3bm2twh4jo5uxgf5kpqcsgzmq2vz2m";
