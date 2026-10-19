@@ -62,7 +62,11 @@ export function insightsPermissionForAccount(
   return insightsPermissionFor({
     requiredScopes,
     grantedScopes: a.grantedScopes ?? null,
-    requestedScopes: group?.optionalScopes?.requested(process.env) ?? [],
+    // Everything the dialog will carry: the group's base set plus whichever opt-ins are on. The
+    // base scopes matter because an account whose grant was never recorded is missing those too,
+    // and judging it on the opt-ins alone reported "not requested" for scopes the dialog does ask
+    // for — leaving the operator no reconnect control at all.
+    requestedScopes: [...(group?.baseScopes ?? []), ...(group?.optionalScopes?.requested(process.env) ?? [])],
     cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env) ?? null,
     missingScopes,
   });

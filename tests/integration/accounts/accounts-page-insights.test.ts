@@ -29,6 +29,19 @@ const askingGroup: OAuthConnectGroup = {
   optionalScopes: { declared: REQUIRED.map((scope) => ({ scope, purpose: "test" })), requested: () => REQUIRED },
 };
 
+/**
+ * The shape that broke on a live install (G39): the surface needs a BASE scope — one the dialog
+ * always carries, never an opt-in — and the account's grant was never recorded. Judging that on
+ * the opt-ins alone called it "not requested" and showed no reconnect at all.
+ */
+const BASE_REQUIRED = ["base_scope_always_asked"];
+const baseScopeGroup: OAuthConnectGroup = {
+  ...throwawayGroup,
+  key: "throwaway-base",
+  baseScopes: BASE_REQUIRED,
+  optionalScopes: { declared: [{ scope: "an_opt_in", purpose: "test" }], requested: () => [] },
+};
+
 function providerWith(key: string, group: OAuthConnectGroup): SocialProvider {
   return {
     ...mockProvider,
@@ -73,10 +86,19 @@ const askingBothGroup: OAuthConnectGroup = {
 
 const askedProvider = providerWith("insights-asked", askingGroup);
 const notAskedProvider = providerWith("insights-not-asked", throwawayGroup);
+// Its surface needs a BASE scope, and the group declares that scope in `baseScopes`.
+const baseScopeProvider = {
+  ...providerWith("insights-base-scope", baseScopeGroup),
+  insights: {
+    ...mockProvider.insights!,
+    declaration: { ...mockProvider.insights!.declaration, postScopes: BASE_REQUIRED, missingPostScopes: MISSING_SCOPES },
+  },
+} as SocialProvider;
 const askedBothProvider = providerWithBothSurfaces("insights-asked-both", askingBothGroup);
 
 registerTestProvider(askedProvider);
 registerTestProvider(notAskedProvider);
+registerTestProvider(baseScopeProvider);
 registerTestProvider(askedBothProvider);
 
 async function connectWith(providerKey: string, grantedScopes: readonly string[] | undefined) {
@@ -125,6 +147,18 @@ describe("accounts page: the insights-need-a-reconnect line (FR-027, US1-AS4, US
     const { env } = await connectWith("insights-asked", REQUIRED);
     const html = await renderedHtml(env);
     expect(html).not.toContain("Insights need a reconnect");
+  });
+
+  // Regression (G39). On a live install every account connected before the grant was stored has
+  // `granted_scopes` NULL, so even the base scopes the dialog always carries count as missing. The
+  // service judged that on the opt-ins alone, called the surface "not requested", and the page
+  // rendered no reconnect line — with the opt-in correctly switched on and nothing to click.
+  it("shown when only a base scope is unaccounted for and the grant was never recorded", async () => {
+    const { env } = await connectWith("insights-base-scope", undefined);
+    const html = await renderedHtml(env);
+    expect(html).toContain("Insights need a reconnect");
+    const [view] = await accounts.listAccounts(env.scope);
+    expect(view!.insightsPostPermission?.kind).toBe("not_granted");
   });
 
   it("an ineligible account's status stays active (FR-027)", async () => {

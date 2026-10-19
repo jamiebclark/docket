@@ -2,7 +2,7 @@ import { docsUrl } from "@/lib/docs";
 import type { CandidatesResult, OAuthConnectGroup } from "../types";
 import { listPageCandidates } from "./candidates";
 import { parseMetaEnv, requireMetaConfig, type MetaConfig } from "./config";
-import { exchangeCode, exchangeLongLived, dialogUrl, metaApp } from "./oauth";
+import { exchangeCode, exchangeLongLived, dialogUrl, metaApp, META_SCOPES } from "./oauth";
 
 const INSIGHTS_SCOPES_DECLARED = [
   { scope: "read_insights", purpose: "Read a Facebook Page's and its posts' numbers" },
@@ -25,6 +25,8 @@ export const metaConnectGroup: OAuthConnectGroup = {
   key: "meta",
   displayName: "Facebook Pages and Instagram",
   setupDoc: docsUrl("meta-setup"),
+  // G39. What the dialog carries before any opt-in — `META_SCOPES` in oauth.ts.
+  baseScopes: META_SCOPES,
   // Appended to the no-accounts / sign-in banners: name what the login must grant (re-review F1).
   callbackHint:
     "Facebook must grant pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic and instagram_content_publish, and at least one Page must be selected in the login dialog.",

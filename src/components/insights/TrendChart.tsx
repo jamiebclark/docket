@@ -53,16 +53,47 @@ function lineSegments(points: readonly { day: string; value: number }[], from: s
   return segments;
 }
 
+/**
+ * The headline a reader scans before anything else: where the metric stands now, and — for a
+ * cumulative metric only — how far it moved across the range. A windowed metric is a series of
+ * independent per-period figures, so differencing its ends would invent a trend that is not there;
+ * it gets the latest period's figure and no delta (contracts/charts.md §3).
+ */
+function headline(series: TrendSeries): { latest: number; delta: number | null } | null {
+  const { points } = series;
+  if (points.length === 0) return null;
+  const latest = points[points.length - 1]!.value;
+  if (series.shape.kind !== "cumulative" || points.length < 2) return { latest, delta: null };
+  return { latest, delta: latest - points[0]!.value };
+}
+
+function signed(n: number): string {
+  return n > 0 ? `+${formatCount(n)}` : formatCount(n);
+}
+
 export function TrendChart({ series, timeZone }: { series: TrendSeries; timeZone: string }) {
   const { points } = series;
   const titleId = `trend-${series.accountId}-${series.metricKey}`;
   const windowed = series.shape.kind === "windowed";
+  const head = headline(series);
 
   return (
     <div>
-      <h3 id={titleId} className="text-sm font-semibold text-heading">
-        {series.accountName} · {series.label}
-      </h3>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 id={titleId} className="text-sm font-semibold text-heading">
+          {series.accountName} · {series.label}
+        </h3>
+        {head ? (
+          <p className="flex items-baseline gap-2">
+            <span className="text-xl font-semibold tabular-nums text-heading">{formatCount(head.latest)}</span>
+            {head.delta !== null ? (
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {signed(head.delta)} over the range
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+      </div>
       <p className="mt-0.5 text-xs text-muted-foreground">
         {formatLocalDate(series.range.from)}–{formatLocalDate(series.range.to)}
         {series.asOf ? (
@@ -89,18 +120,31 @@ export function TrendChart({ series, timeZone }: { series: TrendSeries; timeZone
         </p>
       ) : null}
 
-      <div className="mt-2">
-        <Table caption={`${series.accountName} (${series.platform}) — ${series.label} — ${points.length} reading${points.length === 1 ? "" : "s"}`} columns={["Day", series.label]}>
-          {points.map((p) => (
-            <Row key={p.day}>
-              <Cell header>{formatLocalDate(p.day)}</Cell>
-              <Cell>
-                <span className="tabular-nums">{formatCount(p.value)}</span>
-              </Cell>
-            </Row>
-          ))}
-        </Table>
-      </div>
+      {/*
+        contracts/charts.md §4 permits the table in a `<details>` "where space demands", and a
+        30-day range across several accounts demands it: the tables, not the charts, were most of
+        the page's length. `<details>` keeps every reading in the DOM and in the accessible tree —
+        the SVG still carries no number alone — while letting the page be scanned.
+      */}
+      <details className="mt-2 group">
+        <summary className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline">
+          {points.length === 0
+            ? "No readings to list"
+            : `Daily readings (${points.length})`}
+        </summary>
+        <div className="mt-2">
+          <Table caption={`${series.accountName} (${series.platform}) — ${series.label} — ${points.length} reading${points.length === 1 ? "" : "s"}`} columns={["Day", series.label]}>
+            {points.map((p) => (
+              <Row key={p.day}>
+                <Cell header>{formatLocalDate(p.day)}</Cell>
+                <Cell>
+                  <span className="tabular-nums">{formatCount(p.value)}</span>
+                </Cell>
+              </Row>
+            ))}
+          </Table>
+        </div>
+      </details>
     </div>
   );
 }

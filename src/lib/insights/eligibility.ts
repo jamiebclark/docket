@@ -19,6 +19,11 @@ export type InsightsPermission =
 export function insightsPermissionFor(input: {
   requiredScopes: readonly string[];
   grantedScopes: readonly string[] | null;
+  /**
+   * EVERY scope the group's dialog will ask for as configured now — its base set plus whichever
+   * opt-ins are switched on — not just the opt-ins. A base scope is still a scope the account may
+   * not have granted, and an account whose grant was never recorded is missing all of them.
+   */
   requestedScopes: readonly string[];
   cannotWiden: { reason: string; doc?: string } | null;
   missingScopes: { reason: string; docsPath?: string } | null;

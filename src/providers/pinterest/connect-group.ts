@@ -3,7 +3,7 @@ import type { CandidatesResult, OAuthConnectGroup } from "../types";
 import { readUserAccount } from "./account";
 import { accountExpiry, computePinterestExpiry, type PinterestCredentials } from "./credentials";
 import { parsePinterestEnv, requirePinterestConfig } from "./config";
-import { authorizationUrl as buildAuthorizationUrl, exchangeToken, type PinterestOAuthFailure } from "./oauth";
+import { authorizationUrl as buildAuthorizationUrl, exchangeToken, PINTEREST_SCOPES, type PinterestOAuthFailure } from "./oauth";
 import { PINTEREST_TRIAL_NOTE } from "./settings";
 
 const SETUP = docsUrl("pinterest-setup");
@@ -34,6 +34,8 @@ export const pinterestConnectGroup: OAuthConnectGroup = {
     issues: (source) => parsePinterestEnv(source).issues,
     configured: (source) => parsePinterestEnv(source).config !== null,
   },
+  // G39. What the dialog carries before any opt-in — `PINTEREST_SCOPES` in oauth.ts.
+  baseScopes: PINTEREST_SCOPES.split(","),
   optionalScopes: {
     declared: INSIGHTS_SCOPES_DECLARED,
     doc: docsUrl("pinterest-setup", "insights"),

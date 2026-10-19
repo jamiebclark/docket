@@ -35,6 +35,8 @@ export const tiktokConnectGroup: OAuthConnectGroup = {
     issues: (source) => parseTikTokEnv(source).issues,
     configured: (source) => parseTikTokEnv(source).config !== null,
   },
+  // G39. What the dialog carries before any opt-in — `TIKTOK_SCOPES` in config.ts.
+  baseScopes: TIKTOK_SCOPES.split(","),
   optionalScopes: {
     declared: INSIGHTS_SCOPES_DECLARED,
     doc: docsUrl("tiktok-setup", "insights"),
