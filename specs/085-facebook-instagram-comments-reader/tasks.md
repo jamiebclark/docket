@@ -46,20 +46,20 @@ developer-machine setup rather than tasks that change the repo.
 on. **Nothing in Phase 3 onward may start until this phase is complete** — FR-001 requires the facts
 before any reading code, and the sweep cannot advance its catch-up without FR-033.
 
-- [ ] T002 Apply contracts/research-section-2-additions.md §2–§6 to `docs/research/engagement.md`
+- [X] T002 Apply contracts/research-section-2-additions.md §2–§6 to `docs/research/engagement.md`
       §2: replace the six cells (Facebook Q3/Q4/Q8, Instagram Q3/Q4/Q8), correct Facebook Q2 to
       `pages_read_engagement` **and** `pages_read_user_content`, flip both surfaces' `Consequence`
       paragraphs from "must ship declared-but-unavailable" to "readable" with the FR-006 table
       reproduced, add question 10 (own-posts listing) for all four surfaces, add the field-expansion
       note under the two Meta surfaces' tables, and narrow the Phase 9 closing note per §6 — transcribed
       from research.md §1, not re-derived (FR-001 to FR-007)
-- [ ] T003 [P] Fix the provider-state discard defect in
+- [X] T003 [P] Fix the provider-state discard defect in
       `src/server/scheduler/engagement-read.ts`: on the `kind: "page"` branch, assign
       `providerState = result.providerState ?? providerState` immediately after the
       `result.kind !== "page"` guard, so a successful page's returned state is what gets committed
       instead of the state parsed on entry; every other outcome (the `stop` branch and the loop's
       early breaks) must continue to leave `providerState` exactly as parsed (FR-033, FR-022)
-- [ ] T004 [P] Add `tests/integration/engagement/provider-state.test.ts`: a test provider (via
+- [X] T004 [P] Add `tests/integration/engagement/provider-state.test.ts`: a test provider (via
       `registerTestProvider`) whose `read()` returns a changed `providerState` on a `page` result has
       that state handed to its *next* `read()` call; a second test provider whose `read()` returns a
       non-page outcome after inserting items leaves `provider_state` byte-for-byte unchanged while the
@@ -81,30 +81,30 @@ parent, and the parent resolved to the Docket post.
 
 ### Shared Meta layer (built here, reused by US2)
 
-- [ ] T005 [P] [US1] Create `src/providers/meta/engagement-state.ts`: the `metaEngagementStateSchema`
+- [X] T005 [P] [US1] Create `src/providers/meta/engagement-state.ts`: the `metaEngagementStateSchema`
       (contracts/meta-engagement-sweep.md §2, `v: 1`, `.strict()`, `pending` capped at 3), a
       `parseEngagementState` helper that returns `{}` on any parse failure or `v` mismatch (never
       throws), and a `shrinkEngagementState` guard that serialises the state and, while it exceeds
       1,500 bytes, drops `pending` entries oldest-first then `catchUp.postsAfter`
-- [ ] T006 [P] [US1] Create `src/providers/meta/engagement-state.test.ts`: the schema accepts a
+- [X] T006 [P] [US1] Create `src/providers/meta/engagement-state.test.ts`: the schema accepts a
       maximal state and rejects an extra field (`.strict()`); a state with an unknown `v` parses to
       `{}`; a state built to exceed 1,500 bytes shrinks by dropping `pending` first and then
       `catchUp.postsAfter`, ending under the limit; a unit test builds the largest value the schema
       allows and asserts its serialised size stays under the database's 2,000-byte check (contracts
       §2 rule 1, data-model.md §3, FR-013)
-- [ ] T007 [P] [US1] Create `src/providers/meta/engagement-errors.ts`: one function mapping a
+- [X] T007 [P] [US1] Create `src/providers/meta/engagement-errors.ts`: one function mapping a
       `GraphOutcome` (and the two special-cased Graph code 100 cases: on a request carrying a stored
       cursor vs. on a single post's comments edge) to one of the engagement seam's six non-`page`
       `EngagementReadResult` members, through `classifyGraphError` and `scrub`, with every `summary`
       built from the existing `graphSummary` helper (contracts/meta-engagement-sweep.md §6, FR-019,
       FR-020, FR-023, FR-034)
-- [ ] T008 [P] [US1] Create `src/providers/meta/engagement-errors.test.ts`: every `GraphReply` shape
+- [X] T008 [P] [US1] Create `src/providers/meta/engagement-errors.test.ts`: every `GraphReply` shape
       `tests/helpers/fake-graph.ts` offers (`graph_error` at each classified code, `http` 4xx/5xx,
       `unparseable`, `reset_mid_body`, `pre_send_failure`, `hang`) maps to exactly one of the six
       non-`page` outcomes with no fall-through; a Graph code 100 on a cursor-bearing request maps to
       `cursor_lost`; no mapped message or summary contains a planted access token (FR-019, FR-020,
       FR-023, SC-005, SC-007)
-- [ ] T009 [US1] Create `src/providers/meta/engagement-map.ts` exporting the `MetaCommentSurface`
+- [X] T009 [US1] Create `src/providers/meta/engagement-map.ts` exporting the `MetaCommentSurface`
       interface and `MetaSelfIdentity` type (contracts/meta-comment-surface.md §1) plus the shared
       emit step: given a surface, a raw comment object and a post id, produce one `InboundItemDraft`
       per contracts/meta-engagement-sweep.md §5 — trimmed `externalId` (skip if unusable), `text` from
@@ -112,14 +112,14 @@ parent, and the parent resolved to the Docket post.
       from `surface.mapAuthor(comment)` untouched, `saidAt` parsed from `surface.commentTimeField`
       (skip the comment if unparseable, never default to `now`), `parentExternalId` the post id,
       `data: {}`, `upstream` never set (FR-024 to FR-031, FR-032)
-- [ ] T010 [US1] Create `src/providers/meta/engagement-map.test.ts`: the emit step against recorded
+- [X] T010 [US1] Create `src/providers/meta/engagement-map.test.ts`: the emit step against recorded
       Facebook and Instagram comment fragments produces the exact drafts contracts/meta-comment-surface.md
       §3–§4 table, including the "self" cases (a Facebook comment whose `from.id` equals the Page id,
       an Instagram comment whose `username` or `user.id` equals the account's own identity) producing
       no draft; a comment with no usable id is skipped; a comment with unparseable time is skipped,
       never dated `now`; truncation at 10,000 characters sets `textTruncated` (US1 scenarios 3–4, US2
       scenario 3, FR-016, FR-028, SC-008) — depends on T009
-- [ ] T011 [US1] Create `src/providers/meta/engagement-sweep.ts` exporting `metaEngagementRead`
+- [X] T011 [US1] Create `src/providers/meta/engagement-sweep.ts` exporting `metaEngagementRead`
       (contracts/meta-engagement-sweep.md §1, §3, §4): the pre-step checks (usage back-off,
       `readPageToken`, `prefetchSelf` when the surface declares one and `state.selfUsername` is
       absent), the step chooser (§4.2: drain pending → catch-up on `direction === "older"` → catch-up
@@ -130,7 +130,7 @@ parent, and the parent resolved to the Docket post.
       the catch-up step (§4.5: one call at `catchUp.postsAfter`, no `freshSince` filter, `exhausted`
       and `done` true only when both the listing and `pending` are exhausted) — depends on T005, T007,
       T009
-- [ ] T012 [P] [US1] Create `src/providers/meta/engagement-sweep.test.ts` (fresh/self/freshSince
+- [X] T012 [P] [US1] Create `src/providers/meta/engagement-sweep.test.ts` (fresh/self/freshSince
       sections only here; drain, catch-up, usage and bound sections land in US3/US4): mocked `fetch`
       via `tests/helpers/fake-graph.ts`; a fresh step against one page of posts with inline comments
       emits the expected drafts; a comment at or below `freshSince` is skipped on a second read; a
@@ -139,7 +139,7 @@ parent, and the parent resolved to the Docket post.
 
 ### Facebook provider declaration
 
-- [ ] T013 [US1] Create `src/providers/facebook/engagement.ts`: the `facebookEngagement` object —
+- [X] T013 [US1] Create `src/providers/facebook/engagement.ts`: the `facebookEngagement` object —
       `declaration` exactly as contracts/meta-comment-surface.md §3 (`reads: ["comment"]`,
       `canReply: false`, `readScopes: ["pages_read_engagement", "pages_read_user_content"]`,
       `missingReadScopes.reason` naming `pages_read_user_content` and the reconnect action,
@@ -150,33 +150,33 @@ parent, and the parent resolved to the Docket post.
       `drainParams: { order: "reverse_chronological", filter: "toplevel" }`, `prefetchSelf: null`,
       `mapAuthor` and `isSelf` exactly per contracts §3, `read` delegating to `metaEngagementRead`
       (FR-008, FR-024 to FR-031, FR-035, FR-037, FR-038)
-- [ ] T014 [P] [US1] Create `src/providers/facebook/engagement.test.ts`: `mapAuthor` against a
+- [X] T014 [P] [US1] Create `src/providers/facebook/engagement.test.ts`: `mapAuthor` against a
       `from: {name, id}` fragment and against a `from`-absent fragment; `isSelf` true when `from.id`
       equals the Page's `externalId`; the declaration's `readScopes`, `missingReadScopes` and
       `docsPath` match contracts §3 verbatim (US1 scenario 4, FR-027 to FR-029)
-- [ ] T015 [US1] Wire `engagement: facebookEngagement` onto the exported provider object in
+- [X] T015 [US1] Wire `engagement: facebookEngagement` onto the exported provider object in
       `src/providers/facebook/index.ts` — depends on T013
 
 ### Registry and scope wiring
 
-- [ ] T016 [US1] Add `pages_read_user_content` to `ENGAGEMENT_SCOPES_DECLARED` in
+- [X] T016 [US1] Add `pages_read_user_content` to `ENGAGEMENT_SCOPES_DECLARED` in
       `src/providers/meta/connect-group.ts` and name it in `cannotWiden`'s engagement message, so the
       opt-in flag can request what facebookEngagement's declaration needs (contracts/meta-comment-surface.md
       §3, "a registry assertion should catch, not a reviewer") — depends on T013
-- [ ] T017 [US1] Extend `assertEngagementDeclaration` in `src/providers/registry.ts` with the two
+- [X] T017 [US1] Extend `assertEngagementDeclaration` in `src/providers/registry.ts` with the two
       checks contracts/meta-comment-surface.md §6 requires: (1) every scope in a non-unavailable
       provider's `declaration.readScopes` must appear in that provider's connect group's `baseScopes`
       or `optionalScopes.declared`, so a declared-but-unrequestable scope fails at load; (2)
       `declaration.canReply === false` forbids a `writeBudget` on the same declaration — depends on
       T013, T016
-- [ ] T018 [P] [US1] Extend `src/providers/registry.test.ts` (or create it beside the existing
+- [X] T018 [P] [US1] Extend `src/providers/registry.test.ts` (or create it beside the existing
       registry tests if none covers `assertEngagementDeclaration` yet) with cases for both new
       checks: a provider declaring a `readScope` absent from its connect group's requestable scopes
       throws; a provider with `canReply: false` and a `writeBudget` set throws — depends on T017
 
 ### End-to-end for Facebook
 
-- [ ] T019 [US1] Create `tests/integration/engagement/meta-read.test.ts` (Facebook half, shared file
+- [X] T019 [US1] Create `tests/integration/engagement/meta-read.test.ts` (Facebook half, shared file
       with US2/US3/US4): with mocked Page-posts and Page-comments responses, run the engagement-read
       section for a connected Facebook Page holding both declared scopes and assert one
       `engagement_items` row with kind `comment`, the platform's comment id as `external_id`, the post

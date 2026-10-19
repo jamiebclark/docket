@@ -28,11 +28,12 @@ describe("metaConnectGroup.authorizationUrl", () => {
 });
 
 describe("metaConnectGroup.optionalScopes", () => {
-  it("declares read_insights, instagram_manage_insights and instagram_manage_comments, in that order", () => {
+  it("declares read_insights, instagram_manage_insights, instagram_manage_comments and pages_read_user_content, in that order", () => {
     expect(metaConnectGroup.optionalScopes?.declared).toEqual([
       { scope: "read_insights", purpose: "Read a Facebook Page's and its posts' numbers" },
       { scope: "instagram_manage_insights", purpose: "Read an Instagram account's and its posts' numbers" },
       { scope: "instagram_manage_comments", purpose: "Read an Instagram account's comments" },
+      { scope: "pages_read_user_content", purpose: "Read the comments people leave on a Facebook Page's posts" },
     ]);
   });
 
@@ -45,9 +46,9 @@ describe("metaConnectGroup.optionalScopes", () => {
     expect(requested).toEqual(["read_insights", "instagram_manage_insights"]);
   });
 
-  it("requests exactly the engagement scope when only the engagement flag is on with no config id", () => {
+  it("requests exactly the engagement scopes when only the engagement flag is on with no config id", () => {
     const requested = metaConnectGroup.optionalScopes?.requested({ ...BASE, META_ENGAGEMENT_SCOPES: "true" });
-    expect(requested).toEqual(["instagram_manage_comments"]);
+    expect(requested).toEqual(["instagram_manage_comments", "pages_read_user_content"]);
   });
 
   it("requests the union, in insights-then-engagement order, when both flags are on with no config id", () => {
@@ -56,7 +57,7 @@ describe("metaConnectGroup.optionalScopes", () => {
       META_INSIGHTS_SCOPES: "true",
       META_ENGAGEMENT_SCOPES: "true",
     });
-    expect(requested).toEqual(["read_insights", "instagram_manage_insights", "instagram_manage_comments"]);
+    expect(requested).toEqual(["read_insights", "instagram_manage_insights", "instagram_manage_comments", "pages_read_user_content"]);
   });
 
   it("requests nothing when any flag is on but a login config id is set (FR-019, US3-AS3)", () => {

@@ -17,6 +17,7 @@ const INSIGHTS_SCOPES_DECLARED = [
  */
 const ENGAGEMENT_SCOPES_DECLARED = [
   { scope: "instagram_manage_comments", purpose: "Read an Instagram account's comments" },
+  { scope: "pages_read_user_content", purpose: "Read the comments people leave on a Facebook Page's posts" },
 ] as const;
 
 async function candidatesFromUserToken(
@@ -79,8 +80,8 @@ export const metaConnectGroup: OAuthConnectGroup = {
       if (!config.engagementScopes || (ENGAGEMENT_SCOPES_DECLARED as readonly unknown[]).length === 0) return null;
       return {
         reason:
-          "Add instagram_manage_comments to your Facebook Login for Business configuration in the "
-          + "Meta app dashboard. Docket cannot add them to the login dialog.",
+          "Add instagram_manage_comments and pages_read_user_content to your Facebook Login for "
+          + "Business configuration in the Meta app dashboard. Docket cannot add them to the login dialog.",
         doc: docsUrl("meta-setup", "engagement"),
       };
     },
