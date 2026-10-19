@@ -4080,3 +4080,42 @@ burning the email section's per-tick claim budget on no-ops. That is the schedul
   integration fixtures, and through synthetic declarations in unit tests — every pure function in
   this entry takes a declaration as an argument, so a unit test can hand it any shape with no
   provider involved.
+
+## What the block-shaped CI flakes are not (2026-10-19)
+
+Several flakes share one shape: a test that runs in hundreds of milliseconds locally dies on a test
+timeout under CI load. `generation/brand-context.test.ts` takes 663 ms and died at 20 s;
+`jobs/posting-instructions.test.ts` takes 390 ms and died at 60 s;
+`notifications/stream-teardown.test.ts` waited 18 s for an SSE frame that normally arrives in one 2 s
+probe. A 30x to 150x blowup is a block, not a slow test, so the question was what they block on.
+
+Two answers were tested and **both are wrong**, which is worth recording because both are the obvious
+guesses and each cost a hunt to exclude:
+
+1. **Not a row-lock wait.** `lock_timeout` was set to 15 s on the worker databases, deliberately below
+   vitest's 20 s `testTimeout`, so that a lock wait would fail as `canceling statement due to lock
+   timeout` and name itself. Flake-hunt run 39195627319 recorded **zero** such errors across 80
+   repetitions while tests still died on bare 20 s timeouts.
+2. **Not a wait for a pool connection.** That wait is invisible to `lock_timeout` and
+   `idle_in_transaction_session_timeout`, which are server-side and apply only once a query reaches
+   Postgres — so `DOCKET_POOL_CONNECT_TIMEOUT_MS` was added at 10 s to name it. It did not fire while a
+   sibling test blocked for a full 20 s.
+
+The circumstantial case for the second was good and still turned out wrong: `runTick` runs **ten**
+sections concurrently, `DATABASE_POOL_MAX` defaults to **ten**, and `clock.now()` takes a second
+connection unless handed a transaction — a hazard `dal/clock.ts` warns about in-code. But
+`jobs/posting-instructions.test.ts` passes 3/3 at `DATABASE_POOL_MAX=3`, which should deadlock sooner,
+and the 10 s timeout never fired. A ~35-call-site `clock.now()` refactor was declined twice on that
+basis.
+
+**What remains is contention above the database.** `maxWorkers` is `min(4, cores - 1)`, so a 4-core CI
+runner runs three vitest workers, each capable of a ten-section tick, on one Postgres. Event-loop and
+CPU starvation fits every observation the database theories could not: no Postgres error of any kind,
+timers firing late (the SSE probe), and the blowup scaling with how much work a test asks a tick to do.
+
+**So the remedy is to reduce exposure rather than chase the contention.** A test that asserts what one
+section does should run that section, not a whole tick:
+`scheduler/refresh.test.ts` (#162) and `generation/brand-context.test.ts` (#167) were both corrected
+that way, and hunt 39195627319 shows `refresh.test.ts` gone from the report entirely after the first.
+`jobs/budget.test.ts` had been doing it this way all along. The tick wrapper is usually incidental to
+what these tests assert, and it is the part exposed to the contention.
