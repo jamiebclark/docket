@@ -19,6 +19,7 @@ export const NAV_SECTIONS = [
   { slug: "media", label: "Media", group: "Create", icon: "media" },
   { slug: "jobs", label: "Batch jobs", group: "Create", icon: "jobs" },
   { slug: "accounts", label: "Accounts", group: "Project", icon: "accounts" },
+  { slug: "insights", label: "Insights", group: "Project", icon: "insights" },
   { slug: "settings", label: "Settings", group: "Project", icon: "settings" },
   { slug: "activity", label: "Activity", group: "Project", icon: "activity" },
 ] as const satisfies readonly { slug: string; label: string; group: (typeof NAV_GROUPS)[number]; icon: IconName }[];

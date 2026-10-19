@@ -45,15 +45,15 @@ const error = (code: string, status = 200, message = "") => ({ kind: "error" as 
 describe("tiktokInsights.declaration", () => {
   it("declares the post, account and shared fields of contracts/platform-readers-082.md §1", () => {
     expect(tiktokInsights.declaration.post).toEqual([
-      { key: "tiktok_like_count", label: "Likes" },
-      { key: "comment_count", label: "Comments" },
-      { key: "share_count", label: "Shares" },
-      { key: "view_count", label: "Views" },
+      { key: "tiktok_like_count", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "comment_count", label: "Comments", shape: { kind: "cumulative" } },
+      { key: "share_count", label: "Shares", shape: { kind: "cumulative" } },
+      { key: "view_count", label: "Views", shape: { kind: "cumulative" } },
     ]);
     expect(tiktokInsights.declaration.account).toEqual([
-      { key: "tiktok_follower_count", label: "Followers" },
-      { key: "likes_count", label: "Likes" },
-      { key: "video_count", label: "Videos" },
+      { key: "tiktok_follower_count", label: "Followers", shape: { kind: "cumulative" } },
+      { key: "likes_count", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "video_count", label: "Videos", shape: { kind: "cumulative" } },
     ]);
     expect(tiktokInsights.declaration.maxPostsPerRead).toBe(20);
     expect(tiktokInsights.declaration.postIdSource).toBe("publicPostId");

@@ -22,10 +22,10 @@ function labels(html: string): string[] {
 }
 
 describe("project nav order and wording", () => {
-  it("lists the 13 entries in newcomer order", () => {
+  it("lists the 14 entries in newcomer order", () => {
     expect(labels(render("/p/x/calendar"))).toEqual([
       "Overview", "Compose", "Calendar", "Posts", "Review", "Failures",
-      "Generate", "Brand voice", "Media", "Batch jobs", "Accounts", "Settings", "Activity",
+      "Generate", "Brand voice", "Media", "Batch jobs", "Accounts", "Insights", "Settings", "Activity",
     ]);
   });
 
@@ -36,7 +36,7 @@ describe("project nav order and wording", () => {
     const [, publish, create, project] = html.split(/<p [^>]*>(?:Publish|Create|Project)<\/p>/);
     expect(labels(publish ?? "")).toEqual(["Compose", "Calendar", "Posts", "Review", "Failures"]);
     expect(labels(create ?? "")).toEqual(["Generate", "Brand voice", "Media", "Batch jobs"]);
-    expect(labels(project ?? "")).toEqual(["Accounts", "Settings", "Activity"]);
+    expect(labels(project ?? "")).toEqual(["Accounts", "Insights", "Settings", "Activity"]);
   });
 
   it("keeps Review directly above Failures", () => {

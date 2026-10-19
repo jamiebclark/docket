@@ -10,7 +10,7 @@ Same as for the public API: in the project, open **Settings → API keys → Cre
 
 Point your MCP client at `{{base}}/api/mcp` and give it the key as a bearer credential (`Authorization: Bearer dkt_…`), exactly as you would configure the header for the public API. There is no separate MCP credential and no browser session involved — a signed-in browser confers nothing to an MCP client, and listing tools requires the same valid key as calling one.
 
-## 3. The 20 exposed tools
+## 3. The 21 exposed tools
 
 The key decides the project: there is no project-selection tool, and no tool takes a project id. Running two brands means two configured servers with two keys — see section 6.
 
@@ -20,6 +20,7 @@ Four tools demand an explicit `confirm: true` argument because their effect cann
 |---|---|---|---|
 | `docket_list_accounts` | `read` | | Lists the project's connected accounts. |
 | `docket_list_activity` | `read` | | Lists what happened to publishing, newest first. |
+| `docket_get_insights` | `read` | | Reads account trends and performance comparisons, the same figures the Insights screen shows. |
 | `docket_get_post` | `read` | | Reads one post. |
 | `docket_get_post_target` | `read` | | Reads one target of a post. |
 | `docket_list_media` | `read` | | Lists the media library. |

@@ -50,12 +50,12 @@ describe("xInsights.declaration", () => {
     process.env.X_INSIGHTS_ENABLED = "true";
     expect(xInsights.declaration.unavailable).toBeUndefined();
     expect(xInsights.declaration.post).toEqual([
-      { key: "like_count", label: "Likes" },
-      { key: "reply_count", label: "Replies" },
-      { key: "retweet_count", label: "Reposts" },
-      { key: "quote_count", label: "Quotes" },
-      { key: "bookmark_count", label: "Bookmarks" },
-      { key: "impression_count", label: "Impressions" },
+      { key: "like_count", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "reply_count", label: "Replies", shape: { kind: "cumulative" } },
+      { key: "retweet_count", label: "Reposts", shape: { kind: "cumulative" } },
+      { key: "quote_count", label: "Quotes", shape: { kind: "cumulative" } },
+      { key: "bookmark_count", label: "Bookmarks", shape: { kind: "cumulative" } },
+      { key: "impression_count", label: "Impressions", shape: { kind: "cumulative" } },
     ]);
     expect(xInsights.declaration.account).toEqual([]);
     expect(xInsights.declaration.maxPostsPerRead).toBe(100);

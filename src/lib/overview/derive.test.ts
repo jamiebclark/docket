@@ -41,6 +41,7 @@ const facts = (over: Partial<OverviewFacts> = {}, role: "owner" | "admin" | "edi
     accounts: [],
     postCounts: {},
     upcoming: [],
+    recentPublished: [],
     reviewCount: 0,
     needsDecisionCount: 0,
     ai: { configured: true, voiceProfiles: null },

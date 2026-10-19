@@ -136,12 +136,12 @@ export const xInsights: InsightsSupport<unknown> = {
     const { enabled, readCeiling } = parseXInsightsEnv(process.env);
     return {
       post: [
-        { key: "like_count", label: "Likes" },
-        { key: "reply_count", label: "Replies" },
-        { key: "retweet_count", label: "Reposts" },
-        { key: "quote_count", label: "Quotes" },
-        { key: "bookmark_count", label: "Bookmarks" },
-        { key: "impression_count", label: "Impressions" },
+        { key: "like_count", label: "Likes", shape: { kind: "cumulative" as const } },
+        { key: "reply_count", label: "Replies", shape: { kind: "cumulative" as const } },
+        { key: "retweet_count", label: "Reposts", shape: { kind: "cumulative" as const } },
+        { key: "quote_count", label: "Quotes", shape: { kind: "cumulative" as const } },
+        { key: "bookmark_count", label: "Bookmarks", shape: { kind: "cumulative" as const } },
+        { key: "impression_count", label: "Impressions", shape: { kind: "cumulative" as const } },
       ],
       account: [],
       maxPostsPerRead: 100,

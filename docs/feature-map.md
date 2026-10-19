@@ -122,6 +122,19 @@ spec is written.
   Pinterest's account-metric numbers on any screen (captured every tick, same gap 080 left for Bluesky),
   and the account-metric screen, manual refresh, per-project toggle and chart/trend/comparison gaps every
   prior insights entry has already named, which this entry does not change.
+- **The comparisons only Docket can make (083).** A new Insights page (`/p/<project>/insights`) turns the
+  snapshot and rollup history 080-082 have been accumulating into account trends, per-post numbers on the
+  project overview and posts list, five comparisons (by slot, day of week, series kind, voice profile and
+  origin), and time to first engagement — see `docs/insights.md`. No new platform call of any kind: this is
+  arithmetic and layout over rows that already exist. Every comparison states its own sample size and a
+  per-group verdict (`ranked` at 8+, `provisional` at 4-7, `suppressed` below 4); nothing sums or averages
+  across platforms. Retention's two prune passes are fused with a fold into one transaction per batch, so a
+  trend survives the snapshot that produced it being pruned. One operation, `docket_get_insights`
+  (`GET /insights`), exposes the same figures over the API and MCP — see `docs/mcp.md`. Not yet owned by any
+  spec: **Facebook's account period and Pinterest's `monthly_views` window** stay `unknown`-shaped and so
+  never trend (resolving either needs a reader change, out of scope here), no significance test or
+  normalization for post age, and no manual refresh or per-project toggle — gaps every prior insights entry
+  already named, which this entry does not change.
 
 ## Scheduling and composing (not built)
 

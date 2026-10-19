@@ -619,12 +619,22 @@ export interface EngagementSupport<Settings = unknown> {
   send(ctx: EngagementSendContext<Settings>): Promise<EngagementSendResult>;
 }
 
+/** G38. Whether a metric accumulates, resets per period, or cannot be plotted over time (FR-001). */
+export type MetricShape =
+  | { kind: "cumulative" }
+  /** `windowMs: null` when a window exists but its length is not fixed or not confirmed. */
+  | { kind: "windowed"; windowMs: number | null }
+  /** The reason is rendered where the series would otherwise be (FR-004). */
+  | { kind: "unknown"; reason: string };
+
 /** One metric a platform reports, named with the platform's own word (G30, FR-002). */
 export interface MetricKeyDeclaration {
   /** The platform's own field name, e.g. `likeCount`. Stored verbatim as a key in `metrics`. */
   key: string;
   /** The platform's own label, e.g. "Likes". Rendered as given; never translated or grouped. */
   label: string;
+  /** G38. Declared beside the key and label, by the provider, from docs/research/*.md. */
+  shape: MetricShape;
 }
 
 export interface InsightsDeclaration {

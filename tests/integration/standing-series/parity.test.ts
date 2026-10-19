@@ -57,8 +57,15 @@ function tick(at: Date): Promise<StandingSeriesCounts> {
 
 /** Strips the two fields the quickstart says are allowed to differ (mode and `series.id`). */
 function normalizeRecord(r: GenerationRecord): unknown {
+  // `mode` and the series id already differ by provenance, not by what was generated, and are
+  // neutralised here. 083 added `standingSeries` for the same reason: a point-in-time snapshot of
+  // which series produced the post, so a comparison months later survives the series being renamed
+  // or deleted. Provenance is exactly what this parity check is NOT about — it asserts that the
+  // standing-series path generates the same thing a person would, and the byte-identical `prompt`
+  // comparison above plus the untouched `inputs` are what carry that.
+  const { standingSeries: _provenance, ...withoutProvenance } = r as GenerationRecord & { standingSeries?: unknown };
   return {
-    ...r,
+    ...withoutProvenance,
     mode: "SAME_MODE",
     inputs: { ...r.inputs, series: r.inputs.series ? { ...r.inputs.series, id: "SAME_SERIES_ID" } : null },
   };

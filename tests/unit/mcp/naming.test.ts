@@ -14,7 +14,7 @@ describe("toolNameFor", () => {
 });
 
 describe("PUBLISHED_TOOL_NAMES", () => {
-  it("is the frozen twenty", () => {
+  it("is the frozen twenty-one", () => {
     expect(PUBLISHED_TOOL_NAMES).toEqual([
       "docket_list_accounts",
       "docket_set_account_posting_instructions",
@@ -33,10 +33,11 @@ describe("PUBLISHED_TOOL_NAMES", () => {
       "docket_update_slot",
       "docket_delete_slot",
       "docket_list_activity",
+      "docket_get_insights",
       "docket_create_project",
       "docket_create_voice_profile",
       "docket_update_voice_profile",
     ]);
-    expect(PUBLISHED_TOOL_NAMES).toHaveLength(20);
+    expect(PUBLISHED_TOOL_NAMES).toHaveLength(21);
   });
 });

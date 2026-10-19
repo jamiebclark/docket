@@ -117,4 +117,16 @@ describe("provider insights seam (FR-061, SC-013)", () => {
       expect(matches, `${file} must not import from src/server`).toEqual([]);
     }
   });
+
+  // G38, FR-001 to FR-005: every declared key carries a shape, and exactly these three are unknown.
+  it("gives every provider's declared keys a shape, with exactly three classified unknown", () => {
+    const unknownKeys: string[] = [];
+    for (const provider of listProviders()) {
+      for (const metric of [...(provider.insights?.declaration.post ?? []), ...(provider.insights?.declaration.account ?? [])]) {
+        expect(metric.shape, `${provider.key}'s ${metric.key} must declare a shape`).toBeDefined();
+        if (metric.shape.kind === "unknown") unknownKeys.push(metric.key);
+      }
+    }
+    expect(unknownKeys.sort()).toEqual(["monthly_views", "page_follows", "page_post_engagements"].sort());
+  });
 });

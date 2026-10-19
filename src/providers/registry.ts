@@ -8,7 +8,7 @@ import { pinterestProvider } from "./pinterest";
 import { threadsProvider } from "./threads";
 import { tiktokProvider } from "./tiktok";
 import { xProvider } from "./x";
-import type { MetricKeyDeclaration, OAuthConnectGroup, SocialProvider } from "./types";
+import type { MetricKeyDeclaration, MetricShape, OAuthConnectGroup, SocialProvider } from "./types";
 
 // Adding a provider = one line here (plus its folder under src/providers/<key>/).
 export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider, instagramProvider as SocialProvider, threadsProvider as SocialProvider, xProvider as SocialProvider, tiktokProvider as SocialProvider, pinterestProvider as SocialProvider];
@@ -130,6 +130,16 @@ export function getProvider(key: string): SocialProvider {
 
 export function listProviders(): readonly SocialProvider[] {
   return providers;
+}
+
+/**
+ * G38 (contracts/fold.md §3). The fold tags every point with the key's shape at fold time, read from
+ * the registry here so the DAL never imports it (constitution III/V). A key the registry no longer
+ * declares — a removed provider, a removed key — folds as `unknown`.
+ */
+export function shapeFor(providerKey: string, surface: "post" | "account", metricKey: string): MetricShape {
+  const declared = findProvider(providerKey)?.insights?.declaration[surface].find((k) => k.key === metricKey);
+  return declared?.shape ?? { kind: "unknown", reason: `${providerKey} no longer declares "${metricKey}" on its ${surface} surface` };
 }
 
 export interface ConnectGroupEntry {

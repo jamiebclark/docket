@@ -83,13 +83,13 @@ function accountMetricsFor(settings: MockSettings): Record<string, number> {
 export const mockInsights: InsightsSupport<MockSettings> = {
   declaration: {
     post: [
-      { key: "likeCount", label: "Likes" },
-      { key: "repostCount", label: "Reposts" },
-      { key: "viewCount", label: "Views" },
+      { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "repostCount", label: "Reposts", shape: { kind: "cumulative" } },
+      { key: "viewCount", label: "Views", shape: { kind: "cumulative" } },
     ],
     account: [
-      { key: "followersCount", label: "Followers" },
-      { key: "postsCount", label: "Posts" },
+      { key: "followersCount", label: "Followers", shape: { kind: "cumulative" } },
+      { key: "postsCount", label: "Posts", shape: { kind: "cumulative" } },
     ],
     maxPostsPerRead: 3,
     readBudget: { count: 1000, windowSeconds: 3_600 },
