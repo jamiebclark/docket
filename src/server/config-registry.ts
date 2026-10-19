@@ -11,6 +11,8 @@ export const INTERNAL_VARIABLES: Readonly<Record<string, string>> = {
   PATH: "shell search path, set in the image only",
   COREPACK_HOME: "Corepack cache location, set in the image only",
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "stops Corepack asking before it downloads, set in the image only",
+  DOCKET_POOL_CONNECT_TIMEOUT_MS:
+    "test-harness only: bounds the wait for a pool connection so it fails as \"timeout exceeded when trying to connect\" instead of hanging; unset in production, where a request keeps waiting",
 };
 
 /**
