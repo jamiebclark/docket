@@ -30,6 +30,24 @@ export function workerDatabaseUrl(baseUrl: string, workerId: number): string {
   //
   // Tests that exercise lock contention on purpose set `SET LOCAL lock_timeout` inside their own
   // transaction (see dal/notifications.ts), which takes precedence over this.
-  url.searchParams.set("options", "-c lock_timeout=30s -c idle_in_transaction_session_timeout=30s");
+  // The two have different jobs and so different values.
+  //
+  // `lock_timeout` bounds how long a statement WAITS for a lock, and it MUST stay below vitest's
+  // `testTimeout` (20s in vitest.config.ts) or it is pointless:
+  // at 30s, which is what this first shipped as, every default-timeout test lost the race and died as
+  // "Test timed out in 20000ms" before Postgres ever cancelled anything — which is the exact mystery
+  // these deadlines exist to remove. `generation/brand-context.test.ts` failed that way 2 of 20
+  // repetitions in flake-hunt run 39136066573 with the deadlines already in place.
+  //
+  // 15s is comfortably above anything legitimate: the suite's statements are milliseconds and the
+  // slowest deliberate stall is a 6s fake LLM call in jobs/budget.test.ts.
+  //
+  // `idle_in_transaction_session_timeout` is different and stays at 30s. It kills a session sitting
+  // idle INSIDE a transaction, which is a leak that would otherwise hang forever, so 30s still catches
+  // it long before any test timeout. Lowering it to 15s broke jobs/fairness.test.ts with
+  // "terminating connection due to idle-in-transaction timeout" (25P03): that test legitimately holds
+  // a transaction open across a 20-item job, and killing it is a false positive, not a find.
+  // worker-db-timeouts.test.ts asserts each relationship rather than the bare numbers.
+  url.searchParams.set("options", "-c lock_timeout=15s -c idle_in_transaction_session_timeout=30s");
   return url.toString();
 }

@@ -3,6 +3,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { readHeartbeats } from "../../../src/server/dal/heartbeats";
 import { runTick } from "../../../src/server/scheduler";
+import { runTokenRefresh } from "../../../src/server/scheduler/token-refresh";
+import { schedulerConfig, type SchedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import { decryptCredentials, encryptCredentials } from "../../../src/server/services/accounts";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
@@ -43,13 +46,35 @@ async function expiring(projectId: string, settings: Record<string, unknown> = {
  */
 const TICK_BUDGET_MS = 120_000;
 
+/**
+ * Runs ONLY the refresh section, not a whole tick.
+ *
+ * `claimRefreshAccounts` ends in `.for("update", { skipLocked: true })`, and `runTick` runs nine
+ * sections concurrently through one `Promise.all` against one pool. So whenever a sibling section
+ * happens to hold a row lock on this test's `social_accounts` row, the refresh claim SKIPS it and the
+ * section reports every counter at zero with `ok: true` and `outOfBudget: 0` - which is exactly what
+ * CI recorded on two different tests here, and exactly why pinning the budget never helped: the
+ * deadline gate was never the mechanism. These pass alone because nothing else holds locks.
+ *
+ * These tests assert what refresh DOES with a given provider result, which is what the comment on
+ * TICK_BUDGET_MS above already says. The tick wrapper was incidental to that and is what made them
+ * flaky, so it is gone. Tick wiring is still covered: the heartbeat test below runs a real tick, and
+ * so does the publishing-interaction step in the needs_reauth test.
+ */
+function refreshOnly(overrides: Partial<SchedulerConfig> = {}) {
+  return runTokenRefresh({
+    config: schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, ...overrides }),
+    tickId: "test",
+    startedAt: new Date(),
+  });
+}
+
 describe("token refresh", () => {
   it("refreshes expiring credentials and re-encrypts them", async () => {
     const { project } = await createProjectWithMembers();
     const { account, repos } = await expiring(project.id);
-    const tick = await runTick({ config: { timeBudgetMs: TICK_BUDGET_MS } });
-    expect(tick.tokenRefresh.ok).toBe(true);
-    expect(tick.tokenRefresh.counts.refreshed, `tokenRefresh ${JSON.stringify(tick.tokenRefresh)}`).toBeGreaterThanOrEqual(1);
+    const counts = await refreshOnly();
+    expect(counts.refreshed, `tokenRefresh ${JSON.stringify(counts)}`).toBeGreaterThanOrEqual(1);
     const after = await repos.accounts.get(account.id);
     expect(after!.credentialsExpiresAt!.getTime()).toBeGreaterThan(Date.now() + 30 * 86_400_000);
     expect(after!.lastRefreshedAt).not.toBeNull();
@@ -65,14 +90,13 @@ describe("token refresh", () => {
 
     // Refresh is global and capped per tick (default 5); expiring accounts left by other
     // files on this worker's database could fill the cap first, so lift it here.
-    const tick = await runTick({ config: { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS } });
+    const counts = await refreshOnly({ refreshMaxAccounts: 1000 });
     // KNOWN FLAKE, cause not yet identified: this has come back `failed: 0` on CI (runs 39009461524
     // and 39015 shard 1) while passing locally. Pinning the budget did NOT fix it, so it is not the
     // deadline gate `outOfBudget` now reports — with a 120s budget that gate cannot fire. The counts
     // are in the message so the next failure says which disposition took the account instead of
     // asserting a bare zero.
-    const refresh = JSON.stringify(tick.tokenRefresh);
-    expect(tick.tokenRefresh.counts.failed, `tokenRefresh ${refresh}`).toBeGreaterThanOrEqual(1);
+    expect(counts.failed, `tokenRefresh ${JSON.stringify(counts)}`).toBeGreaterThanOrEqual(1);
     const badAfter = await bad.repos.accounts.get(bad.account.id);
     expect(badAfter).toMatchObject({ status: "needs_reauth", lastError: "Mock refresh failure" });
     expect(badAfter!.lastError).not.toContain("old-secret-token");
@@ -115,17 +139,16 @@ describe("token refresh", () => {
     // wall clock and reports zero refreshes under CI contention - see ENGAGEMENT_TIME_SHARE
     // and SCHEDULER_TICK_BUDGET_SECONDS for the capacity side of this, which is a separate
     // concern with its own tests.
-    const tickConfig = { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS };
-    const first = await runTick({ config: tickConfig });
-    expect(first.tokenRefresh.counts.deferred, `tokenRefresh ${JSON.stringify(first.tokenRefresh)}`).toBeGreaterThanOrEqual(1);
+    const first = await refreshOnly({ refreshMaxAccounts: 1000 });
+    expect(first.deferred, `tokenRefresh ${JSON.stringify(first)}`).toBeGreaterThanOrEqual(1);
     const after = await repos.accounts.get(account.id);
     expect(after).toMatchObject({ status: "active" });
     expect(after!.lastError).toContain("PDS unreachable");
     expect(after!.lastError).not.toContain("old-secret-token");
 
     scripted.delete(account.id);
-    const second = await runTick({ config: tickConfig });
-    expect(second.tokenRefresh.counts.refreshed, `tokenRefresh ${JSON.stringify(second.tokenRefresh)}`).toBeGreaterThanOrEqual(1);
+    const second = await refreshOnly({ refreshMaxAccounts: 1000 });
+    expect(second.refreshed, `tokenRefresh ${JSON.stringify(second)}`).toBeGreaterThanOrEqual(1);
     expect(await repos.accounts.get(account.id)).toMatchObject({ status: "active", lastError: null });
   });
 
@@ -144,7 +167,7 @@ describe("token refresh", () => {
       expiresAt: new Date(Date.now() + 30 * 86_400_000),
       displayName: "new.handle",
     });
-    const tick = await runTick({ config: { refreshMaxAccounts: 1000, timeBudgetMs: TICK_BUDGET_MS } });
+    const counts = await refreshOnly({ refreshMaxAccounts: 1000 });
     // This assertion checks two keys, so a bare failure cannot say which one broke — and they have
     // opposite causes. `displayName` alone staying "old.handle" means the account was never refreshed:
     // either not claimed (its provider missing from `listProviders()` at tick time, so its key is not
@@ -153,7 +176,7 @@ describe("token refresh", () => {
     // catch path fired and the refresh threw. Measured at 1-2 of 20 repetitions across three hunts,
     // and it has blocked three unrelated PRs, so the counts and the row both go in the message.
     const row = await repos.accounts.get(account.id);
-    const seen = `tokenRefresh ${JSON.stringify(tick.tokenRefresh)}; row displayName=${row?.displayName} status=${row?.status} lastError=${row?.lastError ?? "null"} lastRefreshedAt=${row?.lastRefreshedAt?.toISOString() ?? "null"}`;
+    const seen = `tokenRefresh ${JSON.stringify(counts)}; row displayName=${row?.displayName} status=${row?.status} lastError=${row?.lastError ?? "null"} lastRefreshedAt=${row?.lastRefreshedAt?.toISOString() ?? "null"}`;
     expect(row, seen).toMatchObject({ displayName: "new.handle", status: "active" });
   });
 });
