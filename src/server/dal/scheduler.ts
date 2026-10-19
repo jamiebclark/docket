@@ -67,6 +67,16 @@ export interface ClaimDueOptions {
   excludeIds: readonly string[];
   /** Per target: return a decision, or `null` to leave it untouched. */
   decide(target: TargetRecord, account: ClaimedAccount, ctx: ClaimContext): Promise<ClaimDecision | null>;
+  /**
+   * Called when a due target is passed over because another session holds its account's row lock.
+   *
+   * This claim locks `social_accounts` with `FOR NO KEY UPDATE ... SKIP LOCKED`, and
+   * `claimRefreshAccounts` locks the same rows `FOR UPDATE`. The two conflict, so whichever section
+   * arrives second silently skips - and a tick runs nine sections through one `Promise.all`. Leaving
+   * the target for the next tick is the right behaviour; doing it invisibly is not, because "the
+   * target was not processed" and "there was nothing due" then look identical from outside.
+   */
+  onAccountLocked?(targetId: string): void;
 }
 
 /** `StepContent` plus the target's stored post type choice. */
@@ -221,7 +231,11 @@ export function claimDueTargets(opts: ClaimDueOptions): Promise<ClaimedTarget[]>
       const claimed: ClaimedTarget[] = [];
       for (const row of rows) {
         const account = byId.get(row.socialAccountId);
-        if (!account) continue; // account locked by someone else: leave the target for later
+        if (!account) {
+          // Account locked by another section: leave the target for the next tick, but say so.
+          opts.onAccountLocked?.(row.id);
+          continue;
+        }
         const decision = await opts.decide(row, account, ctx);
         if (!decision) {
           claimed.push({ target: row, account, decision: null });
