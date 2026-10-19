@@ -5,7 +5,7 @@ import { z } from "zod";
 import { assertCreationAllowance, assertEngagementDeclaration, assertInsightsDeclaration } from "./registry";
 import { readFileSync } from "node:fs";
 import { findConnectGroup, findProvider, getProvider, listConnectGroups, listProviders } from "./registry";
-import type { EngagementDeclaration, InsightsDeclaration } from "./types";
+import type { EngagementDeclaration, InsightsDeclaration, OAuthConnectGroup } from "./types";
 
 describe("provider registry", () => {
   it("finds the mock provider", () => {
@@ -233,6 +233,26 @@ describe("provider registry", () => {
     expect(() => withDecl({ readScopes: ["read_comments"], missingReadScopes: { reason: "ok" } })).not.toThrow();
 
     expect(() => withDecl({ readScopes: ["Not Valid!"], missingReadScopes: { reason: "ok" } })).toThrow(/readScopes entry/);
+
+    // A readScope absent from the connect group's requestable scopes fails at load (contracts/meta-comment-surface.md §6 rule 1).
+    const group: OAuthConnectGroup = {
+      key: "test-group",
+      displayName: "Test",
+      baseScopes: ["base_scope"],
+      optionalScopes: { declared: [{ scope: "optional_scope", purpose: "x" }], requested: () => [] },
+      environment: { variables: [], issues: () => [], configured: () => true },
+      authorizationUrl: () => "https://example.test",
+      exchangeCode: async () => ({ ok: false as const, message: "n/a" }),
+    };
+    const withGroup = (over: Partial<EngagementDeclaration>) =>
+      assertEngagementDeclaration({ key: "x", connect: { strategy: "oauth", group }, engagement: { declaration: { reads: ["comment"], canReply: false, ...over } } });
+
+    expect(() => withGroup({ readScopes: ["base_scope"], missingReadScopes: { reason: "ok" } })).not.toThrow();
+    expect(() => withGroup({ readScopes: ["optional_scope"], missingReadScopes: { reason: "ok" } })).not.toThrow();
+    expect(() => withGroup({ readScopes: ["unrequestable_scope"], missingReadScopes: { reason: "ok" } })).toThrow(/is not in connect group/);
+
+    // canReply: false forbids a writeBudget on the same declaration.
+    expect(() => withDecl({ canReply: false, writeBudget: { count: 1, windowSeconds: 60 } })).toThrow(/writeBudget/);
   });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {

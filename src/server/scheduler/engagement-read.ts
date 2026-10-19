@@ -122,7 +122,7 @@ async function processAccount(
   }
 
   const parsedProviderState = engagement.stateSchema.safeParse(state.providerState ?? {});
-  const providerState = (parsedProviderState.success ? parsedProviderState.data : {}) as Record<string, unknown>;
+  let providerState = (parsedProviderState.success ? parsedProviderState.data : {}) as Record<string, unknown>;
   // The persisted cursor only ever paginates older history (the backfill direction): the newest
   // direction has no "since" parameter on any provider, so it always restarts from `cursor: null`
   // and stops as soon as it sees an item already stored — that overlap *is* the new-items boundary.
@@ -157,6 +157,7 @@ async function processAccount(
       stop = result;
       break;
     }
+    providerState = (result.providerState ?? providerState) as Record<string, unknown>;
     pagesRead++;
     let anyAlreadyStored = false;
     for (const item of result.items) {

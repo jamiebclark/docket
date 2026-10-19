@@ -174,23 +174,25 @@ changes, and its ability to publish is unaffected either way.
 ## 11b. Reading comments (optional)
 
 The engagement inbox (see [engagement.md](engagement.md)) can read Facebook Page and Instagram
-comments, and Threads replies and mentions, but only what
-[docs/research/engagement.md](research/engagement.md) §2 confirmed a permission for — nothing is
-read on any Meta or Threads surface yet regardless of this flag. As with step 11a, Docket does not
-widen a connection's consent screen until the deployer opts in.
+comments — both confirmed readable by [docs/research/engagement.md](research/engagement.md) §2 — and,
+separately, declares Threads replies and mentions `unavailable` until a Threads reader is built. As
+with step 11a, Docket does not widen a connection's consent screen until the deployer opts in.
 
 **For Facebook and Instagram:**
 
-1. Add `instagram_manage_comments` to the app, the same way as step 3's five.
-   `pages_read_engagement` is already requested by every connection (step 3), so Facebook Page
-   comments need nothing extra here.
+1. Add `pages_read_user_content` and `instagram_manage_comments` to the app, the same way as step 3's
+   five. `pages_read_engagement` is already requested by every connection (step 3), but it alone does
+   not cover comments other people leave — `pages_read_user_content` is the permission that does, and
+   Facebook Page comments will not read without it. Reconnecting grants both: a Facebook Page's
+   `pages_read_user_content` and an Instagram account's `instagram_manage_comments`.
 2. Set `META_ENGAGEMENT_SCOPES=true` in `.env` and restart. The next Facebook/Instagram connect or
-   reconnect asks for the extra permission too; an account connected before the flag was on keeps
+   reconnect asks for the extra permissions too; an account connected before the flag was on keeps
    its existing grant until it reconnects.
 3. **If you use a login configuration (`META_LOGIN_CONFIG_ID`, step 2):** the configuration replaces
-   Docket's scope list, so the flag alone changes nothing — add `instagram_manage_comments` to the
-   login configuration itself in the Meta dashboard. Until you do, Docket shows the accounts page's
-   reason pointing back here and offers no reconnect button, because reconnecting could not succeed.
+   Docket's scope list, so the flag alone changes nothing — add `pages_read_user_content` and
+   `instagram_manage_comments` to the login configuration itself in the Meta dashboard. Until you do,
+   Docket shows the accounts page's reason pointing back here and offers no reconnect button, because
+   reconnecting could not succeed.
 
 **For Threads:**
 

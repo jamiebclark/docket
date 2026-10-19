@@ -81,21 +81,38 @@ means an official-domain search result quoted the fact verbatim.
 | # | Question | Answer | Source | Checked | Evidence |
 |---|---|---|---|---|---|
 | 1 | Endpoint | `GET /{object-id}/comments` — "Most Graph API nodes have a /comments edge that lists all the comments on that object." | https://developers.facebook.com/docs/graph-api/reference/v2.2/object/comments | 2026-10-19 | search-summary |
-| 2 | Permission, and is it inside reach of a self-hosted install? | `pages_read_engagement`. **Standard Access** — "Business, Consumer, and Gaming apps are automatically approved for Standard Access for all permissions and features available to their app type," usable without App Review against accounts whose owner holds a role on the app. | https://developers.facebook.com/docs/graph-api/overview/access-levels (quoted directly in `docs/research/meta.md`, checked 2026-10-14) | 2026-10-14 (meta.md) / 2026-10-19 (this cross-check) | page |
-| 3 | Commenter identity fields | **unverified** — tried: searched the Comment object reference; the returned summary names `id`, `message`, `created_time`, `comment_count` and the `/comments` sub-edge, but does not quote a `from` field or any other identity field. No identity shape confirmed. |  |  |  |
-| 4 | Identifier stable across two comments? | **unverified** — tried: cannot be answered without Q3's identifier shape first. |  |  |  |
+| 2 | Permission, and is it inside reach of a self-hosted install? | `pages_read_engagement` **and `pages_read_user_content`**. The second is the one that permits reading *user-generated* content — the comments other people leave; a commenter's comment is user-generated content by definition. Both **Standard Access** — "Business, Consumer, and Gaming apps are automatically approved for Standard Access for all permissions and features available to their app type," usable without App Review against accounts whose owner holds a role on the app. | https://developers.facebook.com/documentation/development/permissions (pages_read_user_content) · https://developers.facebook.com/docs/graph-api/overview/access-levels (quoted directly in `docs/research/meta.md`, checked 2026-10-14) | 2026-10-14 (meta.md) / 2026-10-19 (this cross-check and the pages_read_user_content correction) | page |
+| 3 | Commenter identity fields | **CONFIRMED.** `from`, "The person that made this comment", of type `User`; the `from` field "includes the `name` and `id` of the commenter" — `from{name,id}`. Access is conditional: "For any comments or replies owned by (on) a Page, you must use a Page access token if you want User information to be included in the response." Docket reads with the stored Page access token (`src/providers/meta/credentials.ts`, `readPageToken`), so the condition is met. **No handle field and no profile-link field is documented** on the Comment object. | https://developers.facebook.com/docs/graph-api/reference/comment | 2026-10-19 | search-summary |
+| 4 | Identifier stable across two comments? | **Yes**, within one app and one Page — the scope Docket uses. Page-scoped: "The PSID will remain unique for the user-page combination irrespective of which app retrieves it," and PSIDs "will be returned for … `Comment/comments`, `PagePost/comments`." App-scoped (independently sufficient): "An App-Scoped User ID is unique to the app and cannot be used by other apps," and "If your app stores the IDs of people who do not use your app, such as the IDs of people who comment on your Page's posts, these IDs will change from their original ID to an app-scoped ID." Not promised stable across two *different* Pages, and the design does not need it to be. | https://developers.facebook.com/docs/pages/access-tokens/psid-api/faq · https://developers.facebook.com/documentation/facebook-login/guides/map-users and https://developers.facebook.com/docs/apps/faq | 2026-10-19 | search-summary |
 | 5 | Reply at this access level? (recorded, not built — FR-015) | **unverified** — tried: searched for a reply-to-comment endpoint; found only `object/private_replies` (a different, DM-shaped feature), no comment-reply endpoint or permission confirmed. |  |  |  |
 | 6 | Pagination | Cursor-based: `cursors.after` / `cursors.before`, the Graph API's general paging shape, confirmed to apply to the `/comments` edge. | https://developers.facebook.com/docs/graph-api/reference/v2.2/object/comments?locale=en_GB | 2026-10-19 | search-summary |
 | 7 | Read rate limits | No comment-specific limit found; the general app-level BUC limit applies to every call: "Calls within one hour = 200 * Number of Users," reported via the `X-App-Usage` header. | https://developers.facebook.com/docs/graph-api/overview/rate-limiting/ | 2026-10-19 | search-summary |
-| 8 | Deleted/edited presentation | **unverified** — tried: searched the Comment object reference for a tombstone, deletion flag or edit timestamp; none was quoted back (a `hidden` moderation flag was found, but only on the Instagram Comment object, not confirmed here). |  |  |  |
+| 8 | Deleted/edited presentation | Deletion: **absence is not a signal.** The comments-edge reference states `total_count` "can be greater than or equal to the actual number of comments returned due to comment privacy or deletion" — the document itself makes absence ambiguous between a privacy setting and a deletion. Edits: still **unverified** — no `edited_time`, revision count or equivalent field appears in the documented field list. | https://developers.facebook.com/docs/graph-api/reference/v2.4/object/comments | 2026-10-19 | search-summary |
 | 9 | Per-account or per-post listable? | Per-post only — the `/comments` edge hangs off one object id; no Page-level "all comments" endpoint was found. | same as Q1 | 2026-10-19 | search-summary |
+| 10 | How does an installation list the brand's own recent posts on this surface — which edge, what identifier shape does it return, and what is its pagination shape? | `GET /{page-id}/posts` — "shows only the posts that were published by this page." **Not** `/feed`, which also returns posts others published on the Page. Returns `{page-id}_{post-id}` ids — the same shape Docket's publish path records (`src/providers/facebook/publish.ts`, prefers `post_id`) and the same shape `src/providers/facebook/insights.ts` already calls the only one the insights edge answers for. General Graph cursor paging. | https://developers.facebook.com/docs/pages-api/ and https://developers.facebook.com/docs/graph-api/reference/page/feed/ | 2026-10-19 | search-summary |
 
-**Consequence:** must ship declared-but-`unavailable`. The permission and its
-access level are confirmed buildable, but the identity shape (Q3) is not —
-the second edge case the contract names. `ENGAGEMENT_SCOPES_DECLARED` may
-still list `pages_read_engagement` (US5's opt-in widening does not require
-the surface to be readable yet); no code reads or displays a Facebook Page
-commenter identity in this entry.
+Field expansion with `.limit()` and per-edge nested paging cursors — "Field expansion allows you to
+not only perform nested queries, but also limit results by adding a `.limit()` argument to any field
+or edge," and "nested fields will include their own paging cursors in the response." This is the
+reason one Graph call reads five of the brand's own posts *with* their comments instead of six calls
+reading them separately: `GET /{id}/posts?fields=id,created_time,comments.limit(10){id,message,created_time,from}&limit=5`.
+Source: https://developers.facebook.com/docs/graph-api/using-graph-api · checked 2026-10-19 · search-summary.
+
+**Consequence:** **readable.**
+
+| Surface | Comments endpoint | Permission | Own-posts listing (Q10) | Identity shape (Q3) | **Ships** |
+|---|---|---|---|---|---|
+| Facebook Page comments | ✅ `/{post-id}/comments` (Q1) | ✅ (Q2) + see note above | ✅ `/{page-id}/posts` | ✅ `from{name,id}` | **readable** |
+| Instagram comments | ✅ `/{ig-media-id}/comments` (Q1) | ✅ (Q2) | ✅ `/{ig-user-id}/media` | ✅ `username` | **readable** |
+
+The `unavailable` path is still built and still tested (US6, FR-039) — the surfaces are decided
+independently, so if a reviewer rejects a `search-summary` grade above, that surface flips to
+`unavailable` by editing one object literal and nothing else. `ENGAGEMENT_SCOPES_DECLARED` gains
+`pages_read_user_content` alongside `pages_read_engagement`; every Facebook Page connected before
+this entry lacks the new scope and is skipped by the claim as missing a declared read scope until
+its owner opts in with `META_ENGAGEMENT_SCOPES=true` and reconnects (084's permission gate, US6
+scenario 3). `src/providers/meta/connect-group.ts`'s `ENGAGEMENT_SCOPES_DECLARED` is the only other
+file this entry's facts touch outside the reader code itself.
 
 ### Instagram comments
 
@@ -103,19 +120,51 @@ commenter identity in this entry.
 |---|---|---|---|---|---|
 | 1 | Endpoint | `GET /{ig-media-id}/comments` returns top-level IG Comments on an IG Media object. | https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media/comments/ | 2026-10-19 | search-summary |
 | 2 | Permission, and is it inside reach of a self-hosted install? | Depends on login flow: Instagram API with Instagram Login needs `instagram_business_basic` + `instagram_business_manage_comments`; Instagram API with Facebook Login needs `instagram_basic` + `instagram_manage_comments` + `pages_read_engagement`. Both are **Standard Access**, same general rule as above — confirmed, `docs/research/meta.md` names `instagram_manage_comments` explicitly as usable without App Review. | https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media/comments/ and the access-levels page (meta.md, 2026-10-14) | 2026-10-14 (meta.md) / 2026-10-19 | page |
-| 3 | Commenter identity fields | **unverified** — tried: searched the IG Comment reference; only the `hidden` returnable field was quoted back, no `from`/username/identifier field. |  |  |  |
-| 4 | Identifier stable across two comments? | **unverified** — same reason as Q3. |  |  |  |
+| 3 | Commenter identity fields | **CONFIRMED, and narrower.** The returnable fields are `hidden`, `id`, `like_count`, `media`, `replies`, `text`, `timestamp`, `user` and `username`. `user` "is only returned if the user making the query also owns the comment, otherwise, the username field will be included" — stated the other way round on the comments edge: "the `user` and `biography` fields will not be included in responses unless the User making the request owns the Comment; instead, we will return `username` for all commenters." For a comment left by somebody else — every comment that becomes an inbox item — Instagram supplies `username` and **no identifier at all**. No display name, no identifier and no profile link for someone else's comment. | https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media/comments/ and https://developers.facebook.com/docs/instagram-api/reference/comment/ | 2026-10-19 | search-summary |
+| 4 | Identifier stable across two comments? | **No identifier is returned at all** for a comment Docket does not own, so there is nothing to be stable. A username is not an identity. | same as Q3 | 2026-10-19 | search-summary |
 | 5 | Reply at this access level? (recorded, not built — FR-015) | **unverified** — tried: found the hide/unhide endpoint (`POST /{ig-comment-id}?hide={hide}`, needs `instagram_basic` + `instagram_manage_comments` + `manage_pages`/`pages_show_list`) but no reply-to-comment endpoint or permission quoted. |  |  |  |
 | 6 | Pagination | The endpoint "returns only top-level comments, with replies to comments not included unless you use field expansion to request the replies field" — general Graph API cursor paging applies. | same as Q1 | 2026-10-19 | search-summary |
 | 7 | Read rate limits | Same general app-level BUC limit as Facebook Page comments — no Instagram-comment-specific number found. | https://developers.facebook.com/docs/graph-api/overview/rate-limiting/ | 2026-10-19 | search-summary |
-| 8 | Deleted/edited presentation | A `hidden` field exists on the IG Comment object ("comments made by media object owners on their own media objects will always be displayed, even if hide=true") — but that is a moderation flag Docket's own account sets, not an upstream delete/edit signal. Deletion/edit presentation itself: **unverified**, not tried beyond this. | https://developers.facebook.com/docs/instagram-api/reference/comment/ | 2026-10-19 | search-summary |
+| 8 | Deleted/edited presentation | Deletion: absence is not a signal, same reasoning as Facebook Page comments. Edits: still **unverified**. The existing `hidden` field note stays — "comments made by media object owners on their own media objects will always be displayed, even if hide=true" is a moderation flag the media owner sets, not an upstream signal. | https://developers.facebook.com/docs/instagram-api/reference/comment/ | 2026-10-19 | search-summary |
 | 9 | Per-account or per-post listable? | Per-post only — the `/comments` edge hangs off one `ig-media-id`; no account-level "all comments" endpoint was found. | same as Q1 | 2026-10-19 | search-summary |
+| 10 | How does an installation list the brand's own recent posts on this surface — which edge, what identifier shape does it return, and what is its pagination shape? | `GET /{ig-user-id}/media` — "gets all IG Media on an IG User." Returns `ig-media-id`s, which is what `/{ig-media-id}/comments` takes and exactly what `media_publish` returns and `post_targets.external_id` holds (`src/providers/instagram/publish.ts:320`). General Graph cursor paging, plus documented `since`/`until` time-based pagination. | https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/ | 2026-10-19 | search-summary |
 
-**Consequence:** must ship declared-but-`unavailable`, same reason as
-Facebook Page comments — endpoint, permission and pagination are buildable,
-identity is not. `ENGAGEMENT_SCOPES_DECLARED` may list the confirmed
-Instagram scope(s); no code reads or displays an Instagram commenter
-identity in this entry.
+Field expansion applies here too, already half-recorded above in Q6 ("not included unless you use
+field expansion to request the `replies` field") — see the Facebook Page comments section above for
+the fact in its own right, with its own source.
+
+**Consequence:** **readable.** Instagram's identity row is genuinely different from Facebook's — one
+has an identifier and the other does not — reasoned independently, per the FR-006 table under
+Facebook Page comments above. The `unavailable` path is still built and still tested (US6, FR-039).
+`ENGAGEMENT_SCOPES_DECLARED` may list the confirmed Instagram scope(s).
+
+### What the implementation (085) learned beyond what §2 gave — recorded as assumption, not fact (FR-048)
+
+Three were anticipated by planning; none of the three, and nothing met while writing the reader
+beyond them, needed a fourth. Each is an assumption the design works around, not a gap that blocks
+either surface's `readable` verdict.
+
+1. **Default ordering of both own-posts listings, and of Instagram's comments edge, is undocumented.**
+   Neither `/{page-id}/posts`, `/{ig-user-id}/media` nor `/{ig-media-id}/comments`'s reference page
+   states an ordering guarantee. `src/providers/meta/engagement-sweep.ts` is built not to depend on
+   one — the fresh step filters each comment by its own `saidAt` against `freshSince` rather than by
+   position in the response, and the catch-up step advances by the response's own cursor rather than
+   by an assumed newest-first or oldest-first order. The mocked tests (`engagement-sweep.test.ts`)
+   fix an order for determinism, but that order is the test's choice, not a platform promise.
+2. **Instagram's `user`-returned-only-when-owned rule is the self-comment discriminator, and the word
+   "owns" is ambiguous** between owning the comment (left it) and owning the media (posted it) — the
+   two quoted phrasings on the comments-edge reference ("the user making the query also owns the
+   comment") and the comment-object reference ("unless the User making the request owns the Comment")
+   do not resolve which. `instagramEngagement`'s `isSelf` does not rely on resolving it: the primary
+   check is a `username` match against the cached `selfUsername` from `prefetchSelf`, with a matching
+   `user.id` as a secondary signal only when `user` happens to be present. Neither surface's design
+   depends on "owns" meaning one thing rather than the other.
+3. **Nested paging cursors inside a field-expanded `comments` block are documented in general terms
+   ("nested fields will include their own paging cursors in the response"), not for the `/comments`
+   edge specifically.** The drain step exists partly because of this: if a busy post's inline
+   `comments.paging.cursors.after` is absent where the design expects one, the post is simply not
+   queued into `pending` and its remaining comments wait for the catch-up to reach that post instead —
+   a missing cursor degrades to "read it again later," never to a crash or a silently dropped comment.
 
 ### Threads replies
 
@@ -211,10 +260,13 @@ What this pass could **not** settle, because no official page it reached
 stated the answer (not because nobody looked — see each surface's table in
 §2 above for exactly what was tried):
 
-- commenter/replier/mentioner identity fields, for all four surfaces — the
-  blocker for every "buildable" verdict;
+- commenter/replier/mentioner identity fields, for the two Threads surfaces —
+  the blocker for their "buildable" verdict. Facebook Page comments and
+  Instagram comments were settled by `085-facebook-instagram-comments-reader`
+  (2026-10-19): see their §2 tables above;
 - whether a commenter's identifier is stable across two items by the same
-  person, for all four surfaces (depends on the identity shape above);
+  person, for the two Threads surfaces (depends on the identity shape above).
+  Facebook and Instagram were settled by the same 085 pass;
 - the Threads replies and Threads mentions read endpoints themselves, their
   pagination, and their deleted/edited presentation;
 - read rate limits specific to any of the four surfaces (only the general

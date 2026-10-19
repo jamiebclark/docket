@@ -3,5 +3,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/083-insights-schedule-intelligence/plan.md
+at specs/085-facebook-instagram-comments-reader/plan.md
 <!-- SPECKIT END -->

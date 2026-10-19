@@ -119,7 +119,11 @@ export function assertInsightsDeclaration(provider: Pick<SocialProvider, "key" |
 for (const p of providers) assertInsightsDeclaration(p);
 
 /** Throws on a malformed `engagement` declaration, so a bad provider fails at registry load (G40). */
-export function assertEngagementDeclaration(provider: { key: string; engagement?: { declaration: EngagementDeclaration } }): void {
+export function assertEngagementDeclaration(provider: {
+  key: string;
+  engagement?: { declaration: EngagementDeclaration };
+  connect?: SocialProvider["connect"];
+}): void {
   const support = provider.engagement;
   if (support === undefined) return;
   const d = support.declaration;
@@ -142,7 +146,19 @@ export function assertEngagementDeclaration(provider: { key: string; engagement?
     for (const scope of d.readScopes) {
       if (!GRANTED_SCOPE_PATTERN.test(scope)) bad(`readScopes entry "${scope}" does not match GRANTED_SCOPE_PATTERN`);
     }
+    // contracts/meta-comment-surface.md §6 rule 1: a scope no dialog can ever request would make
+    // `readScopes` an unreachable claim with no error anywhere short of this check.
+    if (provider.connect?.strategy === "oauth") {
+      const group = provider.connect.group;
+      const requestable = new Set([...(group.baseScopes ?? []), ...(group.optionalScopes?.declared.map((s) => s.scope) ?? [])]);
+      for (const scope of d.readScopes) {
+        if (!requestable.has(scope)) bad(`readScopes entry "${scope}" is not in connect group "${group.key}"'s baseScopes or optionalScopes.declared`);
+      }
+    }
   }
+  // contracts/meta-comment-surface.md §6 rule 2: a write allowance on a surface that cannot be
+  // written to is dead configuration, and the reserve it would claim is taken from publishing.
+  if (d.canReply === false && d.writeBudget) bad("canReply is false but writeBudget is set");
 }
 for (const p of providers) assertEngagementDeclaration(p);
 
