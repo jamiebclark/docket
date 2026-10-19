@@ -57,6 +57,22 @@ describe("worker database session deadlines", () => {
     ).toBeLessThan(timeout);
   });
 
+  it("bounds the wait for a pool connection, which no server-side deadline can see", () => {
+    // The third deadline, and the one the other two are blind to: `lock_timeout` and
+    // `idle_in_transaction_session_timeout` only apply once a query reaches Postgres, and a client
+    // queued for a pool connection has not reached it. pg defaults that wait to 0 - forever.
+    //
+    // Flake-hunt run 39195627319 is why this is here: it ran with `lock_timeout` at 15s, below the
+    // 20s testTimeout, and produced zero "canceling statement due to lock timeout" across 80
+    // repetitions while tests still died on bare 20s timeouts. Whatever those blocks are, they are
+    // not row-lock waits.
+    const ms = Number(process.env.DOCKET_POOL_CONNECT_TIMEOUT_MS ?? "0");
+    expect(ms, "DOCKET_POOL_CONNECT_TIMEOUT_MS is unset, so a pool wait hangs instead of failing").toBeGreaterThan(0);
+    expect(ms, "a pool wait must fail before the test timeout, or the test is blamed instead of the pool").toBeLessThan(
+      configuredTestTimeoutMs(),
+    );
+  });
+
   it("leaves idle_in_transaction_session_timeout above it, because it catches a different thing", async () => {
     // Deliberately NOT below testTimeout. This one kills a session idle inside a transaction, which is
     // a leak that would otherwise hang forever, so a generous value still catches it. Setting it to

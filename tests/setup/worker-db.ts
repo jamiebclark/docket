@@ -10,4 +10,10 @@ if (base) {
   process.env.DATABASE_URL = url;
   // Direct URL follows suit, so migration-aware code under test sees the same database.
   process.env.DATABASE_URL_DIRECT = url;
+  // Name a pool wait instead of hanging on it. Server-side deadlines cannot see this one: a client
+  // queued for a connection has not reached Postgres, so neither `lock_timeout` nor
+  // `idle_in_transaction_session_timeout` applies. 10s is below vitest's 20s `testTimeout`, so the
+  // failure says "timeout exceeded when trying to connect" rather than surfacing as whichever test
+  // happened to be waiting. Left unset in production.
+  process.env.DOCKET_POOL_CONNECT_TIMEOUT_MS ??= "10000";
 }
