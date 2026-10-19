@@ -167,14 +167,14 @@ statement is absent and the post's own context is shown instead.
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Replace the parent block in
+- [X] T019 [US3] Replace the parent block in
   `src/app/p/[projectSlug]/inbox/[itemId]/page.tsx` with a three-arm render on `item.parent`'s
   `kind`: `null` renders a plain, non-alert statement that this is not about one of the brand's own
   posts (FR-023); `"docket_post"` renders heading "On your post" with the post's text (FR-021);
   `"external_reference"` renders a heading naming it as not one of the brand's posts with the
   platform reference (FR-022); no `"—"` fallback anywhere; static text, no new control or focus stop
   (contracts/parent-context.md §5)
-- [ ] T020 [P] [US3] Write `tests/integration/engagement/parent-context.test.tsx`: render the real
+- [X] T020 [P] [US3] Write `tests/integration/engagement/parent-context.test.tsx`: render the real
   item page (`renderToStaticMarkup`, the `tests/helpers/actions` mocks) once per stored state —
   null parent, resolved parent, unresolved parent — and assert each produces a distinct non-empty
   statement, with the resolved-case statement absent from the null-case markup and vice versa
