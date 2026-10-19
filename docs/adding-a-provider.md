@@ -77,6 +77,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G36 | `publicPostId` on `StepResult`'s `{ kind: "done" }`, persisted by the generic publish path | 21 |
 | G37 | `postScopes`/`missingPostScopes` and `accountScopes`/`missingAccountScopes` on an `insights` declaration — eligibility checked per surface, not once for both | 21 |
 | G38 | `shape` on a `MetricKeyDeclaration` — whether a key is cumulative, windowed or unknown | 21 |
+| G39 | `baseScopes` on an `OAuthConnectGroup` — what its dialog asks for before any opt-in | 4 |
 
 ## 3. Capabilities and counting rules
 
@@ -211,6 +212,17 @@ behind it. Inert for a provider that never sets `grantedScopes` or `optionalScop
 | `doc` | Published guide explaining the opt-in, usually `docsUrl("meta-setup", "insights")`. |
 | `requested(source)` | Pure, reads only `source`: the scopes this group will actually add to its dialog as currently configured. An operator who has not opted in gets `[]`, and the dialog is unchanged. |
 | `cannotWiden(source)` | Pure. Non-null when the operator opted in but Docket *cannot* widen the dialog — Facebook Login for Business takes its permission set from the Meta app's own configuration (FR-019). Reconnecting cannot help, so no reconnect control is offered; the returned `reason` (and optional `doc`) is shown instead. |
+
+`baseScopes` (G39) is what the group's dialog asks for every time, before any opt-in. It exists so a
+surface can tell "the dialog will carry this, so reconnecting helps" from "the dialog never carries
+it, so reconnecting cannot". Omit it and nothing is assumed to be requested, which is the safe
+default: a group that has not declared its base set makes no promise about what its dialog carries.
+
+Getting this wrong is not theoretical. An account connected before `granted_scopes` was stored has
+it `NULL` — "not known" — so **every** required scope counts as unheld, base scopes included. Judged
+against the opt-ins alone, those base scopes look unrequested and the whole surface reports
+"not requested", which renders no reconnect control at all. That was every pre-existing account on a
+live install, with the opt-in correctly switched on and nothing to click.
 
 The distinction `cannotWiden` draws matters: "you have not asked for this yet" and "asking again cannot
 help, the app configuration decides" are different problems with different fixes, and offering a Reconnect

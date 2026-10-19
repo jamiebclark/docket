@@ -100,6 +100,8 @@ export const threadsConnectGroup: OAuthConnectGroup = {
   },
   callbackHint:
     "If Threads refused the login, check that this Threads account accepted the tester invite in Threads under Settings → Website permissions.",
+  // G39. What the dialog carries before any opt-in (see `authorizationUrl` below).
+  baseScopes: ["threads_basic", "threads_content_publish"],
   optionalScopes: {
     declared: [{ scope: "threads_manage_insights", purpose: "Read a Threads account's and its posts' numbers" }],
     doc: docsUrl("meta-setup", "insights"),

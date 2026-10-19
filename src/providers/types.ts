@@ -235,6 +235,13 @@ export interface OAuthConnectGroup {
     issues(source: Readonly<Record<string, string | undefined>>): ProviderEnvIssue[];
     configured(source: Readonly<Record<string, string | undefined>>): boolean;
   };
+  /**
+   * G39. The scopes this group's dialog asks for every time, before any opt-in. Declared so a
+   * surface can tell "the dialog will ask for this, so reconnecting helps" from "the dialog never
+   * asks for this, so it cannot". Omit it and nothing is assumed to be requested — which is the
+   * safe default, since an undeclared group makes no promise about what its dialog carries.
+   */
+  baseScopes?: readonly string[];
   /** G32. The extra permissions this group may request, and whether it is asking for them now. */
   optionalScopes?: {
     /** Every extra scope, each with the purpose it serves. Static, non-secret, shown in docs. */

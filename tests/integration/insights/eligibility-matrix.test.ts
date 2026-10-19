@@ -92,7 +92,6 @@ describe("the eligibility matrix is pinned to the SQL (contracts/granted-scopes.
           requiredScopes: required,
           grantedScopes: granted,
           requestedScopes: required,
-          declaredOptionalScopes: required,
           cannotWiden: null,
           missingScopes: { reason: "Reconnect to grant insights access." },
         });
@@ -134,7 +133,6 @@ describe("the eligibility matrix is pinned to the SQL (contracts/granted-scopes.
           requiredScopes: held.account,
           grantedScopes: granted,
           requestedScopes: held.account,
-          declaredOptionalScopes: held.account,
           cannotWiden: null,
           missingScopes: { reason: "Reconnect to grant account insights access." },
         });
@@ -144,7 +142,6 @@ describe("the eligibility matrix is pinned to the SQL (contracts/granted-scopes.
           requiredScopes: held.post,
           grantedScopes: granted,
           requestedScopes: held.post,
-          declaredOptionalScopes: held.post,
           cannotWiden: null,
           missingScopes: { reason: "Reconnect to grant post insights access." },
         });
@@ -318,7 +315,6 @@ describe("the eligibility matrix is pinned to the SQL (contracts/granted-scopes.
         requiredScopes: pinterestInsights.declaration.postScopes ?? [],
         grantedScopes: ["user_accounts:read", "boards:read", "pins:write"],
         requestedScopes: pinterestConnectGroup.optionalScopes?.requested({}) ?? [],
-        declaredOptionalScopes: pinterestConnectGroup.optionalScopes?.declared.map((s) => s.scope) ?? [],
         cannotWiden: null,
         missingScopes: pinterestInsights.declaration.missingPostScopes ?? null,
       });
