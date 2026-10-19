@@ -24,7 +24,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { requireFfmpeg } from "../../helpers/ffmpeg";
 import { postsEnv } from "../../helpers/posts-env";
-import { parkAllDueTargets } from "../../helpers/scheduling";
+import { parkAllDueTargets, parkAllVideoVersions } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
 import { createVideoFixtures, type VideoFixtures } from "../../helpers/video-fixtures";
 import { tickConfig } from "../../helpers/tick";
@@ -48,6 +48,8 @@ requireFfmpeg()("publishing a video through the mock provider", () => {
   beforeEach(async () => {
     markWorkerProcess();
     await parkAllDueTargets();
+  // The video-version claim is cross-project too, and this file loops a bounded buildNext().
+  await parkAllVideoVersions();
     // The media claim is cross-project: retire anything an earlier file left queued.
     await crossProject("test: retire processing rows", async () =>
       await getDb().update(mediaAssets).set({ deletedAt: new Date() }).where(eq(mediaAssets.processingState, "processing")),

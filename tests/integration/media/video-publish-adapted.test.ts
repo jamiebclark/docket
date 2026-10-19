@@ -10,7 +10,7 @@ import { buildNext } from "../../../src/server/video/versions-loop";
 import { closeDb, testDb } from "../../helpers/db";
 import { createProject, createVideoAsset } from "../../helpers/factories";
 import { requireFfmpeg } from "../../helpers/ffmpeg";
-import { createMockAccount, createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
+import { createMockAccount, createDueTarget, parkAllDueTargets, parkAllVideoVersions } from "../../helpers/scheduling";
 import { createMemoryStorage } from "../../helpers/storage";
 import { createVideoFixtures, type VideoFixtures } from "../../helpers/video-fixtures";
 import { queueVersionFor, received, receivedStrict, strictVideoProvider } from "../../helpers/video-publish-setup";
@@ -22,6 +22,8 @@ beforeEach(async () => {
   received.length = 0;
   receivedStrict.length = 0;
   await parkAllDueTargets();
+  // The video-version claim is cross-project too, and this file loops a bounded buildNext().
+  await parkAllVideoVersions();
 });
 afterEach(() => setStorageForTests(undefined));
 afterAll(async () => {
