@@ -3,6 +3,7 @@ import { postTargets } from "../../src/server/db/schema/posts";
 import { createSchedulingRepos } from "../../src/server/dal/scope";
 import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import { runTick } from "../../src/server/scheduler";
+import { tickConfig } from "./tick";
 import { encryptCredentials } from "../../src/server/services/accounts";
 import { atTime } from "./clock";
 import { testDb } from "./db";
@@ -75,7 +76,7 @@ export async function threadsSetup(storage: MemoryStorage, opts: ThreadsSetupOpt
 
   /** One scheduler tick at the real clock, or at `when` on the engine clock. */
   const tick = async (when?: Date) => {
-    const run = async () => (await runTick({ config: {} })).publishing.counts;
+    const run = async () => (await runTick(tickConfig())).publishing.counts;
     return when ? atTime(when, run) : run();
   };
   const row = async () =>
