@@ -221,6 +221,10 @@ export async function buildComparisons(input: ComparisonsInput): Promise<Compari
 
 export interface FirstEngagementEntry {
   targetId: string;
+  /** So a surface can name the post the figure is about, and link to it. */
+  postId: string;
+  /** What distinguishes one of these lines from the next: they are otherwise the same account. */
+  publishedAt: Date;
   accountName: string;
   providerKey: string;
   platform: string;
@@ -268,7 +272,7 @@ export async function buildFirstEngagement(input: ComparisonsInput): Promise<Fir
       scannedThrough: row?.scannedThrough ?? null,
       frozenReason: row?.frozenReason ?? null,
     });
-    entries.push({ targetId, accountName: base.accountName, providerKey: base.providerKey, platform, figure });
+    entries.push({ targetId, postId: base.postId, publishedAt: base.publishedAt, accountName: base.accountName, providerKey: base.providerKey, platform, figure });
   }
   return { entries, exactCapablePlatforms };
 }
