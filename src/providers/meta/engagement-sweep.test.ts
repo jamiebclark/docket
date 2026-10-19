@@ -212,6 +212,51 @@ describe("metaEngagementRead — catch-up step (US3, FR-011, FR-015, SC-004)", (
   });
 });
 
+describe("metaEngagementRead — usage back-off (US4, FR-018)", () => {
+  it("records a back-off when a response carries usage at or above the ceiling, and the next read declines without a call", async () => {
+    fake.on("GET", "/v26.0/1001/posts", {
+      kind: "ok",
+      body: { data: [] },
+      headers: { "x-business-use-case-usage": JSON.stringify({ "1001": [{ call_count: 90, estimated_time_to_regain_access: 15 }] }) },
+    });
+
+    const result = await metaEngagementRead(facebookSurface, baseCtx());
+    if (result.kind !== "page") throw new Error(`expected page, got ${result.kind}`);
+    expect(fake.requests).toHaveLength(1);
+
+    const second = await metaEngagementRead(facebookSurface, baseCtx({ providerState: result.providerState }));
+    if (second.kind !== "rate_limited") throw new Error(`expected rate_limited, got ${second.kind}`);
+    expect(second.retryAt).toEqual(new Date(baseCtx().now.getTime() + 15 * 60_000));
+    expect(fake.requests).toHaveLength(1);
+  });
+
+  it("does not back off a response below the ceiling", async () => {
+    fake.on("GET", "/v26.0/1001/posts", {
+      kind: "ok",
+      body: { data: [] },
+      headers: { "x-business-use-case-usage": JSON.stringify({ "1001": [{ call_count: 10, estimated_time_to_regain_access: 15 }] }) },
+    });
+
+    const first = await metaEngagementRead(facebookSurface, baseCtx());
+    if (first.kind !== "page") throw new Error("expected page");
+
+    const second = await metaEngagementRead(facebookSurface, baseCtx({ providerState: first.providerState }));
+    if (second.kind !== "page") throw new Error(`expected page, got ${second.kind}`);
+    expect(fake.requests).toHaveLength(2);
+  });
+});
+
+describe("metaEngagementRead — call bound (US4, FR-014, SC-003)", () => {
+  it("issues exactly one Graph request per read() against an account with many posts", async () => {
+    const manyPosts = Array.from({ length: 50 }, (_, i) => ({ id: `post-${i}`, created_time: "2026-10-01T00:00:00+0000" }));
+    fake.on("GET", "/v26.0/1001/posts", { kind: "ok", body: { data: manyPosts } });
+
+    const result = await metaEngagementRead(facebookSurface, baseCtx());
+    if (result.kind !== "page") throw new Error(`expected page, got ${result.kind}`);
+    expect(fake.requests).toHaveLength(1);
+  });
+});
+
 /** A minimal Instagram-shaped surface, per contracts/meta-comment-surface.md §4. */
 const instagramSurface: MetaCommentSurface = {
   platform: "Instagram",

@@ -299,28 +299,28 @@ platform's own usage signal, sharing the budget with publishing rather than spen
 **Independent Test**: A mocked usage signal at and below the configured ceiling; a run at the
 ceiling records a back-off and the next run declines with `rate_limited`, while a run below proceeds.
 
-- [ ] T030 [US4] Confirm (and adjust if needed) that `src/providers/meta/engagement-sweep.ts`'s
+- [X] T030 [US4] Confirm (and adjust if needed) that `src/providers/meta/engagement-sweep.ts`'s
       pre-step check calls `activeUsageBackoff(account.id, now)` before any Graph request and, when
       active, returns `rate_limited` with that `retryAt` and issues no call; and that every Graph
       response passes through `applyUsageSignal`/`recordUsageBackoff` so a response at or above
       `metaUsageCeiling()` with `estimated_time_to_regain_access` records a back-off for the
       **next** read without aborting the read already in progress (FR-018) — depends on T011
-- [ ] T031 [P] [US4] Extend `src/providers/meta/engagement-sweep.test.ts` with the usage suite: a
+- [X] T031 [P] [US4] Extend `src/providers/meta/engagement-sweep.test.ts` with the usage suite: a
       scripted response carrying `x-business-use-case-usage` at or above the ceiling records a
       back-off; the next `read()` for that account returns `rate_limited` with the recorded `retryAt`
       and `graph.requests` gains no new entry (US4 scenario 1, FR-018) — depends on T030
-- [ ] T032 [P] [US4] Extend `src/providers/meta/engagement-sweep.test.ts` with the call-bound suite:
+- [X] T032 [P] [US4] Extend `src/providers/meta/engagement-sweep.test.ts` with the call-bound suite:
       against a scripted account with at least 50 posts (ten times `POSTS_PER_PAGE`), one `read()`
       issues exactly one Graph request; a scheduler-level assertion (extend
       `tests/integration/engagement/meta-read.test.ts`) confirms a full run issues at most
       `ENGAGEMENT_READ_PAGES_PER_RUN` calls regardless of account size — asserted on
       `graph.requests.length`, never on a timer (US4 scenario 2, FR-014, SC-003) — depends on T011,
       T019
-- [ ] T033 [P] [US4] Extend `src/providers/meta/engagement-errors.test.ts` to enumerate every
+- [X] T033 [P] [US4] Extend `src/providers/meta/engagement-errors.test.ts` to enumerate every
       `GraphOutcome` shape the fake graph offers end-to-end for both surfaces and assert each maps to
       one of the seam's six non-`page` outcomes with no unclassified case (US4 scenario 3, FR-019,
       SC-005) — depends on T008; largely a coverage extension of T008 rather than new behaviour
-- [ ] T034 [P] [US4] Extend `tests/integration/engagement/meta-read.test.ts` with a failure-leaves-
+- [X] T034 [P] [US4] Extend `tests/integration/engagement/meta-read.test.ts` with a failure-leaves-
       state-alone case: after a failing read (any non-page outcome) mid-run, `provider_state` and
       `backfilling` are byte-for-byte what they were before the run, while any item inserted earlier
       in the same run is still present; and a secret-scan assertion that no access token appears in
