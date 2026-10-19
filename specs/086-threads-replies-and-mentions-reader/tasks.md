@@ -347,3 +347,44 @@ Task: "Add engagementUnavailable field to AccountView in src/server/services/acc
 - US2's "implementation" is proof-only: research.md §2.1-§2.3 found the ingest, first-engagement and
   same-post-count code already correct by construction; if a task's test reveals a defect, fix it in
   that task rather than opening a new one
+
+---
+
+## Phase 8: Review remediation
+
+**Purpose**: Close the findings in [review.md](./review.md). T029 blocks the merge; T030-T032 are
+MINOR findings taken in the same pass because each is a few lines and the loop is running anyway.
+Run only the affected files per task (`pnpm vitest run <files>`), then one full
+`pnpm lint && pnpm typecheck && pnpm test` at the end of this phase — the full suite has never been
+observed green on this branch (review F6), so this pass is the first chance to see it.
+
+- [ ] T029 Make `tests/integration/engagement/scope-gate.test.ts:413` order-independent: it asserts
+  `counts.unavailable === 0`, but `counts.unavailable` now includes
+  `countAccountsOnUnavailableEngagement`, a cross-project `count(*)` over every active Threads
+  account in the worker database, so the test fails whenever any of the thirteen Threads-account test
+  files shared its database. Keep the production count as it is (FR-016 wants it) — express the
+  test's real intent (the skipped-permission count stays distinct from unavailable) as a baseline
+  delta or a direct comparison against `countAccountsOnUnavailableEngagement`. Then restore the exact
+  `=== 1` assertion T014 specified in `tests/integration/engagement/threads-unavailable.test.ts:54`
+  and `:85`, which was weakened to `toBeGreaterThanOrEqual(1)` for the same reason and can no longer
+  catch over-counting — review F1 (BLOCKER), src/server/scheduler/engagement-read.ts:66,
+  tests/integration/engagement/scope-gate.test.ts:413
+- [ ] T030 [P] Give the `docket_post` arm of the item page's parent block a fallback, so a brand post
+  published with an empty caption does not render "On your post" above a blank line: `base_text` is
+  `DEFAULT '' NOT NULL` and no capability requires text, so `resolveParent` returns
+  `{ kind: "docket_post", text: "" }`. Use the same shape the file already uses twelve lines below
+  (`{item.text || "(no text)"}`), or fall through to the external reference. Extend
+  `tests/integration/engagement/parent-context.test.tsx` with a caption-less published target —
+  review F2 (MINOR), src/app/p/[projectSlug]/inbox/[itemId]/page.tsx:70
+- [ ] T031 [P] Prove FR-015's two precedence guards, which no test currently exercises: both
+  FR-015 tests pass with the guards deleted, because a Threads account's `readPermission` is `null`
+  by construction. Add a `registerTestProvider` fixture declaring both `unavailable` and a non-ok
+  read permission (contracts/parent-context.md §6.3 prescribes exactly this, noting that
+  `registerTestProvider` bypasses `assertEngagementDeclaration`), and render it through both pages,
+  asserting the unavailability wins and no reconnect is offered — review F3 (MINOR),
+  src/app/p/[projectSlug]/accounts/page.tsx:239, src/app/p/[projectSlug]/inbox/page.tsx:93
+- [ ] T032 [P] Remove the second source of truth for `DocPage`: `DOC_PAGES` duplicates the union
+  literal by literal, and `new Set<DocPage>([...])` type-checks whether or not it is exhaustive, so
+  a page added to the type but not the set makes `docsHref` return the docs root for a real page with
+  nothing failing. Derive the union from one `as const` array
+  (`export type DocPage = (typeof DOC_PAGES)[number]`) — review F4 (MINOR), src/lib/docs.ts:27
