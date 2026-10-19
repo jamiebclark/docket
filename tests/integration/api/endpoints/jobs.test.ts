@@ -1,15 +1,33 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { llmFailureMessage } from "../../../../src/server/llm/messages";
 import { setLlmForTests } from "../../../../src/server/llm";
-import { runTick } from "../../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../../src/server/scheduler/config";
+import { getEnv } from "../../../../src/server/env";
 import { setStorageForTests } from "../../../../src/server/storage";
 import { api, createKey } from "../../../helpers/api";
 import { closeDb } from "../../../helpers/db";
 import { createFakeLlm, type FakeStep } from "../../../helpers/fake-llm";
 import type { LlmProvider } from "../../../../src/server/llm/types";
-import { jobsEnv, modelOk, parkAllJobs, routeLlm, tickConfig } from "../../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, routeLlm, TICK_BUDGET_MS } from "../../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
+
+// Drain the generation section, not whole ticks. This file had the heaviest tick loops in the suite:
+// four loops of forty, plus a single call - 161 ten-section ticks to drive jobs whose progress is then
+// asserted through the API. Nine of those ten sections are incidental to every assertion here.
+//
+// It had not flaked yet, which reads as luck rather than safety: of the five heaviest tick loops in the
+// suite, three have measurably flaked (jobs/posting-instructions at ten in #169, generation/brand-context
+// at fifteen in #167, media/video-publish-adapted at twenty). Both database explanations for those
+// blocks are excluded by measurement - see docs/decisions.md, "What the block-shaped CI flakes are not"
+// - so what is left is contention above the database, and this file asks for more of it than any other.
+//
+// The loops keep their own break conditions and their 100ms pauses; only the thing being run changes.
+// The comment on the first loop, that another file's tick may hold a lease on these items, is also less
+// true now: one section competes for fewer claims than ten.
+const DRAIN_CONFIG = schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, jobMaxItems: 3 });
+const drainOnce = () => runGenerationJobs({ config: DRAIN_CONFIG, tickId: "test-jobs-api", startedAt: new Date() });
 afterAll(async () => {
   setLlmForTests(null);
   setStorageForTests(undefined);
@@ -63,7 +81,7 @@ describe("open jobs over HTTP", () => {
 
     // Ticks are global, so another file's tick may hold a lease on one of these items for a moment.
     for (let i = 0; i < 40; i++) {
-      await runTick(tickConfig({ jobMaxItems: 3 }));
+      await drainOnce();
       if ((await e.scope.jobs.get(jobId))?.status === "completed") break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -145,7 +163,7 @@ describe("open jobs over HTTP", () => {
     expect(first.status).toBe(201);
     await api("POST", `/jobs/${jobId}/close`, { key: e.key });
     for (let i = 0; i < 40; i++) {
-      await runTick(tickConfig({ jobMaxItems: 3 }));
+      await drainOnce();
       if ((await e.scope.jobs.get(jobId))?.status === "completed") break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -158,7 +176,7 @@ describe("open jobs over HTTP", () => {
     await api("POST", `/jobs/${secondId}/close`, { key: e.key });
 
     for (let i = 0; i < 40; i++) {
-      await runTick(tickConfig({ jobMaxItems: 3 }));
+      await drainOnce();
       if ((await e.scope.jobs.get(secondId))?.status === "completed") break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -182,7 +200,7 @@ describe("open jobs over HTTP", () => {
     await e.scope.externalClaims.insert({ sourceKey: "default", externalId: "already-there", postId: other.id, claimedAt: new Date() });
 
     for (let i = 0; i < 40; i++) {
-      await runTick(tickConfig({ jobMaxItems: 3 }));
+      await drainOnce();
       const refreshed = await api("GET", `/jobs/${jobId}/items/${row.id}`, { key: e.key });
       if (refreshed.json.status === "skipped") break;
       await new Promise((r) => setTimeout(r, 100));
@@ -226,7 +244,7 @@ describe("open jobs over HTTP", () => {
     await api("POST", `/jobs/${jobId}/close`, { key: e.key });
 
     setLlmForTests(createFakeLlm([{ fail: "credit_exhausted" }]));
-    await runTick(tickConfig({ jobMaxItems: 3 }));
+    await drainOnce();
 
     const items = await api("GET", `/jobs/${jobId}/items`, { key: e.key });
     expect(items.json.data).toHaveLength(1);
