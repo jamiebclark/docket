@@ -34,7 +34,30 @@ const logger: Logger = {
 export type Database = NodePgDatabase<typeof schema>;
 
 export function createDatabase(url: string, max = 10): { db: Database; pool: Pool } {
-  const pool = new Pool({ connectionString: url, max });
+  // `connectionTimeoutMillis` defaults to 0 - wait forever for a pool client - and that wait is
+  // invisible to every server-side deadline, because `lock_timeout` and
+  // `idle_in_transaction_session_timeout` only apply once a query reaches Postgres. A client queued
+  // for a connection has not reached it.
+  //
+  // That gap is why a whole class of CI failures stayed unexplained. Flake-hunt run 39195627319 ran
+  // with `lock_timeout` at 15s, below vitest's 20s `testTimeout`, and produced ZERO
+  // "canceling statement due to lock timeout" across 80 repetitions while
+  // `generation/brand-context.test.ts` still died on a bare 20s timeout - so those blocks
+  // are not waiting on row locks. A pool wait is the remaining candidate the deadlines cannot see:
+  // `runTick` runs ten sections concurrently, `DATABASE_POOL_MAX` defaults to ten, and `clock.now()`
+  // takes a second connection unless handed a transaction (see the warning in dal/clock.ts).
+  //
+  // Unset in production, so behaviour there is unchanged: a request keeps waiting as it does today.
+  // The test harness sets it, so a pool wait fails as "timeout exceeded when trying to connect"
+  // instead of hanging until some unrelated test timeout fires. This is a diagnostic, not a theory
+  // being asserted - `jobs/posting-instructions.test.ts` passes 3/3 at DATABASE_POOL_MAX=3, which
+  // argues against pool starvation, so the next hunt gets to decide rather than me.
+  const connectTimeout = Number(process.env.DOCKET_POOL_CONNECT_TIMEOUT_MS ?? "0");
+  const pool = new Pool({
+    connectionString: url,
+    max,
+    ...(Number.isFinite(connectTimeout) && connectTimeout > 0 ? { connectionTimeoutMillis: connectTimeout } : {}),
+  });
   // An idle client that loses its connection (database restart, forced drop) emits
   // "error" on the pool; unhandled, that crashes the process. The pool discards the
   // client and reconnects on the next query, so log the code (never the URL) and go on.
