@@ -34,6 +34,9 @@ const OWNS_ITS_BUDGET = new Set([
   "tests/integration/jobs/budget.test.ts",
   // This file: the examples in its own prose are not calls.
   "tests/lint/tick-budget.test.ts",
+  // Its sibling, for the same reason in reverse: tick-parking.test.ts has to contain the literal
+  // string this lint searches for, because that string is its own detector.
+  "tests/lint/tick-parking.test.ts",
 ]);
 
 function testFiles(dir: string, out: string[] = []): string[] {

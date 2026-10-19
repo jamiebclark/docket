@@ -5,13 +5,15 @@ import { runCrossProject } from "../../../src/server/db/cross-project";
 import { generationJobs } from "../../../src/server/db/schema";
 import { ValidationIssuesError } from "../../../src/server/dal/errors";
 import { setLlmForTests } from "../../../src/server/llm";
-import { runTick } from "../../../src/server/scheduler";
+import { runGenerationJobs } from "../../../src/server/scheduler/generation";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import * as accounts from "../../../src/server/services/accounts";
 import { appendItems, createJob, getJob } from "../../../src/server/services/jobs";
 import { setStorageForTests } from "../../../src/server/storage";
 import { closeDb } from "../../helpers/db";
 import { createFakeLlm } from "../../helpers/fake-llm";
-import { jobsEnv, modelOk, parkAllJobs, tickConfig } from "../../helpers/jobs-env";
+import { jobsEnv, modelOk, parkAllJobs, TICK_BUDGET_MS } from "../../helpers/jobs-env";
 
 beforeEach(parkAllJobs);
 afterAll(async () => {
@@ -32,9 +34,24 @@ async function setup(n = 1, images = 0) {
 }
 type Env = Awaited<ReturnType<typeof setup>>;
 
+// Drains the generation section, not ten whole ticks.
+//
+// `runTick` runs ten sections concurrently, and nine of them are incidental to a file about which
+// posting instructions a job item carries. This helper is shared by every test here, so that cost was
+// multiplied across the file - and all four of its tests died together on a 60s timeout in flake-hunt
+// runs 39088399743 and 39132854448, the first test timing out and its siblings then failing in the
+// `beforeEach` behind it. The file runs in 390ms locally, so a 60s death is a 150x blowup.
+//
+// Neither database explanation survived measurement: run 39195627319 ran with `lock_timeout` at 15s,
+// below the 20s test timeout, and recorded no lock timeout anywhere, and a 10s pool-connect timeout
+// never fired either (docs/decisions.md, "What the block-shaped CI flakes are not"). What is left is
+// contention above the database, so the remedy is to stop asking for nine sections this file does not
+// use - the same correction #162 made to scheduler/refresh.test.ts and #167 to brand-context.
+const DRAIN_CONFIG = schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, jobMaxItems: 5 });
+
 async function drain(e: Env, jobId: string) {
   for (let i = 0; i < 10; i++) {
-    await runTick(tickConfig({ jobMaxItems: 5 }));
+    await runGenerationJobs({ config: DRAIN_CONFIG, tickId: "test-posting-instructions", startedAt: new Date() });
     const c = await e.scope.jobItems.countByStatus(jobId);
     if (c.queued + c.running === 0) break;
   }
