@@ -62,16 +62,41 @@ export function frameReader(response: Response): FrameReader {
     return parseFrame(raw);
   }
 
+  let delivered = 0;
+  let bytesRead = 0;
+  let reads = 0;
+
+  /**
+   * Says what the stream was doing, not just that it stopped.
+   *
+   * "no frame within 18000ms" has at least three causes that need different fixes: nothing was ever
+   * written (the watcher never produced a snapshot), bytes arrived but never completed a frame (a
+   * partial or slow write), or frames arrived earlier and then stopped. The bare message cannot tell
+   * them apart, and `notifications/stream-teardown.test.ts` has died on it with its deadline already
+   * widened once from three probes to six - widening it again without knowing which of the three it is
+   * would be guessing.
+   */
+  const timedOut = (deadlineMs: number, startedAt: number) =>
+    `stream helper: no frame within ${deadlineMs}ms (waited ${Date.now() - startedAt}ms; ` +
+    `${delivered} frame(s) delivered before this one; ${reads} read(s) returning ${bytesRead} byte(s); ` +
+    `${buffer.length} byte(s) buffered without a frame terminator)`;
+
   return {
     async next(deadlineMs = DEFAULT_DEADLINE_MS) {
-      const deadlineAt = Date.now() + deadlineMs;
+      const startedAt = Date.now();
+      const deadlineAt = startedAt + deadlineMs;
       for (;;) {
         const frame = takeOne();
-        if (frame) return frame;
+        if (frame) {
+          delivered++;
+          return frame;
+        }
         const remaining = deadlineAt - Date.now();
-        if (remaining <= 0) throw new Error(`stream helper: no frame within ${deadlineMs}ms`);
-        const { done, value } = await withTimeout(reader.read(), remaining, `stream helper: no frame within ${deadlineMs}ms`);
-        if (done) throw new Error("stream helper: stream ended before a full frame arrived");
+        if (remaining <= 0) throw new Error(timedOut(deadlineMs, startedAt));
+        const { done, value } = await withTimeout(reader.read(), remaining, timedOut(deadlineMs, startedAt));
+        if (done) throw new Error(`stream helper: stream ended before a full frame arrived (${timedOut(deadlineMs, startedAt)})`);
+        reads++;
+        bytesRead += value?.byteLength ?? 0;
         buffer += decoder.decode(value, { stream: true });
       }
     },
