@@ -138,6 +138,34 @@ has an identifier and the other does not — reasoned independently, per the FR-
 Facebook Page comments above. The `unavailable` path is still built and still tested (US6, FR-039).
 `ENGAGEMENT_SCOPES_DECLARED` may list the confirmed Instagram scope(s).
 
+### What the implementation (085) learned beyond what §2 gave — recorded as assumption, not fact (FR-048)
+
+Three were anticipated by planning; none of the three, and nothing met while writing the reader
+beyond them, needed a fourth. Each is an assumption the design works around, not a gap that blocks
+either surface's `readable` verdict.
+
+1. **Default ordering of both own-posts listings, and of Instagram's comments edge, is undocumented.**
+   Neither `/{page-id}/posts`, `/{ig-user-id}/media` nor `/{ig-media-id}/comments`'s reference page
+   states an ordering guarantee. `src/providers/meta/engagement-sweep.ts` is built not to depend on
+   one — the fresh step filters each comment by its own `saidAt` against `freshSince` rather than by
+   position in the response, and the catch-up step advances by the response's own cursor rather than
+   by an assumed newest-first or oldest-first order. The mocked tests (`engagement-sweep.test.ts`)
+   fix an order for determinism, but that order is the test's choice, not a platform promise.
+2. **Instagram's `user`-returned-only-when-owned rule is the self-comment discriminator, and the word
+   "owns" is ambiguous** between owning the comment (left it) and owning the media (posted it) — the
+   two quoted phrasings on the comments-edge reference ("the user making the query also owns the
+   comment") and the comment-object reference ("unless the User making the request owns the Comment")
+   do not resolve which. `instagramEngagement`'s `isSelf` does not rely on resolving it: the primary
+   check is a `username` match against the cached `selfUsername` from `prefetchSelf`, with a matching
+   `user.id` as a secondary signal only when `user` happens to be present. Neither surface's design
+   depends on "owns" meaning one thing rather than the other.
+3. **Nested paging cursors inside a field-expanded `comments` block are documented in general terms
+   ("nested fields will include their own paging cursors in the response"), not for the `/comments`
+   edge specifically.** The drain step exists partly because of this: if a busy post's inline
+   `comments.paging.cursors.after` is absent where the design expects one, the post is simply not
+   queued into `pending` and its remaining comments wait for the catch-up to reach that post instead —
+   a missing cursor degrades to "read it again later," never to a crash or a silently dropped comment.
+
 ### Threads replies
 
 | # | Question | Answer | Source | Checked | Evidence |

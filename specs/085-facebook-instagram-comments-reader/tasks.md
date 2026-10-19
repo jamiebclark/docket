@@ -398,29 +398,29 @@ could flip to unavailable by one declaration field without the other noticing.
 **Purpose**: Documentation, the secret scan, the full regression proof, and recording what the
 implementation learned beyond what documentation gave (FR-048).
 
-- [ ] T041 [P] Update `docs/engagement.md`'s supported-platforms table (FR-046): per surface, what is
+- [X] T041 [P] Update `docs/engagement.md`'s supported-platforms table (FR-046): per surface, what is
       read (comments only), that replying is not offered, and — only if either surface ends up
       shipping unavailable after T002's research edit — why
-- [ ] T042 [P] Update `docs/engagement.md`'s platform-permissions section (FR-047): the permissions
+- [X] T042 [P] Update `docs/engagement.md`'s platform-permissions section (FR-047): the permissions
       Facebook and Instagram now actually require (`pages_read_user_content`,
       `instagram_manage_comments`), what happens to an account that has not reconnected, and that the
       opt-in flag alone cannot widen a login configuration
-- [ ] T043 [P] Update `docs/meta-setup.md`'s `#engagement` section: name `pages_read_user_content`
+- [X] T043 [P] Update `docs/meta-setup.md`'s `#engagement` section: name `pages_read_user_content`
       and `instagram_manage_comments`, and what a reconnect grants, matching the `docsPath` both
       declarations point at (FR-038)
-- [ ] T044 [P] Add the four judgement-call entries from plan.md ("Four judgement calls") to
+- [X] T044 [P] Add the four judgement-call entries from plan.md ("Four judgement calls") to
       `docs/decisions.md`, each with its stated reversal, if not already recorded there by an earlier
       phase of this feature
-- [ ] T045 Update `docs/research/engagement.md` with anything T009–T034 learned that documentation
+- [X] T045 Update `docs/research/engagement.md` with anything T009–T034 learned that documentation
       alone did not give, recorded as an assumption rather than a confirmed fact — at minimum the
       three plan.md and contracts/research-section-2-additions.md §7 already name (undocumented
       default ordering of both listings and of Instagram's comments edge; the ambiguity in
       Instagram's "owns" rule; nested paging cursors being documented in general terms, not for the
       comments edge specifically) plus any other gap the implementation met (FR-048)
-- [ ] T046 [P] Extend `tests/integration/security/secret-scan.test.ts` to cover the two new surfaces'
+- [X] T046 [P] Extend `tests/integration/security/secret-scan.test.ts` to cover the two new surfaces'
       error messages, attempt summaries, activity entries and stored `provider_data` — never narrowed
       (FR-023, FR-034, SC-007) — depends on T013, T020
-- [ ] T047 [P] Run `src/providers/bluesky/engagement.test.ts` and every existing file under
+- [X] T047 [P] Run `src/providers/bluesky/engagement.test.ts` and every existing file under
       `tests/integration/engagement/` and confirm every 077 and 084 engagement test passes with **no
       edits** to those files — an edit needed here means something generic changed that this feature
       promised not to change (spec Out of Scope: "Changing the engagement seam") — depends on T003

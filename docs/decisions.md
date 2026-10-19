@@ -4149,3 +4149,30 @@ what these tests assert, and it is the part exposed to the contention.
   the gate reads `granted_scopes`, it writes nothing new. `src/lib/scope-permission.ts` and
   `src/server/dal/scope-predicates.ts` stay regardless: they are the insights code, relocated, and 081
   depends on them under their aliases.
+
+## 085 — Facebook Page and Instagram comment reading, four judgement calls (2026-10-19)
+
+- **§2's "must ship declared-but-`unavailable`" verdict is overturned by research, not by assumption.**
+  Both surfaces ship readable because FR-001 to FR-005 closed the gaps that caused the verdict and
+  FR-006 then computed it mechanically from the FR-006 table, not by asserting it. The `unavailable`
+  path stays built and tested (US6), and flipping either surface back to it is one declaration field
+  (`contracts/meta-comment-surface.md` §5), not a design change. **Reversal:** set that surface's
+  declaration to `unavailable: { reason, docsPath }`; no other file changes.
+- **`pages_read_user_content` is declared, which skips every existing Facebook Page until it
+  reconnects.** The alternative — declaring only `pages_read_engagement` and hoping it also covers
+  comments other people leave — ships a reader that returns nothing, with no explanation anywhere in
+  the product. 084's gate already has a reconnect notice built for exactly this shape of gap, and that
+  notice is the better failure: a Page owner sees "Inbox needs a reconnect" rather than silence.
+  **Reversal:** drop `pages_read_user_content` from `facebookEngagement`'s declared `readScopes` and
+  from `ENGAGEMENT_SCOPES_DECLARED`; every already-connected Page reads again, minus the comments the
+  dropped scope was the only way to reach.
+- **The sweep advances its own catch-up rather than waiting for the scheduler's backfill flag**,
+  because that flag demonstrably never fires for a Meta account — nothing upstream of this entry sets
+  it for the engagement seam. The step chooser's `lastStep === "fresh"` branch is what makes the
+  catch-up start on its own. **Reversal:** delete that branch in the step chooser; the catch-up becomes
+  `direction`-driven only, which is correct but relies on the scheduler flag firing — slower, not wrong.
+- **No pacing setting was added.** FR-018's usage-signal back-off (`activeUsageBackoff`,
+  `recordUsageBackoff`) plus the scheduler's existing minimum read interval are the only budget
+  controls; a brand-new interval setting would have been a number invented for this entry rather than
+  a fact traced to anything, which Constitution I forbids. **Reversal:** none needed — there is no
+  setting to remove, only a setting that was deliberately not added.
