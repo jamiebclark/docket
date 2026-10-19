@@ -182,14 +182,14 @@ rows and authorization URLs against pre-change behaviour (quickstart.md §2).
 Depends on Phases 2 and 4: there is nothing to compare against "pre-change" until the moves (Phase 2)
 and the gate (Phase 4) exist.
 
-- [ ] T020 [US2] Assert in `src/providers/meta/connect-group.test.ts` and
+- [X] T020 [US2] Assert in `src/providers/meta/connect-group.test.ts` and
       `src/providers/threads/connect-group.test.ts` that both authorization URLs are byte-identical to
       their pre-change strings, parameter order included, with both engagement flags unset (FR-029)
-- [ ] T021 [US2] Run `pnpm vitest run tests/integration/engagement src/lib/insights
+- [X] T021 [US2] Run `pnpm vitest run tests/integration/engagement src/lib/insights
       tests/integration/insights` and confirm 077's engagement suite passes with **no edits**, and
       081's insights suite passes with exactly the two expected edits from Phase 2 (T002, T003) and the
       one extension from T016 — and no others. A third edit means something generic broke
-- [ ] T022 [US2] Integration test confirming that with both flags unset, the inbox page shows no new
+- [X] T022 [US2] Integration test confirming that with both flags unset, the inbox page shows no new
       notice and the account filter offers exactly the accounts it offered before, and that a Bluesky
       account with `granted_scopes` `NULL` is claimed, read and committed as before (US2 scenarios 2, 5)
 

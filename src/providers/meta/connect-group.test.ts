@@ -1,7 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { metaConnectGroup } from "./connect-group";
 
 const BASE = { META_APP_ID: "12345", META_APP_SECRET: "a".repeat(32) };
+
+// FR-029, US2-AS1: with both engagement flags unset (they don't exist yet — Phase 6 adds them),
+// the authorization URL is byte-identical to today's — compared against a literal, never a
+// re-computation.
+describe("metaConnectGroup.authorizationUrl", () => {
+  const ORIGINAL = { id: process.env.META_APP_ID, secret: process.env.META_APP_SECRET };
+  beforeEach(() => {
+    process.env.META_APP_ID = "12345";
+    process.env.META_APP_SECRET = "a".repeat(32);
+  });
+  afterEach(() => {
+    if (ORIGINAL.id === undefined) delete process.env.META_APP_ID;
+    else process.env.META_APP_ID = ORIGINAL.id;
+    if (ORIGINAL.secret === undefined) delete process.env.META_APP_SECRET;
+    else process.env.META_APP_SECRET = ORIGINAL.secret;
+  });
+
+  it("with both engagement flags unset, the URL is byte-identical to today's", () => {
+    const url = metaConnectGroup.authorizationUrl({ state: "st", redirectUri: "https://x.test/connect/callback" });
+    expect(url).toBe(
+      "https://www.facebook.com/v26.0/dialog/oauth?client_id=12345&redirect_uri=https%3A%2F%2Fx.test%2Fconnect%2Fcallback&state=st&response_type=code&scope=pages_show_list%2Cpages_manage_posts%2Cpages_read_engagement%2Cinstagram_basic%2Cinstagram_content_publish",
+    );
+  });
+});
 
 describe("metaConnectGroup.optionalScopes", () => {
   it("declares read_insights and instagram_manage_insights, in that order", () => {

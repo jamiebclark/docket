@@ -5,10 +5,13 @@ import { mockEngagement } from "../../../src/providers/mock/engagement";
 import type { EngagementDeclaration } from "../../../src/providers/types";
 import { claimDueEngagementReads, type EngagementProviderRule } from "../../../src/server/dal/engagement-read-claims";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
+import { forProject } from "../../../src/server/dal/scope";
 import { getEnv } from "../../../src/server/env";
 import { schedulerConfig } from "../../../src/server/scheduler/config";
 import { runEngagementRead } from "../../../src/server/scheduler/engagement-read";
 import * as accountsService from "../../../src/server/services/accounts";
+import { listEngagementAccounts } from "../../../src/server/services/engagement/inbox";
+import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
@@ -212,5 +215,43 @@ describe("the engagement scope gate (US3, FR-018–FR-025)", () => {
     expect(itemAfter?.text).toBe(itemBefore?.text);
     const accountAfter = await repos.accounts.get(account.id);
     expect(accountAfter?.status).toBe(accountBefore?.status);
+  });
+});
+
+describe("an untouched install (US2 scenarios 2, 5)", () => {
+  it("claims, reads and commits a NULL-granted account through the real engagement-read section exactly as 077 specified, and the inbox page shows no new notice for it", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "mock",
+      displayName: "Untouched mock",
+      externalAccountId: "scope-gate-untouched",
+      settings: { engagementItems: [{ kind: "comment", externalId: "untouched-1", text: "Hi", saidAt: AT.toISOString() }] },
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      // grantedScopes omitted: the column stays NULL, exactly as a Bluesky account connected before
+      // 081 ever introduced the column. The default mock and bluesky declarations both carry no
+      // readScopes, so this is the same "matched by provider key alone" path (FR-006).
+    });
+
+    await runSection();
+
+    const item = await repos.engagementItems.getByExternalId(account.id, "untouched-1");
+    expect(item).not.toBeNull();
+    const state = await repos.engagementAccountStates.get(account.id);
+    expect(state).not.toBeNull();
+
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    const accountViews = await listEngagementAccounts(scope);
+    const view = accountViews.find((v) => v.id === account.id);
+    expect(view).toEqual({
+      id: account.id,
+      displayName: "Untouched mock",
+      providerKey: "mock",
+      providerDisplayName: "Mock (offline)",
+      unavailable: null,
+    });
+    expect(Object.keys(view ?? {}).sort()).toEqual(["displayName", "id", "providerDisplayName", "providerKey", "unavailable"]);
   });
 });

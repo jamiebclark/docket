@@ -59,10 +59,11 @@ describe("threadsConnectGroup.exchangeCode", () => {
   });
 });
 
-// FR-018, US1-AS1: with THREADS_INSIGHTS_SCOPES unset, the authorization URL is byte-identical to
+// FR-018, FR-029, US1-AS1, US2-AS1: with both engagement flags unset (they don't exist yet —
+// Phase 6 adds them) and THREADS_INSIGHTS_SCOPES unset, the authorization URL is byte-identical to
 // today's — compared against a literal, never a re-computation.
 describe("threadsConnectGroup.authorizationUrl", () => {
-  it("with THREADS_INSIGHTS_SCOPES unset, the URL is byte-identical to today's", () => {
+  it("with both engagement flags and THREADS_INSIGHTS_SCOPES unset, the URL is byte-identical to today's", () => {
     const url = threadsConnectGroup.authorizationUrl({ state: "st", redirectUri: "https://x.test/connect/callback" });
     expect(url).toBe(
       "https://threads.com/oauth/authorize?client_id=12345&redirect_uri=https%3A%2F%2Fx.test%2Fconnect%2Fcallback&scope=threads_basic%2Cthreads_content_publish&response_type=code&state=st",
