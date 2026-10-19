@@ -81,7 +81,7 @@ describe("US3: the opt-in flag on, a reconnect granting the scope, and Instagram
       requiredScopes: instagramInsights.declaration.postScopes ?? [],
       grantedScopes: account.grantedScopes,
       requestedScopes: metaConnectGroup.optionalScopes?.requested(process.env) ?? [],
-      cannotWiden: metaConnectGroup.optionalScopes?.cannotWiden?.(process.env) ?? null,
+      cannotWiden: metaConnectGroup.optionalScopes?.cannotWiden?.(process.env, "insights") ?? null,
       missingScopes: instagramInsights.declaration.missingPostScopes ?? null,
     });
     expect(permission.kind).toBe("ok");

@@ -10,6 +10,7 @@ import {
   type InsightsProviderRule,
 } from "../../../src/server/dal/insights-claims";
 import { claimDueEngagementReads, type EngagementProviderRule } from "../../../src/server/dal/engagement-read-claims";
+import { findProvider } from "../../../src/providers/registry";
 import { randomUUID } from "node:crypto";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { atTime } from "../../helpers/clock";
@@ -401,6 +402,78 @@ describe("the eligibility matrix is pinned to the SQL (contracts/granted-scopes.
           expect(wasClaimed).toBe(permission.kind === "ok");
         });
       }
+    }
+  });
+
+  describe("turning on the engagement flag leaves insights permissions unmoved (FR-033, contracts/optional-scopes-per-surface.md §3)", () => {
+    const META_GRANTED_KINDS = ["null", "empty", "partial", "exact", "superset"] as const;
+
+    function withEnv<T>(overrides: Record<string, string | undefined>, fn: () => T): T {
+      const original = { ...process.env };
+      Object.assign(process.env, overrides);
+      try {
+        return fn();
+      } finally {
+        for (const key of Object.keys(overrides)) {
+          if (original[key] === undefined) delete process.env[key];
+          else process.env[key] = original[key];
+        }
+      }
+    }
+
+    for (const kind of META_GRANTED_KINDS) {
+      for (const insightsOn of [false, true]) {
+        for (const loginConfigSet of [false, true]) {
+          it(`meta: granted=${kind}, META_INSIGHTS_SCOPES=${insightsOn}, login config ${loginConfigSet ? "set" : "unset"}: engagement flag changes neither surface's insights permission`, () => {
+            const provider = findProvider("facebook");
+            const required = ["pages_read_engagement", "read_insights"];
+            const granted = grantedFor(kind, required);
+            const account = { grantedScopes: granted };
+
+            const baseEnv: Record<string, string | undefined> = {
+              META_APP_ID: "12345",
+              META_APP_SECRET: "a".repeat(32),
+              META_INSIGHTS_SCOPES: insightsOn ? "true" : "false",
+              META_LOGIN_CONFIG_ID: loginConfigSet ? "777" : undefined,
+            };
+
+            const before = withEnv(baseEnv, () => ({
+              post: accountsService.insightsPermissionForAccount(account, provider, "post"),
+              account: accountsService.insightsPermissionForAccount(account, provider, "account"),
+            }));
+            const after = withEnv({ ...baseEnv, META_ENGAGEMENT_SCOPES: "true" }, () => ({
+              post: accountsService.insightsPermissionForAccount(account, provider, "post"),
+              account: accountsService.insightsPermissionForAccount(account, provider, "account"),
+            }));
+
+            expect(after).toEqual(before);
+          });
+        }
+      }
+    }
+
+    for (const insightsOn of [false, true]) {
+      it(`threads: META_INSIGHTS_SCOPES=${insightsOn}: engagement flag changes neither surface's insights permission`, () => {
+        const provider = findProvider("threads");
+        const account = { grantedScopes: null };
+
+        const baseEnv: Record<string, string | undefined> = {
+          THREADS_APP_ID: "12345",
+          THREADS_APP_SECRET: "a".repeat(32),
+          THREADS_INSIGHTS_SCOPES: insightsOn ? "true" : "false",
+        };
+
+        const before = withEnv(baseEnv, () => ({
+          post: accountsService.insightsPermissionForAccount(account, provider, "post"),
+          account: accountsService.insightsPermissionForAccount(account, provider, "account"),
+        }));
+        const after = withEnv({ ...baseEnv, THREADS_ENGAGEMENT_SCOPES: "true" }, () => ({
+          post: accountsService.insightsPermissionForAccount(account, provider, "post"),
+          account: accountsService.insightsPermissionForAccount(account, provider, "account"),
+        }));
+
+        expect(after).toEqual(before);
+      });
     }
   });
 });

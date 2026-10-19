@@ -18,6 +18,8 @@ export interface ThreadsConfig {
   insightsScopes: boolean;
   /** FR-045. Percent of Meta's own BUC usage at or above which insights reads back off. */
   insightsUsageCeiling: number;
+  /** G40. Default off: the authorization URL requests no engagement scope while this is false. */
+  engagementScopes: boolean;
 }
 
 type Source = Readonly<Record<string, string | undefined>>;
@@ -44,6 +46,7 @@ export function parseThreadsEnv(source: Source): { config: ThreadsConfig | null;
   const base = readEnv(source, "THREADS_GRAPH_BASE");
   const insightsScopesRaw = readEnv(source, "THREADS_INSIGHTS_SCOPES");
   const usageCeilingRaw = readEnv(source, "THREADS_INSIGHTS_USAGE_CEILING");
+  const engagementScopesRaw = readEnv(source, "THREADS_ENGAGEMENT_SCOPES");
 
   if (appSecret && !appId) issues.push({ name: "THREADS_APP_ID", reason: "required when THREADS_APP_SECRET is set" });
   else if (appId && !isAppId(appId)) issues.push({ name: "THREADS_APP_ID", reason: "must be the numeric app id" });
@@ -74,8 +77,15 @@ export function parseThreadsEnv(source: Source): { config: ThreadsConfig | null;
     else issues.push({ name: "THREADS_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" });
   }
 
+  let engagementScopes = false;
+  if (engagementScopesRaw !== null) {
+    const v = engagementScopesRaw.toLowerCase();
+    if (v === "true") engagementScopes = true;
+    else if (v !== "false") issues.push({ name: "THREADS_ENGAGEMENT_SCOPES", reason: "must be true or false" });
+  }
+
   if (!(appId && appSecret && isAppId(appId) && isAppSecret(appSecret))) return { config: null, issues };
-  return { config: { appId, appSecret, graphBase, insightsScopes, insightsUsageCeiling }, issues };
+  return { config: { appId, appSecret, graphBase, insightsScopes, insightsUsageCeiling, engagementScopes }, issues };
 }
 
 /** Reads process.env each call. Throws a value-free error when not configured. */

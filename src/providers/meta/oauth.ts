@@ -18,9 +18,19 @@ export function metaApp(cfg: MetaConfig): MetaApp {
   return { graphBase: DEFAULT_GRAPH_BASE, version: cfg.graphVersion };
 }
 
-/** contracts/granted-scopes.md §3. `[]` unless `cfg.insightsScopes` is on (FR-017). */
+export const ENGAGEMENT_OPT_IN = ["instagram_manage_comments"] as const;
+
+/**
+ * contracts/granted-scopes.md §3; contracts/optional-scopes-per-surface.md §3. Insights opt-in
+ * `[]` unless `cfg.insightsScopes` is on (FR-017); engagement opt-in `[]` unless
+ * `cfg.engagementScopes` is on. Deliberately a union, not narrowed per surface — see §3's note on
+ * why narrowing reintroduces a "not requested" bug.
+ */
 export function optionalFor(cfg: MetaConfig): readonly string[] {
-  return cfg.insightsScopes ? ["read_insights", "instagram_manage_insights"] : [];
+  return [
+    ...(cfg.insightsScopes ? ["read_insights", "instagram_manage_insights"] : []),
+    ...(cfg.engagementScopes ? ENGAGEMENT_OPT_IN : []),
+  ];
 }
 
 export function dialogUrl(cfg: MetaConfig, input: { state: string; redirectUri: string }): string {

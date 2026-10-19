@@ -17,6 +17,7 @@ describe("parseThreadsEnv", () => {
       graphBase: THREADS_DEFAULT_GRAPH_BASE,
       insightsScopes: false,
       insightsUsageCeiling: 80,
+      engagementScopes: false,
     });
   });
   it("requires id and secret together", () => {
@@ -56,6 +57,20 @@ describe("parseThreadsEnv", () => {
     const r = parseThreadsEnv({ THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET, THREADS_INSIGHTS_SCOPES: "yes" });
     expect(r.config).not.toBeNull();
     expect(r.issues).toEqual([{ name: "THREADS_INSIGHTS_SCOPES", reason: "must be true or false" }]);
+  });
+
+  it("parses THREADS_ENGAGEMENT_SCOPES with its documented default", () => {
+    const base = { THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET };
+    expect(parseThreadsEnv(base).config?.engagementScopes).toBe(false);
+    expect(parseThreadsEnv({ ...base, THREADS_ENGAGEMENT_SCOPES: "true" }).config?.engagementScopes).toBe(true);
+    expect(parseThreadsEnv({ ...base, THREADS_ENGAGEMENT_SCOPES: "false" }).config?.engagementScopes).toBe(false);
+  });
+
+  it("rejects a non-boolean THREADS_ENGAGEMENT_SCOPES as an environment issue, not a crash, with no value echoed", () => {
+    const r = parseThreadsEnv({ THREADS_APP_ID: ID, THREADS_APP_SECRET: SECRET, THREADS_ENGAGEMENT_SCOPES: "maybe" });
+    expect(r.config).not.toBeNull();
+    expect(r.issues).toEqual([{ name: "THREADS_ENGAGEMENT_SCOPES", reason: "must be true or false" }]);
+    expect(JSON.stringify(r.issues)).not.toContain("maybe");
   });
 
   it("parses THREADS_INSIGHTS_USAGE_CEILING with its documented default", () => {

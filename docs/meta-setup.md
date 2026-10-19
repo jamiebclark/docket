@@ -171,6 +171,41 @@ permission, shows "Insights need a reconnect" on the Accounts page with a link b
 through the existing Reconnect button updates that same account in place — nothing else about it
 changes, and its ability to publish is unaffected either way.
 
+## 11b. Reading comments (optional)
+
+The engagement inbox (see [engagement.md](engagement.md)) can read Facebook Page and Instagram
+comments, and Threads replies and mentions, but only what
+[docs/research/engagement.md](research/engagement.md) §2 confirmed a permission for — nothing is
+read on any Meta or Threads surface yet regardless of this flag. As with step 11a, Docket does not
+widen a connection's consent screen until the deployer opts in.
+
+**For Facebook and Instagram:**
+
+1. Add `instagram_manage_comments` to the app, the same way as step 3's five.
+   `pages_read_engagement` is already requested by every connection (step 3), so Facebook Page
+   comments need nothing extra here.
+2. Set `META_ENGAGEMENT_SCOPES=true` in `.env` and restart. The next Facebook/Instagram connect or
+   reconnect asks for the extra permission too; an account connected before the flag was on keeps
+   its existing grant until it reconnects.
+3. **If you use a login configuration (`META_LOGIN_CONFIG_ID`, step 2):** the configuration replaces
+   Docket's scope list, so the flag alone changes nothing — add `instagram_manage_comments` to the
+   login configuration itself in the Meta dashboard. Until you do, Docket shows the accounts page's
+   reason pointing back here and offers no reconnect button, because reconnecting could not succeed.
+
+**For Threads:**
+
+1. In the Threads use case's permissions (see "Threads: add the use case" below), add
+   `threads_manage_replies` and `threads_manage_mentions` alongside `threads_basic` and
+   `threads_content_publish`.
+2. Set `THREADS_ENGAGEMENT_SCOPES=true` in `.env` and restart. The next Threads connect or
+   reconnect asks for the extra permissions too.
+
+Turning either flag off revokes nothing: an account that already granted the permission keeps its
+recorded grant and keeps being read; it governs only what a new connect or reconnect's dialog asks
+for. An account connected before the flag was turned on, or whose last grant did not include the
+permission, shows "Inbox needs a reconnect" on the Accounts page with a link back here. Reading
+comments never affects an account's ability to publish.
+
 ## 11. Media needs a public bucket
 
 Facebook and Instagram both fetch each image from its URL, so media storage must be a publicly readable bucket. See
@@ -370,3 +405,20 @@ absent from the chooser even with `pages_show_list` granted. Docket works around
 reading the Page ids out of `/debug_token`'s granular scopes
 (`src/providers/meta/candidates.ts`). If a Page is missing from the chooser entirely, check
 that the person connecting has a role on it in the portfolio.
+
+## Engagement
+
+Reading comments on Facebook Page posts and Instagram posts, and replies to and mentions of a
+Threads post, is also **opt-in**, and separate from Insights above — turning one on does not
+turn on the other. See step 11b for how to add the permission and the flag.
+
+| Variable | Effect |
+|---|---|
+| `META_ENGAGEMENT_SCOPES=true` | The Meta dialog (Facebook Pages + Instagram) also asks for `instagram_manage_comments`. |
+| `THREADS_ENGAGEMENT_SCOPES=true` | The Threads dialog also asks for `threads_manage_replies` and `threads_manage_mentions`. |
+
+The Facebook Login for Business caveat above applies here too: if your Meta app uses a login
+configuration, add the permission to the configuration itself, not just to the app, or Docket
+offers no reconnect button for this surface either. Nothing is read on any Meta or Threads
+surface yet in this release — see [docs/research/engagement.md](research/engagement.md) §2 for
+which permissions are confirmed buildable and which are not.

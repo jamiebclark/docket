@@ -211,33 +211,33 @@ login configuration id, with no live dialog (quickstart.md §5).
 Depends on Phase 3 (US1 — the scope strings, possibly empty, that T025/T026 declare) and Phase 2 (T005
 — the `ScopeSurface` parameter).
 
-- [ ] T023 [P] [US5] Add `META_ENGAGEMENT_SCOPES` parsing to `src/providers/meta/config.ts`:
+- [X] T023 [P] [US5] Add `META_ENGAGEMENT_SCOPES` parsing to `src/providers/meta/config.ts`:
       `MetaConfig.engagementScopes`, default `false`, `true`/`false` validated, anything else an env
       issue naming the variable with no value echoed — mirroring `META_INSIGHTS_SCOPES`
-- [ ] T024 [P] [US5] Add `THREADS_ENGAGEMENT_SCOPES` parsing to `src/providers/threads/config.ts`,
+- [X] T024 [P] [US5] Add `THREADS_ENGAGEMENT_SCOPES` parsing to `src/providers/threads/config.ts`,
       `ThreadsConfig.engagementScopes`, same shape as T023
-- [ ] T025 [US5] In `src/providers/meta/connect-group.ts`, add `ENGAGEMENT_SCOPES_DECLARED` (each entry
+- [X] T025 [US5] In `src/providers/meta/connect-group.ts`, add `ENGAGEMENT_SCOPES_DECLARED` (each entry
       `{ scope, purpose }`, filled from §2 and nowhere else — empty if §2 confirmed nothing) and union it
       into `optionalFor(cfg)` in `src/providers/meta/oauth.ts` when `cfg.engagementScopes` is set
       (contracts/optional-scopes-per-surface.md §2–§3)
-- [ ] T026 [P] [US5] Same in `src/providers/threads/connect-group.ts`: declare the Threads
+- [X] T026 [P] [US5] Same in `src/providers/threads/connect-group.ts`: declare the Threads
       engagement scope(s) from §2 (or none) and add them to `requested(source)`/`authorizationUrl`'s
       scope list when `THREADS_ENGAGEMENT_SCOPES` is on
-- [ ] T027 [US5] Implement `cannotWiden(source, "engagement")` in `src/providers/meta/connect-group.ts`
+- [X] T027 [US5] Implement `cannotWiden(source, "engagement")` in `src/providers/meta/connect-group.ts`
       per the table in [contracts/optional-scopes-per-surface.md](./contracts/optional-scopes-per-surface.md) §1:
       non-null only when `META_ENGAGEMENT_SCOPES` is on **and** `META_LOGIN_CONFIG_ID` is set **and**
       `ENGAGEMENT_SCOPES_DECLARED` is non-empty; `null` whenever §2 confirmed nothing, regardless of the
       flag (FR-031)
-- [ ] T028 [US5] Add a `## Engagement` heading to `docs/meta-setup.md` beside the existing `## Insights`
+- [X] T028 [US5] Add a `## Engagement` heading to `docs/meta-setup.md` beside the existing `## Insights`
       heading (the slug `docsUrl("meta-setup", "engagement")` resolves to), and a new
       `## 11b. Reading comments (optional)` section beside `## 11a`, without renumbering `## 11a` or
       `## 11`
-- [ ] T029 [US5] Unit tests: `src/providers/meta/config.test.ts` + `src/providers/threads/config.test.ts`
+- [X] T029 [US5] Unit tests: `src/providers/meta/config.test.ts` + `src/providers/threads/config.test.ts`
       (flag parsing: `true`/`false`/absent/`maybe`, no value echoed); `src/providers/meta/connect-group.test.ts`
       + `.../threads/connect-group.test.ts` (requested union across all four flag combinations;
       `cannotWiden`'s full table including both surfaces; byte-identical URLs reconfirmed with flags on
       but `ENGAGEMENT_SCOPES_DECLARED` empty)
-- [ ] T030 [US5] Extend `tests/integration/insights/eligibility-matrix.test.ts` (or a sibling test) to
+- [X] T030 [US5] Extend `tests/integration/insights/eligibility-matrix.test.ts` (or a sibling test) to
       walk every combination of `META_ENGAGEMENT_SCOPES` × `META_INSIGHTS_SCOPES` × `META_LOGIN_CONFIG_ID`
       (and the Threads pair) and assert each account's insights permission for both surfaces is
       identical to its pre-change value (FR-033)

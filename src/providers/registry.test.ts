@@ -296,6 +296,7 @@ describe("provider registry", () => {
         "THREADS_GRAPH_BASE",
         "THREADS_INSIGHTS_SCOPES",
         "THREADS_INSIGHTS_USAGE_CEILING",
+        "THREADS_ENGAGEMENT_SCOPES",
       ]);
     });
     it("registers x in its own connect group", () => {
