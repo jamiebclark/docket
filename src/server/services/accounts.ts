@@ -63,6 +63,7 @@ export function insightsPermissionForAccount(
     requiredScopes,
     grantedScopes: a.grantedScopes ?? null,
     requestedScopes: group?.optionalScopes?.requested(process.env) ?? [],
+    declaredOptionalScopes: group?.optionalScopes?.declared.map((s) => s.scope) ?? [],
     cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env) ?? null,
     missingScopes,
   });

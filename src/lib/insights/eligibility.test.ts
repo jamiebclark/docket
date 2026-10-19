@@ -10,6 +10,7 @@ describe("insightsPermissionFor", () => {
         requiredScopes: [],
         grantedScopes: null,
         requestedScopes: [],
+        declaredOptionalScopes: [],
         cannotWiden: null,
         missingScopes: null,
       }),
@@ -22,6 +23,7 @@ describe("insightsPermissionFor", () => {
         requiredScopes: ["read_insights"],
         grantedScopes: ["read_insights", "pages_show_list"],
         requestedScopes: ["read_insights"],
+        declaredOptionalScopes: ["read_insights"],
         cannotWiden: null,
         missingScopes,
       }),
@@ -34,6 +36,7 @@ describe("insightsPermissionFor", () => {
         requiredScopes: ["read_insights"],
         grantedScopes: null,
         requestedScopes: [],
+        declaredOptionalScopes: ["read_insights"],
         cannotWiden: { reason: "Configure in the Meta app dashboard.", doc: "/docs/x" },
         missingScopes,
       }),
@@ -52,6 +55,7 @@ describe("insightsPermissionFor", () => {
         requiredScopes: ["read_insights"],
         grantedScopes: null,
         requestedScopes: [],
+        declaredOptionalScopes: ["read_insights"],
         cannotWiden: null,
         missingScopes,
       }),
@@ -69,6 +73,7 @@ describe("insightsPermissionFor", () => {
         requiredScopes: ["read_insights"],
         grantedScopes: null,
         requestedScopes: ["read_insights"],
+        declaredOptionalScopes: ["read_insights"],
         cannotWiden: null,
         missingScopes,
       }),
@@ -85,6 +90,7 @@ describe("insightsPermissionFor", () => {
     const base = {
       requiredScopes: ["read_insights"],
       requestedScopes: ["read_insights"],
+      declaredOptionalScopes: ["read_insights"],
       cannotWiden: null,
       missingScopes,
     };
@@ -101,6 +107,7 @@ describe("insightsPermissionFor", () => {
       requiredScopes: ["instagram_basic", "instagram_manage_insights"],
       grantedScopes: ["instagram_basic"],
       requestedScopes: ["instagram_basic", "instagram_manage_insights"],
+      declaredOptionalScopes: ["instagram_manage_insights"],
       cannotWiden: null,
       missingScopes,
     });
@@ -111,5 +118,44 @@ describe("insightsPermissionFor", () => {
       docsPath: missingScopes.docsPath,
       canReconnect: true,
     });
+  });
+
+  // Regression. Found on a live install: every account connected before the grant started being
+  // recorded has `grantedScopes: null`, so every required scope is missing — including the BASE
+  // ones the dialog always requests. Those are absent from `requestedScopes`, which only lists the
+  // opt-in additions, so the whole surface reported "not requested" and the accounts page offered
+  // no reconnect at all. The operator had the opt-in switched on and no way to act on it.
+  it("offers a reconnect when only base scopes are unaccounted for, with the opt-in on", () => {
+    const result = insightsPermissionFor({
+      // What Instagram's post surface actually requires.
+      requiredScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+      // Never recorded: the account predates the grant being stored.
+      grantedScopes: null,
+      // The group adds only the opt-in scopes; the rest are in its base set.
+      requestedScopes: ["read_insights", "instagram_manage_insights"],
+      declaredOptionalScopes: ["read_insights", "instagram_manage_insights"],
+      cannotWiden: null,
+      missingScopes,
+    });
+    expect(result).toEqual({
+      kind: "not_granted",
+      missing: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+      reason: missingScopes.reason,
+      docsPath: missingScopes.docsPath,
+      canReconnect: true,
+    });
+  });
+
+  it("still reports not_requested when the opt-in itself is off", () => {
+    const result = insightsPermissionFor({
+      requiredScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+      grantedScopes: null,
+      // The opt-in is off, so the group adds nothing to its dialog.
+      requestedScopes: [],
+      declaredOptionalScopes: ["read_insights", "instagram_manage_insights"],
+      cannotWiden: null,
+      missingScopes,
+    });
+    expect(result.kind).toBe("not_requested");
   });
 });
