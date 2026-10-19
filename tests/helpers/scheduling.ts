@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "../../src/server/db/client";
 import { runCrossProject } from "../../src/server/db/cross-project";
-import { accountMetricPollStates, engagementAccountStates, postMetricPollStates, postTargets, socialAccounts } from "../../src/server/db/schema";
+import { accountMetricPollStates, engagementAccountStates, postMetricPollStates, postTargets, socialAccounts, videoVersions } from "../../src/server/db/schema";
 import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import type { AccountRecord } from "../../src/server/dal/accounts";
 import type { MediaRow } from "../../src/server/dal/media";
@@ -172,6 +172,40 @@ export async function parkAllInsightsPolls(): Promise<void> {
     // A frozen row's CHECK forbids a non-null next_poll_at, and a frozen target is never claimed
     // anyway, so it is left alone here rather than parked.
     await db.update(postMetricPollStates).set({ nextPollAt: PARKED_UNTIL }).where(isNull(postMetricPollStates.frozenReason));
+  });
+}
+
+/**
+ * Pushes every queued video version out of reach of `claimNext`, so a build loop under test builds its
+ * own version rather than whatever another file left queued.
+ *
+ * The claim is `WHERE state = 'queued' OR (state = 'building' AND lease_until < now)`, taken one row at
+ * a time across every project. A test that queues a version and then loops `buildNext()` a bounded
+ * number of times is therefore spending those iterations on other files' work, and
+ * `media/video-publish-adapted.test.ts` exhausted its twenty on PR #151's shard 4 and failed asserting
+ * its own version had reached `ready`. Its code already carries the comment: "The claim is
+ * cross-project, so versions other files left queued may be built first."
+ *
+ * Parking means leasing them to nobody: `state = 'building'` with a lease into 2100 fails both halves
+ * of the claim's predicate. Two constraints shape that - `video_versions_lease_pair` requires
+ * `lease_until` and `lease_token` to be null or non-null together, and `video_versions_error_matches_state`
+ * ties a non-null `error` to `state = 'failed'`, which this does not touch. A `building` row whose lease
+ * has already expired is claimable too, so it is parked the same way.
+ *
+ * Not folded into `parkAllDueTargets`: that is called mid-test by a few files, and parking a version
+ * the test itself has just queued would break it rather than steady it.
+ */
+export async function parkAllVideoVersions(): Promise<void> {
+  await runCrossProject("test: park video versions", async () => {
+    await getDb()
+      .update(videoVersions)
+      .set({ state: "building", leaseUntil: PARKED_UNTIL, leaseToken: "parked-by-tests" })
+      .where(
+        or(
+          eq(videoVersions.state, "queued"),
+          and(eq(videoVersions.state, "building"), isNotNull(videoVersions.leaseUntil), lt(videoVersions.leaseUntil, sql`now()`)),
+        ),
+      );
   });
 }
 
