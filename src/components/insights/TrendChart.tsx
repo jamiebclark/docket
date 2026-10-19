@@ -9,6 +9,12 @@ import type { TrendSeries } from "@/lib/insights/trend";
 
 const WIDTH = 480;
 const HEIGHT = 160;
+/**
+ * A one-point series gets a shorter canvas. §5 requires the point to be drawn, not a full plot area
+ * around it: at the full height a single reading was a hand's breadth of empty box, and an account
+ * awaiting its second reading filled the page with them.
+ */
+const POINT_HEIGHT = 56;
 const PAD = { top: 10, right: 10, bottom: 10, left: 10 };
 
 const DAY_MS = 86_400_000;
@@ -29,14 +35,14 @@ function scaleX(index: number, totalDays: number): number {
   return PAD.left + (totalDays <= 0 ? span / 2 : (index / totalDays) * span);
 }
 
-function scaleY(value: number, min: number, max: number): number {
-  const span = HEIGHT - PAD.top - PAD.bottom;
+function scaleY(value: number, min: number, max: number, height: number): number {
+  const span = height - PAD.top - PAD.bottom;
   if (max === min) return PAD.top + span / 2;
   return PAD.top + span - ((value - min) / (max - min)) * span;
 }
 
 /** Breaks the polyline at every gap, so a missing day is a visible gap, never interpolated (FR-014). */
-function lineSegments(points: readonly { day: string; value: number }[], from: string, min: number, max: number): string[] {
+function lineSegments(points: readonly { day: string; value: number }[], from: string, min: number, max: number, height: number): string[] {
   const segments: string[] = [];
   let current: string[] = [];
   let prevIndex: number | null = null;
@@ -46,7 +52,7 @@ function lineSegments(points: readonly { day: string; value: number }[], from: s
       if (current.length > 0) segments.push(current.join(" "));
       current = [];
     }
-    current.push(`${scaleX(index, dayIndex(points[points.length - 1]!.day, from))},${scaleY(point.value, min, max)}`);
+    current.push(`${scaleX(index, dayIndex(points[points.length - 1]!.day, from))},${scaleY(point.value, min, max, height)}`);
     prevIndex = index;
   }
   if (current.length > 0) segments.push(current.join(" "));
@@ -157,22 +163,34 @@ function Chart({ series, titleId }: { series: TrendSeries; titleId: string }) {
   const max = Math.max(...values);
   const totalDays = dayIndex(points[points.length - 1]!.day, points[0]!.day);
   const windowed = series.shape.kind === "windowed";
+  const height = points.length === 1 ? POINT_HEIGHT : HEIGHT;
 
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height="auto" role="img" aria-labelledby={titleId} className="text-primary">
+    // `width="100%"` alone let the 480-wide viewBox scale to whatever the card was, so every chart
+    // rendered around half again its natural height — most of it empty. Capped at its own width, it
+    // is drawn at the size it was laid out for and the page stops being a scroll.
+    <svg viewBox={`0 0 ${WIDTH} ${height}`} width="100%" height="auto" role="img" aria-labelledby={titleId} className="mt-2 w-full max-w-[480px] text-primary">
       <g aria-hidden="true">
-        <line x1={PAD.left} y1={HEIGHT - PAD.bottom} x2={WIDTH - PAD.right} y2={HEIGHT - PAD.bottom} className="stroke-border" strokeWidth={1} />
+        <line x1={PAD.left} y1={height - PAD.bottom} x2={WIDTH - PAD.right} y2={height - PAD.bottom} className="stroke-border" strokeWidth={1} />
         {windowed
           ? points.map((p) => {
               const index = dayIndex(p.day, points[0]!.day);
               const x = scaleX(index, totalDays);
-              const y = scaleY(p.value, min, max);
+              const y = scaleY(p.value, min, max, height);
               const barWidth = Math.max(4, (WIDTH - PAD.left - PAD.right) / (totalDays + 1) - 2);
-              return <rect key={p.day} x={x - barWidth / 2} y={y} width={barWidth} height={HEIGHT - PAD.bottom - y} className="fill-primary" />;
+              return <rect key={p.day} x={x - barWidth / 2} y={y} width={barWidth} height={height - PAD.bottom - y} className="fill-primary" />;
             })
-          : lineSegments(points, points[0]!.day, min, max).map((seg, i) => (
+          : lineSegments(points, points[0]!.day, min, max, height).map((seg, i) => (
               <polyline key={i} points={seg} fill="none" className="stroke-primary" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
             ))}
+        {/*
+          A polyline of one vertex draws nothing, so a cumulative series with a single reading was an
+          empty box — exactly the "empty chart" §5 forbids, in the one state where it is most likely
+          to be seen: the first reading after a connection. The point gets drawn as a point.
+        */}
+        {points.length === 1 && !windowed ? (
+          <circle cx={scaleX(0, 0)} cy={scaleY(points[0]!.value, min, max, height)} r={4} className="fill-primary" />
+        ) : null}
       </g>
     </svg>
   );

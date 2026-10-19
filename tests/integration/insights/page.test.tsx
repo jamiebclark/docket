@@ -47,6 +47,30 @@ describe("insights page (quickstart.md §6, FR-070 to FR-074)", () => {
     expect(html).toContain('<caption class="sr-only">');
   });
 
+  it("draws the single reading as a point, never an empty box, on a one-reading series (charts.md §5)", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    await env.scope.accountMetricSnapshots.insertIfAbsent({ socialAccountId: account.id, providerKey: "mock", capturedAt: new Date(), metrics: { followersCount: 42 } });
+    actAs(env.owner);
+    const html = await render(env.project.slug);
+
+    // A <polyline> of one vertex renders nothing at all, which is the empty chart §5 forbids.
+    expect(html, "the one point must be drawn").toContain("<circle");
+    expect(html).toContain("A trend needs more than one reading.");
+    // And it must not be given a full plot area to sit alone in.
+    expect(html).toMatch(/viewBox="0 0 480 56"/);
+  });
+
+  it("never lets a chart scale past the size it was laid out for", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    await env.scope.accountMetricSnapshots.insertIfAbsent({ socialAccountId: account.id, providerKey: "mock", capturedAt: new Date(), metrics: { followersCount: 42 } });
+    actAs(env.owner);
+    const html = await render(env.project.slug);
+    // width="100%" on its own stretched a 480-wide viewBox to the card, half again its height.
+    expect(html).toContain("max-w-[480px]");
+  });
+
   it("states a note naming the platform, never an empty chart or a zero, when a platform declares no account metrics (FR-015, US1.3)", async () => {
     const env = await postsEnv();
     await env.scope.accounts.upsertConnected({
