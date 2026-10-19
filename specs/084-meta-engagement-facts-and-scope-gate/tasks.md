@@ -258,28 +258,28 @@ accounts-page line and button for each (quickstart.md §4).
 
 Depends on Phase 4 (US3 — the declaration and eligibility plumbing) and Phase 2 (T005).
 
-- [ ] T031 [US4] Add `engagementPermissionForAccount(account, provider)` to
+- [X] T031 [US4] Add `engagementPermissionForAccount(account, provider)` to
       `src/server/services/accounts.ts` (contracts/scope-permission.md §4) and
       `engagementReadPermission: ScopePermission | null` to `AccountRecord`
-- [ ] T032 [US4] Add `readPermission: ScopePermission | null` to `EngagementAccountView` in
+- [X] T032 [US4] Add `readPermission: ScopePermission | null` to `EngagementAccountView` in
       `src/server/services/engagement/inbox.ts`, computed inside `listEngagementAccounts` from the
       account's `grantedScopes` and the provider's declaration
-- [ ] T033 [P] [US4] In `src/app/p/[projectSlug]/inbox/page.tsx`, render a second notice block for
+- [X] T033 [P] [US4] In `src/app/p/[projectSlug]/inbox/page.tsx`, render a second notice block for
       accounts whose `readPermission` is set and `kind !== "ok"`, worded as something a reconnect may
       fix (distinguishable from the existing `unavailable` wording), able to appear alongside it for
       different accounts; exclude such accounts from the account filter alongside `unavailable` ones
       (FR-034, FR-035)
-- [ ] T034 [P] [US4] In `src/app/p/[projectSlug]/accounts/page.tsx`, add an "Inbox needs a reconnect."
+- [X] T034 [P] [US4] In `src/app/p/[projectSlug]/accounts/page.tsx`, add an "Inbox needs a reconnect."
       line with the provider's reason and a docs link, showing `ReconnectGroupButton` only when
       `canManage && permission.canReconnect` — no control at all, reason only, when it cannot be
       widened (FR-030, FR-036, SC-008)
-- [ ] T035 [US4] Integration tests in `tests/integration/engagement/scope-gate.test.ts` and
+- [X] T035 [US4] Integration tests in `tests/integration/engagement/scope-gate.test.ts` and
       `tests/integration/engagement/permissions.test.tsx`: both notices appear together for different
       accounts with distinguishable wording; the ineligible account is absent from the inbox filter; the
       accounts-page line and button appear/disappear correctly per `canReconnect`; a member without
       `engagement: ["view"]` sees no notice, reason, count or account name, and none is reachable
       through an API key, the public API or an MCP tool (FR-037)
-- [ ] T036 [P] [US4] Extend `tests/integration/security/secret-scan.test.ts` to cover the new notice,
+- [X] T036 [P] [US4] Extend `tests/integration/security/secret-scan.test.ts` to cover the new notice,
       reason and count, asserting none carries a credential or token (FR-039)
 
 **Checkpoint**: A member can tell, from the page alone, which account is affected, why, and whether

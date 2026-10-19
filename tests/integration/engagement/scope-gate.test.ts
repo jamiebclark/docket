@@ -251,7 +251,109 @@ describe("an untouched install (US2 scenarios 2, 5)", () => {
       providerKey: "mock",
       providerDisplayName: "Mock (offline)",
       unavailable: null,
+      readPermission: null,
     });
-    expect(Object.keys(view ?? {}).sort()).toEqual(["displayName", "id", "providerDisplayName", "providerKey", "unavailable"]);
+    expect(Object.keys(view ?? {}).sort()).toEqual([
+      "displayName",
+      "id",
+      "providerDisplayName",
+      "providerKey",
+      "readPermission",
+      "unavailable",
+    ]);
+  });
+});
+
+describe("the inbox notice and accounts-page line (US4, FR-034–FR-037)", () => {
+  it("reports a ScopePermission other than ok for an account missing its declared read scopes, and null once default/no scopes are declared", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    withReadScopes(["read_comments"]);
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "mock",
+      displayName: "Needs reconnect",
+      externalAccountId: "scope-gate-notice",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      // grantedScopes omitted: NULL.
+    });
+
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    const accountViews = await listEngagementAccounts(scope);
+    const view = accountViews.find((v) => v.id === account.id);
+    expect(view?.unavailable).toBeNull();
+    expect(view?.readPermission).not.toBeNull();
+    expect(view?.readPermission?.kind).not.toBe("ok");
+    if (view?.readPermission && view.readPermission.kind !== "ok") {
+      expect(view.readPermission.reason).toMatch(/read_comments/);
+    }
+
+    const accountList = await accountsService.listAccounts(scope);
+    const accountView = accountList.find((a) => a.id === account.id);
+    expect(accountView?.engagementReadPermission?.kind).not.toBe("ok");
+  });
+
+  it("holds both an unavailable notice and a readPermission notice at once, for different accounts, with distinguishable wording", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    const originalDecl = mockEngagement.declaration;
+    mockEngagement.declaration = { ...originalDecl, unavailable: { reason: "Not buildable yet." }, readScopes: undefined, missingReadScopes: undefined };
+    const unavailableAccount = await repos.accounts.upsertConnected({
+      providerKey: "mock",
+      displayName: "Unavailable one",
+      externalAccountId: "scope-gate-unavailable",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+    });
+    mockEngagement.declaration = originalDecl;
+    withReadScopes(["read_comments"]);
+    const gatedAccount = await repos.accounts.upsertConnected({
+      providerKey: "mock",
+      displayName: "Gated one",
+      externalAccountId: "scope-gate-gated",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+    });
+
+    mockEngagement.declaration = { ...originalDecl, unavailable: { reason: "Not buildable yet." }, readScopes: undefined, missingReadScopes: undefined };
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    let views = await listEngagementAccounts(scope);
+    const unavailableView = views.find((v) => v.id === unavailableAccount.id);
+    expect(unavailableView?.unavailable?.reason).toBe("Not buildable yet.");
+
+    withReadScopes(["read_comments"]);
+    views = await listEngagementAccounts(scope);
+    const gatedView = views.find((v) => v.id === gatedAccount.id);
+    expect(gatedView?.readPermission?.kind).not.toBe("ok");
+    expect(unavailableView?.unavailable?.reason).not.toBe(
+      gatedView?.readPermission && gatedView.readPermission.kind !== "ok" ? gatedView.readPermission.reason : undefined,
+    );
+  });
+
+  it("gives an account that holds its declared scopes a readPermission of ok, and the accounts-page line does not appear for it", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    withReadScopes(["read_comments"]);
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "mock",
+      displayName: "Already granted",
+      externalAccountId: "scope-gate-granted",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["read_comments"],
+    });
+    const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+    const views = await listEngagementAccounts(scope);
+    expect(views.find((v) => v.id === account.id)?.readPermission).toEqual({ kind: "ok" });
+    const accountViews = await accountsService.listAccounts(scope);
+    expect(accountViews.find((a) => a.id === account.id)?.engagementReadPermission).toEqual({ kind: "ok" });
   });
 });

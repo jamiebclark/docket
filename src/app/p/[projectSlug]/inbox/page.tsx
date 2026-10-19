@@ -89,6 +89,28 @@ export default async function InboxPage({ params, searchParams }: Props) {
           </div>
         ) : null}
 
+        {accounts.some((a) => a.readPermission && a.readPermission.kind !== "ok") ? (
+          <div className="mt-4 space-y-2">
+            {accounts.flatMap((a) => {
+              const permission = a.readPermission;
+              if (!permission || permission.kind === "ok") return [];
+              return [
+                <p key={a.id} role="status" className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {a.displayName} ({a.providerDisplayName}) needs a reconnect to read its comments: {permission.reason}
+                  {permission.docsPath ? (
+                    <>
+                      {" "}
+                      <Link href={permission.docsPath} className="underline">
+                        Learn more
+                      </Link>
+                    </>
+                  ) : null}
+                </p>,
+              ];
+            })}
+          </div>
+        ) : null}
+
         <form method="get" action={`/p/${projectSlug}/inbox`} className="mt-4 flex flex-wrap items-end gap-3">
           <ChoiceField
             id="inbox-account"
@@ -97,7 +119,12 @@ export default async function InboxPage({ params, searchParams }: Props) {
             compact
             autoSubmit
             defaultValue={query.account ?? ""}
-            options={[{ value: "", label: "All accounts" }, ...accounts.filter((a) => !a.unavailable).map((a) => ({ value: a.id, label: a.displayName }))]}
+            options={[
+              { value: "", label: "All accounts" },
+              ...accounts
+                .filter((a) => !a.unavailable && !(a.readPermission && a.readPermission.kind !== "ok"))
+                .map((a) => ({ value: a.id, label: a.displayName })),
+            ]}
           />
           <ChoiceField
             id="inbox-kind"
