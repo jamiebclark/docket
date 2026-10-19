@@ -239,7 +239,7 @@ the fold, the trend reader, the comparison reader and `shape.ts`.
 - [X] T076 [P] Update `docs/mcp.md`'s prose beyond the tool table/count already done in T073, if any remains (FR-082) — skip if T073 already covers it fully
 - [X] T077 [P] Extend `tests/integration/security/secret-scan.test.ts` to cover all three new tables and the new API response, asserting `target_first_engagement` has no text column at all; never exempt or narrow an existing check (FR-084)
 - [X] T078 [P] Add the SC-011 test asserting no provider HTTP call is made while rendering or serving insights
-- [ ] T079 Run the full pass: `pnpm lint && pnpm typecheck && pnpm test`, plus `pnpm db:check` and `pnpm build`, all green (FR-086)
+- [X] T079 Run the full pass: `pnpm lint && pnpm typecheck && pnpm test`, plus `pnpm db:check` and `pnpm build`, all green (FR-086)
 
 ---
 
