@@ -87,20 +87,20 @@ This phase runs with no code dependency on Phase 2 and may proceed in parallel w
 `docs/`. It must finish before US5's connect-group tasks, which are its only downstream consumer
 (spec Constraint 2).
 
-- [ ] T006 [US1] Research the four comment surfaces — Facebook Page comments, Instagram comments,
+- [X] T006 [US1] Research the four comment surfaces — Facebook Page comments, Instagram comments,
       Threads replies, Threads mentions — against the nine questions in
       [contracts/research-section-2.md](./contracts/research-section-2.md) §1, using `WebSearch`
       constrained to official Meta/Threads documentation domains. Record each result as `page` or
       `search-summary` per the admissibility rule in §3, or `unverified` with what was tried
-- [ ] T007 [US1] Replace `docs/research/engagement.md` §2 (the old 7×3 grid) with the new 9×4 grid from
+- [X] T007 [US1] Replace `docs/research/engagement.md` §2 (the old 7×3 grid) with the new 9×4 grid from
       T006, each surface closing with its own consequence paragraph (buildable, or
       must-ship-`unavailable` and why — contracts/research-section-2.md §4). The old table is removed,
       not left alongside the new one
-- [ ] T008 [US1] Rewrite the "Phase 9 human task" note at the end of `docs/research/engagement.md`,
+- [X] T008 [US1] Rewrite the "Phase 9 human task" note at the end of `docs/research/engagement.md`,
       distinguishing which questions this pass settled (and at which evidence grade) from which
       genuinely still need a live session, a second person and a browser — without deleting the record
       that T083/T084 are unachievable by a headless pipeline
-- [ ] T009 [P] [US1] Add a one-line cross-reference in `docs/research/meta.md` pointing to
+- [X] T009 [P] [US1] Add a one-line cross-reference in `docs/research/meta.md` pointing to
       `docs/research/engagement.md` §2 as where comment-read facts live; update its `Checked` date only
       if the file is otherwise touched
 
