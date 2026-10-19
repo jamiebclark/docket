@@ -38,6 +38,17 @@ export interface PublishingCounts {
   staleResults: number;
   released: number;
   waitingForVideo: number;
+  /**
+   * Due targets passed over because another session held the account's row lock.
+   *
+   * The publishing claim takes `social_accounts` `FOR NO KEY UPDATE ... SKIP LOCKED` while
+   * `claimRefreshAccounts` takes the same rows `FOR UPDATE`, and a tick runs nine sections through one
+   * `Promise.all` - so the section that arrives second skips the row. Leaving the target for the next
+   * tick is correct; reporting nothing was not, because it made "the target was not processed"
+   * indistinguishable from "nothing was due". `limits/enforcement.test.ts` failed on exactly that,
+   * asserting a target had reached `failed` after a tick that never touched it.
+   */
+  accountLocked: number;
 }
 
 export const emptyPublishingCounts = (): PublishingCounts => ({
@@ -52,6 +63,7 @@ export const emptyPublishingCounts = (): PublishingCounts => ({
   staleResults: 0,
   released: 0,
   waitingForVideo: 0,
+  accountLocked: 0,
 });
 
 /** How long a due target waits for its adapted video before it fails (P13). */
@@ -93,6 +105,9 @@ export async function runPublishing(opts: {
       now,
       limit: Math.min(config.batchSize, config.maxItems - handled.size),
       excludeIds: [...handled],
+      onAccountLocked: () => {
+        counts.accountLocked++;
+      },
       async decide(target, account, ctx) {
         const finish = (patch: TargetPatch, outcome: ClaimDecision["attempts"]): ClaimDecision => {
           const activity = eventForDecision({
