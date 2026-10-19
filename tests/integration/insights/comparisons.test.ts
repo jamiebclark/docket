@@ -120,7 +120,10 @@ describe("comparisons and the floor, with a database (quickstart.md §4, US3, US
     const pruned = await runCrossProject("test: prune closed standing-series runs", () =>
       pruneClosedStandingSeriesRunsBefore(new Date(), 100),
     );
-    expect(pruned).toBe(1);
+    // Cross-project, like the prune itself: a worker's database carries closed runs left by other
+    // files, so an absolute count asserts their isolation rather than this behaviour. That this
+    // run in particular is gone is what the `series_unrecorded` exclusion below actually proves.
+    expect(pruned).toBeGreaterThanOrEqual(1);
 
     const after = await buildComparisons({ projectId: e.project.id, timeZone: TIME_ZONE, range: WIDE_RANGE });
     const seriesKindAfter = after.find((c) => c.dimension === "series_kind" && c.metricKey === "likeCount");
