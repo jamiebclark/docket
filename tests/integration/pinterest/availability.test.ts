@@ -15,6 +15,7 @@ import { encryptCredentials } from "../../../src/server/services/accounts";
 import { createFakePinterest } from "../../helpers/fake-pinterest";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
+import { parkAllDueTargets } from "../../helpers/scheduling";
 import { sessionFor } from "../../helpers/connect-group";
 import { postsEnv } from "../../helpers/posts-env";
 import { tickConfig } from "../../helpers/tick";
@@ -23,6 +24,12 @@ afterAll(closeDb);
 afterEach(() => {
   vi.unstubAllEnvs();
 });
+
+// A tick claims across every project and is `limit`-bounded, so rows left by other files on this
+// worker's database fill this tick's claims and its own target is never reached - which shows up
+// as the poll-state row simply not existing. Measured at 1 of 20 repetitions in flake-hunt run
+// 39195627319, failing as "expected undefined to match object".
+beforeEach(parkAllDueTargets);
 
 describe("Pinterest availability on Accounts", () => {
   it("is not configured without the variables, with a setup-guide link and no connect action", async () => {

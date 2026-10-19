@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { forProject } from "../../../src/server/dal/scope";
-import { runTick } from "../../../src/server/scheduler";
+import { runPublishing } from "../../../src/server/scheduler/publishing";
+import { schedulerConfig } from "../../../src/server/scheduler/config";
+import { getEnv } from "../../../src/server/env";
 import * as accounts from "../../../src/server/services/accounts";
 import * as posts from "../../../src/server/services/posts";
 import * as slots from "../../../src/server/services/slots";
@@ -9,7 +12,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
-import { tickConfig } from "../../helpers/tick";
+import { TICK_BUDGET_MS } from "../../helpers/tick";
 import type { SchedulerConfig } from "../../../src/server/scheduler/config";
 import { expectCount, expectCounts } from "../../helpers/counts";
 
@@ -22,7 +25,32 @@ afterAll(async () => {
 const BEFORE = new Date("2026-10-01T12:00:00Z");
 const SLOT = new Date("2026-10-05T09:00:00Z");
 const at = (seconds: number) => new Date(SLOT.getTime() + seconds * 1000);
-const tick = (when: Date, config: Partial<SchedulerConfig> = {}) => atTime(when, () => runTick(tickConfig(config)));
+// Runs ONLY the publishing section, and keeps the shape every call site already expects.
+//
+// Every assertion in this file is on `publishing.counts`, but this helper used to run a whole tick -
+// ten sections concurrently through one `Promise.all`. That cost blocked this file on a 20s
+// `testTimeout` repeatedly, and it was the single biggest tax on merges in this repo: it alone turned
+// #164, #165, #167 and #168 red, none of which touch the scheduler.
+//
+// The other symptom was `staleResults: 1` with `ambiguous: 0` - the target published, and
+// `recordStepResult`'s lease-guarded write then found the lease gone, so the result was discarded.
+// That is the publishing analogue of the `lost` outcome fixed in #159, and a sibling section taking
+// the lease is the mechanism it needs. One section cannot race nine others.
+//
+// `startedAt` is the pinned instant rather than `new Date()`: inside `atTime` the clock is pinned, and
+// `runPublishing` computes its deadline from `startedAt`, so a real timestamp here would measure the
+// budget against a clock that is not moving. `runTick` passes `await clock.now()` for the same reason.
+const tick = (when: Date, config: Partial<SchedulerConfig> = {}) =>
+  atTime(when, async () => ({
+    publishing: {
+      counts: await runPublishing({
+        config: schedulerConfig(getEnv(), { timeBudgetMs: TICK_BUDGET_MS, ...config }),
+        // A uuid, not a label: `publish_attempts.tick_id` is a uuid column, and `runTick` generates one.
+        tickId: randomUUID(),
+        startedAt: when,
+      }),
+    },
+  }));
 
 async function queued(settings: Record<string, unknown>) {
   const ctx = await createProjectWithMembers();
