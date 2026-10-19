@@ -203,9 +203,33 @@ export function insightsConfig(config: SchedulerConfig) {
     leaseMs: config.leaseMs,
     // Insights takes a share of the tick, never all of it, below engagement's share since it is the
     // least urgent section: see ENGAGEMENT_TIME_SHARE above and research.md §6.
-    timeBudgetMs: Math.floor(config.timeBudgetMs * (config.insightsTimeShare ?? INSIGHTS_DEFAULTS.timeShare)),
+    //
+    // The share is floored at one provider call plus a margin to start it. `runInsightsPoll` will
+    // not begin unless `providerTimeoutMs` remains, so a share smaller than that is not "a small
+    // share" — it is the section never running at all, silently, for the life of the install. At
+    // the stock 25s tick and 10s provider timeout the old 0.3 share gave 7.5s and did exactly that:
+    // every tick counted `outOfBudget` and returned, and nothing was ever polled on any platform.
+    // Tests never caught it because `tickConfig()` pins a 120s budget, so the defaults that ship
+    // were the one configuration never exercised.
+    timeBudgetMs: insightsTimeBudgetMs(config),
   };
 }
+
+/** Exported for the test that pins the shipped defaults against the gate in `runInsightsPoll`. */
+export function insightsTimeBudgetMs(config: SchedulerConfig): number {
+  const configured = config.insightsTimeShare ?? INSIGHTS_DEFAULTS.timeShare;
+  // An explicit 0 is an off switch and stays one: the floor exists to stop a SMALL share silently
+  // disabling the section, not to override an operator who asked for it off.
+  if (configured <= 0) return 0;
+  const share = Math.floor(config.timeBudgetMs * configured);
+  const floor = config.providerTimeoutMs + INSIGHTS_START_MARGIN_MS;
+  // Still never more than the tick itself: if the floor does not fit, the tick budget is too small
+  // for any section to make a provider call and raising insights' share would not change that.
+  return Math.min(Math.max(share, floor), config.timeBudgetMs);
+}
+
+/** Headroom over one provider call: enough for the claim and the first request to get away. */
+export const INSIGHTS_START_MARGIN_MS = 2_000;
 
 export const STANDING_SERIES_MAX_SERIES_DEFAULT = 2;
 export const STANDING_SERIES_MAX_POSTS_DEFAULT = 2;

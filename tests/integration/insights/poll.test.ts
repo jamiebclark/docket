@@ -65,6 +65,28 @@ describe("runInsightsPoll (contracts/scheduler-insights.md)", () => {
   // a best-effort assertion the first time it's reached, not the contract itself; the contract this
   // test actually verifies without exception — ok stays true, and the heartbeat matches the summary
   // (FR-036, FR-037, US4-AS1) — holds regardless of cross-project noise.
+  // Regression. Every test here pins a 120s tick through `tickConfig()`, so the section's share was
+  // always generous and the configuration that actually ships was the one never exercised. At the
+  // stock 25s tick and 10s provider timeout the 0.3 share came to 7.5s, `runInsightsPoll` refused to
+  // begin, and NOTHING was ever polled on any platform — on a live install, for days, silently.
+  it("polls at the shipped tick budget, not only at the generous one the tests pin", async () => {
+    const ctx = await createProjectWithMembers();
+    const account = await createMockAccount(ctx.project.id);
+    const { target } = await publishedTarget(ctx.project.id, account.id);
+
+    // The defaults from .env.example, not tickConfig()'s 120s.
+    const summary = await atTime(new Date(NOW.getTime() + 3_600_000), () =>
+      runTick({ config: { timeBudgetMs: 25_000, providerTimeoutMs: 10_000 } }),
+    );
+
+    expect(summary.insightsPoll.counts.outOfBudget).toBe(0);
+    const [snapshot] = await getDb()
+      .select()
+      .from(postMetricSnapshots)
+      .where(and(eq(postMetricSnapshots.projectId, ctx.project.id), eq(postMetricSnapshots.postTargetId, target.id)));
+    expect(snapshot, "a target due at the shipped budget must actually be polled").toBeDefined();
+  });
+
   it("a tick with nothing due reports every count zero and writes a matching heartbeat (FR-036, FR-037, US4-AS1)", async () => {
     const summary = await atTime(NOW, () => runTick(tickConfig()));
     expect(summary.insightsPoll.ok).toBe(true);
