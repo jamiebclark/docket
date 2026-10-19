@@ -242,14 +242,14 @@ entry's re-check attempt, its date, and that the result was unchanged.
 
 ### Implementation for User Story 5
 
-- [ ] T026 [US5] Edit `docs/research/engagement.md` §2: under each of the **Threads replies** and
+- [X] T026 [US5] Edit `docs/research/engagement.md` §2: under each of the **Threads replies** and
   **Threads mentions** headings, add prose (not new table rows, not edits to existing answer cells)
   after the existing `**Consequence:**` paragraph recording the 2026-10-19 re-check — what was
   searched for, that the verdict is unchanged, and the Keyword Search fact recorded as found and
   rejected (FR-031) — followed by a numbered list of exactly what is still missing per surface
   (endpoint path, object field list, pagination shape) with the permission named as confirmed and
   not missing (FR-032) (contracts/documentation.md §4)
-- [ ] T027 [US5] Run `pnpm vitest run tests/integration/docs/engagement-research.test.ts` and confirm
+- [X] T027 [US5] Run `pnpm vitest run tests/integration/docs/engagement-research.test.ts` and confirm
   it still passes against the §2 edit — the test parses on `### ` headings and requires every
   numbered row to cite a URL or be marked `**unverified**`, so this is the check that the added prose
   did not become a new row or an edited answer cell (depends on T026)
