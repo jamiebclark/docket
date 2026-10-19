@@ -341,17 +341,17 @@ both new surfaces; everything else on the item still works.
 Instagram comment; confirm no reply composer, the stated reason, and that dismiss/mark-handled/post
 link still work.
 
-- [ ] T035 [US5] Edit `src/app/p/[projectSlug]/inbox/[itemId]/page.tsx:79-83`: replace the
+- [X] T035 [US5] Edit `src/app/p/[projectSlug]/inbox/[itemId]/page.tsx:79-83`: replace the
       `Can't reply: {item.replyable.reason}` wording with a plain sentence that does not carry a
       "fault report" prefix, keeping `role="status"` and the existing `replyableVerdict` logic
       (`canReply: false` → "This platform cannot be replied to through Docket.") untouched — only the
       surrounding sentence changes (FR-041, data-model.md §4)
-- [ ] T036 [P] [US5] Create `tests/integration/engagement/meta-not-repliable.test.tsx`: the inbox
+- [X] T036 [P] [US5] Create `tests/integration/engagement/meta-not-repliable.test.tsx`: the inbox
       detail view for a stored Facebook comment and for a stored Instagram comment each render no
       reply composer and no disabled control, showing the corrected sentence naming the platform
       limit; dismissing, marking handled, the link to the parent post and the account filter all still
       work on both items (US5 scenarios 1, 2, 4; FR-041, FR-042) — depends on T035, T013, T020
-- [ ] T037 [P] [US5] Extend `tests/integration/engagement/send.test.ts` with a case per new surface: a
+- [X] T037 [P] [US5] Extend `tests/integration/engagement/send.test.ts` with a case per new surface: a
       send attempted for a stored Facebook or Instagram comment through any path fails permanently
       with a clear reason and is never retried, because `engagement-send.ts` already refuses a
       provider whose declaration says `canReply: false` — this pins existing generic behaviour for the

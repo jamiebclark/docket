@@ -187,4 +187,50 @@ describe("engagement-send (FR-038–FR-045, SC-004, SC-005, SC-006)", () => {
     const approvedThird = await approveReply(scope, third.draftId);
     expect(approvedThird).toMatchObject({ ok: false, code: "already_answered" });
   });
+
+  it.each(["facebook", "instagram"] as const)(
+    "a send attempted for a stored %s comment is refused permanently and never retried, because engagement-send already refuses a provider whose declaration says canReply: false (US5 scenario 3, FR-036)",
+    async (providerKey) => {
+      const ctx = await createProjectWithMembers();
+      const scope = await forProject(fakeSession(ctx.owner.id), ctx.project.slug);
+      const account = await scope.accounts.upsertConnected({
+        providerKey,
+        displayName: `Test ${providerKey}`,
+        externalAccountId: `ext-account-${providerKey}`,
+        settings: {},
+        credentialsEncrypted: null,
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        grantedScopes:
+          providerKey === "facebook"
+            ? ["pages_read_engagement", "pages_read_user_content"]
+            : ["instagram_basic", "instagram_manage_comments", "pages_read_engagement"],
+      });
+      const { id: itemId } = await scope.engagementItems.insertIfAbsent({
+        socialAccountId: account.id,
+        providerKey,
+        kind: "comment",
+        externalId: `ext-comment-${providerKey}`,
+        text: "Great post!",
+        authorDisplayName: "Ada",
+        authorHandle: "ada",
+        authorExternalId: "ada-1",
+        authorUrl: null,
+        authorIdentityStable: true,
+        saidAt: new Date(),
+        ingestedAt: new Date(),
+        parentExternalId: null,
+      });
+
+      const written = await writeReply(scope, itemId, "Thanks!");
+      expect(written).toMatchObject({ ok: false, code: "not_replyable" });
+
+      // No draft and no claim were ever created, so a tick has nothing to retry.
+      const tick = await runTick(tickConfig(NO_WAIT));
+      expect(tick.engagementSend.counts.sent).toBe(0);
+      expect(tick.engagementSend.counts.failed).toBe(0);
+      const item = await scope.engagementItems.get(itemId);
+      expect(item?.state).toBe("waiting");
+    },
+  );
 });

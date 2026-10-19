@@ -78,7 +78,7 @@ export default async function InboxItemPage({ params }: Props) {
 
         {!item.replyable.ok ? (
           <p role="status" className="mt-4 text-sm text-muted-foreground">
-            Can&apos;t reply: {item.replyable.reason}
+            {item.replyable.reason}
           </p>
         ) : null}
 
