@@ -1,6 +1,5 @@
 import { Fragment } from "react";
-import type { DocPage } from "@/lib/docs";
-import { docsUrl } from "@/lib/docs";
+import { docsHref } from "@/lib/docs";
 import type { TargetInsightsView } from "@/lib/insights/panel";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -52,7 +51,7 @@ function Reason({ text, docsPath }: { text: string; docsPath?: string }) {
     <p className="text-xs text-muted-foreground">
       {text}{" "}
       {docsPath ? (
-        <a href={docsUrl(docsPath as DocPage)} target="_blank" rel="noopener noreferrer" className="underline">
+        <a href={docsHref(docsPath)} target="_blank" rel="noopener noreferrer" className="underline">
           Learn more
         </a>
       ) : null}
