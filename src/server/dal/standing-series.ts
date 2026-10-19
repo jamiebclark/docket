@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, notExists, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import {
   posts,
   standingSeries,
+  standingSeriesOccurrences,
   standingSeriesPositions,
   standingSeriesRuns,
   type StandingSeriesPositionRow,
@@ -434,7 +435,32 @@ export async function pruneClosedStandingSeriesRunsBefore(before: Date, limit: n
   const ids = await db
     .select({ id: standingSeriesRuns.id })
     .from(standingSeriesRuns)
-    .where(and(isNotNull(standingSeriesRuns.closedAt), lt(standingSeriesRuns.closedAt, before)))
+    .where(
+      and(
+        isNotNull(standingSeriesRuns.closedAt),
+        lt(standingSeriesRuns.closedAt, before),
+        // Skip a run whose positions a PENDING occurrence still cites, or this delete throws.
+        //
+        // Deleting the run cascades to its positions, and that nulls
+        // `standing_series_occurrences.position_id`. For a settled occurrence that is fine, but
+        // `standing_series_occurrences_pending_has_position` requires an occurrence with no outcome to
+        // keep a position — so the cascade violates it and the whole statement fails with 23514,
+        // taking the housekeeping section of the tick down with it. Reproduced directly: a closed run
+        // older than the cutoff whose position one pending occurrence cites.
+        //
+        // Deferring rather than deleting is deliberate. The alternative is cascading occurrences away
+        // with their run, which would discard settled history too, and a pending occurrence is by
+        // definition still in use. A run therefore stays until its occurrences settle; one that never
+        // settles pins its run, which is a retention cost rather than a correctness one.
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(standingSeriesOccurrences)
+            .innerJoin(standingSeriesPositions, eq(standingSeriesOccurrences.positionId, standingSeriesPositions.id))
+            .where(and(eq(standingSeriesPositions.runId, standingSeriesRuns.id), isNull(standingSeriesOccurrences.outcome))),
+        ),
+      ),
+    )
     .limit(limit);
   if (ids.length === 0) return 0;
   const runIds = ids.map((r) => r.id);
