@@ -121,47 +121,47 @@ account was claimed and no call was attempted for the other (quickstart.md §3).
 Depends on Phase 2 (T002–T005). Does not depend on US1 — the gate is proven entirely through `mock`
 and test-registered providers, with no real scope string (spec Constraint 9).
 
-- [ ] T010 [US3] Add `readScopes?: readonly string[]` and `missingReadScopes?: { reason: string;
+- [X] T010 [US3] Add `readScopes?: readonly string[]` and `missingReadScopes?: { reason: string;
       docsPath?: string }` to `EngagementDeclaration` in `src/providers/types.ts`
       (contracts/engagement-read-scopes.md §1)
-- [ ] T011 [US3] Add `assertEngagementDeclaration` to `src/providers/registry.ts`, run over every
+- [X] T011 [US3] Add `assertEngagementDeclaration` to `src/providers/registry.ts`, run over every
       provider at module load: `reads` non-empty; `unavailable.reason` 1–300 chars when set;
       `unavailable` and non-empty `readScopes` never both set (naming both fields); non-empty
       `readScopes` requires `missingReadScopes.reason` 1–300 chars; every `readScopes` entry matches
       `GRANTED_SCOPE_PATTERN` from `src/lib/granted-scopes.ts` (contracts/engagement-read-scopes.md §2)
-- [ ] T012 [US3] Unit test `src/providers/registry.test.ts`: each of T011's five failure messages, and
+- [X] T012 [US3] Unit test `src/providers/registry.test.ts`: each of T011's five failure messages, and
       a valid declaration loading without error
-- [ ] T013 [US3] Add `EngagementProviderRule { providerKey: string; readScopes: readonly string[] }` and
+- [X] T013 [US3] Add `EngagementProviderRule { providerKey: string; readScopes: readonly string[] }` and
       change `claimDueEngagementReads` in `src/server/dal/engagement-read-claims.ts` to take
       `providers: readonly EngagementProviderRule[]` instead of `providerKeys`, applying
       `accountHoldsScopes`/`accountMissingScopes` (T004) inside the one transaction at **both**: the
       lazy-insert left-join select before `INSERT … ON CONFLICT DO NOTHING`, and the due-rows select
       with `FOR UPDATE SKIP LOCKED` (contracts/engagement-read-scopes.md §4)
-- [ ] T014 [US3] Update `src/server/scheduler/engagement-read.ts` to build `EngagementProviderRule[]`
+- [X] T014 [US3] Update `src/server/scheduler/engagement-read.ts` to build `EngagementProviderRule[]`
       from `listProviders()` (filtering providers with `declaration.unavailable`, mapping
       `readScopes ?? []`) and pass it to `claimDueEngagementReads` in place of the old key list
       (data-model.md §4)
-- [ ] T015 [P] [US3] Add `engagementReadScopes: z.array(z.string()).default([])` to
+- [X] T015 [P] [US3] Add `engagementReadScopes: z.array(z.string()).default([])` to
       `src/providers/mock/settings.ts` and `mockEngagementRuleFor(settings)` to
       `src/providers/mock/engagement.ts`, mirroring `mockInsightsRuleFor` (data-model.md §8). The
       default `mock` declaration itself gains no `readScopes`
-- [ ] T016 [US3] Extend `tests/integration/insights/eligibility-matrix.test.ts` to add the engagement
+- [X] T016 [US3] Extend `tests/integration/insights/eligibility-matrix.test.ts` to add the engagement
       claim as a third subject: walk declared scopes × grant state × requested scopes × `cannotWiden`
       and assert `scopePermissionFor(...).kind === "ok"` iff `claimDueEngagementReads` returns the
       account (FR-023, contracts/scope-permission.md §3)
-- [ ] T017 [US3] Integration test `tests/integration/engagement/scope-gate.test.ts` (new file), using
+- [X] T017 [US3] Integration test `tests/integration/engagement/scope-gate.test.ts` (new file), using
       `registerTestProvider` with a scripted `readScopes` + `missingReadScopes`: an account missing one
       declared scope is not returned by the claim, its `read_lease_until`/`read_lease_owner` stay
       `NULL`, `decryptCredentials` is called zero times and the provider's `read` is never invoked; a
       `NULL` grant is treated as not holding the scopes; no `engagement_account_states` row is created
       for the ineligible account; an account that later gains the grant is claimed and read from page
       one on the next run with no manual step
-- [ ] T018 [US3] Same file, T017: Bluesky and the default `mock` configuration are claimed, read and
+- [X] T018 [US3] Same file, T017: Bluesky and the default `mock` configuration are claimed, read and
       committed exactly as 077 specified (empty `readScopes` ⇒ matched by provider key alone); registry
       load fails when a test provider sets both `unavailable` and a non-empty `readScopes` (message
       names both fields), and when it sets a non-empty `readScopes` with no reason or a scope that fails
       `GRANTED_SCOPE_PATTERN`
-- [ ] T019 [US3] Same file, T017: an account that loses eligibility keeps every item it already has,
+- [X] T019 [US3] Same file, T017: an account that loses eligibility keeps every item it already has,
       readable and unchanged, and its status badge, publish limits and `needs_reauth` state are
       untouched (FR-024, FR-025)
 

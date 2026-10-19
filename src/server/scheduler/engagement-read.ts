@@ -3,7 +3,7 @@ import { findProvider, listProviders } from "../../providers/registry";
 import type { EngagementReadResult } from "../../providers/types";
 import { directionFor, nextBackfillState, shouldReadAnotherPage } from "../../lib/engagement/paging";
 import * as clock from "../dal/clock";
-import { claimDueEngagementReads, type ClaimedEngagementAccount } from "../dal/engagement-read-claims";
+import { claimDueEngagementReads, type ClaimedEngagementAccount, type EngagementProviderRule } from "../dal/engagement-read-claims";
 import { forSchedulerProject } from "../dal/scheduler";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { decryptCredentials } from "../services/accounts";
@@ -49,18 +49,18 @@ export async function runEngagementRead(opts: { config: SchedulerConfig; tickId:
   const counts = emptyEngagementReadCounts();
   const deadline = opts.startedAt.getTime() + cfg.timeBudgetMs;
   // FR-055: a declared-but-unavailable surface is never claimed, so no call is ever attempted for it.
-  const providerKeys = listProviders()
+  const providers: EngagementProviderRule[] = listProviders()
     .filter((p) => p.engagement && !p.engagement.declaration.unavailable)
-    .map((p) => p.key);
+    .map((p) => ({ providerKey: p.key, readScopes: p.engagement!.declaration.readScopes ?? [] }));
 
-  if (providerKeys.length > 0) {
+  if (providers.length > 0) {
     const now = await clock.now();
     const claimed = await claimDueEngagementReads({
       now,
       limit: ACCOUNTS_PER_RUN,
       leaseMs: opts.config.leaseMs,
       minIntervalMs: cfg.readMinIntervalMs,
-      providerKeys,
+      providers,
     });
     counts.claimed = claimed.length;
     await Promise.all(claimed.map((claim) => processAccount(claim, { config: opts.config, cfg, deadline, counts })));

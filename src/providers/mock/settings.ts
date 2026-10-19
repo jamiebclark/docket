@@ -49,6 +49,8 @@ export const mockSettingsSchema = z.object({
   engagementReadBehaviour: z.enum(mockEngagementReadBehaviours).default("page"),
   /** Serves pages normally through this many pages, then returns `engagementReadBehaviour` instead — so a run can insert items on one page and stop on the next. */
   engagementReadFailAfterPages: z.number().int().min(1).max(100).optional(),
+  /** G40: drives the eligibility matrix test's `EngagementProviderRule.readScopes`, without touching a real provider. */
+  engagementReadScopes: z.array(z.string()).default([]),
   /** The insights surface is declared but unavailable, with a reason and no call ever made (FR-003). */
   insightsUnavailable: z.boolean().default(false),
   /** The values a post metrics read returns, for every requested id not listed in `insightsGoneExternalIds`. */

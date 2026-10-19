@@ -547,6 +547,14 @@ export interface EngagementDeclaration {
    * is ever made for them.
    */
   unavailable?: { reason: string; docsPath?: string };
+  /**
+   * G40. Permissions an account must hold before Docket reads a single comment for it.
+   * Default empty — "no permission needed", which is every provider's behaviour today.
+   * A per-account claim: two accounts on the same provider may differ.
+   */
+  readScopes?: readonly string[];
+  /** G40. Shown when `readScopes` are not held. Required when `readScopes` is non-empty. */
+  missingReadScopes?: { reason: string; docsPath?: string };
 }
 
 export interface InboundItemDraft {

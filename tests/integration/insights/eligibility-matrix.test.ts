@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { insightsPermissionFor } from "../../../src/lib/insights/eligibility";
+import { scopePermissionFor } from "../../../src/lib/scope-permission";
 import { pinterestConnectGroup } from "../../../src/providers/pinterest/connect-group";
 import { pinterestInsights } from "../../../src/providers/pinterest/insights";
 import {
@@ -8,6 +9,7 @@ import {
   countAccountsMissingInsightsScopes,
   type InsightsProviderRule,
 } from "../../../src/server/dal/insights-claims";
+import { claimDueEngagementReads, type EngagementProviderRule } from "../../../src/server/dal/engagement-read-claims";
 import { randomUUID } from "node:crypto";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { atTime } from "../../helpers/clock";
@@ -363,5 +365,42 @@ describe("the eligibility matrix is pinned to the SQL (contracts/granted-scopes.
       expect(fake.requests).toHaveLength(0);
       expect(decryptSpy).not.toHaveBeenCalled();
     });
+  });
+
+  describe("the engagement claim agrees with scopePermissionFor over declared scopes × grant state (contracts/scope-permission.md §3, FR-023)", () => {
+    for (const [scopeCountLabel, required] of Object.entries(REQUIRED_SETS)) {
+      for (const kind of ["null", "empty", "partial", "exact", "superset"] as const) {
+        it(`${scopeCountLabel} declared readScopes, granted=${kind}: claimed iff scopePermissionFor returns ok`, async () => {
+          const ctx = await createProjectWithMembers();
+          const repos = forSchedulerProject(ctx.project.id);
+          const providerKey = `engagement-matrix-${scopeCountLabel}-${kind}`;
+          const granted = grantedFor(kind, required);
+          const account = await repos.accounts.upsertConnected({
+            providerKey,
+            displayName: "Engagement matrix account",
+            externalAccountId: `ext-${providerKey}`,
+            settings: {},
+            credentialsEncrypted: null,
+            credentialsExpiresAt: null,
+            connectedByUserId: null,
+            grantedScopes: granted ?? undefined,
+          });
+
+          const rule: EngagementProviderRule = { providerKey, readScopes: required };
+          const claimed = await claimDueEngagementReads({ now: NOW, limit: 100, leaseMs: 60_000, minIntervalMs: 0, providers: [rule] });
+          const wasClaimed = claimed.some((c) => c.account.id === account.id);
+
+          const permission = scopePermissionFor({
+            requiredScopes: required,
+            grantedScopes: granted,
+            requestedScopes: required,
+            cannotWiden: null,
+            missingScopes: { reason: "Reconnect to grant engagement access." },
+          });
+
+          expect(wasClaimed).toBe(permission.kind === "ok");
+        });
+      }
+    }
   });
 });
