@@ -134,18 +134,18 @@ target, is excluded from first-engagement, and reports a zero same-post count.
 *No application code changes — this story proves existing behaviour (research.md §2.1-§2.3) and
 fixes any defect proving it reveals.*
 
-- [ ] T016 [P] [US2] Write `tests/integration/engagement/parentless-ingest.test.ts`: run the real
+- [X] T016 [P] [US2] Write `tests/integration/engagement/parentless-ingest.test.ts`: run the real
   engagement-read section over a mock page carrying one parentless mention, one parented reply
   resolving to a published target, and one reply whose parent id matches none of the brand's posts,
   all in the same page; read all three rows back from `engagement_items` and assert the mention has
   `parent_external_id`, `parent_post_id` and `parent_post_target_id` all null (FR-017), the resolved
   reply has all three set (FR-021), the unresolved reply has `parent_external_id` set and both post
   columns null (FR-022), and the parented rows are undisturbed by the parentless one (FR-024)
-- [ ] T017 [P] [US2] Write `tests/integration/engagement/same-post-count.test.ts`: store three
+- [X] T017 [P] [US2] Write `tests/integration/engagement/same-post-count.test.ts`: store three
   parentless mentions with ascending `said_at` and assert the oldest reports
   `newerOnSameParent === 0` (FR-019, not a count of the other two); store two parented replies on one
   target and assert the older one reports `1`
-- [ ] T018 [US2] Edit `tests/integration/insights/first-engagement.test.ts`: publish a target, store
+- [X] T018 [US2] Edit `tests/integration/insights/first-engagement.test.ts`: publish a target, store
   a parentless mention whose `said_at` is after publish, run `recordFirstEngagement`, assert
   `exact_first_at` and `bound_before_at` are null and `firstEngagementFigure` reports `none_yet` or
   `not_examined` (FR-018, SC-003); store a parented reply on the same target in the same run and

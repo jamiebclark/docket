@@ -172,6 +172,78 @@ describe("recordFirstEngagement (US6, contracts/first-engagement.md)", () => {
     expect(afterPrune?.exactFirstAt).toEqual(saidAt);
   });
 
+  it("a parentless mention is never the exact figure; a parented reply on the same run is (US2, FR-018, FR-021, SC-003)", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    const publishedAt = new Date("2026-01-03T12:00:00.000Z");
+    const target = await publish(env, account.id, publishedAt);
+
+    const mentionSaidAt = new Date(publishedAt.getTime() + 5 * 60_000);
+    await env.scope.engagementItems.insertIfAbsent({
+      socialAccountId: account.id,
+      providerKey: "mock",
+      kind: "mention",
+      externalId: `mention-${randomUUID()}`,
+      text: "no parent here",
+      authorDisplayName: null,
+      authorHandle: null,
+      authorExternalId: null,
+      authorUrl: null,
+      authorIdentityStable: false,
+      saidAt: mentionSaidAt,
+      ingestedAt: new Date(),
+      parentExternalId: null,
+      parentPostTargetId: null,
+    });
+
+    await recordFirstEngagement(config(), new Date());
+
+    const afterMention = await row(env.project.id, target.id);
+    expect(afterMention?.exactFirstAt).toBeNull();
+    expect(afterMention?.boundBeforeAt).toBeNull();
+    const mentionFigure = firstEngagementFigure({
+      publishedAt,
+      exactFirstAt: afterMention?.exactFirstAt ?? null,
+      boundBeforeAt: afterMention?.boundBeforeAt ?? null,
+      boundAfterAt: afterMention?.boundAfterAt ?? null,
+      scannedThrough: afterMention?.scannedThrough ?? null,
+      frozenReason: null,
+    });
+    expect(["none_yet", "not_examined"]).toContain(mentionFigure.kind);
+
+    const replySaidAt = new Date(publishedAt.getTime() + 10 * 60_000);
+    await env.scope.engagementItems.insertIfAbsent({
+      socialAccountId: account.id,
+      providerKey: "mock",
+      kind: "reply",
+      externalId: `reply-${randomUUID()}`,
+      text: "nice post",
+      authorDisplayName: null,
+      authorHandle: null,
+      authorExternalId: null,
+      authorUrl: null,
+      authorIdentityStable: false,
+      saidAt: replySaidAt,
+      ingestedAt: new Date(),
+      parentExternalId: null,
+      parentPostTargetId: target.id,
+    });
+
+    await recordFirstEngagement(config(), new Date());
+
+    const afterReply = await row(env.project.id, target.id);
+    expect(afterReply?.exactFirstAt).toEqual(replySaidAt);
+    const replyFigure = firstEngagementFigure({
+      publishedAt,
+      exactFirstAt: afterReply!.exactFirstAt,
+      boundBeforeAt: afterReply!.boundBeforeAt,
+      boundAfterAt: afterReply!.boundAfterAt,
+      scannedThrough: afterReply!.scannedThrough,
+      frozenReason: null,
+    });
+    expect(replyFigure).toEqual({ kind: "exact", afterMs: 10 * 60_000 });
+  });
+
   it("a later, higher snapshot does not move the recorded bound (US6.8, FR-043)", async () => {
     const env = await postsEnv();
     const account = await env.account({});
