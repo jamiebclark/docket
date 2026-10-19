@@ -4119,3 +4119,33 @@ section does should run that section, not a whole tick:
 that way, and hunt 39195627319 shows `refresh.test.ts` gone from the report entirely after the first.
 `jobs/budget.test.ts` had been doing it this way all along. The tick wrapper is usually incidental to
 what these tests assert, and it is the part exposed to the contention.
+
+## 084 — G40, declaring an engagement read's scopes and answering `cannotWiden` per surface (2026-10-19)
+
+- **The declaration and `cannotWiden` ship as one change, not two.** They answer one question from two
+  sides: may this account's comments be read, and if not, can reconnecting fix it? Shipping the
+  eligibility gate alone would let the UI tell a member "not granted" on an install whose dialog cannot
+  be widened (a login configuration that does not list the permission), sending them round a reconnect
+  loop that cannot grant anything — the precise failure 081 was built to avoid for insights, and the
+  reason this entry's Constraint 6 insists engagement get the same treatment rather than shipping the
+  half that is easier to test.
+- **The pure decision and the SQL predicate are generalised, not duplicated, with aliases kept.**
+  `insightsPermissionFor`/`InsightsPermission` move verbatim to `scopePermissionFor`/`ScopePermission`
+  in `src/lib/scope-permission.ts`, and `eligible()`'s inline SQL in the insights claim becomes
+  `accountHoldsScopes`/`accountMissingScopes` in `src/server/dal/scope-predicates.ts`, reused by both
+  the insights and engagement claims. `src/lib/insights/eligibility.ts` keeps exporting the old names as
+  a two-line alias so no caller outside this entry has to change, and 081's test suite is the proof: it
+  passes with zero edits (Phase 5, T021).
+- **Two deployment flags, not one shared one.** `META_ENGAGEMENT_SCOPES` and `THREADS_ENGAGEMENT_SCOPES`
+  are new flags, separate from their insights twins — turning on insights scopes must not silently widen
+  the engagement dialog too, and an operator who wants comments read but not metrics captured (or the
+  reverse) needs to be able to say so. Each mirrors its insights sibling's parsing and failure shape
+  exactly, so there is one pattern to learn, not two.
+- **Reversal.** Delete `readScopes`/`missingReadScopes` from the `engagement` declaration and
+  `assertEngagementDeclaration`'s last three checks; restore `claimDueEngagementReads`'s
+  `providerKeys: readonly string[]` parameter; delete `countAccountsMissingEngagementScopes` and
+  `accountsSkippedNoPermission`; drop the `surface` argument from `cannotWiden`; delete both env flags
+  and the engagement entries from both connect groups' `declared`. Nothing persisted needs undoing —
+  the gate reads `granted_scopes`, it writes nothing new. `src/lib/scope-permission.ts` and
+  `src/server/dal/scope-predicates.ts` stay regardless: they are the insights code, relocated, and 081
+  depends on them under their aliases.

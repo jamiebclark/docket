@@ -323,27 +323,27 @@ silently claiming less and still reporting success.
 
 **Purpose**: The documentation FR-042 to FR-047 ask for, beyond what T007–T009 and T028 already cover.
 
-- [ ] T041 [P] Update `docs/engagement.md`'s supported-platforms table to state, per Meta surface, what
+- [X] T041 [P] Update `docs/engagement.md`'s supported-platforms table to state, per Meta surface, what
       the read will need per §2 (naming the permission where confirmed, saying plainly where it is not),
       continuing to state that nothing is read on any Meta surface yet; add the Meta/Threads entries to
       its "Platform permissions" section describing the opt-in flags, the login-configuration
       limitation, and that a missing permission never affects publishing (FR-042, FR-043)
-- [ ] T042 [P] Finish documenting both flags in `docs/meta-setup.md` beside the existing insights opt-in
+- [X] T042 [P] Finish documenting both flags in `docs/meta-setup.md` beside the existing insights opt-in
       (not replacing it): where to add the permission in the Meta and Threads dashboards, what the flag
       changes, that it affects only the next connect/reconnect, and the login-configuration caveat
       (FR-044)
-- [ ] T043 [P] Document `META_ENGAGEMENT_SCOPES` and `THREADS_ENGAGEMENT_SCOPES` in `.env.example`: both
+- [X] T043 [P] Document `META_ENGAGEMENT_SCOPES` and `THREADS_ENGAGEMENT_SCOPES` in `.env.example`: both
       commented and `false`, their effect, the login-configuration caveat, and a pointer to
       `docs/meta-setup.md`, in the same shape as the existing insights flags (FR-045)
-- [ ] T044 [P] Update `docs/adding-a-provider.md` §20 to describe the new declaration fields and the
+- [X] T044 [P] Update `docs/adding-a-provider.md` §20 to describe the new declaration fields and the
       claim-level guarantee; fix the mis-annotation of the engagement `unavailable` field as "(G55)" to
       note it is 077's FR-055 and never was a generic change; add **G40** to the "Generic hooks index"
       (today's last row is G39) naming both halves and the files they touch (FR-017, FR-046)
-- [ ] T045 [P] Add a `docs/decisions.md` entry for G40: why the declaration and `cannotWiden` ship as one
+- [X] T045 [P] Add a `docs/decisions.md` entry for G40: why the declaration and `cannotWiden` ship as one
       change, the generalisation of the pure decision and SQL predicate with aliases kept, the two env
       flags and their deployment-flag rationale, and how to reverse all of it (plan.md's three judgement
       calls; contracts/engagement-read-scopes.md §6)
-- [ ] T046 Run the full suite once: `pnpm lint && pnpm typecheck && pnpm test`, then `pnpm db:check`
+- [X] T046 Run the full suite once: `pnpm lint && pnpm typecheck && pnpm test`, then `pnpm db:check`
       (confirms `drizzle/0047_salty_owl.sql` is still the newest file — no schema change), then
       `pnpm build` (two pages changed) < /dev/null
 
