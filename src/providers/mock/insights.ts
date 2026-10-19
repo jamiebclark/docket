@@ -28,7 +28,7 @@ function stopResult(
     case "fatal_error":
       return { kind: "fatal_error", error: "Mock fatal insights failure." };
     case "unavailable":
-      return { kind: "unavailable", reason: "Mock insights set to unavailable for this account." };
+      return { kind: "unavailable", reason: "Mock insights set to unavailable for this account.", docsPath: settings.insightsUnavailableDocsPath ?? undefined };
   }
 }
 
@@ -39,12 +39,25 @@ function stopResult(
  */
 export function mockInsightsRuleFor(settings: MockSettings): {
   providerKey: "mock";
-  requiredScopes: readonly string[];
+  postScopes: readonly string[];
+  accountScopes: readonly string[];
+  postIdSource: "externalId" | "publicPostId";
+  missingPostId: { reason: string; docsPath?: string } | null;
+  postMetricsDeclared: boolean;
+  accountMetricsDeclared: boolean;
   ephemeralPostTypes: readonly { postType: string; lifetimeMs: number }[];
 } {
   return {
     providerKey: "mock",
-    requiredScopes: settings.insightsRequiredScopes,
+    postScopes: settings.insightsPostScopes,
+    accountScopes: settings.insightsAccountScopes,
+    postIdSource: settings.insightsPostIdSource,
+    missingPostId:
+      settings.insightsPostIdSource === "publicPostId"
+        ? { reason: "This target has no queryable public post id.", docsPath: settings.insightsMissingPostIdDocsPath ?? undefined }
+        : null,
+    postMetricsDeclared: true,
+    accountMetricsDeclared: true,
     ephemeralPostTypes:
       settings.insightsEphemeralLifetimeMs !== null ? [{ postType: "story", lifetimeMs: settings.insightsEphemeralLifetimeMs }] : [],
   };
@@ -70,13 +83,13 @@ function accountMetricsFor(settings: MockSettings): Record<string, number> {
 export const mockInsights: InsightsSupport<MockSettings> = {
   declaration: {
     post: [
-      { key: "likeCount", label: "Likes" },
-      { key: "repostCount", label: "Reposts" },
-      { key: "viewCount", label: "Views" },
+      { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "repostCount", label: "Reposts", shape: { kind: "cumulative" } },
+      { key: "viewCount", label: "Views", shape: { kind: "cumulative" } },
     ],
     account: [
-      { key: "followersCount", label: "Followers" },
-      { key: "postsCount", label: "Posts" },
+      { key: "followersCount", label: "Followers", shape: { kind: "cumulative" } },
+      { key: "postsCount", label: "Posts", shape: { kind: "cumulative" } },
     ],
     maxPostsPerRead: 3,
     readBudget: { count: 1000, windowSeconds: 3_600 },

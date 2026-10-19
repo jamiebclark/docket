@@ -8,9 +8,23 @@ describe("parsePinterestEnv", () => {
 
   it("configures with both valid values", () => {
     expect(parsePinterestEnv({ PINTEREST_CLIENT_ID: "ID", PINTEREST_CLIENT_SECRET: "SECRET" })).toEqual({
-      config: { clientId: "ID", clientSecret: "SECRET" },
+      config: { clientId: "ID", clientSecret: "SECRET", insightsScopes: false },
       issues: [],
     });
+  });
+
+  it("parses PINTEREST_INSIGHTS_SCOPES with its documented default", () => {
+    expect(
+      parsePinterestEnv({ PINTEREST_CLIENT_ID: "ID", PINTEREST_CLIENT_SECRET: "SECRET", PINTEREST_INSIGHTS_SCOPES: "true" }).config
+        ?.insightsScopes,
+    ).toBe(true);
+    expect(parsePinterestEnv({ PINTEREST_CLIENT_ID: "ID", PINTEREST_CLIENT_SECRET: "SECRET" }).config?.insightsScopes).toBe(false);
+  });
+
+  it("rejects a non-boolean PINTEREST_INSIGHTS_SCOPES as an environment issue, not a crash", () => {
+    const r = parsePinterestEnv({ PINTEREST_CLIENT_ID: "ID", PINTEREST_CLIENT_SECRET: "SECRET", PINTEREST_INSIGHTS_SCOPES: "yes" });
+    expect(r.config?.insightsScopes).toBe(false);
+    expect(r.issues).toEqual([{ name: "PINTEREST_INSIGHTS_SCOPES", reason: "must be true or false" }]);
   });
 
   it("names the missing variable when only one of the pair is set, never a value", () => {

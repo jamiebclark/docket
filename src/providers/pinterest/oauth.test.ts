@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PinterestConfig } from "./config";
 import { authorizationUrl, exchangeToken, refreshToken } from "./oauth";
 
-const cfg: PinterestConfig = { clientId: "client-123", clientSecret: "secret-456" };
+const cfg: PinterestConfig = { clientId: "client-123", clientSecret: "secret-456", insightsScopes: false };
 
 describe("authorizationUrl", () => {
   it("carries client_id, redirect_uri, response_type, scope and state, pure", () => {

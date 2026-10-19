@@ -1,7 +1,11 @@
 import { z } from "zod";
+import { findProvider } from "@/providers/registry";
+import { buildTargetInsightsView, type TargetInsightsView } from "@/lib/insights/panel";
 import { ForbiddenError } from "../../dal/errors";
 import type { PostRecord } from "../../dal/posts";
 import type { ProjectScope } from "../../dal/scope";
+import * as clock from "../../dal/clock";
+import { insightsPermissionForAccount } from "../accounts";
 import { targetNoteFor } from "./notes";
 import type { TargetRecord } from "../../dal/targets";
 
@@ -21,7 +25,15 @@ export interface PostListItem {
   needsDecision: boolean;
   /** Next scheduled time for live posts, else the latest published time. */
   relevantAt: Date | null;
-  targets: { id: string; accountId: string; accountName: string; status: TargetRecord["status"]; note: string | null }[];
+  targets: {
+    id: string;
+    accountId: string;
+    accountName: string;
+    providerName: string;
+    status: TargetRecord["status"];
+    note: string | null;
+    insights: TargetInsightsView;
+  }[];
 }
 
 export interface PostList {
@@ -49,6 +61,12 @@ export async function listPosts(scope: ProjectScope, input: unknown = {}): Promi
     offset: (q.page - 1) * POSTS_PAGE_SIZE,
   });
   const accounts = new Map((await scope.accounts.list()).map((a) => [a.id, a]));
+  const targetIds = rows.flatMap((r) => r.targets.map((t) => t.id));
+  const now = await clock.now();
+  const [latestSnapshots, pollStates] = await Promise.all([
+    scope.postMetricSnapshots.latestForTargets(targetIds),
+    scope.postMetricPollStates.getMany(targetIds),
+  ]);
   return {
     items: rows.map((r) => ({
       id: r.post.id,
@@ -56,13 +74,28 @@ export async function listPosts(scope: ProjectScope, input: unknown = {}): Promi
       status: r.post.status,
       needsDecision: r.needsDecision,
       relevantAt: r.relevantAt,
-      targets: r.targets.map((t) => ({
-        id: t.id,
-        accountId: t.socialAccountId,
-        accountName: accounts.get(t.socialAccountId)?.displayName ?? "Removed account",
-        status: t.status,
-        note: accounts.has(t.socialAccountId) ? targetNoteFor(accounts.get(t.socialAccountId)!.providerKey, t.postingFields) : null,
-      })),
+      targets: r.targets.map((t) => {
+        const account = accounts.get(t.socialAccountId);
+        const providerName = account ? (findProvider(account.providerKey)?.displayName ?? account.providerKey) : "";
+        return {
+          id: t.id,
+          accountId: t.socialAccountId,
+          accountName: account?.displayName ?? "Removed account",
+          providerName,
+          status: t.status,
+          note: account ? targetNoteFor(account.providerKey, t.postingFields) : null,
+          insights: buildTargetInsightsView({
+            status: t.status,
+            externalId: t.externalId,
+            declaration: (account ? findProvider(account.providerKey)?.insights?.declaration : undefined) ?? null,
+            providerName,
+            permission: account ? insightsPermissionForAccount(account, findProvider(account.providerKey), "post") : null,
+            snapshot: (latestSnapshots.get(t.id) as { capturedAt: Date; metrics: Record<string, unknown> } | undefined) ?? null,
+            pollState: pollStates.get(t.id) ?? null,
+            now,
+          }),
+        };
+      }),
     })),
     total,
     page: q.page,

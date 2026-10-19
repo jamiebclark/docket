@@ -2,6 +2,7 @@
 // The service (src/server/services/overview.ts) gathers OverviewFacts; the page renders OverviewView.
 
 import { docsUrl } from "@/lib/docs";
+import type { TargetInsightsView } from "@/lib/insights/panel";
 import { roleLabel } from "@/lib/roles/roles";
 import { joinNames } from "@/lib/roles/names";
 import { hasActiveSlot } from "@/lib/roles/slots";
@@ -39,6 +40,20 @@ export type UpcomingPost = {
   accountNames: string[];
 };
 
+export type RecentPublishedTarget = {
+  id: string;
+  accountName: string;
+  providerName: string;
+  insights: TargetInsightsView;
+};
+
+export type RecentPublishedPost = {
+  id: string;
+  excerpt: string;
+  publishedAt: Date | null;
+  targets: RecentPublishedTarget[];
+};
+
 export type OverviewFacts = {
   project: { slug: string; name: string; timezone: string };
   viewer: {
@@ -58,6 +73,7 @@ export type OverviewFacts = {
   accounts: OverviewAccount[];
   postCounts: Partial<Record<PostStatusKey, number>>;
   upcoming: UpcomingPost[];
+  recentPublished: RecentPublishedPost[];
   reviewCount: number;
   needsDecisionCount: number;
   ai: { configured: boolean; voiceProfiles: number | null };
@@ -124,6 +140,7 @@ export type OverviewView = {
   checklist: ChecklistView | null;
   needsAttention: AttentionItem[] | null;
   comingUp: { kind: "list"; items: UpcomingPost[] } | Empty;
+  recentPublished: { kind: "list"; items: RecentPublishedPost[] } | Empty;
   accounts: { kind: "list"; rows: AccountRow[] } | Empty;
   postsByStatus:
     | { kind: "counts"; items: { label: string; count: number; href: string }[] }
@@ -336,6 +353,12 @@ export function deriveComingUp(facts: OverviewFacts): OverviewView["comingUp"] {
   return { kind: "empty", message: `No scheduled posts yet. Connect an account first. Ask ${names(facts, "or")} to connect one.`, action: null };
 }
 
+/** Recent published posts with their latest per-target numbers (FR-020). Never a cross-platform total. */
+export function deriveRecentPublished(facts: OverviewFacts): OverviewView["recentPublished"] {
+  if (facts.recentPublished.length > 0) return { kind: "list", items: facts.recentPublished };
+  return { kind: "empty", message: "No published posts yet.", action: null };
+}
+
 export function deriveAccounts(facts: OverviewFacts): OverviewView["accounts"] {
   const base = `/p/${facts.project.slug}`;
   const { can } = facts.viewer;
@@ -415,7 +438,9 @@ export function derivePostsByStatus(facts: OverviewFacts): OverviewView["postsBy
   };
 }
 
-export function deriveOverview(facts: OverviewFacts): Pick<OverviewView, "title" | "description" | "primaryAction" | "checklist" | "needsAttention" | "comingUp" | "accounts" | "postsByStatus" | "contentTools"> {
+export function deriveOverview(
+  facts: OverviewFacts,
+): Pick<OverviewView, "title" | "description" | "primaryAction" | "checklist" | "needsAttention" | "comingUp" | "recentPublished" | "accounts" | "postsByStatus" | "contentTools"> {
   const base = `/p/${facts.project.slug}`;
   const { can } = facts.viewer;
   // No account yet: the one primary action is connecting one, and someone who can't gets none rather than a dead end.
@@ -434,6 +459,7 @@ export function deriveOverview(facts: OverviewFacts): Pick<OverviewView, "title"
     checklist: deriveChecklist(facts),
     needsAttention: deriveNeedsAttention(facts),
     comingUp: deriveComingUp(facts),
+    recentPublished: deriveRecentPublished(facts),
     accounts: deriveAccounts(facts),
     postsByStatus: derivePostsByStatus(facts),
     contentTools: deriveContentTools(facts),

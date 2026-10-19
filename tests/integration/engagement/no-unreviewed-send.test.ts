@@ -81,10 +81,24 @@ describe("no path to an unreviewed send (SC-003)", () => {
     expect(exportedFunctionNames).toContain("dismissItems");
   });
 
-  it("no API operation and no MCP tool mentions engagement", () => {
+  it("no API operation and no MCP tool exposes the engagement inbox", () => {
+    // The operation registry must not mention engagement at all: `OPERATIONS` feeds the router, the
+    // OpenAPI document and the MCP tool list together, so an entry here is a live surface.
     const operationsSource = readFileSync("src/server/api/operations/index.ts", "utf8");
     expect(operationsSource).not.toMatch(/engagement/i);
+
+    // `schemas.ts` is checked for the inbox's own nouns rather than the word "engagement". 083's
+    // time-to-first-engagement is a read-only figure about how quickly people replied, named for
+    // engagement but reaching none of its write machinery; banning the substring outright flagged
+    // it, which is a false positive on a guard that has to stay sharp.
     const schemasSource = readFileSync("src/lib/api/schemas.ts", "utf8");
-    expect(schemasSource).not.toMatch(/engagement/i);
+    expect(schemasSource).not.toMatch(/engagement(item|draft|reply|send|claim)/i);
+    expect(schemasSource).not.toMatch(/\b(sendReply|unreviewed|needs_review|approveDraft)\b/i);
+
+    // And every remaining mention is the first-engagement read, not something new that slipped in.
+    const mentions = schemasSource.split("\n").filter((line) => /engagement/i.test(line));
+    for (const line of mentions) {
+      expect(line, `unexpected engagement mention in schemas.ts: ${line.trim()}`).toMatch(/FirstEngagement/);
+    }
   });
 });

@@ -22,6 +22,14 @@ import {
   type TikTokState,
 } from "./state";
 
+/** The same guard the `public_post_id` column CHECK and the backfill apply. */
+export function plausiblePublicPostId(v: unknown): string | null {
+  if (typeof v !== "string" && typeof v !== "number") return null;
+  const s = String(v);
+  if (s.length === 0 || s.length > 64 || /\s/.test(s)) return null;
+  return s;
+}
+
 const fatal = (error: string, summary?: AttemptSummary): StepResult => ({ kind: "fatal_error", error, ...(summary ? { summary } : {}) });
 const retry = (error: string, extra: { notBefore?: Date; credentialsExpired?: boolean } = {}): StepResult => ({ kind: "retryable_error", error, ...extra });
 
@@ -435,8 +443,15 @@ async function checkStatus(e: Env, raw: unknown): Promise<StepResult> {
   const status = typeof data.status === "string" ? data.status : "";
   const summary: AttemptSummary = { request, response: { status: status.slice(0, 40) } };
   if (status === "PUBLISH_COMPLETE") {
-    const ids = Array.isArray(data.publicaly_available_post_id) ? data.publicaly_available_post_id.map((id) => String(id).slice(0, 40)).slice(0, 10) : [];
-    return { kind: "done", externalId: s.publishId, summary: { request, response: { status, ...(ids.length ? { publicPostIds: ids } : {}) } } };
+    const rawIds = Array.isArray(data.publicaly_available_post_id) ? data.publicaly_available_post_id : [];
+    const ids = rawIds.map((id) => String(id).slice(0, 40)).slice(0, 10);
+    const publicPostId = plausiblePublicPostId(rawIds[0]);
+    return {
+      kind: "done",
+      externalId: s.publishId,
+      ...(publicPostId ? { publicPostId } : {}),
+      summary: { request, response: { status, ...(ids.length ? { publicPostIds: ids } : {}) } },
+    };
   }
   if (status === "FAILED") {
     const reason = typeof data.fail_reason === "string" ? data.fail_reason : null;

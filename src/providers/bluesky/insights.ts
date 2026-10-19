@@ -109,15 +109,15 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<BlueskySettings
 export const blueskyInsights: InsightsSupport<BlueskySettings> = {
   declaration: {
     post: [
-      { key: "likeCount", label: "Likes" },
-      { key: "repostCount", label: "Reposts" },
-      { key: "replyCount", label: "Replies" },
-      { key: "quoteCount", label: "Quotes" },
+      { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "repostCount", label: "Reposts", shape: { kind: "cumulative" } },
+      { key: "replyCount", label: "Replies", shape: { kind: "cumulative" } },
+      { key: "quoteCount", label: "Quotes", shape: { kind: "cumulative" } },
     ],
     account: [
-      { key: "followersCount", label: "Followers" },
-      { key: "followsCount", label: "Following" },
-      { key: "postsCount", label: "Posts" },
+      { key: "followersCount", label: "Followers", shape: { kind: "cumulative" } },
+      { key: "followsCount", label: "Following", shape: { kind: "cumulative" } },
+      { key: "postsCount", label: "Posts", shape: { kind: "cumulative" } },
     ],
     maxPostsPerRead: 25, // the lexicon's own maxLength (FR-053)
     readBudget: { count: 1_666, windowSeconds: 3_600 }, // interim, UNVERIFIED (research.md §3)

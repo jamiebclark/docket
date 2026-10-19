@@ -10,6 +10,41 @@ const baseEnv = () => {
   vi.stubEnv("PINTEREST_CLIENT_SECRET", "client-secret");
 };
 
+describe("pinterestConnectGroup.authorizationUrl", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("with PINTEREST_INSIGHTS_SCOPES unset, is byte-for-byte today's literal (FR-027)", () => {
+    baseEnv();
+    const url = pinterestConnectGroup.authorizationUrl({ state: "st8", redirectUri: "https://example.com/cb" });
+    expect(url).toBe(
+      "https://www.pinterest.com/oauth/?client_id=client-id&redirect_uri=https%3A%2F%2Fexample.com%2Fcb&response_type=code&scope=user_accounts%3Aread%2Cboards%3Aread%2Cpins%3Awrite&state=st8",
+    );
+  });
+
+  it("with PINTEREST_INSIGHTS_SCOPES=true, carries today's scopes plus pins:read (FR-027)", () => {
+    baseEnv();
+    vi.stubEnv("PINTEREST_INSIGHTS_SCOPES", "true");
+    const url = new URL(pinterestConnectGroup.authorizationUrl({ state: "st8", redirectUri: "https://example.com/cb" }));
+    expect(url.searchParams.get("scope")).toBe("user_accounts:read,boards:read,pins:write,pins:read");
+  });
+
+  it("with PINTEREST_INSIGHTS_SCOPES=false, is byte-identical to today's literal (FR-027)", () => {
+    baseEnv();
+    vi.stubEnv("PINTEREST_INSIGHTS_SCOPES", "false");
+    const url = new URL(pinterestConnectGroup.authorizationUrl({ state: "st8", redirectUri: "https://example.com/cb" }));
+    expect(url.searchParams.get("scope")).toBe("user_accounts:read,boards:read,pins:write");
+  });
+});
+
+describe("pinterestConnectGroup.optionalScopes", () => {
+  it("declares pins:read, requested only when PINTEREST_INSIGHTS_SCOPES is on (FR-027)", () => {
+    expect(pinterestConnectGroup.optionalScopes?.declared).toEqual([{ scope: "pins:read", purpose: "Read a pin's analytics (impressions, clicks, saves)" }]);
+    const base = { PINTEREST_CLIENT_ID: "client-id", PINTEREST_CLIENT_SECRET: "client-secret" };
+    expect(pinterestConnectGroup.optionalScopes?.requested(base)).toEqual([]);
+    expect(pinterestConnectGroup.optionalScopes?.requested({ ...base, PINTEREST_INSIGHTS_SCOPES: "true" })).toEqual(["pins:read"]);
+  });
+});
+
 describe("pinterestConnectGroup.exchangeCode", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

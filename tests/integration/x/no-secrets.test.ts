@@ -13,13 +13,18 @@ import { publishAttempts } from "../../../src/server/db/schema/attempts";
 import { connectAttempts } from "../../../src/server/db/schema/connect";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
 import { postTargets } from "../../../src/server/db/schema/posts";
+import { postMetricPollStates, postMetricSnapshots } from "../../../src/server/db/schema/insights";
 import { pkceVerifier } from "../../../src/providers/x/pkce";
+import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { runTick } from "../../../src/server/scheduler";
 import { runTokenRefresh } from "../../../src/server/scheduler/token-refresh";
 import * as connect from "../../../src/server/services/connect";
+import { encryptCredentials } from "../../../src/server/services/accounts";
 import { closeDb, testDb } from "../../helpers/db";
 import { sessionFor } from "../../helpers/connect-group";
 import { createFakeX, tokenReply } from "../../helpers/fake-x";
+import { createProjectWithMembers } from "../../helpers/factories";
+import { atTime } from "../../helpers/clock";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
@@ -103,6 +108,47 @@ describe("X secrets never leave the encrypted column (SC-008)", () => {
     expect(fake.callsTo("POST", "/2/tweets").length).toBeGreaterThan(0);
     for (const secret of [CLIENT_SECRET, CODE, ACCESS1, REFRESH1, ACCESS2, REFRESH2, state, verifier]) {
       expect(haystack, `leaked ${secret.slice(0, 8)}…`).not.toContain(secret);
+    }
+  });
+
+  it("keeps a token planted in a scripted insights error out of the snapshot row, last_error and unavailable_reason (FR-046)", async () => {
+    vi.stubEnv("X_INSIGHTS_ENABLED", "true");
+    const INSIGHTS_ACCESS = "NS-INSIGHTS-ACCESS-9900";
+    const INSIGHTS_REFRESH = "NS-INSIGHTS-REFRESH-9900";
+    fake.secrets(CLIENT_SECRET, CODE, ACCESS1, REFRESH1, ACCESS2, REFRESH2, INSIGHTS_ACCESS, INSIGHTS_REFRESH);
+
+    const ctx = await createProjectWithMembers();
+    const projectId = ctx.project.id;
+    const repos = forSchedulerProject(projectId);
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "x",
+      displayName: "Insights account",
+      externalAccountId: "x-insights-ns",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
+    });
+    const now = new Date();
+    const credentials = { v: 1, accessToken: INSIGHTS_ACCESS, refreshToken: INSIGHTS_REFRESH, accessExpiresAt: now.getTime() + 3_600_000, refreshIssuedAt: now.getTime() };
+    await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, credentials), new Date(now.getTime() + 180 * 86_400_000));
+    const post = await repos.posts.insert({ baseText: "Hello" });
+    const [target] = await repos.targets.insertMany([{ postId: post.id, socialAccountId: account.id }]);
+    const publishedAt = new Date(now.getTime() - 2 * 3_600_000);
+    await repos.targets.update(target!.id, { status: "published", externalId: "1001", publishedAt });
+
+    fake.on("GET", "/2/tweets", { kind: "problem", status: 403, title: `Forbidden for ${INSIGHTS_ACCESS}`, detail: `token ${INSIGHTS_REFRESH} is not permitted` });
+    await atTime(now, () => runTick(tickConfig({})));
+
+    const snapshotRows = await testDb().select().from(postMetricSnapshots).where(eq(postMetricSnapshots.projectId, projectId));
+    const pollStateRows = await testDb().select().from(postMetricPollStates).where(eq(postMetricPollStates.projectId, projectId));
+    const dump = JSON.stringify([snapshotRows, pollStateRows]);
+    expect(dump).not.toContain(INSIGHTS_ACCESS);
+    expect(dump).not.toContain(INSIGHTS_REFRESH);
+    for (const l of logged) {
+      expect(l).not.toContain(INSIGHTS_ACCESS);
+      expect(l).not.toContain(INSIGHTS_REFRESH);
     }
   });
 });

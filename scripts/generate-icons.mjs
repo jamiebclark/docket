@@ -50,6 +50,7 @@ const ICONS = {
   slidersHorizontal: "sliders-horizontal",
   overview: "layout-dashboard",
   circle: "circle",
+  insights: "chart-line",
 };
 
 /** Provider key → Simple Icons slug. The mock provider has no brand; it uses the "flask" UI icon. */

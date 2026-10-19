@@ -78,13 +78,13 @@ Env vars are validated at startup with Zod and documented in `.env.example`.
   for interactivity. Follow the `docket-ui` skill for UI work.
 - Out of scope until a spec says otherwise: video, stories (except Instagram
   Stories, 078 — Facebook Page Stories stay out of scope), reels, analytics
-  (except per-post and per-account metric capture, 080 — charts, trends and
-  comparisons stay out of scope), other platforms, billing, public sign-up,
-  Netlify. Inbox/comments shipped in 077 (Bluesky only); see
-  `docs/engagement.md`. Post and account insights shipped in 080 (Bluesky
-  only) and extended in 081 to Instagram, Facebook Pages and (where
-  confirmed) Threads, each gated on an opt-in reconnect; see
-  `docs/insights.md`.
+  (except per-post and per-account metric capture, 080; charts, trends and
+  comparisons, 083), other platforms, billing, public sign-up, Netlify.
+  Inbox/comments shipped in 077 (Bluesky only); see `docs/engagement.md`.
+  Post and account insights shipped in 080 (Bluesky only) and extended in
+  081 to Instagram, Facebook Pages and (where confirmed) Threads, each
+  gated on an opt-in reconnect; see `docs/insights.md`. Insights charts,
+  trends and comparisons shipped in 083; see `docs/insights.md`.
 
 ## Development Workflow
 
@@ -150,4 +150,4 @@ on product behaviour; `docs/research/` wins on external facts. Amendments are
 made by editing this file in a `docs(constitution):` commit with a version
 bump.
 
-**Version**: 1.8.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-18
+**Version**: 1.9.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-18

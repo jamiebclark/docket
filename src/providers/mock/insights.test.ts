@@ -70,15 +70,53 @@ describe("mock insights fixture", () => {
     expect(mockInsights.declaration.post.map((k) => k.key)).toEqual(["likeCount", "repostCount", "viewCount"]);
     expect(mockInsights.declaration.account.map((k) => k.key)).toEqual(["followersCount", "postsCount"]);
 
-    // insightsRequiredScopes / insightsEphemeralLifetimeMs drive mockInsightsRuleFor
-    const parsed = mockSettingsSchema.parse({ insightsRequiredScopes: ["read_insights"], insightsEphemeralLifetimeMs: 86_400_000 });
+    // insightsPostScopes / insightsAccountScopes / insightsEphemeralLifetimeMs drive mockInsightsRuleFor
+    const parsed = mockSettingsSchema.parse({
+      insightsPostScopes: ["read_insights"],
+      insightsAccountScopes: ["read_account_insights"],
+      insightsEphemeralLifetimeMs: 86_400_000,
+    });
     expect(mockInsightsRuleFor(parsed)).toEqual({
       providerKey: "mock",
-      requiredScopes: ["read_insights"],
+      postScopes: ["read_insights"],
+      accountScopes: ["read_account_insights"],
+      postIdSource: "externalId",
+      missingPostId: null,
+      postMetricsDeclared: true,
+      accountMetricsDeclared: true,
       ephemeralPostTypes: [{ postType: "story", lifetimeMs: 86_400_000 }],
     });
     const bare = mockSettingsSchema.parse({});
-    expect(mockInsightsRuleFor(bare)).toEqual({ providerKey: "mock", requiredScopes: [], ephemeralPostTypes: [] });
+    expect(mockInsightsRuleFor(bare)).toEqual({
+      providerKey: "mock",
+      postScopes: [],
+      accountScopes: [],
+      postIdSource: "externalId",
+      missingPostId: null,
+      postMetricsDeclared: true,
+      accountMetricsDeclared: true,
+      ephemeralPostTypes: [],
+    });
+  });
+
+  it("082 (G35): insightsPostIdSource and insightsMissingPostIdDocsPath drive mockInsightsRuleFor's missingPostId", () => {
+    const publicPostId = mockSettingsSchema.parse({ insightsPostIdSource: "publicPostId", insightsMissingPostIdDocsPath: "tiktok-setup#insights" });
+    expect(mockInsightsRuleFor(publicPostId)).toMatchObject({
+      postIdSource: "publicPostId",
+      missingPostId: { docsPath: "tiktok-setup#insights" },
+    });
+    expect(mockInsightsRuleFor(publicPostId).missingPostId?.reason.length).toBeGreaterThan(0);
+
+    const externalId = mockSettingsSchema.parse({});
+    expect(mockInsightsRuleFor(externalId)).toMatchObject({ postIdSource: "externalId", missingPostId: null });
+  });
+
+  it("082 (FR-050): insightsUnavailableDocsPath carries a docsPath on a scripted run-time unavailable, on both surfaces", async () => {
+    const ctx = account({ insightsPostReadBehaviour: "unavailable", insightsAccountReadBehaviour: "unavailable", insightsUnavailableDocsPath: "pinterest-setup#insights" });
+    const post = await mockInsights.readPostMetrics({ ...ctx, posts: [{ externalId: "p1" }] });
+    expect(post).toMatchObject({ kind: "unavailable", docsPath: "pinterest-setup#insights" });
+    const acct = await mockInsights.readAccountMetrics(ctx);
+    expect(acct).toMatchObject({ kind: "unavailable", docsPath: "pinterest-setup#insights" });
   });
 
   it("081: insightsUnqueryableIds returns unqueryable, never metrics or gone, for the scripted id", async () => {

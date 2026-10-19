@@ -37,16 +37,47 @@ function providerWith(key: string, group: OAuthConnectGroup): SocialProvider {
     connect: { strategy: "oauth", group },
     insights: {
       ...mockProvider.insights!,
-      declaration: { ...mockProvider.insights!.declaration, requiredScopes: REQUIRED, missingScopes: MISSING_SCOPES },
+      declaration: { ...mockProvider.insights!.declaration, postScopes: REQUIRED, missingPostScopes: MISSING_SCOPES },
     },
   } as SocialProvider;
 }
 
+/** Missing both surfaces, so a single account can show two reconnect lines. */
+function providerWithBothSurfaces(key: string, group: OAuthConnectGroup): SocialProvider {
+  return {
+    ...mockProvider,
+    key,
+    displayName: `${key} (test)`,
+    connect: { strategy: "oauth", group },
+    insights: {
+      ...mockProvider.insights!,
+      declaration: {
+        ...mockProvider.insights!.declaration,
+        postScopes: REQUIRED,
+        missingPostScopes: MISSING_SCOPES,
+        accountScopes: ["needs_account_insight_scope"],
+        missingAccountScopes: { reason: "Reconnect to grant account insights access.", docsPath: "meta-setup" },
+      },
+    },
+  } as SocialProvider;
+}
+
+const askingBothGroup: OAuthConnectGroup = {
+  ...throwawayGroup,
+  key: "throwaway-asking-both",
+  optionalScopes: {
+    declared: [...REQUIRED, "needs_account_insight_scope"].map((scope) => ({ scope, purpose: "test" })),
+    requested: () => [...REQUIRED, "needs_account_insight_scope"],
+  },
+};
+
 const askedProvider = providerWith("insights-asked", askingGroup);
 const notAskedProvider = providerWith("insights-not-asked", throwawayGroup);
+const askedBothProvider = providerWithBothSurfaces("insights-asked-both", askingBothGroup);
 
 registerTestProvider(askedProvider);
 registerTestProvider(notAskedProvider);
+registerTestProvider(askedBothProvider);
 
 async function connectWith(providerKey: string, grantedScopes: readonly string[] | undefined) {
   const env = await postsEnv();
@@ -100,7 +131,7 @@ describe("accounts page: the insights-need-a-reconnect line (FR-027, US1-AS4, US
     const { env } = await connectWith("insights-not-asked", undefined);
     const [view] = await accounts.listAccounts(env.scope);
     expect(view!.status).toBe("active");
-    expect(view!.insightsPermission?.kind).toBe("not_requested");
+    expect(view!.insightsPostPermission?.kind).toBe("not_requested");
   });
 
   it("a pre-081 account (granted_scopes NULL, never asked): badge unchanged, no reconnect line, still publishes (US1-AS4)", async () => {
@@ -111,8 +142,37 @@ describe("accounts page: the insights-need-a-reconnect line (FR-027, US1-AS4, US
     expect(view!.status).toBe("active");
     expect(view!.notes).toEqual([]);
     expect(view!.publishLimit).toBeNull();
-    expect(view!.insightsPermission?.kind).toBe("not_requested");
+    expect(view!.insightsPostPermission?.kind).toBe("not_requested");
     expect(account.grantedScopes ?? null).toBeNull();
+  });
+});
+
+describe("accounts page: one reconnect line per waiting surface (G37, FR-017)", () => {
+  it("missing only the post scope: one line naming post", async () => {
+    const { env } = await connectWith("insights-asked", []);
+    const html = await renderedHtml(env);
+    expect(html).toContain("Insights need a reconnect (post)");
+    expect(html).not.toContain("Insights need a reconnect (account)");
+  });
+
+  it("missing only the account scope: one line naming account", async () => {
+    const { env } = await connectWith("insights-asked-both", [...REQUIRED]);
+    const html = await renderedHtml(env);
+    expect(html).not.toContain("Insights need a reconnect (post)");
+    expect(html).toContain("Insights need a reconnect (account)");
+  });
+
+  it("missing both: two lines, one per surface", async () => {
+    const { env } = await connectWith("insights-asked-both", []);
+    const html = await renderedHtml(env);
+    expect(html).toContain("Insights need a reconnect (post)");
+    expect(html).toContain("Insights need a reconnect (account)");
+  });
+
+  it("missing neither: no lines", async () => {
+    const { env } = await connectWith("insights-asked-both", [...REQUIRED, "needs_account_insight_scope"]);
+    const html = await renderedHtml(env);
+    expect(html).not.toContain("Insights need a reconnect");
   });
 });
 
@@ -149,8 +209,8 @@ describe("accounts page: Instagram's own Meta connect group, flag on (US3-AS2, U
       expect(html).toContain("instagram_manage_insights");
       const [view] = await accounts.listAccounts(env.scope);
       expect(view!.status).toBe("active");
-      expect(view!.insightsPermission?.kind).toBe("not_granted");
-      expect(view!.insightsPermission?.kind === "not_granted" && view!.insightsPermission.canReconnect).toBe(true);
+      expect(view!.insightsPostPermission?.kind).toBe("not_granted");
+      expect(view!.insightsPostPermission?.kind === "not_granted" && view!.insightsPostPermission.canReconnect).toBe(true);
     } finally {
       restoreEnv();
     }
@@ -170,8 +230,8 @@ describe("accounts page: Instagram's own Meta connect group, flag on (US3-AS2, U
       expect(html).toContain("Login for Business");
       expect(html).not.toContain("Reconnect ");
       const [view] = await accounts.listAccounts(env.scope);
-      expect(view!.insightsPermission?.kind).toBe("not_granted");
-      expect(view!.insightsPermission?.kind === "not_granted" && view!.insightsPermission.canReconnect).toBe(false);
+      expect(view!.insightsPostPermission?.kind).toBe("not_granted");
+      expect(view!.insightsPostPermission?.kind === "not_granted" && view!.insightsPostPermission.canReconnect).toBe(false);
     } finally {
       restoreEnv();
     }

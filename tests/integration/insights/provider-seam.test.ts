@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { listProviders } from "../../../src/providers/registry";
 
@@ -70,5 +71,62 @@ describe("provider insights seam (FR-061, SC-013)", () => {
 
   it("has no shared metric mapping table under src/providers/meta (each provider's declaration is its own)", () => {
     expect(() => readFileSync("src/providers/meta/metrics.ts", "utf8")).toThrow();
+  });
+
+  // FR-018, constitution V: TikTok's, Pinterest's and X's declared metric keys stay provider-local
+  // and disjoint from one another and from the 081 platforms, same check as above, three readers later.
+  it("declares disjoint post and account metric keys across TikTok, Pinterest and X", () => {
+    const byProvider = new Map(
+      ["tiktok", "pinterest", "x", "instagram", "facebook", "threads", "bluesky"].map((key) => {
+        const provider = listProviders().find((p) => p.key === key)!;
+        const keys = [...(provider.insights?.declaration.post ?? []), ...(provider.insights?.declaration.account ?? [])].map((m) => m.key);
+        return [key, keys] as const;
+      }),
+    );
+    const providerKeys = [...byProvider.keys()];
+    for (let i = 0; i < providerKeys.length; i++) {
+      for (let j = i + 1; j < providerKeys.length; j++) {
+        const a = byProvider.get(providerKeys[i]!)!;
+        const b = byProvider.get(providerKeys[j]!)!;
+        const overlap = a.filter((k) => b.includes(k));
+        expect(overlap, `${providerKeys[i]} and ${providerKeys[j]} must not share a declared metric key`).toEqual([]);
+      }
+    }
+  });
+
+  // constitution V: `src/providers/**` never imports from `src/server/**`. Checked for every file
+  // under the three new provider folders, not just their insights module.
+  it("imports nothing from src/server in the tiktok, pinterest and x provider folders", () => {
+    const SERVER_IMPORT = /from\s+["']((?:\.\.\/)+server\/[^"']*|@\/server\/[^"']*)["']/g;
+
+    function tsFilesUnder(dir: string): string[] {
+      const out: string[] = [];
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...tsFilesUnder(path));
+        else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) out.push(path);
+      }
+      return out;
+    }
+
+    const files = ["src/providers/tiktok", "src/providers/pinterest", "src/providers/x"].flatMap(tsFilesUnder);
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      const matches = [...source.matchAll(SERVER_IMPORT)].map((m) => m[1]);
+      expect(matches, `${file} must not import from src/server`).toEqual([]);
+    }
+  });
+
+  // G38, FR-001 to FR-005: every declared key carries a shape, and exactly these three are unknown.
+  it("gives every provider's declared keys a shape, with exactly three classified unknown", () => {
+    const unknownKeys: string[] = [];
+    for (const provider of listProviders()) {
+      for (const metric of [...(provider.insights?.declaration.post ?? []), ...(provider.insights?.declaration.account ?? [])]) {
+        expect(metric.shape, `${provider.key}'s ${metric.key} must declare a shape`).toBeDefined();
+        if (metric.shape.kind === "unknown") unknownKeys.push(metric.key);
+      }
+    }
+    expect(unknownKeys.sort()).toEqual(["monthly_views", "page_follows", "page_post_engagements"].sort());
   });
 });

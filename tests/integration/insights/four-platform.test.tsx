@@ -161,4 +161,139 @@ describe("the performance panel across Instagram, Facebook, Threads and Bluesky 
     expect(markup).not.toMatch(/\bcombined\b/i);
     expect(markup).not.toContain(">129<");
   });
+
+  /**
+   * FR-047, SC-009: the 082 readers alongside Bluesky — same independence, no cross-platform
+   * aggregation, and a metric one platform's response omitted produces no row for it.
+   */
+  it("renders four independent platform blocks for TikTok, Pinterest, X and Bluesky at once", async () => {
+    process.env.X_INSIGHTS_ENABLED = "true";
+    teardown = () => {
+      delete process.env.X_INSIGHTS_ENABLED;
+    };
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+
+    const tiktok = await repos.accounts.upsertConnected({
+      providerKey: "tiktok",
+      displayName: "TikTok Account",
+      externalAccountId: "tt-1",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["video.list", "user.info.stats"],
+    });
+    const pinterest = await repos.accounts.upsertConnected({
+      providerKey: "pinterest",
+      displayName: "Pinterest Account",
+      externalAccountId: "pin-1",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["pins:read"],
+    });
+    const x = await repos.accounts.upsertConnected({
+      providerKey: "x",
+      displayName: "X Account",
+      externalAccountId: "x-1",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["tweet.read"],
+    });
+    const bluesky = await repos.accounts.upsertConnected({
+      providerKey: "bluesky",
+      displayName: "Bluesky Account",
+      externalAccountId: "bs-2",
+      settings: { pdsUrl: "https://bsky.social" },
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+    });
+
+    const post = await repos.posts.insert({ baseText: "Hello, everywhere (four-platform)" });
+    const targets = await repos.targets.insertMany([
+      { postId: post.id, socialAccountId: tiktok.id },
+      { postId: post.id, socialAccountId: pinterest.id },
+      { postId: post.id, socialAccountId: x.id },
+      { postId: post.id, socialAccountId: bluesky.id },
+    ]);
+    const [ttTarget, pinTarget, xTarget, bsTarget] = targets;
+
+    for (const [target, externalId, publicPostId] of [
+      [ttTarget, "tt-video-1", "tt-video-1"],
+      [pinTarget, "pin-pin-1", null],
+      [xTarget, "2002", null],
+      [bsTarget, "at://bs-2/app.bsky.feed.post/1", null],
+    ] as const) {
+      await repos.targets.update(target!.id, { status: "published", externalId, publicPostId, publishedAt: NOW });
+    }
+
+    await repos.postMetricSnapshots.insertIfAbsent({
+      postTargetId: ttTarget!.id,
+      socialAccountId: tiktok.id,
+      providerKey: "tiktok",
+      capturedAt: NOW,
+      metrics: { tiktok_like_count: 50, comment_count: 4, share_count: 2, view_count: 900 },
+    });
+    await repos.postMetricSnapshots.insertIfAbsent({
+      postTargetId: pinTarget!.id,
+      socialAccountId: pinterest.id,
+      providerKey: "pinterest",
+      capturedAt: NOW,
+      metrics: { IMPRESSION: 240, PIN_CLICK: 37, SAVE: 20 }, // OUTBOUND_CLICK omitted on purpose
+    });
+    await repos.postMetricSnapshots.insertIfAbsent({
+      postTargetId: xTarget!.id,
+      socialAccountId: x.id,
+      providerKey: "x",
+      capturedAt: NOW,
+      metrics: { like_count: 11, retweet_count: 3 }, // reply_count, quote_count, bookmark_count, impression_count omitted
+    });
+    await repos.postMetricSnapshots.insertIfAbsent({
+      postTargetId: bsTarget!.id,
+      socialAccountId: bluesky.id,
+      providerKey: "bluesky",
+      capturedAt: NOW,
+      metrics: { likeCount: 7 },
+    });
+
+    const page = await asOwner(ctx.owner.id, () => PostPage({ params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) }));
+    const markup = await html(page);
+
+    // TikTok's own words and numbers.
+    expect(markup).toContain(">50<");
+    expect(markup).toContain("Comments");
+    expect(markup).toContain(">4<");
+    expect(markup).toContain("Shares");
+    expect(markup).toContain(">2<");
+    expect(markup).toContain("Views");
+    expect(markup).toContain(">900<");
+
+    // Pinterest's own words; Outbound clicks never rendered because the snapshot omitted it.
+    expect(markup).toContain("Impressions");
+    expect(markup).toContain(">240<");
+    expect(markup).toContain("Pin clicks");
+    expect(markup).toContain(">37<");
+    expect(markup).toContain("Saves");
+    expect(markup).toContain(">20<");
+    expect(markup).not.toContain("Outbound clicks");
+
+    // X's own words; the four omitted keys never render a row.
+    expect(markup).toContain(">11<");
+    expect(markup).toContain("Reposts");
+    expect(markup).toContain(">3<");
+    expect(markup).not.toContain("Bookmarks");
+
+    // Bluesky's own Likes row; no Reposts/Quotes row for it (its response never reported them).
+    expect(markup).toContain(">7<");
+
+    // No aggregate figure of any kind: no total/sum/average/combined across platforms.
+    expect(markup).not.toMatch(/\btotal\b/i);
+    expect(markup).not.toMatch(/\baverage\b/i);
+    expect(markup).not.toMatch(/\bcombined\b/i);
+  });
 });

@@ -521,6 +521,13 @@ Source: same as above.
 | `page_post_engagements` | `read_insights`, `pages_read_engagement`, `ANALYZE` task | day/week/days_28 | not stated | CONFIRMED |
 | `page_follows` | same | not stated (documented replacement for `page_fans`) | not stated | CONFIRMED |
 
+**Open period question (083, G38).** Both of these are classified `shape: "unknown"` in 083 because
+Docket's account read pins no `period` param and `page_follows` has no documented period at all —
+there is no way to say what span of time either number covers, so neither can be plotted over time.
+Pinning a `period` on the account read would resolve `page_post_engagements` (not `page_follows`,
+which names no period to pin); that is a reader change, out of scope for 083 under FR-005, and left
+for whichever later entry decides it is worth doing. See `docs/decisions.md` ("083 — G38").
+
 ### Threads media (post) insights — PARTLY CONFIRMED (not declared under FR-003 unless the implement phase confirms the official enum)
 Source: <https://developers.facebook.com/documentation/threads/insights>,
 corroborating third-party integration guides. Checked 2026-10-17.

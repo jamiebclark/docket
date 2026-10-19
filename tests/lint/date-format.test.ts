@@ -31,6 +31,9 @@ const ALLOWED = new Set([
   "src/components/ui/TimeZoneField.tsx", // "GMT+1" labels in the zone picker
   "src/lib/compose/first-post.ts", // a yyyy-mm-dd key, never displayed
   "src/lib/validation/timezone.ts", // throws on an unknown zone
+  "src/providers/pinterest/window.ts", // yyyy-mm-dd query params Pinterest's analytics API requires, never displayed
+  "src/server/dal/insights-read.ts", // a UTC day inside a grouping key, never displayed
+  "src/server/services/insights/fold.ts", // the UTC day the rollup buckets by, never displayed
 ]);
 
 function files(dir: string): string[] {

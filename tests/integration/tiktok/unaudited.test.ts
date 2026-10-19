@@ -1,4 +1,8 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { claimDuePostMetricPolls, type InsightsProviderRule } from "../../../src/server/dal/insights-claims";
+import { getDb } from "../../../src/server/db/client";
+import { postMetricPollStates } from "../../../src/server/db/schema";
+import { and, eq } from "drizzle-orm";
 import { creatorReply } from "../../helpers/fake-tiktok";
 import { closeDb } from "../../helpers/db";
 import { CREATOR, STATUS, tiktokVideoSetup, UPLOAD_PATH, UPLOAD_URL, VIDEO_INIT } from "../../helpers/tiktok-publish";
@@ -21,6 +25,32 @@ describe("unaudited TikTok app", () => {
 
     expect((await s.row()).status).toBe("published");
     expect(s.fake.callsTo("POST", VIDEO_INIT)[0]!.fields.post_info).toMatchObject({ privacy_level: "SELF_ONLY" });
+
+    // FR-012: an unaudited install's post has no public post id, so it reaches the same frozen
+    // "unqueryable" state as any other missing-id target (contracts/public-post-id.md §2, §5) —
+    // there is no separate code path for "never issued" vs. "unrecoverable".
+    const row = await s.row();
+    expect(row.externalId).toBeTruthy();
+    expect(row.publicPostId).toBeNull();
+
+    const rule: InsightsProviderRule = {
+      providerKey: "tiktok",
+      postScopes: [],
+      accountScopes: [],
+      postIdSource: "publicPostId",
+      missingPostId: { reason: "Docket cannot read this post's numbers." },
+      postMetricsDeclared: true,
+      accountMetricsDeclared: true,
+      ephemeralPostTypes: [],
+    };
+    await claimDuePostMetricPolls({ now: new Date(), limit: 100, leaseMs: 60_000, minIntervalMs: 0, providers: [rule] });
+    const [state] = await getDb()
+      .select()
+      .from(postMetricPollStates)
+      .where(and(eq(postMetricPollStates.projectId, s.projectId), eq(postMetricPollStates.postTargetId, s.target.id)));
+    expect(state?.frozenReason).toBe("unqueryable");
+    expect(state?.unavailableReason).toBe(rule.missingPostId!.reason);
+    expect(state?.nextPollAt).toBeNull();
   });
 
   it("fails at publish, posting nothing, when a non-private choice meets an unaudited app", async () => {

@@ -37,6 +37,7 @@ export const FIXTURES: Record<string, Fixture> = {
   generatePost: { body: (p) => ({ brief: "x", accountIds: [p.account.id] }) },
   listUpcomingSlots: {},
   listActivity: {},
+  getInsights: {},
   listJobs: {},
   createJob: { body: () => ({}) },
   getJob: { params: (p) => ({ jobId: p.job.id }) },

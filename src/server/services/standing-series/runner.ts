@@ -403,6 +403,7 @@ export async function processClaimedSeries(claimed: ClaimedStandingSeries, ctx: 
       provider: step.provider,
       model: step.model,
       voiceProfile: { id: voice.id, versionId: voice.versionId, version: voice.version, name: voice.name },
+      standingSeries: { id: series.id, name: series.name, occurrenceRule: series.occurrenceRule },
       inputs,
       prompt: step.prompt,
       policies: { requested: config.requested, resolved: config.resolved, decision: null },

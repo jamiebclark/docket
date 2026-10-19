@@ -52,6 +52,25 @@ describe("authorizationUrl", () => {
     vi.stubEnv("TIKTOK_CLIENT_SECRET", "");
     expect(() => tiktokConnectGroup.authorizationUrl({ state: STATE, redirectUri: REDIRECT })).toThrow(/not configured/);
   });
+
+  it("with TIKTOK_INSIGHTS_SCOPES unset, produces a byte-for-byte identical URL to today's literal (FR-019)", () => {
+    const url = tiktokConnectGroup.authorizationUrl({ state: STATE, redirectUri: REDIRECT });
+    expect(url).toBe(
+      `https://www.tiktok.com/v2/auth/authorize/?client_key=CLIENT-KEY&response_type=code&scope=user.info.basic%2Cvideo.publish&redirect_uri=${encodeURIComponent(REDIRECT)}&state=${STATE}`,
+    );
+  });
+
+  it("with TIKTOK_INSIGHTS_SCOPES=true, carries today's scopes plus exactly video.list and user.info.stats, in declaration order, nothing else (FR-019)", () => {
+    vi.stubEnv("TIKTOK_INSIGHTS_SCOPES", "true");
+    const url = new URL(tiktokConnectGroup.authorizationUrl({ state: STATE, redirectUri: REDIRECT }));
+    expect(url.searchParams.get("scope")).toBe("user.info.basic,video.publish,video.list,user.info.stats");
+  });
+
+  it("with TIKTOK_INSIGHTS_SCOPES=false, is byte-identical to today's literal (FR-019)", () => {
+    vi.stubEnv("TIKTOK_INSIGHTS_SCOPES", "false");
+    const url = new URL(tiktokConnectGroup.authorizationUrl({ state: STATE, redirectUri: REDIRECT }));
+    expect(url.searchParams.get("scope")).toBe("user.info.basic,video.publish");
+  });
 });
 
 describe("group declaration", () => {
@@ -63,6 +82,16 @@ describe("group declaration", () => {
     expect(tiktokConnectGroup.environment.configured({})).toBe(false);
     expect(tiktokConnectGroup.environment.configured({ TIKTOK_CLIENT_KEY: "K", TIKTOK_CLIENT_SECRET: "S" })).toBe(true);
     expect(tiktokConnectGroup.environment.issues({ TIKTOK_CLIENT_KEY: "K" })).toHaveLength(1);
+  });
+
+  it("declares video.list and user.info.stats, requested only when TIKTOK_INSIGHTS_SCOPES is on (FR-019)", () => {
+    expect(tiktokConnectGroup.optionalScopes?.declared).toEqual([
+      { scope: "video.list", purpose: "Read a TikTok video's likes, comments, shares and views" },
+      { scope: "user.info.stats", purpose: "Read a TikTok account's followers, likes and video counts" },
+    ]);
+    const base = { TIKTOK_CLIENT_KEY: "K", TIKTOK_CLIENT_SECRET: "S" };
+    expect(tiktokConnectGroup.optionalScopes?.requested(base)).toEqual([]);
+    expect(tiktokConnectGroup.optionalScopes?.requested({ ...base, TIKTOK_INSIGHTS_SCOPES: "true" })).toEqual(["video.list", "user.info.stats"]);
   });
 });
 

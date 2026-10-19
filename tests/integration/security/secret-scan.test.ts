@@ -118,6 +118,14 @@ import { getMailer, setMailerForTests } from "../../../src/server/mail";
 import { recordingMailer } from "../../helpers/mailer";
 import { DEFAULT_GRAPH_BASE } from "../../../src/providers/meta/graph";
 import { graphVersion } from "../../../src/providers/meta/config";
+import { createFakeTikTok, type FakeTikTok } from "../../helpers/fake-tiktok";
+import { createFakePinterest, type FakePinterest } from "../../helpers/fake-pinterest";
+import { createFakeX, type FakeX } from "../../helpers/fake-x";
+import { postMetricPollStates, accountMetricPollStates, postMetricSnapshots, accountMetricSnapshots, accountMetricRollups, postMetricRollups, targetFirstEngagement } from "../../../src/server/db/schema/insights";
+import { foldAndPruneAccountSnapshotsBefore, foldAndPrunePostSnapshotsBefore } from "../../../src/server/dal/insights";
+import { runCrossProject } from "../../../src/server/db/cross-project";
+import { shapeFor } from "../../../src/providers/registry";
+import { createKey } from "../../helpers/api";
 
 afterAll(async () => {
   // A stored credential would otherwise make a later file's project configured (worker DBs are shared).
@@ -951,6 +959,188 @@ describe("secret scan (FR-020, SC-005)", () => {
       { name: "graph error echo of the facebook token", value: GRAPH_ERROR_ECHO },
     ];
     expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
+  });
+
+  it("the TikTok, Pinterest and X insights readers and their poll-state/snapshot rows never echo a credential (FR-013, FR-054)", async () => {
+    await parkAllDueTargets();
+    process.env.X_INSIGHTS_ENABLED = "true";
+
+    const TT_ACCESS = "scan-tiktok-access-7a1c9e3d5b8042f6097a1c2d3e4f5061";
+    const TT_REFRESH = "scan-tiktok-refresh-2b4e6a8c0d1f3759680a1b2c3d4e5f60";
+    const PIN_ACCESS = "scan-pinterest-access-9c0b1a2938475665f4e3d2c1b0a9f8e7";
+    const PIN_REFRESH = "scan-pinterest-refresh-1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60";
+    const X_ACCESS = "scan-x-access-3f4a5b6c7d8e9f001122334455667788";
+    const X_REFRESH = "scan-x-refresh-8899aabbccddeeff0011223344556677";
+
+    const ctx = await postsEnv();
+    const repos = forSchedulerProject(ctx.project.id);
+    const NOW = new Date("2026-09-01T00:00:00Z");
+    const future = new Date(NOW.getTime() + 60 * 86_400_000);
+
+    const post = await repos.posts.insert({ baseText: "Scan three-platform insights" });
+    const TT_VIDEO_ID = "scan-tiktok-video-1";
+    const PIN_PIN_ID = "scan-pinterest-pin-1";
+    const X_POST_ID = "2001";
+
+    // Each provider's account, target and fake are set up and ticked on its own: the fakes each
+    // stub `global.fetch` unconditionally (no host filter), so installing more than one at a time
+    // would have the last-installed fake answer every provider's requests.
+    const tiktokAccount = await repos.accounts.upsertConnected({
+      providerKey: "tiktok",
+      displayName: "Scan TikTok",
+      externalAccountId: "scan-tiktok-open-id",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["video.list", "user.info.stats"],
+    });
+    await repos.accounts.setCredentials(
+      tiktokAccount.id,
+      accounts.encryptCredentials(tiktokAccount.id, {
+        v: 1,
+        accessToken: TT_ACCESS,
+        refreshToken: TT_REFRESH,
+        accessExpiresAt: future.getTime(),
+        refreshIssuedAt: NOW.getTime(),
+        refreshExpiresAt: future.getTime(),
+        refreshExpiryEstimated: false,
+        openId: "scan-tiktok-open-id",
+      }),
+      null,
+    );
+    const [tiktokTarget] = await repos.targets.insertMany([{ postId: post.id, socialAccountId: tiktokAccount.id }]);
+    await repos.targets.update(tiktokTarget!.id, { status: "published", externalId: TT_VIDEO_ID, publicPostId: TT_VIDEO_ID, publishedAt: NOW });
+
+    const fakeTikTok: FakeTikTok = createFakeTikTok().install();
+    fakeTikTok.on("POST", "/v2/video/query/", { kind: "error", code: "validation_error", message: `Request refused for token ${TT_ACCESS}`, status: 400 });
+    fakeTikTok.on("GET", "/v2/user/info/", { kind: "error", code: "validation_error", message: `Request refused for token ${TT_ACCESS}`, status: 400 });
+    try {
+      await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig({})));
+    } finally {
+      fakeTikTok.uninstall();
+    }
+    expect(fakeTikTok.callsTo("POST", "/v2/video/query/")).toHaveLength(1);
+
+    const pinterestAccount = await repos.accounts.upsertConnected({
+      providerKey: "pinterest",
+      displayName: "Scan Pinterest",
+      externalAccountId: "scan-pinterest-user-1",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["pins:read"],
+    });
+    await repos.accounts.setCredentials(
+      pinterestAccount.id,
+      accounts.encryptCredentials(pinterestAccount.id, {
+        v: 1,
+        accessToken: PIN_ACCESS,
+        refreshToken: PIN_REFRESH,
+        accessExpiresAt: future.getTime(),
+        refreshIssuedAt: NOW.getTime(),
+        refreshExpiresAt: future.getTime(),
+        refreshExpiryEstimated: false,
+      }),
+      null,
+    );
+    const [pinterestTarget] = await repos.targets.insertMany([{ postId: post.id, socialAccountId: pinterestAccount.id }]);
+    await repos.targets.update(pinterestTarget!.id, { status: "published", externalId: PIN_PIN_ID, publishedAt: NOW });
+
+    const fakePinterest: FakePinterest = createFakePinterest().install();
+    fakePinterest.on("GET", `/v5/pins/${PIN_PIN_ID}/analytics`, { kind: "error", message: `Request refused for token ${PIN_ACCESS}`, status: 400 });
+    fakePinterest.on("GET", "/v5/user_account", { kind: "ok", body: { follower_count: 12, monthly_views: 340 } });
+    try {
+      await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig({})));
+    } finally {
+      fakePinterest.uninstall();
+    }
+    // Pinterest's account-metrics read did succeed, so a snapshot exists to scan alongside the
+    // failed post-metrics read.
+    expect(fakePinterest.callsTo("GET", "/v5/user_account")).toHaveLength(1);
+    expect(fakePinterest.callsTo("GET", `/v5/pins/${PIN_PIN_ID}/analytics`)).toHaveLength(1);
+
+    const xAccount = await repos.accounts.upsertConnected({
+      providerKey: "x",
+      displayName: "Scan X",
+      externalAccountId: "scan-x-user-1",
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["tweet.read"],
+    });
+    await repos.accounts.setCredentials(
+      xAccount.id,
+      accounts.encryptCredentials(xAccount.id, {
+        v: 1,
+        accessToken: X_ACCESS,
+        refreshToken: X_REFRESH,
+        accessExpiresAt: future.getTime(),
+        refreshIssuedAt: NOW.getTime(),
+      }),
+      null,
+    );
+    const [xTarget] = await repos.targets.insertMany([{ postId: post.id, socialAccountId: xAccount.id }]);
+    await repos.targets.update(xTarget!.id, { status: "published", externalId: X_POST_ID, publishedAt: NOW });
+
+    const fakeX: FakeX = createFakeX().install();
+    fakeX.on("GET", "/2/tweets", { kind: "problem", status: 403, title: "Forbidden", detail: `Request refused for token ${X_ACCESS}` });
+    try {
+      await atTime(new Date(NOW.getTime() + 3_600_000), () => runTick(tickConfig({})));
+    } finally {
+      fakeX.uninstall();
+      delete process.env.X_INSIGHTS_ENABLED;
+    }
+    expect(fakeX.callsTo("GET", "/2/tweets")).toHaveLength(1);
+
+    const sessionBefore = session.current;
+    session.current = { user: { id: ctx.owner.id }, session: { id: "scan-three-platform-insights-session" } };
+    const params = { params: Promise.resolve({ projectSlug: ctx.project.slug, postId: post.id }) };
+    const postMarkup = renderToStaticMarkup((await PostPage(params)) as never);
+    session.current = sessionBefore;
+
+    // Fold the just-captured snapshots into rollup points (083): forcing `before` past the capture
+    // time exercises the fold without waiting for `INSIGHTS_RETENTION_DAYS`.
+    const foldBefore = new Date(NOW.getTime() + 7_200_000);
+    await runCrossProject("test: scan fold account snapshots", () => foldAndPruneAccountSnapshotsBefore(foldBefore, 10_000, shapeFor));
+    await runCrossProject("test: scan fold post snapshots", () => foldAndPrunePostSnapshotsBefore(foldBefore, 10_000, shapeFor));
+
+    // The same figures over the API (083, docket_get_insights): a read key, no platform call, scanned
+    // alongside the stored rows.
+    const insightsKey = (await createKey(ctx.scope, ["read"])).secret;
+    const insightsResponse = await api("GET", "/insights?from=2026-08-01&to=2026-09-05", { key: insightsKey });
+    expect(insightsResponse.status).toBe(200);
+
+    const db = testDb();
+    const pieces: Piece[] = [
+      { place: "page: post (tiktok/pinterest/x insights panel)", text: postMarkup },
+      { place: "post_targets (public_post_id)", text: JSON.stringify(await db.select().from(postTargets).where(eq(postTargets.projectId, ctx.project.id))) },
+      { place: "post_metric_poll_states", text: JSON.stringify(await db.select().from(postMetricPollStates).where(eq(postMetricPollStates.projectId, ctx.project.id))) },
+      { place: "account_metric_poll_states", text: JSON.stringify(await db.select().from(accountMetricPollStates).where(eq(accountMetricPollStates.projectId, ctx.project.id))) },
+      { place: "post_metric_snapshots", text: JSON.stringify(await db.select().from(postMetricSnapshots).where(eq(postMetricSnapshots.projectId, ctx.project.id))) },
+      { place: "account_metric_snapshots", text: JSON.stringify(await db.select().from(accountMetricSnapshots).where(eq(accountMetricSnapshots.projectId, ctx.project.id))) },
+      { place: "account_metric_rollups", text: JSON.stringify(await db.select().from(accountMetricRollups).where(eq(accountMetricRollups.projectId, ctx.project.id))) },
+      { place: "post_metric_rollups", text: JSON.stringify(await db.select().from(postMetricRollups).where(eq(postMetricRollups.projectId, ctx.project.id))) },
+      { place: "target_first_engagement", text: JSON.stringify(await db.select().from(targetFirstEngagement).where(eq(targetFirstEngagement.projectId, ctx.project.id))) },
+      await responsePiece("GET /insights", rebuilt(insightsResponse)),
+    ];
+
+    const secrets: Secret[] = [
+      { name: "tiktok access token", value: TT_ACCESS },
+      { name: "tiktok refresh token", value: TT_REFRESH },
+      { name: "pinterest access token", value: PIN_ACCESS },
+      { name: "pinterest refresh token", value: PIN_REFRESH },
+      { name: "x access token", value: X_ACCESS },
+      { name: "x refresh token", value: X_REFRESH },
+      { name: "insights api key", value: insightsKey },
+    ];
+    expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
+    // The three accounts' poll states are now rescheduled hours or days past this test's fake `NOW`,
+    // which is still well before the real clock an unpinned tick elsewhere reads — park them
+    // so they cannot leak a claim into a later file sharing this worker's database.
+    await parkAllDueTargets();
   });
 
   it("activity events store no secret even when a provider, refresh or connect error echoes one (SC-006)", async () => {

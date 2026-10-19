@@ -34,28 +34,64 @@ function strip(row: SocialAccountRow): ClaimedAccount {
   return rest;
 }
 
-/** data-model.md §4 (G33). The claim's eligibility rule for one provider. */
+/** data-model.md §4 (G35, G37). The claim's eligibility rule for one provider. */
 export interface InsightsProviderRule {
   providerKey: string;
-  /** Empty = no permission needed (Bluesky, mock). Otherwise every one must be held. */
-  requiredScopes: readonly string[];
+  /** G37. Scopes the POST surface needs. Empty = none (Bluesky, mock). */
+  postScopes: readonly string[];
+  /** G37. Scopes the ACCOUNT surface needs. Empty = none (Pinterest, Bluesky, mock). */
+  accountScopes: readonly string[];
+  /** G35. Which stored column the post reader is given. */
+  postIdSource: "externalId" | "publicPostId";
+  /** G35. Required when `postIdSource` is `"publicPostId"`. */
+  missingPostId: { reason: string; docsPath?: string } | null;
+  /** G37. False when the provider declares no post metrics — the post claim skips it entirely. */
+  postMetricsDeclared: boolean;
+  /** G37. False when the provider declares no account metrics — the account claim skips it (X). */
+  accountMetricsDeclared: boolean;
   /** FR-038/FR-041: used by the lazy insert to freeze an already-expired subject with no call. */
   ephemeralPostTypes: readonly { postType: string; lifetimeMs: number }[];
 }
 
-/** FR-022/FR-023. An ineligible account never gets as far as a lease, a decrypt or a call. */
-function eligible(rules: readonly InsightsProviderRule[]) {
+/** G35. The stored column a provider's post reader is given. */
+function idColumn(rule: InsightsProviderRule) {
+  return rule.postIdSource === "publicPostId" ? postTargets.publicPostId : postTargets.externalId;
+}
+
+function scopesOf(rule: InsightsProviderRule, surface: "post" | "account"): readonly string[] {
+  return surface === "post" ? rule.postScopes : rule.accountScopes;
+}
+
+function declaredOn(rule: InsightsProviderRule, surface: "post" | "account"): boolean {
+  return surface === "post" ? rule.postMetricsDeclared : rule.accountMetricsDeclared;
+}
+
+/** FR-022/FR-023/G37. An ineligible account never gets as far as a lease, a decrypt or a call. */
+function eligible(rules: readonly InsightsProviderRule[], surface: "post" | "account") {
+  const withSurface = rules.filter((r) => declaredOn(r, surface));
   return or(
-    ...rules.map((r) =>
-      r.requiredScopes.length === 0
+    ...withSurface.map((r) => {
+      const scopes = scopesOf(r, surface);
+      return scopes.length === 0
         ? eq(socialAccounts.providerKey, r.providerKey)
         : and(
             eq(socialAccounts.providerKey, r.providerKey),
             isNotNull(socialAccounts.grantedScopes),
-            sql`${socialAccounts.grantedScopes} @> ${sql.param([...r.requiredScopes])}::text[]`,
-          ),
-    ),
+            sql`${socialAccounts.grantedScopes} @> ${sql.param([...scopes])}::text[]`,
+          );
+    }),
   );
+}
+
+/** G35. A target without a queryable id for its provider is never claimed, never leased (FR-015). */
+function hasQueryableId(rules: readonly InsightsProviderRule[]) {
+  return or(...rules.map((r) => and(eq(socialAccounts.providerKey, r.providerKey), isNotNull(idColumn(r)))));
+}
+
+/** G35. The source-appropriate id for each row's own provider, so `ClaimedPostMetricPoll.externalId` carries it. */
+function selectedId(rules: readonly InsightsProviderRule[]) {
+  const whens = rules.map((r) => sql`WHEN ${socialAccounts.providerKey} = ${r.providerKey} THEN ${idColumn(r)}`);
+  return sql<string>`(CASE ${sql.join(whens, sql` `)} ELSE ${postTargets.externalId} END)`;
 }
 
 /**
@@ -82,7 +118,7 @@ export function claimDueAccountMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            eligible(rules),
+            eligible(rules, "account"),
             isNull(accountMetricPollStates.socialAccountId),
           ),
         );
@@ -100,7 +136,7 @@ export function claimDueAccountMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            eligible(rules),
+            eligible(rules, "account"),
             or(isNull(accountMetricPollStates.pollLeaseUntil), lte(accountMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(accountMetricPollStates.nextPollAt),
             lte(accountMetricPollStates.nextPollAt, opts.now),
@@ -159,11 +195,11 @@ export function claimDuePostMetricPolls(opts: {
         .where(
           and(
             eq(postTargets.status, "published"),
-            isNotNull(postTargets.externalId),
+            hasQueryableId(rules),
             isNotNull(postTargets.publishedAt),
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            eligible(rules),
+            eligible(rules, "post"),
             isNull(postMetricPollStates.postTargetId),
           ),
         )
@@ -187,8 +223,56 @@ export function claimDuePostMetricPolls(opts: {
           )
           .onConflictDoNothing({ target: postMetricPollStates.postTargetId });
       }
+      // G35: a target whose provider's post reader needs `publicPostId` and has none is inserted
+      // already frozen, zero calls. An `externalId`-source target with a null column is the
+      // pre-081 "published by hand" case — left uninserted, counted by `countPublishedWithoutExternalId`.
+      const publicPostIdRules = rules.filter((r) => r.postIdSource === "publicPostId");
+      const missingId = publicPostIdRules.length === 0
+        ? []
+        : await exec
+            .select({
+              targetId: postTargets.id,
+              projectId: postTargets.projectId,
+              socialAccountId: postTargets.socialAccountId,
+              providerKey: socialAccounts.providerKey,
+            })
+            .from(postTargets)
+            .innerJoin(socialAccounts, eq(socialAccounts.id, postTargets.socialAccountId))
+            .leftJoin(postMetricPollStates, eq(postMetricPollStates.postTargetId, postTargets.id))
+            .where(
+              and(
+                eq(postTargets.status, "published"),
+                isNotNull(postTargets.publishedAt),
+                // A target with no `external_id` at all was published by hand, never via this
+                // provider's API — it was never going to have a public post id either, and stays
+                // in the pre-081 "no external id" bucket rather than freezing on this one (FR-014).
+                isNotNull(postTargets.externalId),
+                isNull(socialAccounts.removedAt),
+                eq(socialAccounts.status, "active"),
+                eligible(rules, "post"),
+                or(...publicPostIdRules.map((r) => and(eq(socialAccounts.providerKey, r.providerKey), isNull(idColumn(r))))),
+                isNull(postMetricPollStates.postTargetId),
+              ),
+            )
+            .limit(opts.limit);
+      for (const row of missingId) {
+        const rule = rulesByProviderKey.get(row.providerKey);
+        if (!rule?.missingPostId) continue;
+        await exec
+          .insert(postMetricPollStates)
+          .values({
+            postTargetId: row.targetId,
+            projectId: row.projectId,
+            socialAccountId: row.socialAccountId,
+            nextPollAt: null,
+            frozenAt: opts.now,
+            frozenReason: "unqueryable",
+            unavailableReason: rule.missingPostId.reason,
+          })
+          .onConflictDoNothing({ target: postMetricPollStates.postTargetId });
+      }
       const rows = await exec
-        .select({ state: postMetricPollStates, externalId: postTargets.externalId, publishedAt: postTargets.publishedAt, chosenPostType: postTargets.chosenPostType })
+        .select({ state: postMetricPollStates, externalId: selectedId(rules), publishedAt: postTargets.publishedAt, chosenPostType: postTargets.chosenPostType })
         .from(postMetricPollStates)
         .innerJoin(postTargets, eq(postTargets.id, postMetricPollStates.postTargetId))
         .innerJoin(socialAccounts, eq(socialAccounts.id, postMetricPollStates.socialAccountId))
@@ -196,7 +280,7 @@ export function claimDuePostMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
-            eligible(rules),
+            eligible(rules, "post"),
             or(isNull(postMetricPollStates.pollLeaseUntil), lte(postMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(postMetricPollStates.nextPollAt),
             lte(postMetricPollStates.nextPollAt, opts.now),
@@ -239,7 +323,7 @@ export function countPublishedWithoutExternalId(providers: readonly InsightsProv
           isNotNull(postTargets.resolvedAt),
           isNull(postTargets.externalId),
           isNull(socialAccounts.removedAt),
-          eligible(providers),
+          eligible(providers, "post"),
         ),
       );
     return row?.n ?? 0;
@@ -247,33 +331,58 @@ export function countPublishedWithoutExternalId(providers: readonly InsightsProv
 }
 
 /**
- * Companion count for `accountsSkippedNoPermission` (data-model.md §4, FR-049): an ineligible account
- * is excluded by the claim, so the claim cannot report it.
+ * Companion count for `targetsSkippedNoPublicPostId` (data-model.md §4, FR-053, G35): published,
+ * insights-eligible, this provider's post reader needs `publicPostId` and the column is null.
  */
-export function countAccountsMissingInsightsScopes(providers: readonly InsightsProviderRule[]): Promise<number> {
-  return crossProject("scheduler: count insights-ineligible accounts", async () => {
-    const rules = providers.filter((r) => r.requiredScopes.length > 0);
+export function countPublishedWithoutPublicPostId(providers: readonly InsightsProviderRule[]): Promise<number> {
+  return crossProject("scheduler: count insights-eligible targets with no public post id", async () => {
+    const rules = providers.filter((r) => r.postIdSource === "publicPostId" && r.postMetricsDeclared);
     if (rules.length === 0) return 0;
     const [row] = await getDb()
       .select({ n: sql<number>`count(*)::int` })
-      .from(socialAccounts)
+      .from(postTargets)
+      .innerJoin(socialAccounts, eq(socialAccounts.id, postTargets.socialAccountId))
       .where(
         and(
+          eq(postTargets.status, "published"),
+          isNull(postTargets.publicPostId),
           isNull(socialAccounts.removedAt),
-          eq(socialAccounts.status, "active"),
-          or(
-            ...rules.map((r) =>
-              and(
-                eq(socialAccounts.providerKey, r.providerKey),
-                or(
-                  isNull(socialAccounts.grantedScopes),
-                  sql`NOT (${socialAccounts.grantedScopes} @> ${sql.param([...r.requiredScopes])}::text[])`,
-                ),
-              ),
-            ),
-          ),
+          eligible(rules, "post"),
         ),
       );
+    return row?.n ?? 0;
+  });
+}
+
+/**
+ * Companion count for `accountsSkippedNoPermission` (data-model.md §4, FR-049, G37): an ineligible
+ * account is excluded by the claim, so the claim cannot report it. Counts an account missing
+ * **either** surface's scopes, deduplicated by account id, over providers that declare that surface.
+ */
+export function countAccountsMissingInsightsScopes(providers: readonly InsightsProviderRule[]): Promise<number> {
+  return crossProject("scheduler: count insights-ineligible accounts", async () => {
+    const missingOn = (surface: "post" | "account") =>
+      providers.filter((r) => declaredOn(r, surface) && scopesOf(r, surface).length > 0);
+    const rules = [...missingOn("post"), ...missingOn("account")];
+    if (rules.length === 0) return 0;
+    const conditions = [
+      ...missingOn("post").map((r) =>
+        and(
+          eq(socialAccounts.providerKey, r.providerKey),
+          or(isNull(socialAccounts.grantedScopes), sql`NOT (${socialAccounts.grantedScopes} @> ${sql.param([...r.postScopes])}::text[])`),
+        ),
+      ),
+      ...missingOn("account").map((r) =>
+        and(
+          eq(socialAccounts.providerKey, r.providerKey),
+          or(isNull(socialAccounts.grantedScopes), sql`NOT (${socialAccounts.grantedScopes} @> ${sql.param([...r.accountScopes])}::text[])`),
+        ),
+      ),
+    ];
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(socialAccounts)
+      .where(and(isNull(socialAccounts.removedAt), eq(socialAccounts.status, "active"), or(...conditions)));
     return row?.n ?? 0;
   });
 }

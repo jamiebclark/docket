@@ -42,9 +42,16 @@ describe("TikTok setup documentation", () => {
   it("has the headings that the connect group and messages link to", () => {
     expect(tiktokConnectGroup.redirectRequirement?.doc).toBe(docsUrl("tiktok-setup", "callback-address"));
     const found = slugs(doc);
-    for (const anchor of ["callback-address", "unaudited-apps", "photo-posts-and-domain-verification", "owed-live-checks"]) {
+    for (const anchor of ["callback-address", "unaudited-apps", "photo-posts-and-domain-verification", "owed-live-checks", "insights"]) {
       expect(found, anchor).toContain(anchor);
     }
+  });
+
+  it("states the TIKTOK_INSIGHTS_SCOPES flag, the insight scopes and what each buys, with a default matching .env.example", () => {
+    expect(doc).toMatch(/TIKTOK_INSIGHTS_SCOPES=true/);
+    expect(doc).toMatch(/video\.list/);
+    expect(doc).toMatch(/user\.info\.stats/);
+    expect(read(".env.example")).toMatch(/# TIKTOK_INSIGHTS_SCOPES=false/);
   });
 
   it("covers scopes, the audit, consent risk and what is out of scope", () => {

@@ -44,8 +44,9 @@ describe("facebookInsights declaration", () => {
     for (const prohibited of FACEBOOK_PROHIBITED_METRICS) expect(keys).not.toContain(prohibited);
   });
 
-  it("requires pages_read_engagement and read_insights", () => {
-    expect(facebookInsights.declaration.requiredScopes).toEqual(["pages_read_engagement", "read_insights"]);
+  it("requires pages_read_engagement and read_insights on both surfaces", () => {
+    expect(facebookInsights.declaration.postScopes).toEqual(["pages_read_engagement", "read_insights"]);
+    expect(facebookInsights.declaration.accountScopes).toEqual(["pages_read_engagement", "read_insights"]);
   });
 
   it("declares no ephemeral post types (Facebook Page Stories are out of scope)", () => {

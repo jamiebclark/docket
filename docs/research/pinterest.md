@@ -171,6 +171,13 @@ https://developers.pinterest.com/docs/getting-started/set-up-authentication-and-
   `pin_count`, `follower_count`, `following_count`, `monthly_views`. By default this is "the token user_account";
   Business Access deployments may pass `ad_account_id` to read a different owned account.
   https://developers.pinterest.com/docs/api/v5/user_account-get/
+
+  **Open period question (083, G38).** `monthly_views` is classified `shape: "unknown"` in 083: the
+  page above names the field and nothing else, no source states the window it covers (a rolling 30
+  days, a calendar month, or something else), and the field's own name is not a source (constitution
+  I). Resolving this needs Pinterest to document the window, which this entry cannot do and FR-005
+  forbids guessing at; left open for whoever finds the documentation. See `docs/decisions.md`
+  ("083 — G38").
 - `GET /v5/boards` (scope `boards:read`) lists the connected account's boards. Query: `page_size` (1-250,
   default 25), `bookmark` (opaque pagination cursor), `privacy` (enum `ALL`, `PUBLIC`, `PROTECTED`, `SECRET`,
   `PUBLIC_AND_SECRET`), `ad_account_id`. Response: `bookmark` (cursor for the next page) and `items[]`: `id`,

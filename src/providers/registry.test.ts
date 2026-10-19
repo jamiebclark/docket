@@ -134,8 +134,8 @@ describe("provider registry", () => {
       capabilities: getProvider("instagram").capabilities,
       insights: {
         declaration: {
-          post: [{ key: "likeCount", label: "Likes" }],
-          account: [{ key: "followersCount", label: "Followers" }],
+          post: [{ key: "likeCount", label: "Likes", shape: { kind: "cumulative" } }],
+          account: [{ key: "followersCount", label: "Followers", shape: { kind: "cumulative" } }],
           maxPostsPerRead: 25,
           readBudget: { count: 100, windowSeconds: 3_600 },
         } as InsightsDeclaration,
@@ -150,8 +150,15 @@ describe("provider registry", () => {
     const withDecl = (over: Partial<typeof ok.insights.declaration>) =>
       assertInsightsDeclaration({ ...ok, insights: { ...ok.insights, declaration: { ...ok.insights.declaration, ...over } } });
     expect(() => withDecl({ post: [], account: [] })).toThrow(/Inconsistent insights declaration/);
-    expect(() => withDecl({ post: [{ key: "likeCount", label: "Likes" }, { key: "likeCount", label: "Likes" }] })).toThrow(/duplicate/);
-    expect(() => withDecl({ post: [{ key: "likeCount", label: "" }] })).toThrow(/label/);
+    expect(() =>
+      withDecl({
+        post: [
+          { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+          { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+        ],
+      }),
+    ).toThrow(/duplicate/);
+    expect(() => withDecl({ post: [{ key: "likeCount", label: "", shape: { kind: "cumulative" } }] })).toThrow(/label/);
     expect(() => withDecl({ maxPostsPerRead: 0 })).toThrow(/maxPostsPerRead/);
     expect(() => withDecl({ readBudget: { count: 0, windowSeconds: 10 } })).toThrow(/readBudget.count/);
     const unavailableOk = { ...ok, insights: { ...ok.insights, declaration: { post: [], account: [], maxPostsPerRead: 25, readBudget: { count: 1, windowSeconds: 1 }, unavailable: { reason: "needs a permission" } } } };
@@ -160,14 +167,26 @@ describe("provider registry", () => {
     expect(() => withSchema(z.object({ likeCount: z.number().int().optional() }))).toThrow(/closed/);
     expect(() => withSchema(z.object({ likeCount: z.string().optional() }).strict())).toThrow(/optional number/);
 
-    // requiredScopes non-empty requires a missingScopes.reason of 1-300 chars
-    expect(() => withDecl({ requiredScopes: ["read_insights"] })).toThrow(/missingScopes/);
-    expect(() => withDecl({ requiredScopes: ["read_insights"], missingScopes: { reason: "" } })).toThrow(/missingScopes/);
-    expect(() => withDecl({ requiredScopes: ["read_insights"], missingScopes: { reason: "x".repeat(301) } })).toThrow(/missingScopes/);
-    expect(() => withDecl({ requiredScopes: ["read_insights"], missingScopes: { reason: "ok" } })).not.toThrow();
+    // postScopes non-empty requires a missingPostScopes.reason of 1-300 chars
+    expect(() => withDecl({ postScopes: ["read_insights"] })).toThrow(/missingPostScopes/);
+    expect(() => withDecl({ postScopes: ["read_insights"], missingPostScopes: { reason: "" } })).toThrow(/missingPostScopes/);
+    expect(() => withDecl({ postScopes: ["read_insights"], missingPostScopes: { reason: "x".repeat(301) } })).toThrow(/missingPostScopes/);
+    expect(() => withDecl({ postScopes: ["read_insights"], missingPostScopes: { reason: "ok" } })).not.toThrow();
 
-    // every requiredScopes entry must match GRANTED_SCOPE_PATTERN
-    expect(() => withDecl({ requiredScopes: ["Not Valid!"], missingScopes: { reason: "ok" } })).toThrow(/requiredScopes/);
+    // accountScopes non-empty requires a missingAccountScopes.reason of 1-300 chars
+    expect(() => withDecl({ accountScopes: ["read_insights"] })).toThrow(/missingAccountScopes/);
+    expect(() => withDecl({ accountScopes: ["read_insights"], missingAccountScopes: { reason: "" } })).toThrow(/missingAccountScopes/);
+    expect(() => withDecl({ accountScopes: ["read_insights"], missingAccountScopes: { reason: "x".repeat(301) } })).toThrow(/missingAccountScopes/);
+    expect(() => withDecl({ accountScopes: ["read_insights"], missingAccountScopes: { reason: "ok" } })).not.toThrow();
+
+    // every postScopes/accountScopes entry must match GRANTED_SCOPE_PATTERN
+    expect(() => withDecl({ postScopes: ["Not Valid!"], missingPostScopes: { reason: "ok" } })).toThrow(/postScopes/);
+    expect(() => withDecl({ accountScopes: ["Not Valid!"], missingAccountScopes: { reason: "ok" } })).toThrow(/accountScopes/);
+
+    // postIdSource: "publicPostId" requires a missingPostId.reason of 1-300 chars
+    expect(() => withDecl({ postIdSource: "publicPostId" })).toThrow(/missingPostId/);
+    expect(() => withDecl({ postIdSource: "publicPostId", missingPostId: { reason: "" } })).toThrow(/missingPostId/);
+    expect(() => withDecl({ postIdSource: "publicPostId", missingPostId: { reason: "ok" } })).not.toThrow();
 
     // ephemeralPostTypes.postType must be a known PostType, in the provider's own capabilities.postTypes, unique
     expect(() => withDecl({ ephemeralPostTypes: [{ postType: "not-a-post-type" as never, lifetimeMs: 86_400_000 }] })).toThrow(/ephemeralPostTypes/);
@@ -186,10 +205,10 @@ describe("provider registry", () => {
     expect(() => withDecl({ ephemeralPostTypes: [{ postType: "story", lifetimeMs: 1000 }] })).toThrow(/lifetimeMs/);
     expect(() => withDecl({ ephemeralPostTypes: [{ postType: "story", lifetimeMs: 31 * 86_400_000 }] })).toThrow(/lifetimeMs/);
 
-    // unavailable and requiredScopes are never both set
+    // unavailable and postScopes/accountScopes are never both set
     expect(() =>
-      withDecl({ post: [], account: [], unavailable: { reason: "no permission" }, requiredScopes: ["read_insights"], missingScopes: { reason: "ok" } }),
-    ).toThrow(/unavailable.*requiredScopes|requiredScopes.*unavailable/);
+      withDecl({ post: [], account: [], unavailable: { reason: "no permission" }, postScopes: ["read_insights"], missingPostScopes: { reason: "ok" } }),
+    ).toThrow(/unavailable.*postScopes|postScopes.*unavailable/);
   });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {

@@ -25,7 +25,7 @@ describe("parseTikTokEnv", () => {
 
   it("configures with both, and reads the audit flag in any case", () => {
     expect(parseTikTokEnv({ TIKTOK_CLIENT_KEY: "K", TIKTOK_CLIENT_SECRET: "S", TIKTOK_APP_AUDITED: "TRUE" })).toEqual({
-      config: { clientKey: "K", clientSecret: "S" },
+      config: { clientKey: "K", clientSecret: "S", insightsScopes: false },
       audited: true,
       issues: [],
     });
@@ -37,6 +37,22 @@ describe("parseTikTokEnv", () => {
     expect(r.issues).toEqual([{ name: "TIKTOK_APP_AUDITED", reason: "must be true or false" }]);
     expect(r.audited).toBe(false);
     expect(r.config).not.toBeNull();
+  });
+
+  it("parses TIKTOK_INSIGHTS_SCOPES with its documented default", () => {
+    expect(
+      parseTikTokEnv({ TIKTOK_CLIENT_KEY: "K", TIKTOK_CLIENT_SECRET: "S", TIKTOK_INSIGHTS_SCOPES: "true" }).config?.insightsScopes,
+    ).toBe(true);
+    expect(
+      parseTikTokEnv({ TIKTOK_CLIENT_KEY: "K", TIKTOK_CLIENT_SECRET: "S", TIKTOK_INSIGHTS_SCOPES: "false" }).config?.insightsScopes,
+    ).toBe(false);
+    expect(parseTikTokEnv({ TIKTOK_CLIENT_KEY: "K", TIKTOK_CLIENT_SECRET: "S" }).config?.insightsScopes).toBe(false);
+  });
+
+  it("rejects a non-boolean TIKTOK_INSIGHTS_SCOPES as an environment issue, not a crash", () => {
+    const r = parseTikTokEnv({ TIKTOK_CLIENT_KEY: "K", TIKTOK_CLIENT_SECRET: "S", TIKTOK_INSIGHTS_SCOPES: "yes" });
+    expect(r.config?.insightsScopes).toBe(false);
+    expect(r.issues).toEqual([{ name: "TIKTOK_INSIGHTS_SCOPES", reason: "must be true or false" }]);
   });
 });
 

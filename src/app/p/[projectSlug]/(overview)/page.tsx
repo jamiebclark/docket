@@ -5,6 +5,7 @@ import { ContentToolsCard } from "@/components/overview/ContentToolsCard";
 import { ComingUpCard } from "@/components/overview/ComingUpCard";
 import { NeedsAttentionCard } from "@/components/overview/NeedsAttentionCard";
 import { PostsByStatusCard } from "@/components/overview/PostsByStatusCard";
+import { RecentPublishedCard } from "@/components/overview/RecentPublishedCard";
 import { ProblemsCallout } from "@/components/notifications/ProblemsCallout";
 import { buttonStyles } from "@/components/ui/Button";
 import { Checklist, type ChecklistItem } from "@/components/ui/Checklist";
@@ -109,6 +110,7 @@ export default async function ProjectOverview({ params }: Props) {
       ) : null}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ComingUpCard view={view.comingUp} timeZone={timeZone} calendarHref={`${base}/calendar`} />
+        <RecentPublishedCard view={view.recentPublished} timeZone={timeZone} postHref={(id) => `${base}/posts/${id}`} />
         <AccountsCard view={view.accounts} timeZone={timeZone} />
         <PostsByStatusCard view={view.postsByStatus} />
         {view.contentTools ? <ContentToolsCard view={view.contentTools} /> : null}

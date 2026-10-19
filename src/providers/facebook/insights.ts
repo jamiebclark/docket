@@ -215,20 +215,40 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<FacebookSetting
  */
 export const facebookInsights: InsightsSupport<FacebookSettings> = {
   declaration: {
-    requiredScopes: ["pages_read_engagement", "read_insights"],
-    missingScopes: {
+    postScopes: ["pages_read_engagement", "read_insights"],
+    missingPostScopes: {
+      reason: "A Facebook Page needs the read_insights permission before Docket can read its numbers.",
+      docsPath: "meta-setup#insights",
+    },
+    accountScopes: ["pages_read_engagement", "read_insights"],
+    missingAccountScopes: {
       reason: "A Facebook Page needs the read_insights permission before Docket can read its numbers.",
       docsPath: "meta-setup#insights",
     },
     post: [
-      { key: "post_media_view", label: "Views" },
-      { key: "post_total_media_view_unique", label: "Reach" },
-      { key: "post_reactions_by_type_total", label: "Reactions" },
-      { key: "post_clicks", label: "Clicks" },
+      { key: "post_media_view", label: "Views", shape: { kind: "cumulative" } },
+      { key: "post_total_media_view_unique", label: "Reach", shape: { kind: "cumulative" } },
+      { key: "post_reactions_by_type_total", label: "Reactions", shape: { kind: "cumulative" } },
+      { key: "post_clicks", label: "Clicks", shape: { kind: "cumulative" } },
     ],
     account: [
-      { key: "page_post_engagements", label: "Engagements" },
-      { key: "page_follows", label: "Follows" },
+      {
+        key: "page_post_engagements",
+        label: "Engagements",
+        shape: {
+          kind: "unknown",
+          reason:
+            "Facebook reports this for a day, a week or 28 days and Docket's request does not pin one, so it cannot be plotted over time.",
+        },
+      },
+      {
+        key: "page_follows",
+        label: "Follows",
+        shape: {
+          kind: "unknown",
+          reason: "Facebook does not state the period this number covers, so Docket cannot plot it over time.",
+        },
+      },
     ],
     maxPostsPerRead: 1,
     readBudget: { count: 48_000, windowSeconds: 86_400 }, // interim, UNVERIFIED (research §4)

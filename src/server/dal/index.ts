@@ -82,9 +82,10 @@ export {
   createAccountMetricSnapshotsRepo,
   createPostMetricPollStatesRepo,
   createPostMetricSnapshotsRepo,
-  prunePostMetricSnapshotsBefore,
-  pruneAccountMetricSnapshotsBefore,
+  foldAndPruneAccountSnapshotsBefore,
+  foldAndPrunePostSnapshotsBefore,
 } from "./insights";
+export type { FoldAndPruneCounts } from "./insights";
 export type {
   AccountMetricPollStateRow,
   AccountMetricPollStatesRepo,

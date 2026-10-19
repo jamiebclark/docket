@@ -9,7 +9,15 @@ describe("applyStepResult", () => {
   it("done → published with ids and cleared lease", () => {
     const r = applyStepResult({ result: { kind: "done", externalId: "x1", url: "https://e/x1" }, target: fresh, now, config });
     expect(r.outcome).toBe("done");
-    expect(r.patch).toMatchObject({ status: "published", externalId: "x1", externalUrl: "https://e/x1", publishedAt: now, leaseOwner: null, nextAttemptAt: null });
+    expect(r.patch).toMatchObject({ status: "published", externalId: "x1", externalUrl: "https://e/x1", publicPostId: null, publishedAt: now, leaseOwner: null, nextAttemptAt: null });
+  });
+  it("done carrying a publicPostId (G36) writes it to the patch", () => {
+    const r = applyStepResult({ result: { kind: "done", externalId: "x1", publicPostId: "pub-1" }, target: fresh, now, config });
+    expect(r.patch).toMatchObject({ publicPostId: "pub-1" });
+  });
+  it("done without a publicPostId writes null", () => {
+    const r = applyStepResult({ result: { kind: "done", externalId: "x1" }, target: fresh, now, config });
+    expect(r.patch).toMatchObject({ publicPostId: null });
   });
   it("continue → publishing with state, reset attempts, honouring notBefore", () => {
     const later = new Date(now.getTime() + 600_000);

@@ -39,15 +39,15 @@ afterEach(() => vi.unstubAllGlobals());
 describe("blueskyInsights.declaration", () => {
   it("declares the post keys, account keys, labels and maxPostsPerRead:25", () => {
     expect(blueskyInsights.declaration.post).toEqual([
-      { key: "likeCount", label: "Likes" },
-      { key: "repostCount", label: "Reposts" },
-      { key: "replyCount", label: "Replies" },
-      { key: "quoteCount", label: "Quotes" },
+      { key: "likeCount", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "repostCount", label: "Reposts", shape: { kind: "cumulative" } },
+      { key: "replyCount", label: "Replies", shape: { kind: "cumulative" } },
+      { key: "quoteCount", label: "Quotes", shape: { kind: "cumulative" } },
     ]);
     expect(blueskyInsights.declaration.account).toEqual([
-      { key: "followersCount", label: "Followers" },
-      { key: "followsCount", label: "Following" },
-      { key: "postsCount", label: "Posts" },
+      { key: "followersCount", label: "Followers", shape: { kind: "cumulative" } },
+      { key: "followsCount", label: "Following", shape: { kind: "cumulative" } },
+      { key: "postsCount", label: "Posts", shape: { kind: "cumulative" } },
     ]);
     expect(blueskyInsights.declaration.maxPostsPerRead).toBe(25);
   });

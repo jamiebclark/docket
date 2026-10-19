@@ -44,7 +44,7 @@ export async function refreshPinterest(input: { credentials: unknown; now: Date;
       next.refreshExpiresAt = expiry.refreshExpiresAt;
       next.refreshExpiryEstimated = expiry.refreshExpiryEstimated;
     }
-    return { ok: true, credentials: next, expiresAt: accountExpiry(next) };
+    return { ok: true, credentials: next, expiresAt: accountExpiry(next), ...(out.scopes ? { grantedScopes: out.scopes } : {}) };
   } catch {
     return { ok: false, transient: true, retryAt, reason: "Pinterest could not be reached to renew the sign-in; will retry." };
   }

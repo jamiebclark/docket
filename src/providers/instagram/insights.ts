@@ -166,23 +166,28 @@ async function readAccountMetrics(ctx: AccountMetricsReadContext<InstagramSettin
  */
 export const instagramInsights: InsightsSupport<InstagramSettings> = {
   declaration: {
-    requiredScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
-    missingScopes: {
+    postScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+    missingPostScopes: {
+      reason: "Instagram needs the instagram_manage_insights permission before Docket can read its numbers.",
+      docsPath: "meta-setup#insights",
+    },
+    accountScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+    missingAccountScopes: {
       reason: "Instagram needs the instagram_manage_insights permission before Docket can read its numbers.",
       docsPath: "meta-setup#insights",
     },
     post: [
-      { key: "views", label: "Views" },
-      { key: "reach", label: "Reach" },
-      { key: "likes", label: "Likes" },
-      { key: "comments", label: "Comments" },
-      { key: "saved", label: "Saved" },
-      { key: "shares", label: "Shares" },
-      { key: "total_interactions", label: "Interactions" },
+      { key: "views", label: "Views", shape: { kind: "cumulative" } },
+      { key: "reach", label: "Reach", shape: { kind: "cumulative" } },
+      { key: "likes", label: "Likes", shape: { kind: "cumulative" } },
+      { key: "comments", label: "Comments", shape: { kind: "cumulative" } },
+      { key: "saved", label: "Saved", shape: { kind: "cumulative" } },
+      { key: "shares", label: "Shares", shape: { kind: "cumulative" } },
+      { key: "total_interactions", label: "Interactions", shape: { kind: "cumulative" } },
     ],
     account: [
-      { key: "reach", label: "Reach" },
-      { key: "follower_count", label: "New followers" },
+      { key: "reach", label: "Reach", shape: { kind: "windowed", windowMs: 86_400_000 } },
+      { key: "follower_count", label: "New followers", shape: { kind: "windowed", windowMs: 86_400_000 } },
     ],
     maxPostsPerRead: 1,
     readBudget: { count: 48_000, windowSeconds: 86_400 }, // interim, UNVERIFIED (research §4)

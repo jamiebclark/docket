@@ -430,7 +430,7 @@ export interface AttemptSummary {
 
 export type StepResult = (
   | { kind: "continue"; state: unknown; notBefore?: Date; /** Shown as the target's status until the next result (G24). */ wait?: string }
-  | { kind: "done"; externalId: string; url?: string }
+  | { kind: "done"; externalId: string; url?: string; publicPostId?: string }
   | { kind: "retryable_error"; error: string; notBefore?: Date; credentialsExpired?: boolean }
   | { kind: "fatal_error"; error: string; credentialsInvalid?: true }
   /** `credentialsInvalid`: the platform rejected the credentials; the account is flagged, and the target stays ambiguous. */
@@ -619,12 +619,22 @@ export interface EngagementSupport<Settings = unknown> {
   send(ctx: EngagementSendContext<Settings>): Promise<EngagementSendResult>;
 }
 
+/** G38. Whether a metric accumulates, resets per period, or cannot be plotted over time (FR-001). */
+export type MetricShape =
+  | { kind: "cumulative" }
+  /** `windowMs: null` when a window exists but its length is not fixed or not confirmed. */
+  | { kind: "windowed"; windowMs: number | null }
+  /** The reason is rendered where the series would otherwise be (FR-004). */
+  | { kind: "unknown"; reason: string };
+
 /** One metric a platform reports, named with the platform's own word (G30, FR-002). */
 export interface MetricKeyDeclaration {
   /** The platform's own field name, e.g. `likeCount`. Stored verbatim as a key in `metrics`. */
   key: string;
   /** The platform's own label, e.g. "Likes". Rendered as given; never translated or grouped. */
   label: string;
+  /** G38. Declared beside the key and label, by the provider, from docs/research/*.md. */
+  shape: MetricShape;
 }
 
 export interface InsightsDeclaration {
@@ -642,10 +652,18 @@ export interface InsightsDeclaration {
    * shows `reason` with a link to `docsPath`.
    */
   unavailable?: { reason: string; docsPath?: string };
-  /** G33. Permissions an account must hold before any read is attempted. Default empty. */
-  requiredScopes?: readonly string[];
-  /** G33. Shown when `requiredScopes` are not held. Required when `requiredScopes` is non-empty. */
-  missingScopes?: { reason: string; docsPath?: string };
+  /** G37. Permissions the POST surface needs before any post read. Default empty. */
+  postScopes?: readonly string[];
+  /** G37. Shown when `postScopes` are not held. Required when `postScopes` is non-empty. */
+  missingPostScopes?: { reason: string; docsPath?: string };
+  /** G37. Permissions the ACCOUNT surface needs. Default empty — may differ from `postScopes`. */
+  accountScopes?: readonly string[];
+  /** G37. Shown when `accountScopes` are not held. Required when `accountScopes` is non-empty. */
+  missingAccountScopes?: { reason: string; docsPath?: string };
+  /** G35. Which stored identifier `readPostMetrics` is given. Default `"externalId"`. */
+  postIdSource?: "externalId" | "publicPostId";
+  /** G35. Required when `postIdSource` is `"publicPostId"`: shown for a target that has none. */
+  missingPostId?: { reason: string; docsPath?: string };
   /** G34. Post types whose numbers die after `lifetimeMs` from publication. */
   ephemeralPostTypes?: readonly { postType: PostType; lifetimeMs: number }[];
 }

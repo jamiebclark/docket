@@ -49,7 +49,12 @@ describe("refreshTikTok", () => {
       refreshIssuedAt: NOW.getTime(),
       refreshExpiresAt: NOW.getTime() + 1_000_000,
     });
-    expect(r).toEqual({ ok: true, credentials: next, expiresAt: new Date(NOW.getTime() + 1_000_000) });
+    expect(r).toEqual({
+      ok: true,
+      credentials: next,
+      expiresAt: new Date(NOW.getTime() + 1_000_000),
+      grantedScopes: ["user.info.basic", "video.publish"],
+    });
     expect(fake.requests[0]!.fields).toMatchObject({ grant_type: "refresh_token", refresh_token: OLD_REFRESH, client_key: "CLIENT-KEY" });
   });
 
@@ -114,6 +119,19 @@ describe("refreshTikTok", () => {
       reason: "TikTok is not configured on this server.",
     });
     expect(fake.requests).toHaveLength(0);
+  });
+
+  it("a scope narrower than before updates the stored grantedScopes", async () => {
+    fake.on("POST", TOKEN, { kind: "ok", body: tokenReply({ access_token: "A", refresh_token: "NEW-REFRESH", scope: "user.info.basic" }) });
+    const r = await run(creds());
+    expect(r).toMatchObject({ ok: true, grantedScopes: ["user.info.basic"] });
+  });
+
+  it("no scope field in the reply leaves grantedScopes unchanged", async () => {
+    fake.on("POST", TOKEN, { kind: "ok", body: { access_token: "A", expires_in: 7200 } });
+    const r = await run(creds());
+    expect(r).toMatchObject({ ok: true });
+    if (r.ok) expect(r).not.toHaveProperty("grantedScopes");
   });
 
   it("two refreshes in a row: the second sends the first's new refresh token", async () => {

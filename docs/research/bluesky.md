@@ -88,7 +88,21 @@ Confirmed by reading `node_modules/@atproto/api` directly — the generated type
 | **Confirmed absence**: views or reach on a profile | No such property exists anywhere in `ProfileViewDetailed` | same |
 | `bookmarkCount` | Present on `PostView` but left undeclared — not confirmed from Bluesky's own documentation, only from the generated client; recorded as an owned-by-no-entry gap (`docs/feature-map.md`) | same |
 
-`NEEDS RESEARCH`: whether `app.bsky.feed.getPosts` and `app.bsky.actor.getProfile` answer
+**ANSWERED 2026-10-18** (was `NEEDS RESEARCH`): both calls answer **unauthenticated** on the public
+AppView host `https://public.api.bsky.app`, verified by hand:
+
+| Call | Result |
+|---|---|
+| `app.bsky.actor.getProfile?actor=bsky.app` | `followersCount` 35,296,985, `followsCount` 22, `postsCount` 880 — no auth, no error |
+| `app.bsky.feed.getPosts?uris=at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3my43eyfzs225` | `likeCount` 7,565, `repostCount` 1,505, `replyCount` 339, `quoteCount` 218 — no auth, no error |
+| `app.bsky.feed.getAuthorFeed?actor=bsky.app` | answers unauthenticated too (used to obtain the URI above) |
+
+The read allowance for that host is still undocumented and remains unverified. **This changes
+nothing in the shipped design**, which is the point: the reader goes through the account's own
+session (`src/providers/bluesky/insights.ts:57,87`), so the public host is an alternative Docket
+does not use and does not depend on. Recorded so the question is closed rather than open.
+
+The original question, for context — whether `app.bsky.feed.getPosts` and `app.bsky.actor.getProfile` answer
 **unauthenticated**, at which host, and under what read allowance. Nothing in the 080 design depends
 on the answer: both calls go through the account's own session (`agentFor(settings.pdsUrl,
 credentials.accessJwt)`), the same path 077's engagement reader already proves out, needing no new
