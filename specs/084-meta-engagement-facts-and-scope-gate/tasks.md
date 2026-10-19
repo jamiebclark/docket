@@ -47,20 +47,20 @@ what makes "byte for byte" a thing later tasks can verify rather than assert.
 **⚠️ CRITICAL**: No user-story work in Phase 3+ except US1 (pure documentation, no code) can begin
 until this phase is complete.
 
-- [ ] T002 Create `src/lib/scope-permission.ts` exporting `scopePermissionFor` and `ScopePermission`,
+- [X] T002 Create `src/lib/scope-permission.ts` exporting `scopePermissionFor` and `ScopePermission`,
       with the body moved **verbatim** from `src/lib/insights/eligibility.ts`'s
       `insightsPermissionFor`/`InsightsPermission` (branch order unchanged — see
       [contracts/scope-permission.md](./contracts/scope-permission.md) §2). Turn
       `src/lib/insights/eligibility.ts` into a two-line alias module:
       `export { scopePermissionFor as insightsPermissionFor, type ScopePermission as InsightsPermission }`
-- [ ] T003 Move `src/lib/insights/eligibility.test.ts` to `src/lib/scope-permission.test.ts`, re-point
+- [X] T003 Move `src/lib/insights/eligibility.test.ts` to `src/lib/scope-permission.test.ts`, re-point
       the import to `./scope-permission`, and keep every assertion verbatim (contracts/scope-permission.md §1)
-- [ ] T004 [P] Create `src/server/dal/scope-predicates.ts` exporting `accountHoldsScopes(scopes)` and
+- [X] T004 [P] Create `src/server/dal/scope-predicates.ts` exporting `accountHoldsScopes(scopes)` and
       `accountMissingScopes(scopes)` (NULL-handling per [data-model.md](./data-model.md) §5), extracted
       from `eligible()` and `countAccountsMissingInsightsScopes` in
       `src/server/dal/insights-claims.ts`. Update both to call the new functions instead of inlining the
       SQL, with no change in the queries they produce
-- [ ] T005 [P] Add `export type ScopeSurface = "insights" | "engagement"` to `src/providers/types.ts`
+- [X] T005 [P] Add `export type ScopeSurface = "insights" | "engagement"` to `src/providers/types.ts`
       and add a `surface: ScopeSurface` second parameter to `OAuthConnectGroup.optionalScopes.cannotWiden`.
       Update the one call site, `src/server/services/accounts.ts:70`, to pass `"insights"`. Update
       `src/providers/meta/connect-group.ts`'s `cannotWiden` implementation to accept the new parameter

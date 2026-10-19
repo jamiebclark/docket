@@ -222,6 +222,9 @@ export type CandidatesResult =
   /** `message` is shown to the user as written, on the paste form and in the accounts banner (G18): plain text, secrets scrubbed, at most 500 characters. */
   | { ok: false; message: string };
 
+/** G40. Docket's own read surfaces an opt-in scope can belong to. Never a platform name. */
+export type ScopeSurface = "insights" | "engagement";
+
 export interface OAuthConnectGroup {
   /** `[a-z0-9-]+`, unique among groups. Stored in `connect_attempts.group_key`. */
   key: string;
@@ -255,7 +258,10 @@ export interface OAuthConnectGroup {
      * Login for Business takes its permission set from the Meta app's configuration (FR-019).
      * Reconnecting cannot help, so no reconnect control is offered.
      */
-    cannotWiden?(source: Readonly<Record<string, string | undefined>>): { reason: string; doc?: string } | null;
+    cannotWiden?(
+      source: Readonly<Record<string, string | undefined>>,
+      surface: ScopeSurface,
+    ): { reason: string; doc?: string } | null;
   };
   /** Callback-address requirement; a group whose address does not qualify is shown as unavailable (G10). */
   redirectRequirement?: {

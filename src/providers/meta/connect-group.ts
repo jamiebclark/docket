@@ -51,7 +51,8 @@ export const metaConnectGroup: OAuthConnectGroup = {
       if (config.loginConfigId) return [];
       return INSIGHTS_SCOPES_DECLARED.map((s) => s.scope);
     },
-    cannotWiden: (source) => {
+    cannotWiden: (source, surface) => {
+      if (surface === "engagement") return null;
       const { config } = parseMetaEnv(source);
       if (!config?.insightsScopes || !config.loginConfigId) return null;
       return {

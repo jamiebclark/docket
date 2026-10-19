@@ -67,7 +67,7 @@ export function insightsPermissionForAccount(
     // and judging it on the opt-ins alone reported "not requested" for scopes the dialog does ask
     // for — leaving the operator no reconnect control at all.
     requestedScopes: [...(group?.baseScopes ?? []), ...(group?.optionalScopes?.requested(process.env) ?? [])],
-    cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env) ?? null,
+    cannotWiden: group?.optionalScopes?.cannotWiden?.(process.env, "insights") ?? null,
     missingScopes,
   });
 }
