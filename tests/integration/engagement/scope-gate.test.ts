@@ -4,6 +4,7 @@ import { assertEngagementDeclaration } from "../../../src/providers/registry";
 import { mockProvider } from "../../../src/providers/mock";
 import { mockEngagement } from "../../../src/providers/mock/engagement";
 import type { EngagementDeclaration } from "../../../src/providers/types";
+import { resetUsageBackoffs } from "../../../src/providers/meta/usage";
 import { claimDueEngagementReads, countAccountsMissingEngagementScopes, type EngagementProviderRule } from "../../../src/server/dal/engagement-read-claims";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { forProject } from "../../../src/server/dal/scope";
@@ -15,6 +16,7 @@ import { listEngagementAccounts } from "../../../src/server/services/engagement/
 import { fakeSession } from "../../helpers/auth";
 import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
+import { createFakeGraph, type FakeGraph } from "../../helpers/fake-graph";
 import { createProjectWithMembers } from "../../helpers/factories";
 import { registerTestProvider } from "../../helpers/provider-fixtures";
 import { parkAllEngagementReads } from "../../helpers/scheduling";
@@ -420,5 +422,44 @@ describe("the accountsSkippedNoPermission count (US6, FR-049-FR-050)", () => {
     ];
     await expect(countAccountsMissingEngagementScopes(rules)).resolves.toBe(0);
     await expect(countAccountsMissingEngagementScopes([])).resolves.toBe(0);
+  });
+});
+
+describe("Facebook and Instagram have not reconnected for their new engagement scopes (US6 scenario 3, SC-009, FR-037)", () => {
+  let fake: FakeGraph;
+  beforeEach(() => {
+    fake = createFakeGraph().install();
+    resetUsageBackoffs();
+  });
+  afterEach(() => {
+    fake.uninstall();
+  });
+
+  it.each([
+    { providerKey: "facebook" as const, externalAccountId: "scope-gate-fb-stale", grantedScopes: ["pages_read_engagement"] },
+    { providerKey: "instagram" as const, externalAccountId: "scope-gate-ig-stale", grantedScopes: ["instagram_basic", "pages_read_engagement"] },
+  ])("excludes a connected %s account missing its new declared scope from the claim, with zero Graph calls, zero credential decrypts, and counts it in accountsSkippedNoPermission", async ({ providerKey, externalAccountId, grantedScopes }) => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+    const account = await repos.accounts.upsertConnected({
+      providerKey,
+      displayName: `Stale ${providerKey}`,
+      externalAccountId,
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes,
+    });
+
+    const decryptSpy = vi.spyOn(accountsService, "decryptCredentials");
+    const counts = await atTime(AT, () =>
+      runEngagementRead({ config: schedulerConfig(getEnv(), tickConfig(NO_WAIT).config), tickId: randomUUID(), startedAt: AT }),
+    );
+
+    expect(fake.requests).toHaveLength(0);
+    expect(decryptSpy).not.toHaveBeenCalled();
+    expect(await repos.engagementAccountStates.get(account.id)).toBeNull();
+    expect(counts.accountsSkippedNoPermission).toBeGreaterThanOrEqual(1);
   });
 });

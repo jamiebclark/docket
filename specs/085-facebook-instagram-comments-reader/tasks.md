@@ -371,19 +371,19 @@ hand.
 account on it is ever claimed, the inbox's unavailable notice names the missing fact, and the other
 surface still reads in the same run.
 
-- [ ] T038 [US6] Create `tests/integration/engagement/meta-unavailable.test.ts`: with one surface's
+- [X] T038 [US6] Create `tests/integration/engagement/meta-unavailable.test.ts`: with one surface's
       test declaration carrying `unavailable: { reason, docsPath }` (contracts/meta-comment-surface.md
       §5), run the engagement-read section and assert zero Graph calls and zero claimed accounts for
       that surface; assert the inbox's unavailable notice (via `listEngagementAccounts`) names the
       stated reason and `docsPath`; assert the *other* surface still reads to completion in the same
       run (US6 scenarios 1–2, FR-006, FR-039) — depends on T013, T020, T017
-- [ ] T039 [P] [US6] Extend `tests/integration/engagement/scope-gate.test.ts`: a connected Facebook
+- [X] T039 [P] [US6] Extend `tests/integration/engagement/scope-gate.test.ts`: a connected Facebook
       Page that has not reconnected (and so lacks `pages_read_user_content`) is not claimed by
       084's claim gate, causes zero Graph calls and zero credential decrypts, and is counted in
       `accountsSkippedNoPermission` rather than dropped silently; repeat for an Instagram account
       lacking `instagram_manage_comments` (US6 scenario 3, SC-009, FR-037) — depends on T013, T020,
       T016
-- [ ] T040 [P] [US6] Verify (no code change expected; file a follow-up task only if a gap is found)
+- [X] T040 [P] [US6] Verify (no code change expected; file a follow-up task only if a gap is found)
       that `docs/engagement.md`'s unavailable-notice copy already surfaces a non-technical reason and
       documentation link for any `unavailable` declaration — this is existing 084 behaviour being
       exercised by a new provider, not new code (US6 scenario 4, part of FR-039)
