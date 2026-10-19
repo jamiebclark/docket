@@ -7,6 +7,7 @@ vi.mock("@/server/auth/session", async () => (await import("../../helpers/action
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
+import { FirstEngagementCard } from "../../../src/components/insights/FirstEngagementCard";
 import InsightsPage from "../../../src/app/p/[projectSlug]/insights/page";
 import InsightsLoading from "../../../src/app/p/[projectSlug]/insights/loading";
 import InsightsError from "../../../src/app/p/[projectSlug]/insights/error";
@@ -152,6 +153,37 @@ describe("insights loading and error states", () => {
     const html = renderToStaticMarkup(createElement(InsightsError, { error: new Error("boom"), reset: () => {} }));
     expect(html).toContain('role="alert"');
     expect(html).toContain("Try again");
+  });
+});
+
+describe("first-engagement lines name the post they are about", () => {
+  const entry = (postId: string, publishedAt: string, afterAtMostMs: number) => ({
+    targetId: `t-${postId}`,
+    postId,
+    publishedAt: new Date(publishedAt),
+    accountName: "stencilvania.bsky.social",
+    providerKey: "bluesky",
+    platform: "Bluesky",
+    figure: { kind: "within_first_reading" as const, afterAtMostMs },
+  });
+
+  const view = {
+    entries: [entry("p1", "2026-10-10T12:00:00Z", 259_200_000), entry("p2", "2026-10-14T12:00:00Z", 172_800_000)],
+    exactCapablePlatforms: ["Bluesky"],
+  };
+
+  const html = () =>
+    renderToStaticMarkup(createElement(FirstEngagementCard, { view, projectSlug: "stencilvania", timeZone: "America/New_York" }));
+
+  it("links each line to its own post, so two figures for one account can be told apart", () => {
+    const out = html();
+    expect(out).toContain("/p/stencilvania/posts/p1");
+    expect(out).toContain("/p/stencilvania/posts/p2");
+  });
+
+  it("puts the most recent post first", () => {
+    const out = html();
+    expect(out.indexOf("/p/stencilvania/posts/p2")).toBeLessThan(out.indexOf("/p/stencilvania/posts/p1"));
   });
 });
 

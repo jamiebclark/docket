@@ -1,6 +1,8 @@
 // components/insights/FirstEngagementCard: how long before anybody noticed (US6,
 // contracts/first-engagement.md §4-§5). Every figure states its own source and resolution; `none_yet`
 // and `never_observed` are counted separately, never averaged in as zero.
+import Link from "next/link";
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { FirstEngagementEntry, FirstEngagementView } from "@/server/services/insights/view";
 
 function humanizeMs(ms: number): string {
@@ -29,10 +31,15 @@ function describeFigure(figure: FirstEngagementEntry["figure"]): string {
   }
 }
 
-export function FirstEngagementCard({ view }: { view: FirstEngagementView }) {
+export function FirstEngagementCard({ view, projectSlug, timeZone }: { view: FirstEngagementView; projectSlug: string; timeZone: string }) {
   if (view.entries.length === 0) return null;
 
-  const observed = view.entries.filter((e) => e.figure.kind === "exact" || e.figure.kind === "bounded" || e.figure.kind === "within_first_reading");
+  // Every line named its account and platform, which for a single-account project is the same words
+  // five times over: five figures that could not be told apart or matched to a post. The post each
+  // one is about is what varies, so that is what the line leads with.
+  const observed = view.entries
+    .filter((e) => e.figure.kind === "exact" || e.figure.kind === "bounded" || e.figure.kind === "within_first_reading")
+    .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
   const noneYet = view.entries.filter((e) => e.figure.kind === "none_yet");
   const neverObserved = view.entries.filter((e) => e.figure.kind === "never_observed");
   const notExamined = view.entries.filter((e) => e.figure.kind === "not_examined");
@@ -49,10 +56,12 @@ export function FirstEngagementCard({ view }: { view: FirstEngagementView }) {
       <ul className="mt-3 flex flex-col gap-1 text-sm">
         {observed.map((entry) => (
           <li key={entry.targetId}>
-            <span className="font-medium text-heading">
-              {entry.accountName} · {entry.platform}
-            </span>
-            : {describeFigure(entry.figure)}
+            <Link href={`/p/${projectSlug}/posts/${entry.postId}`} className="font-medium text-heading underline-offset-2 hover:underline">
+              <LocalTime value={entry.publishedAt} timeZone={timeZone} />
+            </Link>
+            <span className="text-muted-foreground"> · {entry.accountName} · {entry.platform}</span>
+            <br />
+            {describeFigure(entry.figure)}
           </li>
         ))}
       </ul>

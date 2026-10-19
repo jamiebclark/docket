@@ -152,7 +152,7 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
                 Time to first reply
               </h2>
               <Card className="mt-3">
-                <FirstEngagementCard view={firstEngagement} />
+                <FirstEngagementCard view={firstEngagement} projectSlug={projectSlug} timeZone={scope.project.timezone} />
               </Card>
             </section>
           ) : null}
