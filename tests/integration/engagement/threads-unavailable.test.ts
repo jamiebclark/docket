@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { countAccountsOnUnavailableEngagement } from "../../../src/server/dal/engagement-read-claims";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { forProject } from "../../../src/server/dal/scope";
 import { getEnv } from "../../../src/server/env";
@@ -39,6 +40,10 @@ describe("a connected Threads account and a scheduler tick (US1 scenario 5, FR-0
 
     const ctx = await createProjectWithMembers();
     const repos = forSchedulerProject(ctx.project.id);
+    // Measured before this account exists: the figure is database-wide by design, and the worker
+    // database is shared, so the exact claim — this one account is counted exactly once — is a
+    // delta. `toBeGreaterThanOrEqual(1)` could not have caught over-counting; this can.
+    const unavailableBefore = await countAccountsOnUnavailableEngagement(["threads"]);
     const account = await repos.accounts.upsertConnected({
       providerKey: "threads",
       displayName: "@docket",
@@ -51,7 +56,7 @@ describe("a connected Threads account and a scheduler tick (US1 scenario 5, FR-0
 
     const counts = await runSection();
     expect(counts.claimed).toBe(0);
-    expect(counts.unavailable).toBeGreaterThanOrEqual(1);
+    expect(counts.unavailable).toBe(unavailableBefore + 1);
     expect(counts.failed).toBe(0);
     expect(decryptSpy).not.toHaveBeenCalled();
     expect(await repos.engagementAccountStates.get(account.id)).toBeNull();
@@ -82,7 +87,8 @@ describe("a connected Threads account and a scheduler tick (US1 scenario 5, FR-0
 
     const countsAfterGrant = await runSection();
     expect(countsAfterGrant.claimed).toBe(0);
-    expect(countsAfterGrant.unavailable).toBeGreaterThanOrEqual(1);
+    // The same row, re-upserted with the scopes granted: still one, never two.
+    expect(countsAfterGrant.unavailable).toBe(unavailableBefore + 1);
 
     const after = await listEngagementAccounts(scope);
     const afterView = after.find((v) => v.id === account.id);

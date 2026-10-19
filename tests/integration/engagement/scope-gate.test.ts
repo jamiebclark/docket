@@ -5,7 +5,12 @@ import { mockProvider } from "../../../src/providers/mock";
 import { mockEngagement } from "../../../src/providers/mock/engagement";
 import type { EngagementDeclaration } from "../../../src/providers/types";
 import { resetUsageBackoffs } from "../../../src/providers/meta/usage";
-import { claimDueEngagementReads, countAccountsMissingEngagementScopes, type EngagementProviderRule } from "../../../src/server/dal/engagement-read-claims";
+import {
+  claimDueEngagementReads,
+  countAccountsMissingEngagementScopes,
+  countAccountsOnUnavailableEngagement,
+  type EngagementProviderRule,
+} from "../../../src/server/dal/engagement-read-claims";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
 import { forProject } from "../../../src/server/dal/scope";
 import { getEnv } from "../../../src/server/env";
@@ -408,9 +413,16 @@ describe("the accountsSkippedNoPermission count (US6, FR-049-FR-050)", () => {
       grantedScopes: ["read_comments", "read_insights"],
     });
 
+    // `unavailable` counts every account on an unavailable provider across the whole database,
+    // which is what FR-016 wants of a scheduler-wide figure — but the worker database is shared
+    // and never truncated between files, so a bare `toBe(0)` here asserts that no other test file
+    // happened to leave a Threads account behind. Thirteen of them do. The claim this test is
+    // actually making is that none of ITS accounts land in `unavailable`, which is a delta.
+    const unavailableBefore = await countAccountsOnUnavailableEngagement(["threads"]);
+
     const counts = await runSection();
     expect(counts.accountsSkippedNoPermission).toBe(1);
-    expect(counts.unavailable).toBe(0);
+    expect(counts.unavailable).toBe(unavailableBefore);
     expect(counts.failed).toBe(0);
     expect(counts.rateLimited).toBe(0);
   });
