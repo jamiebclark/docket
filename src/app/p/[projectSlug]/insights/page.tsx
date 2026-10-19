@@ -54,6 +54,16 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
   const awaiting = series.filter((s) => s.points.length === 0);
   const byAccount = [...Map.groupBy(withReadings, (s) => s.accountId).entries()];
 
+  // Same problem one level down, and worse: five dimensions times every platform-and-metric pair is
+  // dozens of comparisons, and until enough posts have been read EVERY one of them is a card saying
+  // so. A comparison earns a card by actually ranking something; the rest are counted, with their
+  // reason, in a line. `refusal` is a structural "there is nothing here to compare" (no standing
+  // series has ever run), which is a different thing to say than "not enough posts yet".
+  const ranked = comparisons.filter((c) => c.refusal === null && c.conclusion === "ranked");
+  const notEnough = comparisons.filter((c) => c.refusal === null && c.conclusion !== "ranked");
+  const refused = comparisons.filter((c) => c.refusal !== null);
+  const refusalReasons = [...new Set(refused.map((c) => c.refusal!))];
+
   return (
     <div>
       <PageHeader title="Insights" description={`The last ${RANGE_DAYS} days, per account and per platform. Numbers are never added together across platforms.`} />
@@ -102,10 +112,35 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
                 What is working
               </h2>
               <div className="mt-3 flex flex-col gap-6">
-                {comparisons.map((c) => (
+                {ranked.map((c) => (
                   <Card key={`${c.dimension}-${c.providerKey}-${c.metricKey}`}>
                     <ComparisonCard comparison={c} />
                   </Card>
+                ))}
+                {ranked.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nothing can be ranked yet. A comparison appears here once enough posts have been read to put its
+                    groups in a believable order.
+                  </p>
+                ) : null}
+                {notEnough.length > 0 ? (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-muted-foreground underline-offset-2 hover:underline">
+                      {notEnough.length} comparison{notEnough.length === 1 ? "" : "s"} waiting for more posts
+                    </summary>
+                    <div className="mt-3 flex flex-col gap-6">
+                      {notEnough.map((c) => (
+                        <Card key={`${c.dimension}-${c.providerKey}-${c.metricKey}`}>
+                          <ComparisonCard comparison={c} />
+                        </Card>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+                {refusalReasons.map((reason) => (
+                  <p key={reason} className="text-sm text-muted-foreground">
+                    {reason}
+                  </p>
                 ))}
               </div>
             </section>

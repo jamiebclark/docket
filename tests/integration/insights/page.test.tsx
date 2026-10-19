@@ -91,6 +91,31 @@ describe("insights page (quickstart.md §6, FR-070 to FR-074)", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  // A single published post produces one comparison per dimension per platform-and-metric pair, and
+  // none of them can rank anything yet. Before this, each was a full-width card repeating "not
+  // enough posts" — on a real project that was 75 of them, which is what made the page unreadable.
+  it("counts the comparisons that cannot rank instead of giving each one a card", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    const post = await env.scope.posts.insert({ baseText: "A post." });
+    const [target] = await env.scope.targets.insertMany([{ postId: post.id, socialAccountId: account.id }]);
+    await env.scope.targets.update(target!.id, { status: "published", externalId: `ext-${post.id}`, publishedAt: new Date() });
+    await env.scope.postMetricSnapshots.insertIfAbsent({
+      postTargetId: target!.id,
+      socialAccountId: account.id,
+      providerKey: "mock",
+      capturedAt: new Date(),
+      metrics: { likeCount: 5 },
+    });
+    actAs(env.owner);
+
+    const html = await render(env.project.slug);
+    expect(html).toContain("waiting for more posts");
+    // Still reachable, inside the disclosure — collapsed, never dropped.
+    expect(html).toContain("Not enough posts yet to rank");
+    expect(html).toContain("<details");
+  });
 });
 
 describe("insights loading and error states", () => {
