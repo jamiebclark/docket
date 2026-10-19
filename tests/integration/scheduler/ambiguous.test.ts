@@ -11,6 +11,7 @@ import { createProjectWithMembers } from "../../helpers/factories";
 import { parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
 import type { SchedulerConfig } from "../../../src/server/scheduler/config";
+import { expectCount, expectCounts } from "../../helpers/counts";
 
 beforeEach(parkAllDueTargets);
 
@@ -36,33 +37,33 @@ async function queued(settings: Record<string, unknown>) {
 describe("ambiguous outcomes are never retried (SC-006)", () => {
   it("marks an ambiguous result and never calls the provider again", async () => {
     const { scope, postId, targetId } = await queued({ behaviour: "ambiguous" });
-    expect((await tick(SLOT)).publishing.counts).toMatchObject({ claimed: 1, ambiguous: 1 });
+    expectCounts((await tick(SLOT)).publishing.counts).toMatchObject({ claimed: 1, ambiguous: 1 });
     expect((await posts.getPost(scope, postId)).targets[0]).toMatchObject({ status: "ambiguous" });
     for (let i = 1; i <= 100; i++) {
-      expect((await tick(at(i * 3600))).publishing.counts.claimed).toBe(0);
+      expectCount((await tick(at(i * 3600))).publishing.counts, "claimed").toBe(0);
     }
     expect(await posts.listAttempts(scope, targetId)).toHaveLength(1);
   });
 
   it("treats a throw on a step that can publish as ambiguous", async () => {
     const { scope, targetId } = await queued({ behaviour: "throw" });
-    expect((await tick(SLOT)).publishing.counts).toMatchObject({ ambiguous: 1, retried: 0 });
+    expectCounts((await tick(SLOT)).publishing.counts).toMatchObject({ ambiguous: 1, retried: 0 });
     const [attempt] = await posts.listAttempts(scope, targetId);
     expect(attempt).toMatchObject({ outcome: "ambiguous" });
-    expect((await tick(at(86_400))).publishing.counts.claimed).toBe(0);
+    expectCount((await tick(at(86_400))).publishing.counts, "claimed").toBe(0);
   });
 
   it("treats a timeout on a step that can publish as ambiguous", async () => {
     const { scope, targetId } = await queued({ behaviour: "succeed", delayMs: 2000 });
-    expect((await tick(SLOT, { providerTimeoutMs: 100 })).publishing.counts).toMatchObject({ ambiguous: 1 });
+    expectCounts((await tick(SLOT, { providerTimeoutMs: 100 })).publishing.counts).toMatchObject({ ambiguous: 1 });
     expect((await posts.listAttempts(scope, targetId))[0]).toMatchObject({ outcome: "ambiguous" });
-    expect((await tick(at(86_400))).publishing.counts.claimed).toBe(0);
+    expectCount((await tick(at(86_400))).publishing.counts, "claimed").toBe(0);
   });
 
   it("retries a timeout on a safe step", async () => {
     const { scope, targetId } = await queued({ behaviour: "multi_step", steps: 1, delayMs: 2000 });
     // The first step only creates a container: it cannot publish, so it is safe to retry.
-    expect((await tick(SLOT, { providerTimeoutMs: 100 })).publishing.counts).toMatchObject({ retried: 1, ambiguous: 0 });
+    expectCounts((await tick(SLOT, { providerTimeoutMs: 100 })).publishing.counts).toMatchObject({ retried: 1, ambiguous: 0 });
     expect((await posts.listAttempts(scope, targetId))[0]).toMatchObject({ outcome: "retryable_error" });
   });
 });
