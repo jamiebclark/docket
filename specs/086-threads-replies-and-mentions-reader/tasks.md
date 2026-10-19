@@ -263,7 +263,7 @@ entry's re-check attempt, its date, and that the result was unchanged.
 **Purpose**: One final verification pass, not a per-task ritual (constitution; plan.md Development
 workflow)
 
-- [ ] T028 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` once, at the end of
+- [X] T028 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` once, at the end of
   implementation. `pnpm build` is required because `src/app/**` route files change. `pnpm db:check`
   is not needed — no migration is added — but runs in CI regardless and must stay green
 

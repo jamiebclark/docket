@@ -11,7 +11,7 @@ function tableRows(markdown: string): string[][] {
   const tableMatch = /\| Platform \| Reading comments\/mentions \| Replying \| Direct messages \|\n\|.*\|\n((?:\|.*\|\n?)+)/.exec(
     markdown,
   );
-  if (!tableMatch) throw new Error("supported-platforms table not found");
+  if (!tableMatch?.[1]) throw new Error("supported-platforms table not found");
   return tableMatch[1]
     .trim()
     .split("\n")
@@ -32,7 +32,7 @@ describe("the supported-platforms table (FR-025, FR-026, FR-027, SC-005)", () =>
 
   it("every 'Not yet' cell in the reading column has more than the words 'Not yet'", () => {
     for (const row of rows) {
-      const cell = row[1];
+      const cell = row[1] ?? "";
       if (cell.startsWith("Not yet")) {
         expect(cell, `reading cell for ${row[0]}`).not.toBe("Not yet");
       }
