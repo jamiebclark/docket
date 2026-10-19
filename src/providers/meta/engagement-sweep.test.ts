@@ -4,6 +4,7 @@ import type { EngagementReadContext } from "../types";
 import { resetUsageBackoffs } from "./usage";
 import { metaEngagementRead } from "./engagement-sweep";
 import type { MetaCommentSurface } from "./engagement-map";
+import { DEFAULT_GRAPH_BASE, graphRequest } from "./graph";
 
 const TOKEN = "page-token";
 
@@ -156,5 +157,96 @@ describe("metaEngagementRead — fresh step", () => {
     const result = await metaEngagementRead(facebookSurface, baseCtx());
     if (result.kind !== "page") throw new Error("expected page");
     expect(result.providerState).toMatchObject({ pending: [{ postId: "post-1", after: "CURSOR1" }] });
+  });
+});
+
+/** A minimal Instagram-shaped surface, per contracts/meta-comment-surface.md §4. */
+const instagramSurface: MetaCommentSurface = {
+  platform: "Instagram",
+  ownPostsPath: (id) => `/${id}/media`,
+  postTimeField: "timestamp",
+  commentFields: ["id", "text", "timestamp", "username", "user{id}"],
+  commentTextField: "text",
+  commentTimeField: "timestamp",
+  drainParams: {},
+  async prefetchSelf({ accountExternalId, token, signal }) {
+    const outcome = await graphRequest(
+      { graphBase: DEFAULT_GRAPH_BASE, version: "v26.0" },
+      { method: "GET", path: `/${accountExternalId}`, params: { fields: "username" }, token, signal },
+    );
+    if (outcome.kind !== "ok") return outcome;
+    const body = outcome.body as { username?: unknown } | undefined;
+    const selfUsername = typeof body?.username === "string" ? body.username : null;
+    if (!selfUsername) return { kind: "unparseable", status: outcome.status, usage: outcome.usage };
+    return { kind: "ok", selfUsername };
+  },
+  mapAuthor(comment) {
+    const username = typeof comment.username === "string" && comment.username !== "" ? comment.username : null;
+    return { displayName: null, handle: username, externalId: null, url: null, identityStable: false };
+  },
+  isSelf(comment, identity) {
+    if (identity.selfUsername !== null && comment.username === identity.selfUsername) return true;
+    const user = comment.user as { id?: unknown } | undefined;
+    return typeof user?.id === "string" && user.id === identity.externalId;
+  },
+};
+
+describe("metaEngagementRead — Instagram's prefetchSelf", () => {
+  it("runs first and once; its result lands in the returned providerState", async () => {
+    fake.on("GET", "/v26.0/1001", { kind: "ok", body: { username: "brand" } });
+    fake.on("GET", "/v26.0/1001/media", { kind: "ok", body: { data: [] } });
+
+    const result = await metaEngagementRead(instagramSurface, baseCtx());
+    if (result.kind !== "page") throw new Error(`expected page, got ${result.kind}`);
+    expect(result.providerState).toMatchObject({ selfUsername: "brand" });
+    expect(fake.requests.filter((r) => r.path === "/v26.0/1001")).toHaveLength(1);
+
+    // A second read, given the cached selfUsername, never re-runs the prefetch.
+    fake.reset();
+    fake.on("GET", "/v26.0/1001/media", { kind: "ok", body: { data: [] } });
+    await metaEngagementRead(instagramSurface, baseCtx({ providerState: result.providerState }));
+    expect(fake.requests.filter((r) => r.path === "/v26.0/1001")).toHaveLength(0);
+  });
+
+  it("returns the mapped outcome with zero comments emitted when prefetchSelf fails", async () => {
+    fake.on("GET", "/v26.0/1001", { kind: "graph_error", code: 190, message: "Invalid token" });
+    fake.on("GET", "/v26.0/1001/media", {
+      kind: "ok",
+      body: { data: [{ id: "post-1", timestamp: "2026-10-01T00:00:00+0000", comments: { data: [{ id: "c1", text: "hi", timestamp: "2026-10-01T01:00:00+0000", username: "someone" }] } }] },
+    });
+
+    const result = await metaEngagementRead(instagramSurface, baseCtx());
+    expect(result.kind).not.toBe("page");
+    expect(fake.requests.filter((r) => r.path === "/v26.0/1001/media")).toHaveLength(0);
+  });
+
+  it("drops nested replies present under a scripted replies key — only the top level is stored", async () => {
+    fake.on("GET", "/v26.0/1001", { kind: "ok", body: { username: "brand" } });
+    fake.on("GET", "/v26.0/1001/media", {
+      kind: "ok",
+      body: {
+        data: [
+          {
+            id: "post-1",
+            timestamp: "2026-10-01T00:00:00+0000",
+            comments: {
+              data: [
+                {
+                  id: "c1",
+                  text: "top level",
+                  timestamp: "2026-10-01T01:00:00+0000",
+                  username: "someone",
+                  replies: { data: [{ id: "r1", text: "a reply", timestamp: "2026-10-01T01:05:00+0000", username: "someone-else" }] },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const result = await metaEngagementRead(instagramSurface, baseCtx());
+    if (result.kind !== "page") throw new Error(`expected page, got ${result.kind}`);
+    expect(result.items.map((i) => i.externalId)).toEqual(["c1"]);
   });
 });

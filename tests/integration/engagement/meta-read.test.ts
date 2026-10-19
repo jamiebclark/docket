@@ -98,3 +98,55 @@ describe("Facebook comments reach the inbox (US1, FR-025, FR-026, SC-002)", () =
     expect(allForAccount).not.toBeNull(); // ...but inserts nothing new (unique index keeps one row)
   });
 });
+
+const IG_ID = "2001";
+
+describe("Instagram comments reach the inbox (US2, FR-026, FR-029)", () => {
+  it("stores one engagement_items row with parent_post_id / parent_post_target_id resolved, author_handle from username, author_identity_stable false", async () => {
+    const ctx = await createProjectWithMembers();
+    const repos = forSchedulerProject(ctx.project.id);
+
+    const account = await repos.accounts.upsertConnected({
+      providerKey: "instagram",
+      displayName: "Test IG Account",
+      externalAccountId: IG_ID,
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["instagram_basic", "instagram_manage_comments", "pages_read_engagement"],
+    });
+    await repos.accounts.setCredentials(account.id, encryptCredentials(account.id, { pageToken: TOKEN }), null);
+
+    const { target } = await createDueTarget(ctx.project.id, account.id);
+    const mediaExternalId = `${IG_ID}_777`;
+    await repos.targets.update(target.id, { status: "published", externalId: mediaExternalId, resolvedAt: AT });
+
+    fake.on("GET", `/v26.0/${IG_ID}`, { kind: "ok", body: { username: "brand" } });
+    fake.on("GET", `/v26.0/${IG_ID}/media`, {
+      kind: "ok",
+      body: {
+        data: [
+          {
+            id: mediaExternalId,
+            timestamp: "2026-10-18T00:00:00+0000",
+            comments: {
+              data: [{ id: "ig-comment-1", text: "Love this!", timestamp: "2026-10-18T01:00:00+0000", username: "a_follower" }],
+            },
+          },
+        ],
+      },
+    });
+
+    await runSection();
+
+    const item = await repos.engagementItems.getByExternalId(account.id, "ig-comment-1");
+    expect(item).not.toBeNull();
+    expect(item?.kind).toBe("comment");
+    expect(item?.parentExternalId).toBe(mediaExternalId);
+    expect(item?.parentPostId).toBe(target.postId);
+    expect(item?.parentPostTargetId).toBe(target.id);
+    expect(item?.authorHandle).toBe("a_follower");
+    expect(item?.authorIdentityStable).toBe(false);
+  });
+});

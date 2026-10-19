@@ -198,7 +198,7 @@ the comment once with its parent media id resolved to the Docket post.
 
 ### Instagram provider declaration
 
-- [ ] T020 [US2] Create `src/providers/instagram/engagement.ts`: the `instagramEngagement` object —
+- [X] T020 [US2] Create `src/providers/instagram/engagement.ts`: the `instagramEngagement` object —
       `declaration` exactly as contracts/meta-comment-surface.md §4 (`reads: ["comment"]`,
       `canReply: false`,
       `readScopes: ["instagram_basic", "instagram_manage_comments", "pages_read_engagement"]`,
@@ -211,23 +211,23 @@ the comment once with its parent media id resolved to the Docket post.
       the mapped `GraphOutcome` on failure, `mapAuthor` and `isSelf` exactly per contracts §4, `read`
       delegating to `metaEngagementRead` (FR-008, FR-016, FR-024 to FR-031, FR-035, FR-037, FR-038)
       — depends on T009, T011 (US1)
-- [ ] T021 [P] [US2] Create `src/providers/instagram/engagement.test.ts`: `mapAuthor` against a
+- [X] T021 [P] [US2] Create `src/providers/instagram/engagement.test.ts`: `mapAuthor` against a
       `username`-only fragment and a `username` + `user.id` fragment (owned-comment case); `isSelf`
       true on a matching `username` and, separately, on a matching `user.id`; `prefetchSelf` against a
       scripted `GET /{ig-user-id}?fields=username` success and failure (failure maps through
       engagement-errors, never a partial read); the declaration's `readScopes`, `missingReadScopes`
       and `docsPath` match contracts §4 verbatim (US2 scenarios 1, 3; FR-016, FR-027 to FR-029)
-- [ ] T022 [US2] Wire `engagement: instagramEngagement` onto the exported provider object in
+- [X] T022 [US2] Wire `engagement: instagramEngagement` onto the exported provider object in
       `src/providers/instagram/index.ts` — depends on T020
 
 ### Sweep behaviour specific to Instagram's "refuse without identity" rule
 
-- [ ] T023 [US2] Extend `src/providers/meta/engagement-sweep.ts`'s pre-step checks (if not already
+- [X] T023 [US2] Extend `src/providers/meta/engagement-sweep.ts`'s pre-step checks (if not already
       general enough from T011) so that a surface with a non-null `prefetchSelf` and no cached
       `selfUsername` always runs it before any comment is read, and a `prefetchSelf` failure returns
       the mapped outcome with **no** comments read that run — FR-016 has no degraded mode — depends on
       T011, T020
-- [ ] T024 [P] [US2] Extend `src/providers/meta/engagement-sweep.test.ts` with Instagram-specific
+- [X] T024 [P] [US2] Extend `src/providers/meta/engagement-sweep.test.ts` with Instagram-specific
       cases: `prefetchSelf` runs first and once, its result lands in the returned `providerState`;
       a failing `prefetchSelf` returns `retryable_error` (or the outcome `engagement-errors.ts` maps
       its failure to) with zero comments emitted that run; nested replies present under a scripted
@@ -236,7 +236,7 @@ the comment once with its parent media id resolved to the Docket post.
 
 ### End-to-end for Instagram
 
-- [ ] T025 [US2] Extend `tests/integration/engagement/meta-read.test.ts` with the Instagram half:
+- [X] T025 [US2] Extend `tests/integration/engagement/meta-read.test.ts` with the Instagram half:
       mocked account-media and comments responses store one comment with `parent_post_id` /
       `parent_post_target_id` resolved to the Docket post; `author_handle` is `username`,
       `author_identity_stable` is `false` (US2 scenario 1, FR-026, FR-029) — depends on T020, T022,
