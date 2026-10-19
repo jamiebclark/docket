@@ -21,12 +21,14 @@ afterAll(closeDb);
  * Both were missed twice by hand-written audits, so the check belongs here where it runs every time.
  */
 const ALLOWED = new Map([
-  // Not an actor column and not an audit fact: an occurrence is either settled (has an outcome) or
+  // Decided, and the constraint is the right one: an occurrence is either settled (has an outcome) or
   // pending (has a position), so a pending occurrence whose position is deleted is genuinely invalid.
-  // The fix is at the foreign key, not the check — deleting a position should cascade to its
-  // occurrences or be refused — and which of those is right is a standing-series decision, not a
-  // schema tidy-up. Listed so the debt is visible rather than silent.
-  ["standing_series_occurrences.position_id", "needs a decision: should deleting a position cascade or be refused?"],
+  // What was wrong was pruning a row that is still referenced. Housekeeping's standing-series prune
+  // used to delete a closed run whose positions a pending occurrence cited, which cascaded to the
+  // positions, nulled `position_id`, and threw 23514 out of the whole section; it now skips such a
+  // run until its occurrences settle. So this pair stays, deliberately, and the fix lives in
+  // dal/standing-series.ts rather than in the schema.
+  ["standing_series_occurrences.position_id", "intended: the prune skips referenced runs instead (see pruneClosedStandingSeriesRunsBefore)"],
   // Provenance, not an actor: a model-origin draft records which voice version produced it, and
   // SET NULL destroys exactly the fact the check exists to guarantee. Same question — refuse deleting
   // a profile that drafts reference, or accept losing the provenance.
