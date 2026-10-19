@@ -9,6 +9,7 @@ import { createFakePds, mintJwt, type FakePds } from "../../helpers/fake-pds";
 import { postsEnv } from "../../helpers/posts-env";
 import { createDueTarget, parkAllDueTargets } from "../../helpers/scheduling";
 import { tickConfig } from "../../helpers/tick";
+import { expectCount, expectCounts } from "../../helpers/counts";
 
 const CREATE_SESSION = "/xrpc/com.atproto.server.createSession";
 const REFRESH_SESSION = "/xrpc/com.atproto.server.refreshSession";
@@ -59,7 +60,7 @@ describe("Bluesky sessions through the real scheduler", () => {
     pds.route("POST", CREATE_RECORD, { json: { uri: URI, cid: CID } });
     const { tick, row, account } = await setup({ accessJwt: mintJwt(new Date(Date.now() + 60_000)) });
     const before = (await account()).credentialsEncrypted;
-    expect((await tick()).publishing.counts).toMatchObject({ claimed: 1, done: 1 });
+    expectCounts((await tick()).publishing.counts).toMatchObject({ claimed: 1, done: 1 });
     expect((await row()).status).toBe("published");
     expect(pds.callsTo("POST", REFRESH_SESSION)).toHaveLength(1);
     const publish = pds.callsTo("POST", CREATE_RECORD);
@@ -74,12 +75,12 @@ describe("Bluesky sessions through the real scheduler", () => {
     pds.route("POST", REFRESH_SESSION, { json: rotated() });
     pds.route("POST", CREATE_RECORD, [{ status: 400, json: { error: "ExpiredToken", message: "Token has expired" } }, { json: { uri: URI, cid: CID } }]);
     const { tick, row, account, dueNow } = await setup();
-    expect((await tick()).publishing.counts).toMatchObject({ claimed: 1, retried: 1 });
+    expectCounts((await tick()).publishing.counts).toMatchObject({ claimed: 1, retried: 1 });
     expect((await row()).status).not.toBe("published");
     expect(pds.callsTo("POST", REFRESH_SESSION)).toHaveLength(1);
     expect((await account()).status).toBe("active");
     await dueNow();
-    expect((await tick()).publishing.counts).toMatchObject({ claimed: 1, done: 1 });
+    expectCounts((await tick()).publishing.counts).toMatchObject({ claimed: 1, done: 1 });
     expect((await row()).status).toBe("published");
     expect(pds.callsTo("POST", CREATE_RECORD)).toHaveLength(2);
     expect(pds.callsTo("POST", CREATE_RECORD)[1]!.headers.authorization).toBe(`Bearer ${NEW_ACCESS}`);
@@ -92,7 +93,7 @@ describe("Bluesky sessions through the real scheduler", () => {
     // The dead refresh token is replaced by a whole new session opened with the stored password.
     pds.route("POST", CREATE_SESSION, { json: rotated() });
 
-    expect((await tick()).publishing.counts).toMatchObject({ claimed: 1, done: 1 });
+    expectCounts((await tick()).publishing.counts).toMatchObject({ claimed: 1, done: 1 });
 
     expect((await row()).status).toBe("published");
     expect((await account()).status).toBe("active");
@@ -127,7 +128,7 @@ describe("Bluesky sessions through the real scheduler", () => {
     pds.route("POST", REFRESH_SESSION, { status: 503, json: { error: "Unavailable" } });
     pds.route("POST", CREATE_RECORD, { status: 400, json: { error: "ExpiredToken" } });
     const { tick, row, account } = await setup();
-    expect((await tick()).publishing.counts).toMatchObject({ claimed: 1, retried: 1 });
+    expectCounts((await tick()).publishing.counts).toMatchObject({ claimed: 1, retried: 1 });
     expect((await account()).status).toBe("active");
     expect((await row()).status).not.toBe("failed");
   });
