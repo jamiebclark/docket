@@ -18,7 +18,17 @@ export function metaApp(cfg: MetaConfig): MetaApp {
   return { graphBase: DEFAULT_GRAPH_BASE, version: cfg.graphVersion };
 }
 
-export const ENGAGEMENT_OPT_IN = ["instagram_manage_comments"] as const;
+/**
+ * The engagement scopes the login dialog asks for when the opt-in is on.
+ *
+ * This list and `ENGAGEMENT_SCOPES_DECLARED` in `connect-group.ts` describe the same thing from two
+ * ends — what the dialog requests, and what a surface tells a member it needs — and they shipped
+ * disagreeing: the declaration named `pages_read_user_content`, the dialog never asked for it, so
+ * the accounts page offered a Facebook reconnect that could not grant the permission it named. That
+ * is the loop G40 exists to prevent. `oauth.test.ts` now pins the dialog against
+ * `optionalScopes.requested`, so the two cannot drift again.
+ */
+export const ENGAGEMENT_OPT_IN = ["instagram_manage_comments", "pages_read_user_content"] as const;
 
 /**
  * contracts/granted-scopes.md §3; contracts/optional-scopes-per-surface.md §3. Insights opt-in
