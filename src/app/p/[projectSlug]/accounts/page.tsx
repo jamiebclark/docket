@@ -18,6 +18,7 @@ import { ConnectLanding } from "./ConnectLanding";
 import { ConnectGroupSection } from "./ConnectGroupSection";
 import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
+import { PermissionNotice } from "@/components/accounts/PermissionNotice";
 import { docsHref } from "@/lib/docs";
 import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
@@ -199,63 +200,46 @@ export default async function AccountsPage({
                   ] as const
                 ).map(([surface, permission]) =>
                   permission?.kind === "not_granted" ? (
-                    <div key={surface} className="flex flex-wrap items-end gap-3">
-                      <p className="text-sm">
-                        <span className="font-medium text-foreground">Insights need a reconnect ({surface}).</span>{" "}
-                        {permission.reason}
-                        {permission.docsPath ? (
-                          <>
-                            {" "}
-                            <a href={docsHref(permission.docsPath)} className="underline">
-                              Set up insights →
-                            </a>
-                          </>
-                        ) : null}
-                      </p>
-                      {canManage && permission.canReconnect
-                        ? groups
-                            .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
-                            .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
-                        : null}
-                    </div>
+                    <PermissionNotice
+                      key={surface}
+                      title={`Insights need a reconnect (${surface}).`}
+                      reason={permission.reason}
+                      {...(permission.docsPath ? { docsPath: permission.docsPath, docsLabel: "Set up insights" } : {})}
+                      action={
+                        canManage && permission.canReconnect
+                          ? groups
+                              .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
+                              .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
+                          : null
+                      }
+                    />
                   ) : null,
                 )}
                 {account.engagementUnavailable ? (
-                  <div className="flex flex-wrap items-end gap-3">
-                    <p className="text-sm">
-                      <span className="font-medium text-foreground">Inbox is not available.</span>{" "}
-                      {account.engagementUnavailable.reason}
-                      {account.engagementUnavailable.docsPath ? (
-                        <>
-                          {" "}
-                          <a href={docsHref(account.engagementUnavailable.docsPath)} className="underline">
-                            Learn more →
-                          </a>
-                        </>
-                      ) : null}
-                    </p>
-                  </div>
+                  // `info`, not `warning`: there is nothing the member can do, so it must not look
+                  // like a task they are failing to complete (design-system.md §18).
+                  <PermissionNotice
+                    tone="info"
+                    title="Inbox is not available."
+                    reason={account.engagementUnavailable.reason}
+                    {...(account.engagementUnavailable.docsPath ? { docsPath: account.engagementUnavailable.docsPath } : {})}
+                  />
                 ) : null}
                 {account.engagementUnavailable === null && account.engagementReadPermission && account.engagementReadPermission.kind !== "ok" ? (
-                  <div className="flex flex-wrap items-end gap-3">
-                    <p className="text-sm">
-                      <span className="font-medium text-foreground">Inbox needs a reconnect.</span>{" "}
-                      {account.engagementReadPermission.reason}
-                      {account.engagementReadPermission.docsPath ? (
-                        <>
-                          {" "}
-                          <a href={docsHref(account.engagementReadPermission.docsPath)} className="underline">
-                            Set up comments →
-                          </a>
-                        </>
-                      ) : null}
-                    </p>
-                    {canManage && account.engagementReadPermission.kind === "not_granted" && account.engagementReadPermission.canReconnect
-                      ? groups
-                          .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
-                          .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
-                      : null}
-                  </div>
+                  <PermissionNotice
+                    title="Inbox needs a reconnect."
+                    reason={account.engagementReadPermission.reason}
+                    {...(account.engagementReadPermission.docsPath
+                      ? { docsPath: account.engagementReadPermission.docsPath, docsLabel: "Set up comments" }
+                      : {})}
+                    action={
+                      canManage && account.engagementReadPermission.kind === "not_granted" && account.engagementReadPermission.canReconnect
+                        ? groups
+                            .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
+                            .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
+                        : null
+                    }
+                  />
                 ) : null}
                 {canManage && isMock ? (
                   <div className="flex flex-wrap items-end gap-4">

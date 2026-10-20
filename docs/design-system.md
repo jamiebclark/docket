@@ -627,3 +627,77 @@ Loading is a `loading.tsx` of skeleton blocks matching the layout, per §8 above
 **Numbers** are formatted with the app's existing count formatter, `tabular-nums` in tables, and
 never rounded in a way that would merge two platforms' magnitudes onto one axis — which cannot
 happen, because no axis in this entry carries two platforms' values.
+
+## 18. Notices: a tinted box is always `Alert` (2026-10-20)
+
+Docket shipped an inbox whose "this account needs a reconnect" message was a bare `<p>` with a
+detached button beneath it, and five hand-rolled `rounded-lg border border-border bg-muted px-3
+py-2 text-sm` boxes across three files. `Alert` existed the whole time, documented in §7 with its
+tones and its `role` behaviour, and was imported by none of them.
+
+Nothing was broken, which is why it survived review: each box looked approximately right on its own,
+and only looked wrong beside the others.
+
+**The rule.** Any box that tints or outlines a short message to the member is `Alert`. Not a `<p>`
+with border classes, not a `<div>` that repeats `alertStyles`' tokens by hand. If a message needs a
+shape `Alert` does not have, add a variant to `Alert` — one file changes and every notice gets it.
+
+- **Do** `<Alert tone="warning" title="Inbox needs a reconnect">…</Alert>`.
+- **Don't** hand-roll `rounded-lg border border-border bg-muted px-3 py-2 text-sm`.
+- A notice with an action puts the action **inside** the `Alert`, last, as a `secondary` or `ghost`
+  button. A control floating beneath an untinted sentence reads as unrelated to it, because nothing
+  groups them.
+- A neutral panel that is *context* rather than a message — "On your post", a quoted parent — is not
+  an `Alert`. It is a plain bordered block, and it carries no `role`. Reserve `role="status"` and
+  `role="alert"` for what a screen reader should announce.
+
+`tests/lint/alert-boxes.test.ts` fails a hand-rolled tinted box, so this rule does not depend on a
+reviewer noticing.
+
+## 19. Archetypes (2026-10-20)
+
+§7 lists components; it never said what a *screen* of a given kind looks like. So an inbox was built
+out of `Table` — four columns, `Said` holding a timestamp, the message itself a muted sub-line, and
+the account repeated once per row — because `Table` was the nearest primitive and nothing described
+the alternative. An archetype is the missing middle: not a component, not a whole page, but the
+anatomy a recurring kind of screen has.
+
+### The list/detail archetype (inbox, and anything message-shaped)
+
+A list of things people sent, newest first, one of which may be open beside it.
+
+**The list is not a table.** A table is for comparing values down a column. An inbox is read across
+a row: who, what they said, when, about what. The message gets the most visual weight on the row,
+not the least.
+
+**Row anatomy**, in order of weight:
+
+1. **What they said** — full-strength text, two lines maximum, truncated with an ellipsis.
+2. **Who said it** — display name or handle, with an avatar when the platform gives one. A bare
+   underlined handle is a link, not an identity.
+3. **What it is about** — the parent post's first words when it is one of ours. A row that cannot
+   say what it concerns is asking the reader to open it to find out.
+4. **When** — `LocalTime`, right-aligned and `muted-foreground`. Not a second time format: §4 and
+   `tests/lint/date-format.test.ts` make `formatLocal` the only one, and the day grouping below is
+   what supplies the "recently or a while ago" reading that a relative format would.
+5. **Which account** — only where more than one account is in the list. A column repeating one value
+   on every row is decoration.
+
+**State is weight, not a badge per row.** Waiting is a heavier row and a dot; answered and dismissed
+are quieter. A `Badge` on every row for a value that is the same on every row teaches nothing. Badge
+the exception — `Private`, `Withdrawn`, `Edited` — never the norm.
+
+**Group by day.** `Today`, `Yesterday`, then the date, as a subheading. Undifferentiated scroll is
+how a reader loses their place.
+
+**Filters are chrome.** They sit above the list and must not out-measure it. Three stacked rows of
+chips before the first message means the page is mostly about filtering, and it is not.
+
+**Detail beside the list, not instead of it.** On `lg` and wider the open item renders in a pane next
+to the list, so the reader keeps their place. Below `lg` the list fills the width and the item gets
+its own route — the same route a direct link uses. Both must work; the pane is a layout, not a
+different page.
+
+**Empty is not the same as unavailable.** "Nothing has arrived yet" is an `EmptyState`. "This account
+cannot be read" is an `Alert` above the list (§18): a message about the system, not an absence of
+content.
