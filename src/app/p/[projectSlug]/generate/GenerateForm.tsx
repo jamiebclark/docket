@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import type { MediaView } from "@/server/services/media";
@@ -281,12 +282,15 @@ export function GenerateForm({ slug, mode = "single", profiles, accounts, defaul
       />
 
       {error ? (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded-lg border border-danger-border bg-danger-bg p-3 text-sm text-danger">
+        <Alert tone="danger">
           <p>Error: {error}</p>
-          <Button variant="secondary" onClick={() => submit(freshRequestId())} disabled={busy}>
-            Try again
-          </Button>
-        </div>
+          {/* The action belongs inside the box, not floating beneath it (design-system.md §18). */}
+          <div className="mt-3">
+            <Button variant="secondary" onClick={() => submit(freshRequestId())} disabled={busy}>
+              Try again
+            </Button>
+          </div>
+        </Alert>
       ) : null}
       <LiveRegion message={busy ? (series ? "Planning…" : "Generating…") : error ? `Error: ${error}` : ""} />
 
