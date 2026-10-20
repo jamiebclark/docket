@@ -257,6 +257,7 @@ export async function chooseConnectCandidates(
               settings: c.settings,
               credentials: c.credentials,
               ...(c.expiresAt ? { credentialsExpireAt: new Date(c.expiresAt) } : {}),
+              ...(c.grantedScopes ? { grantedScopes: c.grantedScopes } : {}),
             }),
           ),
         );

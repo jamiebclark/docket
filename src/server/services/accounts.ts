@@ -346,6 +346,7 @@ export async function saveConnectedAccountTx(tx: ProjectScope, parsed: SaveConne
     credentialsEncrypted: null,
     credentialsExpiresAt: parsed.credentialsExpireAt ?? null,
     connectedByUserId: tx.membership.userId,
+    grantedScopes: parsed.grantedScopes as readonly string[] | undefined,
   });
   let result = row;
   if (parsed.credentials !== undefined && parsed.credentials !== null) {
