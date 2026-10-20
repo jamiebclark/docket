@@ -71,6 +71,20 @@ describe("dialogUrl", () => {
     }
   });
 
+  it("asks Facebook to re-prompt when it is requesting an optional scope", () => {
+    // The whole reconnect flow depends on this: without it Facebook shows the asset picker, skips
+    // the permission screen for an app the member already authorized, and hands back the grant they
+    // already had — so "reconnect to grant X" can never grant X.
+    const u = new URL(dialogUrl({ ...cfg, engagementScopes: true }, { state: "s", redirectUri: "https://x.test/cb" }));
+    expect(u.searchParams.get("auth_type")).toBe("rerequest");
+  });
+
+  it("does not re-prompt when there is nothing optional to ask for", () => {
+    // FR-029: with both opt-ins off the dialog must stay exactly what it was.
+    const u = new URL(dialogUrl(cfg, { state: "s", redirectUri: "https://x.test/cb" }));
+    expect(u.searchParams.has("auth_type")).toBe(false);
+  });
+
   it("uses config_id instead of scope when set", () => {
     const u = new URL(dialogUrl({ ...cfg, loginConfigId: "777" }, { state: "s", redirectUri: "https://x.test/cb" }));
     expect(u.searchParams.get("config_id")).toBe("777");

@@ -49,8 +49,22 @@ export function dialogUrl(cfg: MetaConfig, input: { state: string; redirectUri: 
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("state", input.state);
   url.searchParams.set("response_type", "code");
-  if (cfg.loginConfigId) url.searchParams.set("config_id", cfg.loginConfigId);
-  else url.searchParams.set("scope", [...META_SCOPES, ...optionalFor(cfg)].join(","));
+  if (cfg.loginConfigId) {
+    url.searchParams.set("config_id", cfg.loginConfigId);
+  } else {
+    const optional = optionalFor(cfg);
+    url.searchParams.set("scope", [...META_SCOPES, ...optional].join(","));
+    // Facebook does not re-ask an already-authorized app for permissions it has not been granted.
+    // Without this, a member sent to "reconnect for instagram_manage_comments" sees the Page and
+    // Instagram picker, confirms it, and is returned with exactly the grant they already had — no
+    // error, no new permission, and the notice that sent them still showing. `auth_type=rerequest`
+    // is the documented way to make the dialog ask again.
+    //
+    // Only when something optional is actually being requested: with both flags off there is
+    // nothing to re-ask for, and FR-029 pins that URL byte-identical to what shipped before any of
+    // this existed.
+    if (optional.length > 0) url.searchParams.set("auth_type", "rerequest");
+  }
   return url.toString();
 }
 
