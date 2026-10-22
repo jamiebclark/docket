@@ -45,14 +45,31 @@ describe("SignedInHeader (shown on /p/new and /invitations)", () => {
     expect(html).not.toContain('href="/notifications"');
   });
 
-  it("makes the avatar and name the link to the account page, with no separate Account item", async () => {
-    const html = await render(await createUser({ name: "Robin Fox" }));
-    // One /account link, and the name is inside it rather than beside it.
+  it("puts the account, all-activity and sign-out items behind the avatar instead of spending a header control on each", async () => {
+    const user = await createUser({ name: "Robin Fox" });
+    const html = await render(user);
+    // One disclosure, opened by the avatar, holding all three — not three controls in the bar.
+    expect((html.match(/<details/g) ?? []).length).toBe(1);
+    expect(html).toMatch(/<summary[\s\S]*?RF[\s\S]*?<\/summary>/);
     expect((html.match(/href="\/account"/g) ?? []).length).toBe(1);
-    expect(html).toMatch(/href="\/account"[\s\S]*?Robin Fox[\s\S]*?<\/a>/);
-    expect(html).toContain("RF");
+    expect(html).toContain("Your account");
+    expect(html).toContain("All activity");
+    expect(html).toContain("Sign out");
     // The visible name starts the accessible name, so what you read is what you can say (WCAG 2.5.3).
-    expect(html).toMatch(/Robin Fox<\/span><span class="sr-only"> — Account<\/span>/);
+    expect(html).toMatch(/Robin Fox<\/span><span class="sr-only"> — account menu<\/span>/);
+  });
+
+  it("names the signed-in account inside the menu, where a phone has room for it", async () => {
+    // The header shows initials only below `md`, so the avatar alone cannot answer "which account?".
+    const user = await createUser({ name: "Robin Fox" });
+    const html = await render(user);
+    expect(html).toContain(user.email);
+  });
+
+  it("renders the whole menu in the markup, so it still works with no JavaScript", async () => {
+    // A `<details>` disclosure, not a JS-only popover: every item is a real link or submit.
+    const html = await render(await createUser());
+    expect(html).toMatch(/<details[\s\S]*?href="\/account"[\s\S]*?href="\/activity"[\s\S]*?Sign out[\s\S]*?<\/details>/);
   });
 
   it("hides the count when nothing is pending", async () => {

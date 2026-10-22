@@ -118,13 +118,21 @@ export function NotificationPanel({
     }
   }
 
+  // On a phone this is a sheet pinned under the header, not a popover hung off the bell: the bell is
+  // not the last control in the bar, so a panel right-aligned to it and nearly as wide as the screen
+  // began off the left edge of the screen, with most of it unreachable. `left-3 right-3` — rather
+  // than an `inset-x` the `sm:` reset would have to out-order — gives it its width instead, and a
+  // fixed `top-16` clears the h-14 header whether or not the header's backdrop filter makes it the
+  // containing block. A sheet does not move with the page, so it also caps its own height and
+  // scrolls; that is only on the phone, because a scroll box here clips a row's open Snooze
+  // disclosure, and from `sm` up this is the unconstrained popover under the bell it has always been.
   return (
     <div
       id="notifications-panel"
       role="dialog"
       aria-modal="false"
       aria-labelledby="notifications-panel-title"
-      className="absolute right-0 top-full z-40 mt-2 w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-4 shadow-overlay"
+      className="fixed top-16 right-3 left-3 z-40 max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-overlay sm:absolute sm:top-full sm:right-0 sm:left-auto sm:mt-2 sm:max-h-none sm:w-[min(28rem,calc(100vw-2rem))] sm:overflow-y-visible"
     >
       <h2 id="notifications-panel-title" ref={heading} tabIndex={-1} className="mb-2 text-base font-semibold focus:outline-none">
         Recent problems
