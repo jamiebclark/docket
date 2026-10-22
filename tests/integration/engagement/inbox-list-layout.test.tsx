@@ -60,6 +60,13 @@ describe("the inbox list is an inbox, not a table", () => {
     expect(render([item()])).toContain("Dark porch. Candle going in.");
   });
 
+  it("caps the quoted post so it cannot out-weigh the message", () => {
+    // Rendered unbounded on the live install, the quote ran the full row and became the longest
+    // thing in it — the opposite of the weight order §19 sets out.
+    const html = render([item({ parent: { kind: "docket_post", text: "x".repeat(400), externalId: null } })]);
+    expect(html).toMatch(/max-w-\[\d+ch\][^"]*truncate|truncate[^"]*max-w-\[\d+ch\]/);
+  });
+
   it("does not repeat the account on every row when there is only one", () => {
     const html = render([item({ id: "a" }), item({ id: "b" })]);
     expect(html.split("Stencilvania · Instagram").length - 1).toBe(0);
