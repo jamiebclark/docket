@@ -8,6 +8,10 @@ provider code (use the `platform-researcher` agent). Items marked
 **UNVERIFIED** could not be confirmed on an official page; cover them with
 mocked tests and treat them as assumptions.
 
+Comment, reply and mention **reading** facts (Facebook Page comments,
+Instagram comments, Threads replies, Threads mentions) live in
+`docs/research/engagement.md` §2, not here — this file covers publishing.
+
 ## Graph API version
 - Latest: **v26.0** (released 2026-07-29); v25.0 before it.
   Source: https://developers.facebook.com/docs/graph-api/changelog

@@ -237,7 +237,7 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     // The account state row is only created lazily on the first claim, so claim (and release) once
     // before forcing a stable "older" direction across both pages this run — otherwise the second
     // provider call reuses the unrelated "newest" cursor, restarting the page count at zero.
-    await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] });
+    await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providers: [{ providerKey: "mock", readScopes: [] }] });
     await forSchedulerProject(ctx.project.id).engagementAccountStates.update(account.id, { backfilling: true, readLeaseUntil: null, readLeaseOwner: null });
 
     const tick = await atTime(AT, () => runTick(tickConfig({ ...NO_WAIT, engagementReadPageSize: 2, engagementReadPagesPerRun: 3 })));
@@ -281,7 +281,7 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
 
   it("a tick finds the read lease already held by another and moves on", async () => {
     const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "lease-1", text: "hi" }]);
-    const held = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 60_000, minIntervalMs: 0, providerKeys: ["mock"] });
+    const held = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 60_000, minIntervalMs: 0, providers: [{ providerKey: "mock", readScopes: [] }] });
     expect(held.map((c) => c.account.id)).toContain(account.id);
 
     const tick = await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
@@ -294,7 +294,7 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
   it("resumes from the last committed cursor after a tick is killed mid-read", async () => {
     const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "kill-1", text: "hi", saidAt: AT.toISOString() }]);
     // Simulate a kill: claim the lease but never commit or release it.
-    const killed = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] });
+    const killed = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providers: [{ providerKey: "mock", readScopes: [] }] });
     expect(killed.map((c) => c.account.id)).toContain(account.id);
 
     // Once the dangling lease has expired, the next tick reclaims the account and reads normally,

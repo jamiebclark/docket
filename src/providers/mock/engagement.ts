@@ -92,3 +92,12 @@ export const mockEngagement: EngagementSupport<MockSettings> = {
     }
   },
 };
+
+/**
+ * Test-only convenience: builds the `EngagementProviderRule` shape (contracts/engagement-read-scopes.md
+ * §4) a test can pass to `src/server/dal/engagement-read-claims.ts` from a mock account's own
+ * scripted settings, so the scope gate is exercisable with no real provider.
+ */
+export function mockEngagementRuleFor(settings: MockSettings): { providerKey: "mock"; readScopes: readonly string[] } {
+  return { providerKey: "mock", readScopes: settings.engagementReadScopes };
+}

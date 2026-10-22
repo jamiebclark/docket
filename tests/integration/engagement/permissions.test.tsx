@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { AccountSchema } from "../../../src/lib/api/schemas";
 import { ForbiddenError } from "../../../src/server/dal/errors";
 import { forApiKey, forJobRunner } from "../../../src/server/dal/scope";
 import { countInboxWaiting, getInboxItem, listEngagementAccounts, listInbox } from "../../../src/server/services/engagement/inbox";
@@ -51,5 +52,9 @@ describe("engagement permissions (FR-036, FR-037)", () => {
     await expect(listInbox(jobRunnerScope)).rejects.toThrow(ForbiddenError);
     await expect(getInboxItem(jobRunnerScope, "00000000-0000-0000-0000-000000000000")).rejects.toThrow(ForbiddenError);
     await expect(listEngagementAccounts(jobRunnerScope)).rejects.toThrow(ForbiddenError);
+  });
+
+  it("the public API account schema carries no engagement read permission, reason or docs path (FR-037)", () => {
+    expect(Object.keys(AccountSchema.shape)).not.toContain("engagementReadPermission");
   });
 });

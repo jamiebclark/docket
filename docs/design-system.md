@@ -168,7 +168,7 @@ text/UI pairs in both themes.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│ [D] Docket │ Acme Launch ▾  ⌘K   ● Scheduler ran 12 s ago   ✉ Invitations  (RO) Sign out │  ← sticky header, h-14
+│ [D] Docket │ Acme Launch ▾  ⌘K   ● Scheduler ran 12 s ago   ✉ Invitations  🔔  (RO) Robin Fox ▾ │  ← sticky header, h-14
 ├──────────────┬─────────────────────────────────────────────────────┤
 │ ◫ Overview   │  (banners: scheduler stale = danger, reauth = warning) │
 │ PUBLISH      │                                                     │
@@ -191,8 +191,14 @@ text/UI pairs in both themes.
 
 - **Header:** logo (links home), divider, project switcher (pill button with
   chevron and `Ctrl/⌘ K` hint), quiet scheduler status (green dot, `lg+`
-  only), then invitations and user menu (initials avatar from the user's own
-  display name, never from their email).
+  only), then invitations, the notification bell and the user menu (initials
+  avatar from the user's own display name, never from their email). The user
+  menu is a **disclosure, not three controls**: the avatar opens a panel headed
+  by the name and sign-in email — the only place a phone has room to say which
+  account is loaded — then **Your account**, **All activity** and **Sign out**.
+  Three header items each costs the project switcher beside it width it does
+  not have below `md` (§20 G2). Any later "one more header link" belongs in
+  this menu unless it has to be reachable *sooner* than one tap.
 - **Sidebar:** 240 px, sticky below the header, grouped by job: **Overview** first
   (the project home, ungrouped), then **Publish**
   (Compose, Calendar, Posts, Review, Failures), **Create** (Generate, Brand
@@ -346,6 +352,13 @@ needing to stay reachable without opening anything.
   "hidden by default, opened on demand" shape elsewhere in the app
   (`accounts/page.tsx`, `Composer.tsx`); the notification row reuses it rather
   than adding a disclosure component.
+- The header's `UserMenu` is the same shape for the same reason — two links and
+  a sign-out submit, all of which have to survive with no JavaScript, which
+  `Menu`'s `onSelect` items would not. What it adds is `useDismiss`
+  (`src/components/ui/dismiss.ts`): Escape, a press outside, focus leaving — the
+  three dismissals a native disclosure lacks and a header overlay needs. The
+  bell's popover uses the same hook, so the two overlays side by side in the bar
+  cannot drift apart.
 - Each submit inside the disclosure carries the row's subject in its accessible
   name (e.g. "Snooze until tomorrow morning — Instagram post failed"), so two
   rows' "1 hour" buttons are distinguishable to a screen reader even though
@@ -627,3 +640,89 @@ Loading is a `loading.tsx` of skeleton blocks matching the layout, per §8 above
 **Numbers** are formatted with the app's existing count formatter, `tabular-nums` in tables, and
 never rounded in a way that would merge two platforms' magnitudes onto one axis — which cannot
 happen, because no axis in this entry carries two platforms' values.
+
+## 18. Notices: a tinted box is always `Alert` (2026-10-20)
+
+Docket shipped an inbox whose "this account needs a reconnect" message was a bare `<p>` with a
+detached button beneath it, and five hand-rolled `rounded-lg border border-border bg-muted px-3
+py-2 text-sm` boxes across three files. `Alert` existed the whole time, documented in §7 with its
+tones and its `role` behaviour, and was imported by none of them.
+
+Nothing was broken, which is why it survived review: each box looked approximately right on its own,
+and only looked wrong beside the others.
+
+**The rule.** Any box that tints or outlines a short message to the member is `Alert`. Not a `<p>`
+with border classes, not a `<div>` that repeats `alertStyles`' tokens by hand. If a message needs a
+shape `Alert` does not have, add a variant to `Alert` — one file changes and every notice gets it.
+
+- **Do** `<Alert tone="warning" title="Inbox needs a reconnect">…</Alert>`.
+- **Don't** hand-roll `rounded-lg border border-border bg-muted px-3 py-2 text-sm`.
+- A notice with an action puts the action **inside** the `Alert`, last, as a `secondary` or `ghost`
+  button. A control floating beneath an untinted sentence reads as unrelated to it, because nothing
+  groups them.
+- A neutral panel that is *context* rather than a message — "On your post", a quoted parent — is not
+  an `Alert`. It is a plain bordered block, and it carries no `role`. Reserve `role="status"` and
+  `role="alert"` for what a screen reader should announce.
+
+`tests/lint/alert-boxes.test.ts` fails a hand-rolled tinted box, so this rule does not depend on a
+reviewer noticing.
+
+## 19. Archetypes (2026-10-20)
+
+§7 lists components; it never said what a *screen* of a given kind looks like. So an inbox was built
+out of `Table` — four columns, `Said` holding a timestamp, the message itself a muted sub-line, and
+the account repeated once per row — because `Table` was the nearest primitive and nothing described
+the alternative. An archetype is the missing middle: not a component, not a whole page, but the
+anatomy a recurring kind of screen has.
+
+### The list/detail archetype (inbox, and anything message-shaped)
+
+A list of things people sent, newest first, one of which may be open beside it.
+
+**The list is not a table.** A table is for comparing values down a column. An inbox is read across
+a row: who, what they said, when, about what. The message gets the most visual weight on the row,
+not the least.
+
+**Row anatomy**, in order of weight:
+
+1. **What they said** — full-strength text, two lines maximum, truncated with an ellipsis.
+2. **Who said it** — display name or handle, with an avatar when the platform gives one. A bare
+   underlined handle is a link, not an identity.
+3. **What it is about** — the parent post's first words when it is one of ours. A row that cannot
+   say what it concerns is asking the reader to open it to find out.
+4. **When** — `LocalTime`, right-aligned and `muted-foreground`. Not a second time format: §4 and
+   `tests/lint/date-format.test.ts` make `formatLocal` the only one, and the day grouping below is
+   what supplies the "recently or a while ago" reading that a relative format would.
+5. **Which account** — only where more than one account is in the list. A column repeating one value
+   on every row is decoration.
+
+**State is weight, not a badge per row.** Waiting is a heavier row and a dot; answered and dismissed
+are quieter. A `Badge` on every row for a value that is the same on every row teaches nothing. Badge
+the exception — `Private`, `Withdrawn`, `Edited` — never the norm.
+
+**Group by day.** `Today`, `Yesterday`, then the date, as a subheading. Undifferentiated scroll is
+how a reader loses their place.
+
+**Filters are chrome.** They sit above the list and must not out-measure it. Three stacked rows of
+chips before the first message means the page is mostly about filtering, and it is not.
+
+**Detail beside the list, not instead of it.** On `lg` and wider the open item renders in a pane next
+to the list, so the reader keeps their place. Below `lg` the list fills the width and the item gets
+its own route — the same route a direct link uses. Both must work; the pane is a layout, not a
+different page.
+
+**Empty is not the same as unavailable.** "Nothing has arrived yet" is an `EmptyState`. "This account
+cannot be read" is an `Alert` above the list (§18): a message about the system, not an absence of
+content.
+
+## 20. The header on a phone (2026-10-21)
+
+Reported from using Docket on a phone, not found by an audit. Both findings are
+the same mistake: the header was laid out for the width it has from `md` up, and
+below that the pieces were left to fight each other.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| G1 | Opening the bell on a phone put most of its panel off the **left** edge of the screen, out of reach. The panel is `right-0` on the bell, and the bell is not the last control in the bar — so a popover `calc(100vw-2rem)` wide, hung off a point ~70 px in from the right, had to start ~40 px past the left edge. It was never wrong on a desktop, where the panel is far narrower than the room to its left, which is why it survived this long. | High | Below `sm` the panel is a **sheet pinned under the header** (`fixed top-16 left-3 right-3`), not a popover hung off the bell: its width comes from the viewport, so no trigger position can push it anywhere. `left-3 right-3` rather than `inset-x-3`, so the `sm:` reset overrides a property rather than racing a shorthand in the generated source order. `top-16` is a constant, not `top-full`, so it clears the `h-14` header whether or not the header's `backdrop-blur` makes it the containing block for fixed children. A sheet does not scroll with the page, so on the phone it caps its height and scrolls — only there, because a scroll box clips a row's open Snooze disclosure, and from `sm` up this is the unconstrained popover it has always been. |
+| G2 | Below `md` the bar held five targets on the right — invitations, bell, avatar, All activity, Sign out — and the project switcher got whatever was left, which was a few characters of a truncated project name. You could not read which project you were in, which is the one thing the header exists to tell you. | High | The last three collapse into **one** avatar menu (§6, §7): two controls recovered, and the switcher gets their width back. The menu also *answers* the question the squeeze raised — it is headed by the name and sign-in email, which the bar itself cannot show below `md`, where the avatar is bare initials. |
+| G2a | §15 F4 had made the avatar and name *be* the `/account` link, to avoid a text "Account" item among four icon marks. G2 turns the avatar into a menu trigger, so that is no longer available. | Low | **Your account** is the menu's first item, so identity still leads the way to the account page — one tap further, in exchange for the two header slots F4's reasoning was competing for. The avatar keeps its own accessible name (`"<name> — account menu"`, visible name first, WCAG 2.5.3). |

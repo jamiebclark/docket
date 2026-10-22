@@ -8,17 +8,21 @@ member draft and send a reply. Nothing is ever sent without a person approving i
 | Platform | Reading comments/mentions | Replying | Direct messages |
 |---|---|---|---|
 | Bluesky | Yes — replies and mentions | Yes | Not yet |
-| Facebook Pages | Not yet | Not yet | Not yet |
-| Instagram | Not yet | Not yet | Not yet |
-| Threads | Not yet | Not yet | Not yet |
+| Facebook Pages | Yes — comments on the Page's own posts | Not yet — Meta has no confirmed reply-to-comment endpoint at this access level | Not yet |
+| Instagram | Yes — comments on the account's own posts | Not yet — same reason as Facebook | Not yet |
+| Threads — replies | Not yet — the `threads_manage_replies` permission is confirmed and already requestable, but Threads publishes no confirmed read endpoint for replies, so there is nothing to call | Not yet | Not yet |
+| Threads — mentions | Not yet — same: the `threads_manage_mentions` permission is confirmed, the read endpoint is not | Not yet | Not yet |
 
 Bluesky is supported because the facts the inbox needs — how a comment identifies who posted it, how a
 reply addresses its parent, and the write cost of sending one — are all confirmed from the installed
-Bluesky library and Docket's own Bluesky research (see `docs/research/engagement.md`). The same
-questions for Facebook Pages, Instagram and Threads are still unverified, so no Meta surface is built
-yet: nothing here will show a commenter's name or identifier unless it traces to a confirmed answer.
-Direct messages are specified but not built on any platform, for the same reason — no platform's
-message facts are confirmed yet.
+Bluesky library and Docket's own Bluesky research (see `docs/research/engagement.md`). Facebook Page and
+Instagram comments are supported for reading only: the permission, the endpoint and the commenter
+identity shape are all confirmed (`docs/research/engagement.md` §2), but no reply-to-comment endpoint is
+confirmed at this access level on either surface, so a Facebook or Instagram comment in the inbox shows no
+reply composer — it can only be dismissed or marked handled. Threads is not built yet because neither
+surface has a confirmed read endpoint — the permissions for both are already confirmed and requestable,
+but there is nothing to call (see `docs/research/engagement.md` §2). Direct messages are specified but
+not built on any platform — no platform's message facts are confirmed yet.
 
 ## Nothing sends without a person
 
@@ -69,6 +73,21 @@ Each supported surface needs only the access it already has for publishing:
 
 - **Bluesky**: the same app-password session used for publishing is used to read notifications and
   send replies. No extra permission is requested.
+- **Facebook Pages and Instagram**: opt in with `META_ENGAGEMENT_SCOPES=true` so the connect dialog also
+  asks for `pages_read_user_content` (Facebook) and `instagram_manage_comments` (Instagram) —
+  `pages_read_engagement` is already requested by every connection, but it alone is not enough: it does
+  not cover comments other people leave. If your Meta app uses a login configuration
+  (`META_LOGIN_CONFIG_ID`), the permission must be added to that configuration in the Meta dashboard
+  instead — the flag alone cannot widen it there. See [meta-setup.md](meta-setup.md#engagement). A
+  missing permission never affects publishing. An account connected before the flag was turned on, or
+  whose last grant did not include the new permission, is skipped by the read with "Inbox needs a
+  reconnect" on the Accounts page; reconnecting grants it without touching the account's ability to
+  publish.
+- **Threads**: opt in with `THREADS_ENGAGEMENT_SCOPES=true` so the connect dialog also asks for
+  `threads_manage_replies` and `threads_manage_mentions`. See
+  [meta-setup.md](meta-setup.md#engagement). A missing permission never affects publishing; granting
+  these permissions does not cause anything to be read — the reader is not built, and the permission and
+  the reader are separate pieces of work (`docs/research/engagement.md` §2).
 
 ## What this does not do yet
 

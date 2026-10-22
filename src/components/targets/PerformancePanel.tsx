@@ -1,6 +1,5 @@
 import { Fragment } from "react";
-import type { DocPage } from "@/lib/docs";
-import { docsUrl } from "@/lib/docs";
+import { docsHref } from "@/lib/docs";
 import type { TargetInsightsView } from "@/lib/insights/panel";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -29,7 +28,7 @@ function body(view: Exclude<TargetInsightsView, { state: "not_published" }>, pla
         <p>
           {view.reason}{" "}
           {view.docsPath ? (
-            <a href={docsUrl(view.docsPath as DocPage)} target="_blank" rel="noopener noreferrer" className="underline">
+            <a href={docsHref(view.docsPath)} target="_blank" rel="noopener noreferrer" className="underline">
               Learn more
             </a>
           ) : null}
@@ -40,7 +39,7 @@ function body(view: Exclude<TargetInsightsView, { state: "not_published" }>, pla
         <p>
           {view.reason}{" "}
           {view.docsPath ? (
-            <a href={docsUrl(view.docsPath as DocPage)} target="_blank" rel="noopener noreferrer" className="underline">
+            <a href={docsHref(view.docsPath)} target="_blank" rel="noopener noreferrer" className="underline">
               Learn more
             </a>
           ) : null}
@@ -51,7 +50,7 @@ function body(view: Exclude<TargetInsightsView, { state: "not_published" }>, pla
         <p>
           {view.reason}{" "}
           {view.docsPath ? (
-            <a href={docsUrl(view.docsPath as DocPage)} target="_blank" rel="noopener noreferrer" className="underline">
+            <a href={docsHref(view.docsPath)} target="_blank" rel="noopener noreferrer" className="underline">
               Learn more
             </a>
           ) : null}

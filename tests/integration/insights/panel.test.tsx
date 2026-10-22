@@ -207,7 +207,7 @@ describe("the performance panel on the post detail page (contracts/panel.md)", (
     const markup = await html(page);
 
     expect(markup).toContain("pin analytics are refused by the platform.");
-    expect(markup).toContain("pinterest-setup#insights");
+    expect(markup).toContain("pinterest-setup/#insights");
   });
 
   it("an X-opt-in-off-like run-time unavailable reaches the panel as unavailable with reason and docs link (FR-050, SC-003)", async () => {
@@ -229,7 +229,7 @@ describe("the performance panel on the post detail page (contracts/panel.md)", (
     const markup = await html(page);
 
     expect(markup).toContain("Metered reads are off until an operator turns them on.");
-    expect(markup).toContain("x-setup#insights");
+    expect(markup).toContain("x-setup/#insights");
   });
 
   it("a TikTok metric the response omitted is absent from the rendered panel — no row, no dash, no zero (FR-024, contracts/platform-readers-082.md §4)", async () => {

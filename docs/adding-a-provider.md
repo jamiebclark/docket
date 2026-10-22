@@ -78,6 +78,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G37 | `postScopes`/`missingPostScopes` and `accountScopes`/`missingAccountScopes` on an `insights` declaration — eligibility checked per surface, not once for both | 21 |
 | G38 | `shape` on a `MetricKeyDeclaration` — whether a key is cumulative, windowed or unknown | 21 |
 | G39 | `baseScopes` on an `OAuthConnectGroup` — what its dialog asks for before any opt-in | 4 |
+| G40 | `readScopes`/`missingReadScopes` on an `engagement` declaration, checked in the claim; `optionalScopes.cannotWiden` answered per surface | 4, 20 |
 
 ## 3. Capabilities and counting rules
 
@@ -569,7 +570,9 @@ engagement?: {
     reads: readonly ("reply" | "comment" | "mention" | "direct_message")[]; // never empty — omit `engagement` instead
     canReply: boolean;
     writeBudget?: { count: number; windowSeconds: number }; // the per-account allowance a reply spends
-    unavailable?: { reason: string; docsPath?: string };    // declared but not readable on this install (G55)
+    unavailable?: { reason: string; docsPath?: string };    // declared but not readable on this install (077 FR-055)
+    readScopes?: readonly string[];                         // granted_scopes this provider's read needs (G40)
+    missingReadScopes?: { reason: string; docsPath?: string }; // shown when readScopes are not held; required when readScopes is non-empty (G40)
   };
   itemDataSchema: z.ZodType;  // your own shape of `engagement_items.provider_data`
   stateSchema: z.ZodType;     // your own shape of `engagement_account_states.provider_state`
@@ -588,13 +591,34 @@ engagement?: {
   what was created) returned as `ambiguous`, never `retryable_error` — the same "never risk a double effect" rule
   `advance()` already follows.
 - `itemDataSchema` and `stateSchema` must reject anything resembling a credential or token.
+- `readScopes` (G40) is one list, not a pair like `insights`' `postScopes`/`accountScopes` — engagement has one
+  read surface. Default empty means "no permission needed", every provider's behaviour before this field
+  existed. `unavailable` and a non-empty `readScopes` are mutually exclusive — they say different things ("not
+  readable here at all" vs. "not granted by this account yet") and the registry refuses a declaration naming
+  both. A non-empty `readScopes` requires `missingReadScopes.reason` (1–300 characters), and every entry must
+  match `GRANTED_SCOPE_PATTERN` (`src/lib/granted-scopes.ts`) — all enforced at load time by
+  `assertEngagementDeclaration`, so a bad declaration is a startup failure, not a tick-time surprise.
+- **Claim-level guarantee**: an account missing a declared scope (or whose `granted_scopes` is `NULL`, which
+  means "not known", never "holds everything") is never claimed, leased, decrypted or called —
+  `claimDueEngagementReads` checks `readScopes` against the account's `granted_scopes` before it claims, not
+  after. Items already read stay readable; losing eligibility never withdraws them.
+- A surface blocked on something **the platform has not published** — no confirmed read endpoint, no confirmed
+  object shape — is `unavailable`: no account can make it readable, so it declares no `readScopes`.
+  `src/providers/threads/engagement.ts` is the current example. A surface blocked on something **this account
+  has not granted** declares `readScopes` and no `unavailable`, and becomes readable the moment the account
+  reconnects. Naming both would tell a member to go and fix something that is not theirs to fix.
 
-`src/providers/bluesky/engagement.ts` is the one real implementation so far: `app.bsky.notification.listNotifications`
-for reading (never calling `updateSeen`), and `com.atproto.repo.createRecord` for sending, reusing the session and
-refresh path `publish.ts` already has. `src/providers/mock/index.ts` declares all four kinds plus an `unavailable`
-variant, so the inbox's capability seam is testable with no platform credentials at all — read that one first. See
-`docs/engagement.md` for what the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md`
-for the full contract.
+There are two reader shapes, each with one real example:
+
+| Shape | Current real example | Suits |
+|---|---|---|
+| **Account-level reader** — the platform hands the account a feed of inbound items; one call per read, the cursor is the platform's own | `src/providers/bluesky/engagement.ts` (`app.bsky.notification.listNotifications` for reading, never calling `updateSeen`; `com.atproto.repo.createRecord` for sending, reusing the session and refresh path `publish.ts` already has) | platforms with a notifications or mentions feed scoped to the account |
+| **Per-post reader** — the platform lists comments per post, so the provider must discover its own recent posts and walk them, keeping the walk's position in `provider_state` under its own `stateSchema` | `src/providers/meta/engagement-sweep.ts` with `src/providers/facebook/engagement.ts` and `src/providers/instagram/engagement.ts` as the thin per-platform surfaces | platforms whose comment edge hangs off a post, not an account |
+
+`src/providers/mock/index.ts` declares all four kinds plus an `unavailable` variant, so the inbox's capability
+seam is testable with no platform credentials at all — read that one first. See `docs/engagement.md` for what
+the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md` for the
+full contract.
 
 ## 21. Reading post and account metrics (`insights`, 080)
 

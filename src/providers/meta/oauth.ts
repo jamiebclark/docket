@@ -18,9 +18,29 @@ export function metaApp(cfg: MetaConfig): MetaApp {
   return { graphBase: DEFAULT_GRAPH_BASE, version: cfg.graphVersion };
 }
 
-/** contracts/granted-scopes.md §3. `[]` unless `cfg.insightsScopes` is on (FR-017). */
+/**
+ * The engagement scopes the login dialog asks for when the opt-in is on.
+ *
+ * This list and `ENGAGEMENT_SCOPES_DECLARED` in `connect-group.ts` describe the same thing from two
+ * ends — what the dialog requests, and what a surface tells a member it needs — and they shipped
+ * disagreeing: the declaration named `pages_read_user_content`, the dialog never asked for it, so
+ * the accounts page offered a Facebook reconnect that could not grant the permission it named. That
+ * is the loop G40 exists to prevent. `oauth.test.ts` now pins the dialog against
+ * `optionalScopes.requested`, so the two cannot drift again.
+ */
+export const ENGAGEMENT_OPT_IN = ["instagram_manage_comments", "pages_read_user_content"] as const;
+
+/**
+ * contracts/granted-scopes.md §3; contracts/optional-scopes-per-surface.md §3. Insights opt-in
+ * `[]` unless `cfg.insightsScopes` is on (FR-017); engagement opt-in `[]` unless
+ * `cfg.engagementScopes` is on. Deliberately a union, not narrowed per surface — see §3's note on
+ * why narrowing reintroduces a "not requested" bug.
+ */
 export function optionalFor(cfg: MetaConfig): readonly string[] {
-  return cfg.insightsScopes ? ["read_insights", "instagram_manage_insights"] : [];
+  return [
+    ...(cfg.insightsScopes ? ["read_insights", "instagram_manage_insights"] : []),
+    ...(cfg.engagementScopes ? ENGAGEMENT_OPT_IN : []),
+  ];
 }
 
 export function dialogUrl(cfg: MetaConfig, input: { state: string; redirectUri: string }): string {
@@ -29,8 +49,22 @@ export function dialogUrl(cfg: MetaConfig, input: { state: string; redirectUri: 
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("state", input.state);
   url.searchParams.set("response_type", "code");
-  if (cfg.loginConfigId) url.searchParams.set("config_id", cfg.loginConfigId);
-  else url.searchParams.set("scope", [...META_SCOPES, ...optionalFor(cfg)].join(","));
+  if (cfg.loginConfigId) {
+    url.searchParams.set("config_id", cfg.loginConfigId);
+  } else {
+    const optional = optionalFor(cfg);
+    url.searchParams.set("scope", [...META_SCOPES, ...optional].join(","));
+    // Facebook does not re-ask an already-authorized app for permissions it has not been granted.
+    // Without this, a member sent to "reconnect for instagram_manage_comments" sees the Page and
+    // Instagram picker, confirms it, and is returned with exactly the grant they already had — no
+    // error, no new permission, and the notice that sent them still showing. `auth_type=rerequest`
+    // is the documented way to make the dialog ask again.
+    //
+    // Only when something optional is actually being requested: with both flags off there is
+    // nothing to re-ask for, and FR-029 pins that URL byte-identical to what shipped before any of
+    // this existed.
+    if (optional.length > 0) url.searchParams.set("auth_type", "rerequest");
+  }
   return url.toString();
 }
 

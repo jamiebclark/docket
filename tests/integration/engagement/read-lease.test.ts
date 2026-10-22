@@ -16,7 +16,7 @@ afterAll(async () => {
 beforeEach(parkAllEngagementReads);
 
 const AT = new Date("2026-10-10T12:00:00Z");
-const CLAIM_OPTS = { limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] };
+const CLAIM_OPTS = { limit: 10, leaseMs: 1000, minIntervalMs: 0, providers: [{ providerKey: "mock", readScopes: [] }] };
 
 describe("claimDueEngagementReads lease reclaim (F7)", () => {
   it("does not reclaim a live lease, but reclaims once it has expired, and the stale token's commit is dropped", async () => {

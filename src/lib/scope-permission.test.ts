@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insightsPermissionFor } from "./eligibility";
+import { scopePermissionFor as insightsPermissionFor } from "./scope-permission";
 
 const missingScopes = { reason: "Reconnect to grant insights", docsPath: "/docs/insights" };
 

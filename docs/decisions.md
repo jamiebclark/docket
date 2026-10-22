@@ -4120,6 +4120,93 @@ that way, and hunt 39195627319 shows `refresh.test.ts` gone from the report enti
 `jobs/budget.test.ts` had been doing it this way all along. The tick wrapper is usually incidental to
 what these tests assert, and it is the part exposed to the contention.
 
+## 084 — G40, declaring an engagement read's scopes and answering `cannotWiden` per surface (2026-10-19)
+
+- **The declaration and `cannotWiden` ship as one change, not two.** They answer one question from two
+  sides: may this account's comments be read, and if not, can reconnecting fix it? Shipping the
+  eligibility gate alone would let the UI tell a member "not granted" on an install whose dialog cannot
+  be widened (a login configuration that does not list the permission), sending them round a reconnect
+  loop that cannot grant anything — the precise failure 081 was built to avoid for insights, and the
+  reason this entry's Constraint 6 insists engagement get the same treatment rather than shipping the
+  half that is easier to test.
+- **The pure decision and the SQL predicate are generalised, not duplicated, with aliases kept.**
+  `insightsPermissionFor`/`InsightsPermission` move verbatim to `scopePermissionFor`/`ScopePermission`
+  in `src/lib/scope-permission.ts`, and `eligible()`'s inline SQL in the insights claim becomes
+  `accountHoldsScopes`/`accountMissingScopes` in `src/server/dal/scope-predicates.ts`, reused by both
+  the insights and engagement claims. `src/lib/insights/eligibility.ts` keeps exporting the old names as
+  a two-line alias so no caller outside this entry has to change, and 081's test suite is the proof: it
+  passes with zero edits (Phase 5, T021).
+- **Two deployment flags, not one shared one.** `META_ENGAGEMENT_SCOPES` and `THREADS_ENGAGEMENT_SCOPES`
+  are new flags, separate from their insights twins — turning on insights scopes must not silently widen
+  the engagement dialog too, and an operator who wants comments read but not metrics captured (or the
+  reverse) needs to be able to say so. Each mirrors its insights sibling's parsing and failure shape
+  exactly, so there is one pattern to learn, not two.
+- **Reversal.** Delete `readScopes`/`missingReadScopes` from the `engagement` declaration and
+  `assertEngagementDeclaration`'s last three checks; restore `claimDueEngagementReads`'s
+  `providerKeys: readonly string[]` parameter; delete `countAccountsMissingEngagementScopes` and
+  `accountsSkippedNoPermission`; drop the `surface` argument from `cannotWiden`; delete both env flags
+  and the engagement entries from both connect groups' `declared`. Nothing persisted needs undoing —
+  the gate reads `granted_scopes`, it writes nothing new. `src/lib/scope-permission.ts` and
+  `src/server/dal/scope-predicates.ts` stay regardless: they are the insights code, relocated, and 081
+  depends on them under their aliases.
+
+## 085 — Facebook Page and Instagram comment reading, four judgement calls (2026-10-19)
+
+- **§2's "must ship declared-but-`unavailable`" verdict is overturned by research, not by assumption.**
+  Both surfaces ship readable because FR-001 to FR-005 closed the gaps that caused the verdict and
+  FR-006 then computed it mechanically from the FR-006 table, not by asserting it. The `unavailable`
+  path stays built and tested (US6), and flipping either surface back to it is one declaration field
+  (`contracts/meta-comment-surface.md` §5), not a design change. **Reversal:** set that surface's
+  declaration to `unavailable: { reason, docsPath }`; no other file changes.
+- **`pages_read_user_content` is declared, which skips every existing Facebook Page until it
+  reconnects.** The alternative — declaring only `pages_read_engagement` and hoping it also covers
+  comments other people leave — ships a reader that returns nothing, with no explanation anywhere in
+  the product. 084's gate already has a reconnect notice built for exactly this shape of gap, and that
+  notice is the better failure: a Page owner sees "Inbox needs a reconnect" rather than silence.
+  **Reversal:** drop `pages_read_user_content` from `facebookEngagement`'s declared `readScopes` and
+  from `ENGAGEMENT_SCOPES_DECLARED`; every already-connected Page reads again, minus the comments the
+  dropped scope was the only way to reach.
+- **The sweep advances its own catch-up rather than waiting for the scheduler's backfill flag**,
+  because that flag demonstrably never fires for a Meta account — nothing upstream of this entry sets
+  it for the engagement seam. The step chooser's `lastStep === "fresh"` branch is what makes the
+  catch-up start on its own. **Reversal:** delete that branch in the step chooser; the catch-up becomes
+  `direction`-driven only, which is correct but relies on the scheduler flag firing — slower, not wrong.
+- **No pacing setting was added.** FR-018's usage-signal back-off (`activeUsageBackoff`,
+  `recordUsageBackoff`) plus the scheduler's existing minimum read interval are the only budget
+  controls; a brand-new interval setting would have been a number invented for this entry rather than
+  a fact traced to anything, which Constitution I forbids. **Reversal:** none needed — there is no
+  setting to remove, only a setting that was deliberately not added.
+
+## 086 — Threads replies and mentions stay a declaration, three judgement calls (2026-10-19)
+
+- **Both surfaces unverified ⇒ no reader, and the entry itself is the declaration.** The feature
+  description's "if a research unknown can't be closed within the entry, declare `unavailable`
+  honestly rather than guessing" rule applied twice — once per Threads surface — rather than once per
+  entry, because the two surfaces (`reply`, `mention`) have independent permissions and independent
+  unconfirmed endpoints; collapsing them into one verdict would have hidden that mentions could in
+  principle ship before replies do, or vice versa, the moment either endpoint is confirmed. Shipping
+  nothing at all was rejected: the account already exists on connected installs, the engagement
+  system already claims and leases accounts on a tick, and leaving Threads undeclared would mean a
+  silent miss rather than an honest, visible `unavailable` with a reason. **Reversal:** none needed —
+  the declaration is the entry; a future entry that confirms either endpoint edits
+  `threadsEngagement.declaration` to add `readScopes` for that surface.
+- **`docsHref`, and a shipped broken link fixed in passing.** FR-003's notice link could not be
+  delivered without a function that turns a declared `docsPath` into a real URL — the two existing
+  render sites (`TargetMetrics.tsx`, `PerformancePanel.tsx`) were already casting `docsPath as
+  DocPage` and calling `docsUrl` directly, which breaks the moment a `docsPath` carries an anchor or
+  names a page `docsUrl` does not recognize; both call sites have been wrong since 085. Fixing the
+  cast at its two live sites alongside adding `docsHref` means no `as DocPage` cast survives anywhere
+  in the tree, not just at this entry's two new call sites. **Reversal:** delete `docsHref` from
+  `src/lib/docs.ts` and restore the `as DocPage` cast at all four render sites — not recommended, it
+  reintroduces the shipped defect.
+- **`countAccountsOnUnavailableEngagement` is a count query, not a `processAccount` side effect.**
+  FR-016 needs `counts.unavailable` to include Threads accounts, but computing that count inside
+  `processAccount` would mean claiming, leasing and decrypting the account first — exactly what
+  FR-010 forbids for an account whose engagement is declared `unavailable`. A standalone count query
+  mirroring `countAccountsMissingEngagementScopes`'s predicate shape gets the number into the tick's
+  report with no claim, lease or decrypt anywhere in its path. **Reversal:** delete the function and
+  its call in `src/server/scheduler/engagement-read.ts`; `counts.unavailable` undercounts by the
+  number of Threads accounts, which is wrong but not unsafe.
 ## Notification emails: what happened, not how many problems (2026-10-21)
 
 An email arrived titled "Docket: 1 problem", body referring to Stencilvania. It was not a problem:
