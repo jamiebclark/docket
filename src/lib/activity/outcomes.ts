@@ -48,21 +48,11 @@ export const OUTCOME_LABEL: Record<ActivityOutcome, string> = {
   resolved: "Resolved",
   needs_reauth: "Needs reconnecting",
   connect_failed: "Connect failed",
-  engagement: "New replies",
+  // Not "New replies": this outcome covers a reply, a comment, a mention and a DM alike, and the
+  // label sits directly above a message that names the actual kind ("1 new comment"). 077 pinned
+  // "New replies"; revised per docs/decisions.md.
+  engagement: "New in Inbox",
 };
-
-/**
- * The outcome named as a heading directly above its own message.
- *
- * Identical to `OUTCOME_LABEL` but for `engagement`: 077 pinned that badge to "New replies", which is
- * one subtype standing in for the whole class, and above a message reading "1 new comment" the badge
- * contradicts itself and sends the reader looking for a reply that does not exist (020 feedback). The
- * badge is left as the spec pinned it; this is for the surfaces that print a label and its message
- * together, where the mismatch is visible.
- */
-export function outcomeHeading(outcome: ActivityOutcome): string {
-  return outcome === "engagement" ? "New in your Inbox" : OUTCOME_LABEL[outcome];
-}
 
 /**
  * What a *count* of these is called, for a subject line or a one-line summary: "2 failed posts",

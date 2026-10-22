@@ -14,7 +14,7 @@ import { formatLocal } from "../time/format";
 
 export interface EmailProblem {
   outcome: ActivityOutcome;
-  /** `outcomeHeading(outcome)` — passed in rather than derived, so the email never re-words the app. */
+  /** `OUTCOME_LABEL[outcome]` — passed in rather than derived, so the email never re-words the app. */
   outcomeLabel: string;
   occurredAt: Date;
   platforms: { key: string; name: string }[];

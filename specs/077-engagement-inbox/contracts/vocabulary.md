@@ -52,9 +52,16 @@ export const KIND_OUTCOME = {
   engagement_ambiguous: "ambiguous",
 };
 
-OUTCOME_LABEL.engagement = "New replies";
+OUTCOME_LABEL.engagement = "New in Inbox";   // revised, see below
 OUTCOME_TONE.engagement  = "info";
 ```
+
+> **Revised 2026-10-21.** This entry originally read `"New replies"`. It is the badge for the whole
+> outcome class, which — as the paragraph below already says — also holds comments, mentions and DMs,
+> and it renders directly above a message naming the actual kind ("1 new comment"). A notification
+> email about a single Instagram comment therefore announced a reply that did not exist. The label is
+> now `"New in Inbox"`, true of all four item kinds. `OUTCOME_TONE` is unchanged, and
+> `PROBLEM_OUTCOMES` still excludes `engagement`. See `docs/decisions.md`.
 
 `ATTENTION_MEMBER_OUTCOMES` (`src/lib/notifications/attention.ts`) and `ATTENTION_KINDS`
 (`src/lib/notifications/eligibility.ts`) each gain `"engagement"`. `PROBLEM_OUTCOMES` does **not**:

@@ -1,14 +1,17 @@
 /**
- * The one vocabulary for inbound engagement kinds. Pure, so the inbox filter, the activity message
- * and the notification email all call a comment a comment.
+ * How inbound engagement kinds are worded. Pure, so the inbox filter, the activity message and the
+ * notification email all call a comment a comment.
  *
- * `OUTCOME_LABEL.engagement` is "New replies" (077, contracts/vocabulary.md §2) — the badge for the
- * whole outcome class. A comment, a mention and a DM all land in that class, so anything that names
- * one *item* has to name its kind instead, or it tells somebody "reply" about a comment.
+ * `OUTCOME_LABEL.engagement` names the whole outcome class, which covers a reply, a comment, a
+ * mention and a DM alike. Anything that names one *item* has to name its kind instead, or it tells
+ * somebody "reply" about a comment.
+ *
+ * The kinds themselves are declared once, by the provider contract — this module only words them.
  */
 
-export const ENGAGEMENT_ITEM_KINDS = ["reply", "comment", "mention", "direct_message"] as const;
-export type EngagementItemKind = (typeof ENGAGEMENT_ITEM_KINDS)[number];
+import { ENGAGEMENT_ITEM_KINDS, type EngagementItemKind } from "../../providers/types";
+
+export { ENGAGEMENT_ITEM_KINDS, type EngagementItemKind };
 
 /** Title case, for a badge or a filter option. */
 export const ENGAGEMENT_KIND_LABEL: Record<EngagementItemKind, string> = {

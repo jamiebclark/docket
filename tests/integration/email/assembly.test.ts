@@ -103,7 +103,7 @@ describe("assembleForPerson", () => {
     const assembled = await assembleForPerson({ userId: user.id, cadence: "immediate", zone: "UTC", now: new Date() });
     const problem = assembled!.model.groups[0]!.problems[0]!;
     expect(problem.outcome).toBe("engagement");
-    expect(problem.outcomeLabel).toBe("New in your Inbox");
+    expect(problem.outcomeLabel).toBe("New in Inbox");
     expect(problem.message).toBe("1 new comment");
     const { subject } = renderProblemEmail(assembled!.model);
     expect(subject).toBe(`${project.name}: 1 new inbox message`);

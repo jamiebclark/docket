@@ -18,7 +18,7 @@ function problem(overrides: Partial<EmailProblem> = {}): EmailProblem {
 const comment = (overrides: Partial<EmailProblem> = {}): EmailProblem =>
   problem({
     outcome: "engagement",
-    outcomeLabel: "New in your Inbox",
+    outcomeLabel: "New in Inbox",
     platforms: [{ key: "instagram", name: "Instagram" }],
     accountName: "stencilvania",
     message: "1 new comment",

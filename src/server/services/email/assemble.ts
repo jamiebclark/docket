@@ -10,7 +10,7 @@ import type { EmailProblem, EmailProjectGroup, ProblemEmailModel } from "../../.
 import { countAttentionForEmail, listAttentionForEmail, type AttentionRecord } from "../../dal/activity";
 import { emailDb, planForProject, projectsForEmail } from "../../dal/email";
 import { getEnv } from "../../env";
-import { outcomeHeading, type ActivityOutcome } from "../../../lib/activity/outcomes";
+import { OUTCOME_LABEL, type ActivityOutcome } from "../../../lib/activity/outcomes";
 import { recordAccount, recordLink, recordPlatforms } from "../activity";
 
 /** The newest rows listed per project, and the scan bound for the exact overflow count (E16). */
@@ -39,7 +39,7 @@ function toEmailProblem(record: AttentionRecord, projectSlug: string): EmailProb
   const link = recordLink(record) ?? { href: `/p/${projectSlug}/activity`, label: "Open Activity" };
   return {
     outcome: record.outcome as ActivityOutcome,
-    outcomeLabel: outcomeHeading(record.outcome as ActivityOutcome),
+    outcomeLabel: OUTCOME_LABEL[record.outcome],
     occurredAt: record.occurredAt,
     platforms: recordPlatforms(record),
     accountName: recordAccount(record)?.name ?? null,
