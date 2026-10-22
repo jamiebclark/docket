@@ -48,7 +48,30 @@ export const OUTCOME_LABEL: Record<ActivityOutcome, string> = {
   resolved: "Resolved",
   needs_reauth: "Needs reconnecting",
   connect_failed: "Connect failed",
-  engagement: "New replies",
+  // Not "New replies": this outcome covers a reply, a comment, a mention and a DM alike, and the
+  // label sits directly above a message that names the actual kind ("1 new comment"). 077 pinned
+  // "New replies"; revised per docs/decisions.md.
+  engagement: "New in Inbox",
+};
+
+/**
+ * What a *count* of these is called, for a subject line or a one-line summary: "2 failed posts",
+ * "1 new inbox message".
+ *
+ * Separate from `OUTCOME_LABEL`, which names the state of one row and reads wrong after a number
+ * ("1 Needs your decision"). Deliberately avoids the word "problem": `engagement` is an attention
+ * outcome but not a `PROBLEM_OUTCOMES` member, and a subject that called a new comment a problem
+ * sent people looking for a fault that was never there (020 feedback).
+ */
+export const OUTCOME_COUNT_NOUN: Record<ActivityOutcome, { one: string; many: string }> = {
+  published: { one: "published post", many: "published posts" },
+  failed: { one: "failed post", many: "failed posts" },
+  ambiguous: { one: "post to decide on", many: "posts to decide on" },
+  retrying: { one: "retrying post", many: "retrying posts" },
+  resolved: { one: "resolved post", many: "resolved posts" },
+  needs_reauth: { one: "account to reconnect", many: "accounts to reconnect" },
+  connect_failed: { one: "failed connection", many: "failed connections" },
+  engagement: { one: "new inbox message", many: "new inbox messages" },
 };
 
 export type ActivityTone = "success" | "danger" | "warning" | "info" | "neutral";

@@ -95,7 +95,15 @@ export function recordPostDeleted(r: ActivityRecord): boolean {
 
 export function recordLink(r: ActivityRecord): ActivityLink | null {
   return activityLink(
-    { kind: r.kind, outcome: r.outcome, postId: r.postId, postTargetId: r.postTargetId, postDeleted: recordPostDeleted(r), targetStatus: r.targetStatus },
+    {
+      kind: r.kind,
+      outcome: r.outcome,
+      postId: r.postId,
+      postTargetId: r.postTargetId,
+      postDeleted: recordPostDeleted(r),
+      targetStatus: r.targetStatus,
+      socialAccountId: r.socialAccountId,
+    },
     r.projectSlug,
   );
 }

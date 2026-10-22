@@ -264,7 +264,8 @@ the cursor (FR-014).
 | `engagement_ambiguous` | `ambiguous` *(existing)* | `{ reason: 'timeout' \| 'unreadable_response' }` |
 
 Reusing `published` and `ambiguous` keeps the enum churn to one label and puts an ambiguous reply
-exactly where an ambiguous publish already is. `OUTCOME_LABEL.engagement = "New replies"`,
+exactly where an ambiguous publish already is. `OUTCOME_LABEL.engagement = "New in Inbox"`
+(revised from `"New replies"` — see `contracts/vocabulary.md` §2 and `docs/decisions.md`),
 `OUTCOME_TONE.engagement = "info"`.
 
 All three kinds set `social_account_id` and `provider_key`, and leave `post_id`/`post_target_id`

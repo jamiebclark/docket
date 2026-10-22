@@ -118,6 +118,28 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     expect(event).toBeDefined();
   });
 
+  it("says which kinds arrived, not just how many items (020 feedback)", async () => {
+    const { scope } = await setupWithItems([
+      { kind: "comment", externalId: "k-1", text: "nice" },
+      { kind: "comment", externalId: "k-2", text: "also nice" },
+      { kind: "mention", externalId: "k-3", text: "hi there" },
+    ]);
+    await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
+    const feed = await scope.activity.list({
+      windows: [{ projectId: scope.project.id, from: null, to: null }],
+      outcomes: null,
+      platform: null,
+      accountId: null,
+      cursor: null,
+      direction: "older",
+      limit: 10,
+    });
+    const event = feed.find((e) => e.kind === "engagement_received");
+    // The old message was "3 new items", which left a person unable to tell a DM from a mention
+    // without opening the app — and the notification email quoted it verbatim.
+    expect(event!.message).toBe("2 new comments and 1 mention");
+  });
+
   it("stamps edited_upstream_at when the provider reports the item was edited on a later read (US2 AS8)", async () => {
     const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "up-1", text: "Nice post!", saidAt: AT.toISOString() }]);
     await atTime(AT, () => runTick(tickConfig(NO_WAIT)));

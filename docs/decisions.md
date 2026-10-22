@@ -4207,3 +4207,43 @@ what these tests assert, and it is the part exposed to the contention.
   report with no claim, lease or decrypt anywhere in its path. **Reversal:** delete the function and
   its call in `src/server/scheduler/engagement-read.ts`; `counts.unavailable` undercounts by the
   number of Threads accounts, which is wrong but not unsafe.
+## Notification emails: what happened, not how many problems (2026-10-21)
+
+An email arrived titled "Docket: 1 problem", body referring to Stencilvania. It was not a problem:
+somebody had left a comment on a post, and it was sitting in the Inbox. The message was four lines
+long, had no link, and the subject named neither the project nor what had occurred. Four separate
+causes, each fixed:
+
+1. **The subject counted everything as a "problem".** `renderProblemEmail` summed every attention
+   outcome under that one word, though `PROBLEM_OUTCOMES` deliberately excludes `engagement` —
+   077's own contract says "a new comment is not a problem". Subjects now count per outcome through
+   `OUTCOME_COUNT_NOUN` and lead with the project: "Stencilvania: 1 new inbox message". Reverse by
+   restoring the single total in `src/lib/email/problem-email.ts`.
+
+2. **Engagement rows led nowhere.** `activityLink` returned `null` for any row without a
+   `post_target_id`, and an engagement row never has one — it was the only attention row with no
+   destination, in the email *and* in the in-app Activity feed. It now opens the Inbox filtered to
+   the receiving account, and assembly falls back to the project's Activity screen, so no mailed row
+   can be linkless. FR-011 asked for a link all along.
+
+3. **"1 new item" named no kind.** The engagement reader wrote a bare count. It now counts by kind
+   ("1 new comment", "2 new comments and 1 mention") via `src/lib/engagement/kinds.ts`.
+
+4. **No layout.** The HTML was an unstyled `h2`/`ul`/`li`. It is now an inline-styled 600px table on
+   the design-system tokens, with a card and an action button per row. Still no images, no remote
+   content and no stylesheet, and every tone colour sits beside words carrying the same meaning, so
+   FR-014 holds.
+
+**`OUTCOME_LABEL.engagement`: "New replies" → "New in Inbox".** 077 pinned "New replies", but that
+is the badge for a class that also holds comments, mentions and DMs, and it renders directly above a
+message naming the actual kind. The first fix was a separate heading used only by the email, which
+left the in-app badge still saying "New replies" over "1 new comment"; the label itself was the bug,
+so it is now correct everywhere and that workaround is gone. The label also feeds the Activity
+outcome filter, the `OutcomeIcon` title and screen-reader text, the notifications panel and the
+per-kind notification switch — all read correctly with the new wording. `OUTCOME_TONE` is unchanged
+and `PROBLEM_OUTCOMES` still excludes `engagement`. `specs/077-engagement-inbox/contracts/vocabulary.md`
+§2 and `data-model.md` carry the amendment; `tasks.md` keeps the original as the record of what T018
+did, annotated. Reverse by setting the label back and re-adding an email-only heading.
+
+Pinned by `src/lib/activity/outcomes.test.ts`, which fails if the engagement label or count noun
+ever says "repl" again.

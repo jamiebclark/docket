@@ -1363,12 +1363,14 @@ describe("secret scan (FR-020, SC-005)", () => {
           name: "Scan Project",
           problems: [
             {
+              outcome: "failed" as const,
               outcomeLabel: "Failed",
               occurredAt: new Date(),
               platforms: [{ key: "bluesky", name: "Bluesky" }],
               accountName: "scan.bsky.social",
               message: "Could not reach the server.",
               href: "https://docket.scan.test/p/scan-project/activity",
+              actionLabel: "Open Activity",
             },
           ],
           overflow: 0,
