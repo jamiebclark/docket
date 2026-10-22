@@ -168,7 +168,7 @@ text/UI pairs in both themes.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│ [D] Docket │ Acme Launch ▾  ⌘K   ● Scheduler ran 12 s ago   ✉ Invitations  (RO) Sign out │  ← sticky header, h-14
+│ [D] Docket │ Acme Launch ▾  ⌘K   ● Scheduler ran 12 s ago   ✉ Invitations  🔔  (RO) Robin Fox ▾ │  ← sticky header, h-14
 ├──────────────┬─────────────────────────────────────────────────────┤
 │ ◫ Overview   │  (banners: scheduler stale = danger, reauth = warning) │
 │ PUBLISH      │                                                     │
@@ -191,8 +191,14 @@ text/UI pairs in both themes.
 
 - **Header:** logo (links home), divider, project switcher (pill button with
   chevron and `Ctrl/⌘ K` hint), quiet scheduler status (green dot, `lg+`
-  only), then invitations and user menu (initials avatar from the user's own
-  display name, never from their email).
+  only), then invitations, the notification bell and the user menu (initials
+  avatar from the user's own display name, never from their email). The user
+  menu is a **disclosure, not three controls**: the avatar opens a panel headed
+  by the name and sign-in email — the only place a phone has room to say which
+  account is loaded — then **Your account**, **All activity** and **Sign out**.
+  Three header items each costs the project switcher beside it width it does
+  not have below `md` (§20 G2). Any later "one more header link" belongs in
+  this menu unless it has to be reachable *sooner* than one tap.
 - **Sidebar:** 240 px, sticky below the header, grouped by job: **Overview** first
   (the project home, ungrouped), then **Publish**
   (Compose, Calendar, Posts, Review, Failures), **Create** (Generate, Brand
@@ -346,6 +352,13 @@ needing to stay reachable without opening anything.
   "hidden by default, opened on demand" shape elsewhere in the app
   (`accounts/page.tsx`, `Composer.tsx`); the notification row reuses it rather
   than adding a disclosure component.
+- The header's `UserMenu` is the same shape for the same reason — two links and
+  a sign-out submit, all of which have to survive with no JavaScript, which
+  `Menu`'s `onSelect` items would not. What it adds is `useDismiss`
+  (`src/components/ui/dismiss.ts`): Escape, a press outside, focus leaving — the
+  three dismissals a native disclosure lacks and a header overlay needs. The
+  bell's popover uses the same hook, so the two overlays side by side in the bar
+  cannot drift apart.
 - Each submit inside the disclosure carries the row's subject in its accessible
   name (e.g. "Snooze until tomorrow morning — Instagram post failed"), so two
   rows' "1 hour" buttons are distinguishable to a screen reader even though
@@ -701,3 +714,15 @@ different page.
 **Empty is not the same as unavailable.** "Nothing has arrived yet" is an `EmptyState`. "This account
 cannot be read" is an `Alert` above the list (§18): a message about the system, not an absence of
 content.
+
+## 20. The header on a phone (2026-10-21)
+
+Reported from using Docket on a phone, not found by an audit. Both findings are
+the same mistake: the header was laid out for the width it has from `md` up, and
+below that the pieces were left to fight each other.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| G1 | Opening the bell on a phone put most of its panel off the **left** edge of the screen, out of reach. The panel is `right-0` on the bell, and the bell is not the last control in the bar — so a popover `calc(100vw-2rem)` wide, hung off a point ~70 px in from the right, had to start ~40 px past the left edge. It was never wrong on a desktop, where the panel is far narrower than the room to its left, which is why it survived this long. | High | Below `sm` the panel is a **sheet pinned under the header** (`fixed top-16 left-3 right-3`), not a popover hung off the bell: its width comes from the viewport, so no trigger position can push it anywhere. `left-3 right-3` rather than `inset-x-3`, so the `sm:` reset overrides a property rather than racing a shorthand in the generated source order. `top-16` is a constant, not `top-full`, so it clears the `h-14` header whether or not the header's `backdrop-blur` makes it the containing block for fixed children. A sheet does not scroll with the page, so on the phone it caps its height and scrolls — only there, because a scroll box clips a row's open Snooze disclosure, and from `sm` up this is the unconstrained popover it has always been. |
+| G2 | Below `md` the bar held five targets on the right — invitations, bell, avatar, All activity, Sign out — and the project switcher got whatever was left, which was a few characters of a truncated project name. You could not read which project you were in, which is the one thing the header exists to tell you. | High | The last three collapse into **one** avatar menu (§6, §7): two controls recovered, and the switcher gets their width back. The menu also *answers* the question the squeeze raised — it is headed by the name and sign-in email, which the bar itself cannot show below `md`, where the avatar is bare initials. |
+| G2a | §15 F4 had made the avatar and name *be* the `/account` link, to avoid a text "Account" item among four icon marks. G2 turns the avatar into a menu trigger, so that is no longer available. | Low | **Your account** is the menu's first item, so identity still leads the way to the account page — one tap further, in exchange for the two header slots F4's reasoning was competing for. The avatar keeps its own accessible name (`"<name> — account menu"`, visible name first, WCAG 2.5.3). |
