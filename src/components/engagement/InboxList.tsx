@@ -62,11 +62,16 @@ function InboxRow({
               <LocalTime value={item.saidAt} timeZone={timeZone} />
             </span>
           </span>
-          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{author}</span>
-            {showAccount ? <span>· {item.socialAccount.displayName}</span> : null}
+          {/*
+            One line, and the context is capped: rendered unbounded, the quoted post ran the full
+            width and became the longest thing in the row, which inverts the weight order §19 sets
+            out. It is a hint about which post, not the post.
+          */}
+          <span className="mt-1 flex items-center gap-x-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
+            <span className="shrink-0 font-medium text-foreground">{author}</span>
+            {showAccount ? <span className="shrink-0">· {item.socialAccount.displayName}</span> : null}
             {item.parent?.kind === "docket_post" && item.parent.text ? (
-              <span className="min-w-0 truncate">· on “{item.parent.text}”</span>
+              <span className="min-w-0 max-w-[28ch] truncate sm:max-w-[44ch]">· on “{item.parent.text}”</span>
             ) : null}
             {/* Badge the exception only. */}
             {item.kind === "direct_message" ? <Badge tone="warning">Private</Badge> : null}
