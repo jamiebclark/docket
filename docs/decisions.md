@@ -4247,3 +4247,40 @@ did, annotated. Reverse by setting the label back and re-adding an email-only he
 
 Pinned by `src/lib/activity/outcomes.test.ts`, which fails if the engagement label or count noun
 ever says "repl" again.
+
+## The image build fetched pnpm three times, not once (2026-10-22)
+
+The `docker` job failed four times on #191 with `Could not reach
+https://registry.npmjs.org/@pnpm/exe.linux-x64/12.6.0: timed out after 30s`, while every other
+check passed. Nothing in that PR touched a dependency, the Dockerfile, or the build config — the
+npm registry was degraded (measured from a workstation at the time: one success in six attempts,
+the rest timing out at ten seconds). The branch was not the problem, but the build's exposure to
+the registry was, and the failure point moved between Docker stages from run to run.
+
+The `base` stage already intended to prevent this; its comment read "pnpm is fetched once here so
+later stages never hit the network for it". That was untrue, and nothing checked it. `corepack
+install` caches the pnpm **npm package**, but pnpm 12 fetches a separate **native binary**
+(`@pnpm/exe.<platform>`) the first time it actually runs, landing it at
+`$COREPACK_HOME/v1/pnpm/<version>/pnpm-native`. `corepack install` never triggers that, so `deps`
+and `build` each fetched it themselves: three registry round-trips for pnpm per build, each on a
+30 s fuse, any one of which could fail an otherwise sound image.
+
+`base` now runs `pnpm --version` once after `corepack install`, which materialises the native
+binary into that layer for every later stage. Two details that are easy to get wrong, and were:
+
+- **It needs a `package.json` in scope.** The first attempt warmed from `/tmp`, where pnpm sees no
+  `packageManager` field, resolves the *latest* release (12.14.0 at the time) and caches a binary
+  no later stage wants — turning three fetches into four. It now warms against a throwaway copy of
+  the project's own `package.json`.
+- **pnpm drops a lockfile beside whatever `package.json` it finds.** Hence the throwaway copy in
+  `/warm`, removed in the same layer, rather than warming in `/app`.
+
+Measured on a `--no-cache` build: three `Downloading the pnpm` lines before, one after, in `base`.
+`docker run --network none` then resolves `pnpm --version` to 12.6.0 inside the image, which is the
+property actually wanted — `deps` and `build` still reach the registry for *packages*, as they must,
+but no longer for pnpm itself.
+
+Reverse by dropping the warm-up run from the `base` stage. `tests/lint/dockerfile-pnpm.test.ts`
+pins it: pnpm runs in `base`, with a `package.json` in scope, the warm-up directory is cleaned up,
+and no later stage re-provisions pnpm. The guard was checked against the original Dockerfile and
+fails on it.
