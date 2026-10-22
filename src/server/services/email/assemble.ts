@@ -10,7 +10,7 @@ import type { EmailProblem, EmailProjectGroup, ProblemEmailModel } from "../../.
 import { countAttentionForEmail, listAttentionForEmail, type AttentionRecord } from "../../dal/activity";
 import { emailDb, planForProject, projectsForEmail } from "../../dal/email";
 import { getEnv } from "../../env";
-import { OUTCOME_LABEL } from "../../../lib/activity/outcomes";
+import { outcomeHeading, type ActivityOutcome } from "../../../lib/activity/outcomes";
 import { recordAccount, recordLink, recordPlatforms } from "../activity";
 
 /** The newest rows listed per project, and the scan bound for the exact overflow count (E16). */
@@ -30,15 +30,22 @@ function maxBigint(a: bigint, b: bigint): bigint {
   return a > b ? a : b;
 }
 
-function toEmailProblem(record: AttentionRecord): EmailProblem {
-  const link = recordLink(record);
+/**
+ * FR-011 requires every mailed row to carry a link, and `recordLink` legitimately returns nothing for
+ * some rows — a deleted post, say. The project's own Activity screen is the floor, so a message never
+ * again arrives with nothing to click (020 feedback).
+ */
+function toEmailProblem(record: AttentionRecord, projectSlug: string): EmailProblem {
+  const link = recordLink(record) ?? { href: `/p/${projectSlug}/activity`, label: "Open Activity" };
   return {
-    outcomeLabel: OUTCOME_LABEL[record.outcome],
+    outcome: record.outcome as ActivityOutcome,
+    outcomeLabel: outcomeHeading(record.outcome as ActivityOutcome),
     occurredAt: record.occurredAt,
     platforms: recordPlatforms(record),
     accountName: recordAccount(record)?.name ?? null,
     message: record.message,
-    href: link ? `${getEnv().BETTER_AUTH_URL}${link.href}` : null,
+    href: `${getEnv().BETTER_AUTH_URL}${link.href}`,
+    actionLabel: link.label,
   };
 }
 
@@ -76,9 +83,11 @@ export async function assembleForPerson(input: {
     const overflow = Math.max(counted.total - items.length, 0);
     groups.push({
       name: project.name,
-      problems: items.map((item) => toEmailProblem(item)),
+      problems: items.map((item) => toEmailProblem(item, project.slug)),
       overflow,
-      overflowHref: `${getEnv().BETTER_AUTH_URL}/p/${project.slug}/failures`,
+      // Activity, not Failures: an overflow can hold inbox messages and reconnect prompts, which the
+      // Failures screen does not list at all, and FR-011 asks for a link into Activity.
+      overflowHref: `${getEnv().BETTER_AUTH_URL}/p/${project.slug}/activity`,
     });
     contributingProjectIds.push(project.projectId);
     highWater.push({ projectId: project.projectId, maxSeq: counted.maxSeq ?? minSeq });

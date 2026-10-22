@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { Cell, Row, Table } from "@/components/ui/Table";
 import { buttonStyles } from "@/components/ui/Button";
+import { ENGAGEMENT_ITEM_KINDS, ENGAGEMENT_KIND_LABEL } from "@/lib/engagement/kinds";
 import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import { listEngagementAccounts, listInbox, type InboxItemView } from "@/server/services/engagement/inbox";
@@ -108,10 +109,7 @@ export default async function InboxPage({ params, searchParams }: Props) {
             defaultValue={query.kind ?? ""}
             options={[
               { value: "", label: "All kinds" },
-              { value: "reply", label: "Reply" },
-              { value: "comment", label: "Comment" },
-              { value: "mention", label: "Mention" },
-              { value: "direct_message", label: "Direct message" },
+              ...ENGAGEMENT_ITEM_KINDS.map((kind) => ({ value: kind, label: ENGAGEMENT_KIND_LABEL[kind] })),
             ]}
           />
           <ChoiceField

@@ -2,6 +2,7 @@
 import { findProvider, listProviders } from "../../providers/registry";
 import type { EngagementReadResult } from "../../providers/types";
 import { directionFor, nextBackfillState, shouldReadAnotherPage } from "../../lib/engagement/paging";
+import { engagementItemsMessage, type EngagementItemKind } from "../../lib/engagement/kinds";
 import * as clock from "../dal/clock";
 import { claimDueEngagementReads, type ClaimedEngagementAccount } from "../dal/engagement-read-claims";
 import { forSchedulerProject } from "../dal/scheduler";
@@ -129,6 +130,10 @@ async function processAccount(
   let pagesRead = 0;
   let stop: EngagementReadResult | null = null;
   let inserted = 0;
+  // Counted by kind, not just totalled: the activity row — and the email built from it — has to say
+  // "1 new comment" rather than "1 new item", or a person cannot tell a DM from a mention without
+  // opening the app (020 feedback).
+  const insertedByKind: Partial<Record<EngagementItemKind, number>> = {};
   let newestSaidAt: Date | null = state.lastItemAt;
   const now0 = await clock.now();
   const retentionHorizon = new Date(now0.getTime() - ctx.cfg.retentionDays * 86_400_000);
@@ -185,6 +190,7 @@ async function processAccount(
       });
       if (insertResult.inserted) {
         inserted++;
+        insertedByKind[item.kind] = (insertedByKind[item.kind] ?? 0) + 1;
         if (!newestSaidAt || item.saidAt > newestSaidAt) newestSaidAt = item.saidAt;
       } else {
         anyAlreadyStored = true;
@@ -222,7 +228,7 @@ async function processAccount(
           occurredAt: stopNow,
           socialAccountId: account.id,
           providerKey: account.providerKey,
-          message: `${inserted} new ${inserted === 1 ? "item" : "items"}`,
+          message: engagementItemsMessage(insertedByKind),
           details: { items: inserted },
         });
       });
@@ -256,7 +262,7 @@ async function processAccount(
         occurredAt: now,
         socialAccountId: account.id,
         providerKey: account.providerKey,
-        message: `${inserted} new ${inserted === 1 ? "item" : "items"}`,
+        message: engagementItemsMessage(insertedByKind),
         details: { items: inserted },
       });
     }
