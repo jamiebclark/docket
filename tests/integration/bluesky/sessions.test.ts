@@ -155,6 +155,45 @@ describe("Bluesky sessions through the real scheduler", () => {
     expect(a.lastRefreshedAt).not.toBeNull();
   });
 
+  /**
+   * The counterpart to the two tests above: the refresh is refused, but the stored app password
+   * still works, and the account was *already* flagged when the tick started.
+   *
+   * This is the case that kept killing Stencilvania. `needs_reauth` used to be a one-way door —
+   * `claimRefreshAccounts` took only `active` rows and nothing but a human reconnect cleared the
+   * status — so the stored password was never tried again and every due post failed with
+   * "The account is no longer available for publishing". Note the account's credentials expire in
+   * sixty days: it is claimed because it is flagged, not because it is due.
+   */
+  it("recovers a flagged account from the stored app password, with no reconnect", async () => {
+    pds.route("POST", REFRESH_SESSION, { status: 400, json: { error: "ExpiredToken", message: "refresh expired" } });
+    pds.route("POST", CREATE_RECORD, { json: { uri: URI, cid: CID } });
+    const { tick, row, account, accountId, env, dueNow } = await setup();
+    const projectId = env.project.id;
+    await parkAllDueTargets();
+    await testDb()
+      .update(socialAccounts)
+      .set({ status: "needs_reauth", lastError: "Bluesky refused to renew the session (ExpiredToken)." })
+      .where(and(eq(socialAccounts.projectId, projectId), eq(socialAccounts.id, accountId)));
+    const sessionsAtConnect = pds.callsTo("POST", CREATE_SESSION).length;
+
+    const summary = await tick();
+    expect(summary.tokenRefresh).toMatchObject({ ok: true });
+    const a = await account();
+    expect(a.status, `tokenRefresh ${JSON.stringify(summary.tokenRefresh)}`).toBe("active");
+    expect(a.lastError).toBeNull();
+    expect(a.lastRefreshedAt).not.toBeNull();
+    // The password was actually used: a second createSession, after the refresh was refused.
+    expect(pds.callsTo("POST", CREATE_SESSION).length).toBeGreaterThan(sessionsAtConnect);
+
+    // And the posts go out, with nobody having typed anything.
+    await dueNow();
+    await tick();
+    const published = await row();
+    expect(published.status).toBe("published");
+    expect(published.lastError).toBeNull();
+  });
+
   it("restores active when the account is reconnected", async () => {
     const { connect, account, accountId, env } = await setup();
     const projectId = env.project.id;
