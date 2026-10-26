@@ -47,6 +47,10 @@ export const blueskyProvider: SocialProvider<BlueskySettings, BlueskyState> = {
   connectAccount,
   needsRefresh,
   refreshCredentials,
+  // `reauthenticate()` in ./session opens a fresh session from the stored app password, so a
+  // flagged account is worth retrying without a human. Accounts connected before the password
+  // was stored have none; their retry is refused and they keep the manual-reconnect path.
+  canReauthenticate: true,
   validate: validateBluesky,
   stepFor: (state, _settings, content) => stepForContent(state, content),
   advance: (ctx) => advance(ctx) as Promise<StepResult>,

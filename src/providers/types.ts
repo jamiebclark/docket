@@ -763,6 +763,20 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
     now: Date;
     signal: AbortSignal;
   }): Promise<RefreshResult>;
+  /**
+   * True when `refreshCredentials` can open a brand-new session from what is already stored — a
+   * Bluesky app password, say — rather than only renewing a live one. Such an account is worth
+   * retrying *while* it is `needs_reauth`, because the thing that would fix it is already on disk.
+   *
+   * Without this, flagging an account was a one-way door. `claimRefreshAccounts` takes only
+   * `active` rows and `acquireRefreshLease` requires `active`, so the moment anything flagged the
+   * account — including a refusal a stored password would have survived — nothing ever called
+   * `refreshCredentials` again, and publishing refused every target at claim time with "The
+   * account is no longer available for publishing" and zero attempts. The stored password could
+   * only ever help in the narrow window before the flag; after it, only a human reconnect
+   * reopened the door. Requires `refreshCredentials`.
+   */
+  canReauthenticate?: boolean;
   validate(content: PostContent, capabilities: ProviderCapabilities): ValidationIssue[];
   /** Pure and total. `settings` is the account's parsed settings (a step can depend on them). */
   stepFor(state: State | null, settings: Settings, content: StepContent): StepInfo;

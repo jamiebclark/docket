@@ -344,8 +344,18 @@ never directly. Every content and rate limit Docket enforces, with its source an
 
 Implement `refreshCredentials({ account, credentials, now, signal })` for expiring tokens. The engine calls it ahead of
 expiry. Return `{ ok: true, credentials, expiresAt }` to store the new credentials, or `{ ok: false, reason }`.
-A failure marks the account `needs_reauth`: its targets stop publishing until the user reconnects.
-Do not throw for an expected refusal; return `ok: false`.
+A failure marks the account `needs_reauth`: its targets stop publishing until the user reconnects. A success clears the
+flag, so an account that comes back no longer needs a human. Do not throw for an expected refusal; return `ok: false` —
+a throw is held as transient (it says nothing definitive about the credentials) and the account stays `active`.
+
+**`canReauthenticate`.** Set it when `refreshCredentials` can build a brand-new session out of what is already stored,
+rather than only renewing a live one — Bluesky with its saved app password is the case it exists for. Flagged accounts of
+such a provider are claimed by the refresh section *as well as* `active` ones, regardless of the refresh window, so
+`needs_reauth` is a state the engine can leave on its own. Without it, the flag is one-way: `claimRefreshAccounts` takes
+only `active` rows and `acquireRefreshLease` requires `active`, so nothing calls `refreshCredentials` again, and every
+due target is refused at claim time with "The account is no longer available for publishing" and **zero attempts** until
+a human reconnects. A refusal parks the account for 15 minutes, so a credential that really is dead is retried on a
+cadence rather than once per tick.
 
 **Refresh hold.** G11 parks the refresh lease until `retryAt` (up to 24 hours). A provider that both returns a transient `retryAt`
 and defines `needsRefresh` would see the publish-time refresh as `busy` and release its targets until the hold ends. If your
@@ -399,11 +409,15 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
 `src/providers/bluesky/` is the first real provider using only the generic hooks above (the one registry line aside).
 
 - **Connect.** `connect` is `credentials` with `handle`, `appPassword` and an optional `pdsUrl`. `connectAccount` calls
-  `com.atproto.server.createSession`, stores the session tokens, DID and handle, and drops the app password.
+  `com.atproto.server.createSession` and stores the session tokens, the DID, the handle **and the app password**, all
+  encrypted. Keeping the password is what lets `refreshCredentials` open a brand-new session on its own, so the provider
+  sets `canReauthenticate: true`. Accounts connected before this change have no stored password; their refresh is refused
+  and they keep the manual-reconnect path.
 - **Publish-time refresh.** `needsRefresh` is true within 5 minutes of the access JWT's expiry, which is the common case for an idle
   account, so the engine refreshes under a lease before `advance`. If the create call still answers `ExpiredToken`, the provider
-  returns `retryable_error` with `credentialsExpired: true` and the engine refreshes in the same tick, then retries. A refused refresh marks `needs_reauth`;
-  a 5xx or network failure is `transient`.
+  returns `retryable_error` with `credentialsExpired: true` and the engine refreshes in the same tick, then retries. A refused
+  refresh first retries the stored app password (identifying by DID, so a renamed account still signs in) and only marks
+  `needs_reauth` if that is refused too; a 5xx or network failure is `transient`.
 - **Multi-step images.** `stepFor` uses `content.mediaCount`: a text post goes straight to `create_post` (`mayPublish`), a post with
   images runs one non-publishing `upload_image` step per image (state holds each `BlobRef#toJSON()` result), then `create_post`.
 - **Outcomes.** Connection refused / DNS failure is `retryable_error`; 4xx on create is `fatal_error`; timeout, reset or an

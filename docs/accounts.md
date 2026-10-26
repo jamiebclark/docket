@@ -114,9 +114,13 @@ instead of dropping scheduled posts until somebody pastes a password. The trade-
 token, an app password does not expire and survives session revocation, so if the database and its encryption key
 were both exposed, access would last until the password is **revoked in Bluesky**. Revoke it there, not here.
 
-**Needs reconnecting** now means both the session *and* the stored app password were refused — the password was
-revoked or changed in Bluesky. Enter a new one from Accounts. Accounts connected before this was stored have no
-saved password and still need a manual reconnect each time their session is refused.
+**Needs reconnecting** means both the session *and* the stored app password were refused — the password was revoked or
+changed in Bluesky. Enter a new one from Accounts. Accounts connected before this was stored have no saved password and
+still need a manual reconnect each time their session is refused.
+
+A Bluesky account that *is* flagged keeps being retried on its stored password, about every fifteen minutes, and clears
+its own **Needs reconnecting** the moment one works. So a flag that was caused by a passing refusal disappears without
+anyone doing anything; one that stays put means the password itself is gone and only a new one will fix it.
 
 Video needs nothing more at connect: there is no new connection step. A Bluesky-hosted account must have a **verified email**
 address to upload video, and Bluesky allows about 25 videos a day.
