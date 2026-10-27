@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { OriginalLink } from "./OriginalLink";
 import { countingRuleName } from "@/providers/text";
 import type { InboxItemView } from "@/server/services/engagement/inbox";
 import { ReplyPanel } from "@/app/p/[projectSlug]/inbox/[itemId]/ReplyPanel";
@@ -17,6 +18,7 @@ export function InboxItemDetail({
   projectSlug,
   tz,
   canReply,
+  platform,
   maxLength,
   countingRule,
   headingLevel = 1,
@@ -26,6 +28,8 @@ export function InboxItemDetail({
   projectSlug: string;
   tz: string;
   canReply: boolean;
+  /** The platform's own display name, for the "view on …" link (G41). */
+  platform: string;
   maxLength: number;
   countingRule: Parameters<typeof countingRuleName>[0];
   headingLevel?: 1 | 2;
@@ -40,8 +44,12 @@ export function InboxItemDetail({
         <Heading id={headingId} className={headingLevel === 1 ? "text-2xl font-semibold text-heading" : "text-lg font-semibold text-heading"}>
           {author}
         </Heading>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {item.socialAccount.displayName} · <LocalTime value={item.saidAt} timeZone={tz} />
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+          <span>
+            {item.socialAccount.displayName} · <LocalTime value={item.saidAt} timeZone={tz} />
+          </span>
+          {/* G41: read it where it was said. */}
+          <OriginalLink item={item} platform={platform} />
         </p>
       </div>
 

@@ -44,6 +44,7 @@ export default async function InboxItemPage({ params }: Props) {
           tz={tz}
           canReply={canReply}
           maxLength={textCaps.maxLength}
+          platform={provider?.displayName ?? item.providerKey}
           countingRule={textCaps.countingRule}
           headingLevel={1}
           headingId="page-title"

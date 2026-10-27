@@ -203,6 +203,7 @@ export default async function InboxPage({ params, searchParams }: Props) {
                 <InboxList
                   items={list.items}
                   hrefForItem={(id) => hrefFor(projectSlug, { ...query, item: id }, query.page)}
+                platformFor={(key) => findProvider(key)?.displayName ?? key}
                   timeZone={tz}
                   selectedId={openItem?.id}
                   now={new Date()}
@@ -234,6 +235,7 @@ export default async function InboxPage({ params, searchParams }: Props) {
                   tz={tz}
                   canReply={canReply}
                   maxLength={openCaps.maxLength}
+                  platform={openProvider?.displayName ?? openItem.providerKey}
                   countingRule={openCaps.countingRule}
                   headingLevel={2}
                   headingId="inbox-open-item"

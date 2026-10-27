@@ -88,6 +88,24 @@ export const blueskyEngagement: EngagementSupport<BlueskySettings> = {
   declaration: {
     reads: ["reply", "mention"],
     canReply: true,
+    /**
+     * G41. A reply or mention is itself a post, so it has the same address shape this provider
+     * already builds after publishing (`publish.ts`) and after sending a reply above:
+     * `https://bsky.app/profile/<handle>/post/<rkey>`.
+     *
+     * Null without a handle, or when the stored id is not an AT URI naming a post — a guessed link
+     * that 404s is worse than none, and the inbox then offers the parent post instead.
+     */
+    itemUrl: ({ externalId, authorHandle }) => {
+      if (!authorHandle) return null;
+      try {
+        const parsed = new AtUri(externalId);
+        if (parsed.collection !== POST_COLLECTION || !parsed.rkey) return null;
+        return `https://bsky.app/profile/${authorHandle}/post/${parsed.rkey}`;
+      } catch {
+        return null;
+      }
+    },
     writeBudget: { count: 1_666, windowSeconds: 3_600 },
   },
   itemDataSchema: blueskyEngagementItemDataSchema,

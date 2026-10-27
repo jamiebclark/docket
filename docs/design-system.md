@@ -127,7 +127,8 @@ text/UI pairs in both themes.
   `--font-poppins` (500/600/700). Nothing is fetched at build or run time,
   which keeps decision #16 (no Google Fonts download) intact.
 - Numbers that change in place (counts, pagination) use `tabular-nums`.
-- **One date format.** Every instant a person sees is `formatLocal(instant, timeZone)` from
+- **One date format, and one narrow exception.** Every instant a person sees is
+  `formatLocal(instant, timeZone)` from
   `src/lib/time/format.ts` — "Mon, Oct 12, 9:00 AM EDT" — in the **project's** zone, never the
   viewer's and never UTC. In JSX use `LocalTime`, which wraps it in a `<time>` carrying the exact
   instant and a full-date tooltip; `RelativeTime` shows "12 min ago" with that as its title. This
@@ -135,6 +136,14 @@ text/UI pairs in both themes.
   and provider account notes. `tests/lint/date-format.test.ts` fails the build on a hand-rolled
   formatter (`toUTCString`, `toLocaleDateString`, a raw `Intl.DateTimeFormat`, an ISO slice), with a
   short allowlist for the few places that parse or detect a zone rather than display one.
+- **The exception: `<LocalTime format="time">`** — "9:05 AM EDT", no date — and only where a
+  heading immediately above already names the day, as the inbox's day groups do (§19). Jamie's call,
+  2026-10-22: repeating "Mon, Oct 19" on every row beneath a heading that says so is noise.
+  The rule it does not break is the important one — the instant is still formatted once, in
+  `src/lib/time/format.ts`, in the project's zone, inside a `<time>` whose tooltip carries the full
+  date. A reader who needs the day can always get it; the row simply stops shouting it.
+  **Not for use anywhere the date is not already on screen**, because a bare clock time cannot say
+  which day it means.
 - A service's `localTime` field (`PlannedTime`) is a **machine** wall-clock string
   ("2026-10-11T11:30 America/New_York") that the calendar parses. It is never rendered; format the
   `scheduledAt` instant beside it instead.

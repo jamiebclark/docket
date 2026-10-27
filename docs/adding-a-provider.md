@@ -79,6 +79,7 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G38 | `shape` on a `MetricKeyDeclaration` — whether a key is cumulative, windowed or unknown | 21 |
 | G39 | `baseScopes` on an `OAuthConnectGroup` — what its dialog asks for before any opt-in | 4 |
 | G40 | `readScopes`/`missingReadScopes` on an `engagement` declaration, checked in the claim; `optionalScopes.cannotWiden` answered per surface | 4, 20 |
+| G41 | `itemUrl` on an `engagement` declaration: the item's own address on the platform, pure and derived from stored fields, `null` when the shape is not a confirmed fact | 20 |
 
 ## 3. Capabilities and counting rules
 
@@ -587,6 +588,7 @@ engagement?: {
     unavailable?: { reason: string; docsPath?: string };    // declared but not readable on this install (077 FR-055)
     readScopes?: readonly string[];                         // granted_scopes this provider's read needs (G40)
     missingReadScopes?: { reason: string; docsPath?: string }; // shown when readScopes are not held; required when readScopes is non-empty (G40)
+    itemUrl?: (item: { externalId: string; authorHandle: string | null }) => string | null; // where to read it on the platform (G41)
   };
   itemDataSchema: z.ZodType;  // your own shape of `engagement_items.provider_data`
   stateSchema: z.ZodType;     // your own shape of `engagement_account_states.provider_state`
