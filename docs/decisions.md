@@ -4284,3 +4284,42 @@ Reverse by dropping the warm-up run from the `base` stage. `tests/lint/dockerfil
 pins it: pnpm runs in `base`, with a `package.json` in scope, the warm-up directory is cleaned up,
 and no later stage re-provisions pnpm. The guard was checked against the original Dockerfile and
 fails on it.
+
+## Threads insights, shape (b) → shape (a) (2026-10-27)
+
+081 shipped `src/providers/threads/insights.ts` as contract shape (b): `post: []`, `account: []` and
+`unavailable: { reason: "Docket has not confirmed which metrics the Threads insights API reports." }`.
+That was correct at the time — FR-003 forbids declaring a metric the research has not CONFIRMED, and
+the enum was then corroborated only by third-party guides.
+
+**The research caught up and the provider did not.** T099's live check confirmed the media-insights
+enum from Meta's own page and wrote it into `docs/research/meta.md`, but the "upgrade shape (b) to
+shape (a)" half of that task never landed. The task was ticked, so nothing flagged it again, and the
+placeholder reason went on rendering on every published Threads post's performance panel — a
+sentence about Docket's own research state, shown to someone who wanted a number. It is now a real
+reader.
+
+- **Both "in development" metrics are declared.** Meta marks `views` and `shares` that way. They are
+  still part of the documented enum, so Graph does not reject the request; they may just not come
+  back, and an absent key renders no row at all, never a zero (FR-035). Dropping them would instead
+  guarantee no row forever, which is the worse failure.
+- **Three keys are prefixed; the request is not.** `views`, `likes` and `shares` are Instagram's
+  field names too, and `tests/integration/insights/provider-seam.test.ts` requires declared keys to
+  be disjoint across providers — the thing that keeps a shared mapping table from growing between
+  two platforms that use one word for two different events. They store as `threads_views`,
+  `threads_likes`, `threads_shares`; `replies`, `reposts` and `quotes` collide with nothing and keep
+  Threads' own word. Prefixing only the colliders follows TikTok's `tiktok_like_count` precedent.
+  The raw names go out on the wire, and a test asserts the request carries no `threads_` key.
+- **The account surface stays undeclared.** Threads' *profile* edge exposes `follower_count` and
+  some 7-day counters, but those are profile fields rather than `user_insights` metrics, and
+  declaring a profile field as an insights metric key would be a category error (research R4). With
+  `account: []` the poller never claims that surface, so `readAccountMetrics` is unreachable; it
+  returns an honest `unavailable` rather than throwing, so a later caller cannot read silence as a
+  zero. `docs/research/meta.md` records a confirmed `user_insights` enum, so this is a live
+  opportunity, not a dead end — it is simply not this change.
+- **Anyone who already granted the permission needs no reconnect**, which is exactly what shape (b)
+  was designed to preserve: `threads_manage_insights` was requested and recorded all along. An
+  account that did *not* grant it now gets `needs_reconnect` with a reason naming the permission —
+  a state someone can act on, which the old sentence was not.
+
+Reverse by restoring the `unavailable` declaration; nothing outside the provider folder changed.

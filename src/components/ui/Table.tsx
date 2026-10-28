@@ -18,11 +18,19 @@ const MAX_LABELLED_COLUMNS = 10;
 export function Table({
   caption,
   columns,
+  headings,
   grouped = false,
   children,
 }: {
   caption: string;
   columns: string[];
+  /**
+   * Richer content for the `<th scope="col">` cells — a platform mark above an account name, say.
+   * One entry per `columns` entry, in the same order. `columns` still supplies the accessible
+   * column names and the phone layout's per-cell labels, so a heading may add to what a column
+   * says but never replaces it.
+   */
+  headings?: ReactNode[];
   grouped?: boolean;
   children: ReactNode;
 }) {
@@ -35,9 +43,17 @@ export function Table({
         <caption className="sr-only">{caption}</caption>
         <thead className="bg-muted/60 max-sm:sr-only">
           <tr className="border-b border-border">
-            {columns.map((c) => (
-              <th key={c} scope="col" className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {c}
+            {columns.map((c, i) => (
+              <th
+                key={c}
+                scope="col"
+                className={
+                  headings
+                    ? "px-4 py-2.5 align-bottom text-xs font-semibold text-muted-foreground"
+                    : "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                }
+              >
+                {headings ? (headings[i] ?? c) : c}
               </th>
             ))}
           </tr>

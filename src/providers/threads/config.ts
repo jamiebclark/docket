@@ -101,6 +101,17 @@ export function threadsGraphBase(): string {
   return (base && parseBase(base)) || THREADS_DEFAULT_GRAPH_BASE;
 }
 
+/**
+ * FR-045. The percent of Meta's own BUC usage at or above which insights reads back off. Reads
+ * `process.env` each call and never throws: a reader must be able to ask for the ceiling on an
+ * install where Threads is not configured at all, where the default is the right answer.
+ */
+export function threadsInsightsUsageCeiling(): number {
+  const raw = readEnv(process.env, "THREADS_INSIGHTS_USAGE_CEILING");
+  const n = raw === null ? Number.NaN : Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 100 ? n : DEFAULT_INSIGHTS_USAGE_CEILING;
+}
+
 /** The app description for the shared Graph client. */
 export function threadsApp(graphBase: string = threadsGraphBase()): MetaApp {
   return { graphBase, version: THREADS_API_VERSION };
