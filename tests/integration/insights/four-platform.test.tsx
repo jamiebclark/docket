@@ -144,16 +144,21 @@ describe("the performance panel across Instagram, Facebook, Threads and Bluesky 
     expect(markup).toContain("Clicks");
     expect(markup).toContain(">2<");
 
-    // Threads: declared unavailable, so its reason renders and no number is fabricated for it.
-    expect(markup).toContain("Docket has not confirmed which metrics the Threads insights API reports.");
+    // Threads declares a real reader now, but this account never granted `threads_manage_insights`
+    // and this install's connect group never asks for it, so the permission reads as not requested:
+    // the panel names the permission and fabricates no number. The old placeholder — "Docket has not
+    // confirmed which metrics the Threads insights API reports" — is gone for good.
+    expect(markup).toContain("threads_manage_insights");
+    expect(markup).not.toContain("has not confirmed which metrics");
 
     // Bluesky: its own Likes row renders, but no Quotes row — the response never reported quoteCount.
     expect(markup).toContain(">3<");
 
-    // No row anywhere for a metric that was never reported (Threads has no declared keys at all).
-    expect(markup).not.toContain("Replies");
-    expect(markup).not.toContain("Reposts");
-    expect(markup).not.toContain("Quotes");
+    // No row anywhere for a metric no account reported. Threads declares Replies, Reposts, Quotes
+    // and Shares, but holds no snapshot, so none of them earns a row.
+    expect(markup).not.toContain(">Replies<");
+    expect(markup).not.toContain(">Reposts<");
+    expect(markup).not.toContain(">Quotes<");
 
     // No aggregate figure of any kind: no total/sum of 120+6+3=129, no average, no combined count.
     expect(markup).not.toMatch(/\btotal\b/i);

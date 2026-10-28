@@ -894,7 +894,8 @@ describe("secret scan (FR-020, SC-005)", () => {
       connectedByUserId: null,
       grantedScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
     });
-    // Threads still declares `unavailable`: never claimed, never called (080 behaviour, unchanged).
+    // Threads is claimed and read now; its stored blob is deliberately the wrong shape, so the
+    // reader refuses it before issuing a request and TH_TOKEN never reaches the wire.
     const threads = await repos.accounts.upsertConnected({
       providerKey: "threads",
       displayName: "Scan Threads",
@@ -946,7 +947,9 @@ describe("secret scan (FR-020, SC-005)", () => {
     session.current = sessionBefore;
     const pieces: Piece[] = [{ place: "page: post (meta insights panel states)", text: postMarkup }];
     // Sanity: the four 081 panel states this entry adds all actually rendered, not just an absence of secrets.
-    expect(postMarkup).toContain("not confirmed"); // threads: unavailable, 080 behaviour
+    // threads: a real reader now, and this account's stored blob is a Facebook page token rather
+    // than a Threads credential — so the read refuses before any call and the panel says why.
+    expect(postMarkup).toContain("Stored credentials are unreadable");
     expect(postMarkup).toMatch(/read_insights|cannot read its numbers|has not been given permission|Reconnect/);
     expect(postMarkup).toContain("cannot be used to request its numbers"); // facebook: unqueryable
     expect(postMarkup).toContain("story has expired"); // instagram: expired

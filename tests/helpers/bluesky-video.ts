@@ -52,6 +52,14 @@ const SWEEP_PATHS = [
 export const publishRequests = (requests: readonly RecordedRequest[]): RecordedRequest[] =>
   requests.filter((r) => !SWEEP_PATHS.some((path) => new URL(r.url).pathname.includes(path)));
 
+/**
+ * The same, as bare paths. Assert on this rather than `toHaveLength(0)`: when another section
+ * starts sweeping, the failure then names the path to add to `SWEEP_PATHS` instead of saying only
+ * that a count was 1 instead of 0, which is what made this cost a diagnosis twice.
+ */
+export const publishRequestPaths = (requests: readonly RecordedRequest[]): string[] =>
+  publishRequests(requests).map((r) => new URL(r.url).pathname);
+
 export const VIDEO_HOST = "video.bsky.app";
 export const DID = "did:plc:ewvi7nxzyoun6zhxrhs64oiz";
 export const CID = "bafyreib2rxk3rybk3aobmv5cjuql3bm2twh4jo5uxgf5kpqcsgzmq2vz2m";

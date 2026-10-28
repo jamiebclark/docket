@@ -186,16 +186,14 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
         }
       });
 
-      it("marks only Facebook text length and images, Instagram's carousel video aspect, and each Meta-family insights read budget, UNVERIFIED", () => {
+      it("marks only Facebook text length and images, Instagram's carousel video aspect, and their two insights read budgets, UNVERIFIED", () => {
         const flagged = rows.filter((r) => r.source.includes("UNVERIFIED")).map((r) => r.category).sort();
         const expected =
           provider.key === "facebook"
             ? ["images", "note: insights read budget", "text length"]
             : provider.key === "instagram"
               ? ["carousel video max aspect", "carousel video min aspect", "note: insights read budget", "story max aspect", "story min aspect"]
-              : provider.key === "threads"
-                ? ["note: insights read budget"]
-                : [];
+              : [];
         expect(flagged).toEqual(expected);
       });
 
@@ -212,6 +210,18 @@ describe("docs/limits.md matches the registered providers (D13)", () => {
           expect(row!.value).toBe("600 / 60 s");
           expect(row!.source).toContain("PARTLY CONFIRMED");
           expect(row!.source).not.toContain("UNVERIFIED");
+        });
+      }
+
+      if (provider.key === "threads") {
+        // Unlike Facebook's and Instagram's, this one is not a stand-in: research §Q5 documents an
+        // impression floor of 10, so 4800 x 10 is a real floor (contracts/provider-insights-081.md §3).
+        it("documents the 48,000/86,400s insights read budget as sourced, not UNVERIFIED", () => {
+          const row = rows.find((r) => r.category === "note: insights read budget");
+          expect(row).toBeDefined();
+          expect(row!.value).toBe("48000 / 86400 s");
+          expect(row!.source).not.toContain("UNVERIFIED");
+          expect(row!.source).not.toMatch(/interim/i);
         });
       }
 

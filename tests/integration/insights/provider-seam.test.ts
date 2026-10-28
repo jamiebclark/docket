@@ -27,7 +27,9 @@ const SEAM_MODULES = [
   "src/server/dal/insights-claims.ts",
   "src/server/services/insights/retention.ts",
   "src/server/services/posts/view.ts",
-  "src/components/targets/PerformancePanel.tsx",
+  "src/components/targets/PerformanceNote.tsx",
+  "src/components/targets/PerformanceOverlay.tsx",
+  "src/lib/insights/overlay.ts",
 ];
 
 describe("provider insights seam (FR-061, SC-013)", () => {

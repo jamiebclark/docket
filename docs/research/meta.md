@@ -532,25 +532,45 @@ Pinning a `period` on the account read would resolve `page_post_engagements` (no
 which names no period to pin); that is a reader change, out of scope for 083 under FR-005, and left
 for whichever later entry decides it is worth doing. See `docs/decisions.md` ("083 — G38").
 
-### Threads media (post) insights — PARTLY CONFIRMED (not declared under FR-003 unless the implement phase confirms the official enum)
-Source: <https://developers.facebook.com/documentation/threads/insights>,
-corroborating third-party integration guides. Checked 2026-10-17.
+### Threads media (post) insights — CONFIRMED, declared and read
+Source: <https://developers.facebook.com/docs/threads/insights>.
+Checked 2026-10-17, re-checked against the official page 2026-10-27.
 
-| Metric | Required permission | period / metric_type | Processing delay | Confidence |
+| Metric | Required permission | period | Processing delay | Confidence |
 |---|---|---|---|---|
-| `views` | `threads_manage_insights` | daily totals (differs from the rest) | not stated | PARTLY CONFIRMED (third-party corroboration only; official enum not captured) |
-| `likes` | same | lifetime totals | not stated | PARTLY CONFIRMED |
-| `replies` | same | lifetime totals | not stated | PARTLY CONFIRMED |
-| `reposts` | same | lifetime totals | not stated | PARTLY CONFIRMED |
-| `quotes` | same | lifetime totals | not stated | PARTLY CONFIRMED |
-| `shares` (roadmap FR-031) | — | — | — | **R3 — NOT CONFIRMED, no source names it on this edge; dropped** |
+| `views` | `threads_manage_insights` | `lifetime` | not stated | CONFIRMED — Meta marks it **"in development"** |
+| `likes` | same | `lifetime` | not stated | CONFIRMED |
+| `replies` | same | `lifetime` | not stated | CONFIRMED |
+| `reposts` | same | `lifetime` | not stated | CONFIRMED |
+| `quotes` | same | `lifetime` | not stated | CONFIRMED |
+| `shares` | same | `lifetime` | not stated | CONFIRMED — Meta marks it **"in development"** |
 
-Endpoint: `GET /{threads-media-id}/insights?metric=…` on `graph.threads.net`
-(matches Docket's existing Threads transport). Third-party agreement is
-corroboration, not an official source; FR-003 means these are not declared
-unless the implement phase (Phase 11 human task, R3) confirms the enum from
-the official page. If unconfirmed, `src/providers/threads/insights.ts` ships
-`unavailable` instead (research.md §3 decision).
+Endpoint: `GET /{threads-media-id}/insights?metric=…` on the Threads graph
+host (matches Docket's existing Threads transport). Response shape is Graph's
+`{ data: [{ name, period, values: [{ value }] }] }` — `values`, **not**
+`total_value`, which is what the *user* insights edge returns.
+
+The earlier pass recorded this enum as PARTLY CONFIRMED on third-party
+corroboration only, and `src/providers/threads/insights.ts` therefore shipped
+shape (b) — `unavailable`, reason "Docket has not confirmed which metrics the
+Threads insights API reports". The R3 live check then confirmed the enum from
+the official page but the provider was never upgraded with it, so that
+placeholder reason stayed on screen. It is now shape (a): a real reader. See
+`docs/decisions.md` ("Threads insights, shape (b) → shape (a)").
+
+**"In development" is not a reason to drop a metric.** Both marked names are
+part of the documented enum, so Graph does not reject the request — they may
+simply not come back, and a key absent from a reading renders no row at all,
+never a zero (FR-035). Dropping them would instead guarantee no row forever.
+
+**Three declared keys are prefixed, and this is deliberate.** `views`, `likes`
+and `shares` are also Instagram's own field names, and
+`tests/integration/insights/provider-seam.test.ts` requires every provider's
+declared keys to be disjoint so no shared mapping table can grow between two
+platforms using the same word for different events. They are stored as
+`threads_views`, `threads_likes` and `threads_shares`; `replies`, `reposts` and
+`quotes` collide with nothing and stay Threads' own word. Same precedent as
+TikTok's `tiktok_like_count`. The **request** always sends the raw names.
 
 ### Threads user (account) insights — NOT CONFIRMED, not declared (`account: []`)
 The Threads *profile* edge (`/{threads-user-id}?fields=…`) exposes
