@@ -2,7 +2,7 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { allowanceUses } from "../../../src/server/db/schema/scheduler";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
-import { blueskyVideoSetup, CREATE_RECORD_PATH, publishRequests, VIDEO } from "../../helpers/bluesky-video";
+import { blueskyVideoSetup, CREATE_RECORD_PATH, publishRequestPaths, VIDEO } from "../../helpers/bluesky-video";
 import { closeDb, testDb } from "../../helpers/db";
 
 type Setup = Awaited<ReturnType<typeof blueskyVideoSetup>>;
@@ -92,7 +92,7 @@ describe("the 25-a-day allowance", () => {
     await testDb().insert(allowanceUses).values({ projectId: project.id, socialAccountId: current.target.socialAccountId, units: 25, createdAt: at(-HOUR) });
     const counts = await current.tick(at(0));
     expect(counts).toMatchObject({ claimed: 1, deferred: 1 });
-    expect(publishRequests(current.pds.requests)).toHaveLength(0);
+    expect(publishRequestPaths(current.pds.requests)).toEqual([]);
     const row = await current.row();
     expect(row.lastError).toContain("Waiting for Bluesky's daily video upload allowance");
     expect(row.attemptCount).toBe(0);
