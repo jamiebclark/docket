@@ -164,6 +164,10 @@ function TargetCard({
                 View on {t.providerName}
                 <Icon name="externalLink" size={14} />
               </a>
+            ) : t.status === "published" ? (
+              // Answers the question the account beside it raises: that one has "View on Bluesky"
+              // and this one does not, because the platform handed back no address for the post.
+              <span className="text-sm text-muted-foreground">Published on {t.providerName}</span>
             ) : null}
           </div>
         </div>
