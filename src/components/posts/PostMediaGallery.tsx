@@ -102,7 +102,11 @@ function Lightbox({
         if (e.key === "ArrowLeft") onStep(-1);
       }}
       aria-label={media.altText || "Post image"}
-      className="max-h-full max-w-full bg-transparent backdrop:bg-foreground/80 backdrop:backdrop-blur-sm"
+      // No `backdrop:` utilities: the base layer already dims and blurs every dialog's backdrop
+      // with a fixed dark scrim. Overriding it with `bg-foreground/80` made the scrim *light* in
+      // dark mode, where `foreground` is a near-white — a scrim has to be dark in both themes,
+      // which is exactly why that base rule is a fixed colour rather than a token.
+      className="m-auto max-h-full max-w-full bg-transparent"
     >
       <div className="flex flex-col items-center gap-3 p-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
