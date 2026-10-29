@@ -43,6 +43,7 @@ export function claimDueEngagementReads(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.disabledAt),
             inArray(socialAccounts.providerKey, providerKeys),
             isNull(engagementAccountStates.socialAccountId),
           ),
@@ -62,6 +63,7 @@ export function claimDueEngagementReads(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.disabledAt),
             inArray(socialAccounts.providerKey, providerKeys),
             or(isNull(engagementAccountStates.readLeaseUntil), lte(engagementAccountStates.readLeaseUntil, opts.now)),
             or(isNull(engagementAccountStates.readNotBefore), lte(engagementAccountStates.readNotBefore, opts.now)),

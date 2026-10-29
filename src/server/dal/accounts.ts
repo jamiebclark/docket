@@ -2,10 +2,32 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { normalizeGrantedScopes } from "../../lib/granted-scopes";
 import { listProviders } from "../../providers/registry";
 import type { Database } from "../db/client";
-import { postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
+import { postTargets, posts, socialAccountStatus, socialAccounts, type SocialAccountRow } from "../db/schema";
 
 export type AccountRow = SocialAccountRow;
-export type AccountRecord = Omit<AccountRow, "credentialsEncrypted"> & { hasCredentials: boolean };
+
+/** What the stored enum can say: whether the credentials are believed good. Never mentions disabling. */
+export type AuthStatus = (typeof socialAccountStatus.enumValues)[number];
+
+/**
+ * What every caller should branch on: the auth status, unless a member has switched the account off,
+ * in which case `"disabled"` shadows it.
+ *
+ * Deriving it here rather than at each call site is deliberate. Around twenty places ask
+ * `status !== "active"` before publishing, polling, replying, validating or offering an account, and
+ * every one of them must also exclude a disabled account. Shadowing the field means they all do,
+ * and `tsc` makes the handful that render a label handle the new value. The stored enum stays
+ * reachable as `authStatus`, which is what makes enabling restore `needs_reauth` instead of
+ * inventing `active` (`disabled_at` on the table says why).
+ */
+export type EffectiveStatus = AuthStatus | "disabled";
+
+export type AccountRecord = Omit<AccountRow, "credentialsEncrypted" | "status"> & {
+  status: EffectiveStatus;
+  /** The stored enum, unshadowed. Only disable/enable and the refresh paths have any business reading it. */
+  authStatus: AuthStatus;
+  hasCredentials: boolean;
+};
 
 export interface UpsertConnected {
   providerKey: string;
@@ -41,6 +63,8 @@ export type RefreshLeaseResult =
 export interface AccountsRepo {
   /** Distinct non-deleted posts with a draft/scheduled/publishing target on the account. */
   countUnpublishedPosts(accountId: string): Promise<number>;
+  /** Distinct non-deleted posts with a `scheduled` target on the account — what disabling would hold. */
+  countQueuedPosts(accountId: string): Promise<number>;
   listNeedingReauth(): Promise<{ id: string; displayName: string; providerKey: string }[]>;
   list(): Promise<AccountRecord[]>;
   get(id: string): Promise<AccountRecord | null>;
@@ -55,6 +79,12 @@ export interface AccountsRepo {
   setPostingInstructions(id: string, text: string | null): Promise<void>;
   setLimit(id: string, limit: { count: number; windowSeconds: number } | null): Promise<void>;
   markRemoved(id: string, at: Date): Promise<void>;
+  /**
+   * Switches the account off (`at`) or back on (`null`), only while it is not removed and not already in
+   * that state. Touches nothing else: credentials, `status` and `last_error` all survive, which is what
+   * lets enabling hand back the `needs_reauth` the account had when it was switched off.
+   */
+  setDisabled(id: string, at: Date | null): Promise<boolean>;
   /**
    * Internal (token refresh): applies `patch` and clears the refresh lease, only while `token` still holds it.
    * Returns false when the lease was lost.
@@ -87,9 +117,14 @@ export interface StatusChange {
   previousStatus: "active" | "needs_reauth" | null;
 }
 
+/** The one place `disabled_at` becomes a status; see `EffectiveStatus`. */
+export function effectiveStatus(row: Pick<AccountRow, "status" | "disabledAt">): EffectiveStatus {
+  return row.disabledAt !== null ? "disabled" : row.status;
+}
+
 function strip(row: AccountRow): AccountRecord {
   const { credentialsEncrypted, ...rest } = row;
-  return { ...rest, hasCredentials: credentialsEncrypted !== null };
+  return { ...rest, status: effectiveStatus(row), authStatus: row.status, hasCredentials: credentialsEncrypted !== null };
 }
 
 export function createAccountsRepo(db: Database, projectId: string): AccountsRepo {
@@ -125,6 +160,23 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         );
       return row?.n ?? 0;
     },
+    async countQueuedPosts(accountId) {
+      const [row] = await db
+        .select({ n: sql<number>`count(DISTINCT ${posts.id})::int` })
+        .from(postTargets)
+        .innerJoin(
+          posts,
+          and(eq(posts.id, postTargets.postId), eq(posts.projectId, postTargets.projectId), isNull(posts.deletedAt)),
+        )
+        .where(
+          and(
+            eq(postTargets.projectId, projectId),
+            eq(postTargets.socialAccountId, accountId),
+            eq(postTargets.status, "scheduled"),
+          ),
+        );
+      return row?.n ?? 0;
+    },
     async listNeedingReauth() {
       return db
         .select({
@@ -137,6 +189,8 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
           and(
             eq(socialAccounts.projectId, projectId),
             isNull(socialAccounts.removedAt),
+            // A disabled account is not asking to be reconnected: it was switched off on purpose.
+            isNull(socialAccounts.disabledAt),
             eq(socialAccounts.status, "needs_reauth"),
           ),
         )
@@ -244,6 +298,22 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .set({ removedAt: at, credentialsEncrypted: null, credentialsExpiresAt: null })
         .where(mine(id));
     },
+    async setDisabled(id, at) {
+      const rows = await db
+        .update(socialAccounts)
+        .set({ disabledAt: at })
+        .where(
+          and(
+            mine(id),
+            isNull(socialAccounts.removedAt),
+            // Guarded on being off or on, never on the instant: a second disable must keep the original
+            // `disabled_at` (the card shows it) instead of quietly resetting it to now and auditing again.
+            at === null ? sql`${socialAccounts.disabledAt} IS NOT NULL` : isNull(socialAccounts.disabledAt),
+          ),
+        )
+        .returning({ id: socialAccounts.id });
+      return rows.length > 0;
+    },
     async recordRefresh(id, token, patch) {
       const previousStatus = await lockStatus(id);
       const rows = await db
@@ -265,6 +335,7 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
             mine(id),
             eq(socialAccounts.status, "active"),
             isNull(socialAccounts.removedAt),
+            isNull(socialAccounts.disabledAt),
             // No `or`: the scope check treats a disjunction as unable to pin the project.
             sql`coalesce(${socialAccounts.refreshLeaseUntil}, 'epoch'::timestamptz) <= ${opts.now}`,
             eq(socialAccounts.credentialsEncrypted, opts.expectedCiphertext),
@@ -276,12 +347,15 @@ export function createAccountsRepo(db: Database, projectId: string): AccountsRep
         .select({
           status: socialAccounts.status,
           removedAt: socialAccounts.removedAt,
+          disabledAt: socialAccounts.disabledAt,
           c: socialAccounts.credentialsEncrypted,
         })
         .from(socialAccounts)
         .where(mine(id))
         .limit(1);
-      if (!row || row.removedAt !== null || row.status !== "active" || row.c === null) return { kind: "unavailable" };
+      if (!row || row.removedAt !== null || row.disabledAt !== null || row.status !== "active" || row.c === null) {
+        return { kind: "unavailable" };
+      }
       return row.c !== opts.expectedCiphertext ? { kind: "changed" } : { kind: "busy" };
     },
     async markCredentialsInvalid(id, opts) {

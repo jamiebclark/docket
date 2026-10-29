@@ -120,7 +120,12 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
  */
 export async function refreshForPublish(input: {
   projectId: string;
-  account: ClaimedAccount;
+  /**
+   * Only the four fields the refresh actually reads. Narrower than `ClaimedAccount` on purpose: the
+   * callers hand it either a claimed row or an `AccountRecord`, whose `status` is the wider effective
+   * one, and nothing here branches on status — `acquireRefreshLease` is the gate.
+   */
+  account: Pick<ClaimedAccount, "id" | "displayName" | "externalAccountId" | "settings">;
   provider: SocialProvider;
   seenCiphertext: string | null;
   config: SchedulerConfig;

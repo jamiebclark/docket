@@ -15,6 +15,8 @@ const LABEL: Record<string, string> = {
   llm_credential_update: "changed this project's model credential",
   standing_series_create: "created the standing series",
   standing_series_update: "changed the standing series",
+  account_disable: "disabled an account",
+  account_enable: "enabled an account",
   standing_series_pause: "paused the standing series",
   standing_series_resume: "resumed the standing series",
   standing_series_delete: "deleted the standing series",

@@ -29,6 +29,14 @@ export interface AccountView {
   providerName: string;
   displayName: string;
   status: AccountRecord["status"];
+  /** When a member switched it off; `null` while it is on. `status` is already `"disabled"` whenever this is set. */
+  disabledAt: Date | null;
+  /**
+   * Whether the credentials are believed good, ignoring the disable. The accounts page needs it so a
+   * disabled account that is *also* broken can still offer its reconnect — fix first, enable second,
+   * rather than enabling a broken account and watching its held queue fail.
+   */
+  authStatus: AccountRecord["authStatus"];
   lastError: string | null;
   hasCredentials: boolean;
   credentialsExpireAt: Date | null;
@@ -122,6 +130,8 @@ function view(a: AccountRecord, timeZone: string, now?: Date): AccountView {
     providerName: provider?.displayName ?? a.providerKey,
     displayName: a.displayName,
     status: a.status,
+    disabledAt: a.disabledAt,
+    authStatus: a.authStatus,
     lastError: a.lastError,
     hasCredentials: a.hasCredentials,
     credentialsExpireAt: a.credentialsExpiresAt,
@@ -428,6 +438,54 @@ export async function reconnectMock(scope: ProjectScope, accountId: string): Pro
     displayName: account.displayName,
     settings: account.settings ?? {},
   });
+}
+
+/**
+ * Switches the account off, or back on (FR-D1).
+ *
+ * Off means: no publishing, no token refresh, no insights or engagement polling, and no offer of the
+ * account anywhere a post can be written. Posts already scheduled to it keep their times and are held
+ * by the publishing section until it comes back on — nothing is failed and nothing is cancelled.
+ *
+ * `status` is left exactly as it was, so switching a broken account off and on again hands back its
+ * `needs_reauth` and its `last_error` rather than claiming it reconnected itself. Enabling also makes
+ * the held targets due now, since their scheduled times have almost certainly passed.
+ */
+export async function setAccountDisabled(
+  scope: ProjectScope,
+  accountId: string,
+  disabled: boolean,
+): Promise<{ changed: boolean; account: AccountView; releasedTargets: number }> {
+  const id = idSchema.parse(accountId);
+  require(scope, "manage");
+  return scope.transaction(async (tx) => {
+    require(tx, "manage");
+    const account = await tx.accounts.getForUpdate(id);
+    if (!account || account.removedAt) throw new NotFoundError();
+    const now = await clock.now();
+    const changed = await tx.accounts.setDisabled(id, disabled ? now : null);
+    let releasedTargets = 0;
+    if (changed && !disabled) releasedTargets = await tx.targets.makeDueForAccount(id, now);
+    if (changed) {
+      await recordAudit(tx, {
+        action: disabled ? "account_disable" : "account_enable",
+        actorUserId: tx.membership.userId || null,
+        details: { accountId: id, displayName: account.displayName, providerKey: account.providerKey },
+      });
+    }
+    const fresh = await tx.accounts.get(id);
+    if (!fresh) throw new NotFoundError();
+    return { changed, account: view(fresh, tx.project.timezone, now), releasedTargets };
+  });
+}
+
+/** How many scheduled posts disabling the account would hold. */
+export async function accountDisableImpact(scope: ProjectScope, accountId: string): Promise<{ queuedPosts: number }> {
+  const id = idSchema.parse(accountId);
+  require(scope, "view");
+  const account = await scope.accounts.get(id);
+  if (!account || account.removedAt) throw new NotFoundError();
+  return { queuedPosts: await scope.accounts.countQueuedPosts(id) };
 }
 
 /** How many posts would lose a target if the account were removed. */

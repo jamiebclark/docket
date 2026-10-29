@@ -96,6 +96,23 @@ export async function removeAccountAction(slug: string, input: { id: string }): 
   });
 }
 
+export async function setAccountDisabledAction(
+  slug: string,
+  input: { id: string; disabled: boolean },
+): Promise<ActionResult<{ changed: boolean; releasedTargets: number }>> {
+  return mutate(slug, async (scope) => {
+    const out = await accounts.setAccountDisabled(scope, input?.id, input?.disabled === true);
+    return { changed: out.changed, releasedTargets: out.releasedTargets };
+  });
+}
+
+export async function accountDisableImpactAction(
+  slug: string,
+  input: { id: string },
+): Promise<ActionResult<{ queuedPosts: number }>> {
+  return runAction(slug, (scope) => accounts.accountDisableImpact(scope, input?.id));
+}
+
 export async function accountRemovalImpactAction(
   slug: string,
   input: { id: string },

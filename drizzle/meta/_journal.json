@@ -337,6 +337,13 @@
       "when": 1792355504178,
       "tag": "0047_salty_owl",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793242512430,
+      "tag": "0048_fair_bastion",
+      "breakpoints": true
     }
   ]
 }

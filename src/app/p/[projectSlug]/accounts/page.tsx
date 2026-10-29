@@ -20,6 +20,7 @@ import { ConnectCredentialsForm } from "./ConnectCredentialsForm";
 import { ConnectMockForm } from "./ConnectMockForm";
 import { ReconnectGroupButton } from "./ReconnectGroupButton";
 import { RemoveAccountDialog } from "./RemoveAccountDialog";
+import { DisableAccountDialog } from "./DisableAccountDialog";
 import { PostingInstructionsForm } from "./PostingInstructionsForm";
 import { MockBehaviourForm, ReconnectMockButton } from "./SlotEditor";
 import { AccountSlotGrid } from "./AccountSlotGrid";
@@ -35,6 +36,7 @@ export const dynamic = "force-dynamic";
 const STATUS: Record<accounts.AccountView["status"], { label: string; tone: "success" | "danger" | "neutral" }> = {
   active: { label: "Connected", tone: "success" },
   needs_reauth: { label: "Needs reconnecting", tone: "danger" },
+  disabled: { label: "Disabled", tone: "neutral" },
 };
 
 export default async function AccountsPage({
@@ -157,6 +159,9 @@ export default async function AccountsPage({
         ) : (
           withSlots.map(({ account, slots: rows }) => {
             const status = STATUS[account.status];
+            // Reconnecting is offered while the account is switched off too, so a broken account can be
+            // fixed before it is enabled rather than after its held queue has already fired and failed.
+            const needsReconnect = account.authStatus === "needs_reauth";
             const isMock = account.providerKey === "mock";
             const behaviour = (account.settings as { behaviour?: string } | null)?.behaviour ?? "succeed";
             return (
@@ -180,6 +185,12 @@ export default async function AccountsPage({
                   </div>
                   <Badge tone={status.tone}>{status.label}</Badge>
                 </header>
+                {account.disabledAt ? (
+                  <p className="text-sm">
+                    Disabled <LocalTime value={account.disabledAt} timeZone={timeZone} />. Scheduled posts are being held, and
+                    Docket is not posting, refreshing its login, reading its numbers or checking its replies.
+                  </p>
+                ) : null}
                 {account.lastError ? (
                   <p className="text-sm text-danger">Last error: {account.lastError}</p>
                 ) : null}
@@ -221,16 +232,16 @@ export default async function AccountsPage({
                 )}
                 {canManage && isMock ? (
                   <div className="flex flex-wrap items-end gap-4">
-                    {account.status === "needs_reauth" ? <ReconnectMockButton slug={projectSlug} id={account.id} /> : null}
+                    {needsReconnect ? <ReconnectMockButton slug={projectSlug} id={account.id} /> : null}
                     <MockBehaviourForm slug={projectSlug} id={account.id} behaviour={behaviour} />
                   </div>
                 ) : null}
-                {canManage && account.status === "needs_reauth"
+                {canManage && needsReconnect
                   ? groups
                       .filter((g) => g.available && g.providerKeys.includes(account.providerKey))
                       .map((g) => <ReconnectGroupButton key={g.key} slug={projectSlug} groupKey={g.key} displayName={g.displayName} />)
                   : null}
-                {canManage && account.status === "needs_reauth"
+                {canManage && needsReconnect
                   ? groups
                       .filter((g) => g.unavailable && g.paste && g.providerKeys.includes(account.providerKey))
                       .map((g) => (
@@ -239,7 +250,7 @@ export default async function AccountsPage({
                         </p>
                       ))
                   : null}
-                {canManage && account.status === "needs_reauth"
+                {canManage && needsReconnect
                   ? credentialProviders
                       .filter((p) => p.key === account.providerKey)
                       .map((p) => (
@@ -304,7 +315,13 @@ export default async function AccountsPage({
                   </div>
                 </details>
                 {canManage ? (
-                  <div className="flex justify-end border-t border-border pt-4">
+                  <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-4">
+                    <DisableAccountDialog
+                      slug={projectSlug}
+                      id={account.id}
+                      name={account.displayName}
+                      disabled={account.disabledAt !== null}
+                    />
                     <RemoveAccountDialog slug={projectSlug} id={account.id} name={account.displayName} />
                   </div>
                 ) : null}

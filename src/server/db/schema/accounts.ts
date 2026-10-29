@@ -34,6 +34,12 @@ export const socialAccounts = pgTable(
     credentialsEncrypted: text("credentials_encrypted"),
     credentialsExpiresAt: timestamp("credentials_expires_at", { withTimezone: true }),
     status: socialAccountStatus("status").default("active").notNull(),
+    /**
+     * Set while a member has switched the account off (FR-D1). Orthogonal to `status` on purpose: a
+     * broken account can be disabled and keeps its `needs_reauth`, so enabling it restores the truth
+     * rather than claiming it is connected. Never clears credentials — that is what `removed_at` is for.
+     */
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
     lastError: text("last_error"),
     settings: jsonb("settings").default({}).notNull(),
     postingInstructions: text("posting_instructions"),
@@ -91,7 +97,7 @@ export const socialAccounts = pgTable(
     index("social_accounts_expiry_idx")
       .on(t.credentialsExpiresAt)
       .where(
-        sql`${t.removedAt} IS NULL AND ${t.status} = 'active' AND ${t.credentialsExpiresAt} IS NOT NULL`,
+        sql`${t.removedAt} IS NULL AND ${t.disabledAt} IS NULL AND ${t.status} = 'active' AND ${t.credentialsExpiresAt} IS NOT NULL`,
       ),
   ],
 );

@@ -281,6 +281,7 @@ export function claimRefreshAccounts(opts: ClaimRefreshOptions): Promise<Claimed
         .where(
           and(
             eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.disabledAt),
             isNull(socialAccounts.removedAt),
             isNotNull(socialAccounts.credentialsEncrypted),
             lte(socialAccounts.credentialsExpiresAt, new Date(opts.now.getTime() + opts.refreshWindowMs)),

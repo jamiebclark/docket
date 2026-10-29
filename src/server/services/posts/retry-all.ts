@@ -35,7 +35,7 @@ export interface RetryAllResult {
   accounts: RetryAllAccountRow[];
 }
 
-type BlockedKey = "account_removed" | "needs_reconnecting" | "provider_unavailable";
+type BlockedKey = "account_removed" | "account_disabled" | "needs_reconnecting" | "provider_unavailable";
 
 export interface RetryAllPreview {
   scope: { accountId: string; accountName: string } | null;
@@ -153,13 +153,20 @@ export async function previewRetryAll(scope: ProjectScope, input?: unknown): Pro
   const { account: accountId } = retryAllScopeSchema.parse(input ?? {});
   const rows = await scope.targets.listFailedForRetry({ accountId });
   const accounts = new Map((await scope.accounts.list()).map((a) => [a.id, a]));
-  const blocked = { account_removed: 0, needs_reconnecting: 0, provider_unavailable: 0 };
+  const blocked: Pick<SkipCounts, BlockedKey> = {
+    account_removed: 0,
+    account_disabled: 0,
+    needs_reconnecting: 0,
+    provider_unavailable: 0,
+  };
   for (const row of rows) {
     const key = blockedKeyFor(accounts.get(row.socialAccountId));
     if (key) blocked[key]++;
   }
   const known = accountId ? accounts.get(accountId) : undefined;
-  const eligible = rows.length - blocked.account_removed - blocked.needs_reconnecting - blocked.provider_unavailable;
+  // Summed over the keys rather than named one by one, so a later blocked reason cannot be left out of
+  // the subtraction and silently inflate `eligible`.
+  const eligible = rows.length - Object.values(blocked).reduce((sum, n) => sum + n, 0);
   return {
     scope: known ? { accountId: known.id, accountName: known.displayName } : null,
     inScope: rows.length,

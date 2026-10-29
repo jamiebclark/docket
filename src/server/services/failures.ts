@@ -53,7 +53,7 @@ export interface FailureRow {
   targetId: string;
   postId: string;
   status: "ambiguous" | "failed";
-  account: { id: string; name: string; providerName: string; status: "active" | "needs_reauth" | "removed" };
+  account: { id: string; name: string; providerName: string; status: "active" | "needs_reauth" | "disabled" | "removed" };
   excerpt: string;
   intendedAt: Date | null;
   intendedLocal: string | null;

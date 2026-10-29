@@ -49,6 +49,9 @@ export async function readAccountDetails(
     transient: false,
     message: `${account.displayName} needs to be reconnected.`,
   };
+  if (account.status === "disabled") {
+    return { ok: false, transient: false, message: `${account.displayName} is disabled. Enable it to load its options.` };
+  }
   if (account.status !== "active") return reconnect;
 
   const nowMs = (await clock.now()).getTime();

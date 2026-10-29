@@ -11,13 +11,13 @@ import {
   summaryAccounts,
 } from "./retry-all-ui";
 
-const zero = { account_removed: 0, needs_reconnecting: 0, provider_unavailable: 0, no_longer_failed: 0, cannot_publish: 0, no_free_slot: 0 };
+const zero = { account_removed: 0, account_disabled: 0, needs_reconnecting: 0, provider_unavailable: 0, no_longer_failed: 0, cannot_publish: 0, no_free_slot: 0 };
 
 function preview(p: Partial<RetryAllPreview> = {}): RetryAllPreview {
   return {
     scope: null,
     inScope: 5,
-    blocked: { account_removed: 0, needs_reconnecting: 0, provider_unavailable: 0 },
+    blocked: { account_removed: 0, account_disabled: 0, needs_reconnecting: 0, provider_unavailable: 0 },
     eligible: 5,
     willAttempt: 5,
     cap: 100,
@@ -62,7 +62,7 @@ describe("previewLines", () => {
     expect(previewLines(p).counts[1]).toBe("Up to 100 will be retried in this step; press again to continue.");
   });
   it("blocked lines", () => {
-    const p = preview({ blocked: { account_removed: 0, needs_reconnecting: 2, provider_unavailable: 0 }, willAttempt: 3 });
+    const p = preview({ blocked: { account_removed: 0, account_disabled: 0, needs_reconnecting: 2, provider_unavailable: 0 }, willAttempt: 3 });
     expect(previewLines(p)).toEqual({
       counts: ["5 failed posts across all accounts.", "3 will be retried.", "2 can't be retried yet:"],
       blocked: ["2 need reconnecting"],

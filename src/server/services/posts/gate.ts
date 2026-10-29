@@ -24,6 +24,9 @@ export type Gate =
 export async function gate(tx: Tx, target: TargetRecord): Promise<Gate> {
   const account = await tx.accounts.get(target.socialAccountId);
   if (!account) return { ok: false, code: "account_unavailable", message: "That account has been removed." };
+  if (account.status === "disabled") {
+    return { ok: false, code: "account_unavailable", message: `${account.displayName} is disabled. Enable it to post.` };
+  }
   if (account.status !== "active") {
     return { ok: false, code: "account_unavailable", message: `${account.displayName} needs to be reconnected.` };
   }

@@ -27,7 +27,7 @@ export type OverviewAccount = {
   providerKey: string;
   providerName: string;
   displayName: string;
-  status: "active" | "needs_reauth";
+  status: "active" | "needs_reauth" | "disabled";
   providerAvailable: boolean;
   credentialsExpireAt: Date | null;
   slots: { active: number; paused: number };
@@ -313,6 +313,8 @@ export function deriveNeedsAttention(facts: OverviewFacts): AttentionItem[] | nu
   const horizon = facts.now.getTime() + EXPIRY_WINDOW_DAYS * 86_400_000;
   for (const a of facts.accounts) {
     const who = `${a.displayName} (${a.providerName})`;
+    // Switched off on purpose: it asks for nothing, including about credentials it will never refresh.
+    if (a.status === "disabled") continue;
     if (a.status === "needs_reauth") {
       items.push({ kind: "reconnect", label: `${who} needs reconnecting`, badge: { tone: "danger", text: "Needs reconnecting" }, href: accountLink(a), hint, at: null });
     } else if (a.credentialsExpireAt && a.credentialsExpireAt.getTime() <= horizon) {
@@ -369,9 +371,11 @@ export function deriveAccounts(facts: OverviewFacts): OverviewView["accounts"] {
   const rows = facts.accounts.map((a): AccountRow => {
     const badge: AccountRow["badge"] = !a.providerAvailable
       ? { tone: "neutral", text: "Unavailable" }
-      : a.status === "needs_reauth"
-        ? { tone: "danger", text: "Needs reconnecting" }
-        : { tone: "success", text: "Connected" };
+      : a.status === "disabled"
+        ? { tone: "neutral", text: "Disabled" }
+        : a.status === "needs_reauth"
+          ? { tone: "danger", text: "Needs reconnecting" }
+          : { tone: "success", text: "Connected" };
     const { active, paused } = a.slots;
     const slotsText =
       active >= 1
@@ -381,9 +385,11 @@ export function deriveAccounts(facts: OverviewFacts): OverviewView["accounts"] {
           : can.manageSlots
             ? "No posting slots — add some"
             : "No posting slots";
-    const expiry = a.credentialsExpireAt
-      ? { expired: a.credentialsExpireAt.getTime() <= facts.now.getTime(), at: a.credentialsExpireAt }
-      : null;
+    // No expiry line while it is switched off: nothing refreshes it, and the badge already says why.
+    const expiry =
+      a.credentialsExpireAt && a.status !== "disabled"
+        ? { expired: a.credentialsExpireAt.getTime() <= facts.now.getTime(), at: a.credentialsExpireAt }
+        : null;
     return {
       id: a.id,
       providerKey: a.providerKey,

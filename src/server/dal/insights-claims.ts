@@ -118,6 +118,7 @@ export function claimDueAccountMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.disabledAt),
             eligible(rules, "account"),
             isNull(accountMetricPollStates.socialAccountId),
           ),
@@ -136,6 +137,7 @@ export function claimDueAccountMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.disabledAt),
             eligible(rules, "account"),
             or(isNull(accountMetricPollStates.pollLeaseUntil), lte(accountMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(accountMetricPollStates.nextPollAt),
@@ -199,6 +201,7 @@ export function claimDuePostMetricPolls(opts: {
             isNotNull(postTargets.publishedAt),
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.disabledAt),
             eligible(rules, "post"),
             isNull(postMetricPollStates.postTargetId),
           ),
@@ -249,6 +252,7 @@ export function claimDuePostMetricPolls(opts: {
                 isNotNull(postTargets.externalId),
                 isNull(socialAccounts.removedAt),
                 eq(socialAccounts.status, "active"),
+                isNull(socialAccounts.disabledAt),
                 eligible(rules, "post"),
                 or(...publicPostIdRules.map((r) => and(eq(socialAccounts.providerKey, r.providerKey), isNull(idColumn(r))))),
                 isNull(postMetricPollStates.postTargetId),
@@ -280,6 +284,7 @@ export function claimDuePostMetricPolls(opts: {
           and(
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
+            isNull(socialAccounts.disabledAt),
             eligible(rules, "post"),
             or(isNull(postMetricPollStates.pollLeaseUntil), lte(postMetricPollStates.pollLeaseUntil, opts.now)),
             isNotNull(postMetricPollStates.nextPollAt),
@@ -382,7 +387,7 @@ export function countAccountsMissingInsightsScopes(providers: readonly InsightsP
     const [row] = await getDb()
       .select({ n: sql<number>`count(*)::int` })
       .from(socialAccounts)
-      .where(and(isNull(socialAccounts.removedAt), eq(socialAccounts.status, "active"), or(...conditions)));
+      .where(and(isNull(socialAccounts.removedAt), isNull(socialAccounts.disabledAt), eq(socialAccounts.status, "active"), or(...conditions)));
     return row?.n ?? 0;
   });
 }

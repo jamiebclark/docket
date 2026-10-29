@@ -86,6 +86,35 @@ admins can:
 Editors see the same grid read-only. See [getting-started.md](getting-started.md#2-add-posting-slots) for the
 first-time flow.
 
+## Disabling an account
+
+Each connected account has a **Disable** control at the bottom of its card on the Accounts screen. Disabling is the
+reversible middle ground between leaving a broken account alone and removing it: use it when a platform account needs
+fixing and you want Docket to stop trying in the meantime.
+
+While an account is disabled:
+
+- **Nothing is published to it.** Posts already scheduled to it keep their times and are held — they are not failed and
+  not cancelled. Enabling the account makes any that are now overdue due again, so they go out on the next tick, subject
+  to the usual publish limits. The confirmation says how many are waiting before you disable.
+- **It is not offered anywhere a post is written** — the composer, generation jobs and retries all skip it, saying
+  "disabled" rather than "needs reconnecting".
+- **Docket stops calling the platform for it at all**: no token renewal, no insights, no engagement reads or replies.
+  Because nothing renews, stored credentials can expire while it is off; the card stops warning about expiry, since the
+  reconnect is what fixes it.
+- **It stops asking for attention.** It drops off the overview's needs-attention list and out of the reconnect list.
+- **Its credentials, posting slots, posting instructions and history are all kept.** Only `removed_at` clears
+  credentials; disabling never does.
+
+A disabled account that *also* needs reconnecting still offers its **Reconnect** control, so you can fix it first and
+enable it second — enabling a broken account would only fire its held posts into failures. Enabling restores whatever
+state it had when it was switched off: a broken account comes back as **Needs reconnecting**, with its last error, not
+as **Connected**.
+
+- **Who can do it.** Owners and admins, enforced on the server. Both directions appear in the project's activity log
+  (Settings → Members).
+- **Over the API,** `GET /api/v1/accounts` reports `status: "disabled"`. The switch itself is UI-only.
+
 ## Posting instructions
 
 Each connected account has an optional **Posting instructions** field (up to 2,000 characters) on the Accounts screen, in a collapsed section below its posting slots (summary: "Posting instructions · Set" or "· None"). It tells the generator how posts for that account are written: hashtags, links, how a post opens. The brand voice stays on the voice profile; see [generator.md](generator.md#posting-instructions) for how the instructions are used.
