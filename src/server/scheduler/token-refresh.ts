@@ -4,12 +4,23 @@ import * as clock from "../dal/clock";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { claimRefreshAccounts, forSchedulerProject } from "../dal/scheduler";
 import { decryptCredentials } from "../services/accounts";
-import { applyRefreshResult, recordRefreshEmitting } from "./credentials";
+import { applyRefreshResult, recordRefreshEmitting, RECOVERY_RETRY_MS } from "./credentials";
 import type { SchedulerConfig } from "./config";
 import { redact, secretValues } from "./redact";
 
 export interface RefreshCounts {
   refreshed: number;
+  /**
+   * Of those, how many were `needs_reauth` before and are `active` now — an account that came back
+   * on its stored credentials with nobody retyping anything.
+   *
+   * Counted separately because it is the only visible trace of the recovery path working. A plain
+   * `refreshed` bump looks identical to a routine renewal, and the symptom this fixes (every post
+   * failing "The account is no longer available for publishing") is silent from inside the
+   * scheduler: the publishing section refuses those targets at claim time with no provider call,
+   * so no amount of publish logging shows the account was recoverable all along.
+   */
+  recovered: number;
   failed: number;
   /** Transient failures: the account stays `active` and is retried. */
   deferred: number;
@@ -45,9 +56,14 @@ export interface RefreshCounts {
 }
 
 /**
- * Refreshes credentials that expire within the window (D7). One account's failure never stops the
- * others; a definitive failure flags the account `needs_reauth` with a redacted reason; a transient one keeps it `active`. Writes its own heartbeat
- * only when the section completes.
+ * Refreshes credentials that expire within the window (D7), and retries accounts already flagged
+ * `needs_reauth` whose provider declares `canReauthenticate` — those can rebuild a session from
+ * what is stored, so the flag is recoverable without a human (see `claimRefreshAccounts`).
+ *
+ * One account's failure never stops the others. A definitive refusal flags the account
+ * `needs_reauth` with a redacted reason and parks it for `RECOVERY_RETRY_MS`; a transient failure,
+ * a thrown error and a timeout all keep it `active` and retry. A success clears the flag.
+ * Writes its own heartbeat only when the section completes.
  */
 export async function runTokenRefresh(opts: {
   config: SchedulerConfig;
@@ -55,7 +71,7 @@ export async function runTokenRefresh(opts: {
   startedAt: Date;
 }): Promise<RefreshCounts> {
   const { config } = opts;
-  const counts: RefreshCounts = { refreshed: 0, failed: 0, deferred: 0, outOfBudget: 0, claimed: 0, lost: 0 };
+  const counts: RefreshCounts = { refreshed: 0, recovered: 0, failed: 0, deferred: 0, outOfBudget: 0, claimed: 0, lost: 0 };
   const deadline = opts.startedAt.getTime() + config.timeBudgetMs;
   const token = randomUUID();
   const now = await clock.now();
@@ -67,6 +83,11 @@ export async function runTokenRefresh(opts: {
     leaseMs: config.leaseMs,
     providerKeys: listProviders()
       .filter((p) => p.refreshCredentials)
+      .map((p) => p.key),
+    // Providers that can rebuild a session from stored credentials: their flagged accounts are
+    // claimed too, so `needs_reauth` stops being a state only a human can leave.
+    recoverProviderKeys: listProviders()
+      .filter((p) => p.refreshCredentials && p.canReauthenticate)
       .map((p) => p.key),
     token,
   });
@@ -94,15 +115,27 @@ export async function runTokenRefresh(opts: {
         signal: AbortSignal.timeout(config.providerTimeoutMs),
       });
       const applied = await applyRefreshResult(repos, account, token, result, secrets, { holdTransient: true });
-      if (applied.kind === "refreshed") counts.refreshed++;
-      else if (applied.kind === "refused") counts.failed++;
+      if (applied.kind === "refreshed") {
+        counts.refreshed++;
+        if (applied.recovered) counts.recovered++;
+      } else if (applied.kind === "refused") counts.failed++;
       else if (applied.kind === "transient") counts.deferred++;
       else if (applied.kind === "lost") counts.lost++;
     } catch (error) {
       const message = redact(error instanceof Error ? error.message : "Refreshing credentials failed.", secrets);
       try {
-        const kept = await recordRefreshEmitting(repos, account.id, token, { status: "needs_reauth", lastError: message });
-        if (kept) counts.failed++;
+        // Treated as transient, matching `refreshForPublish`: "a thrown error or a timeout says
+        // nothing definitive about the credentials". This used to flag `needs_reauth`, so a
+        // failure that never reached the platform — a decrypt error, a settings-schema parse, an
+        // AbortSignal firing — made the account unpublishable until a human reconnected it. The
+        // account stays `active` and the next tick tries again.
+        const kept = await recordRefreshEmitting(repos, account.id, token, {
+          lastError: `Renewing credentials failed temporarily: ${message}`,
+          // Parked, not just released: nothing here fixes itself inside one tick, and an
+          // unparked throw is a claim every tick for the life of the account.
+          refreshLeaseUntil: new Date((await clock.now()).getTime() + RECOVERY_RETRY_MS),
+        });
+        if (kept.changed) counts.deferred++;
       } catch {
         // The lease expires on its own; the next tick retries.
       }

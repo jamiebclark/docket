@@ -2,7 +2,7 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { allowanceUses } from "../../../src/server/db/schema/scheduler";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
-import { blueskyVideoSetup, CREATE_RECORD_PATH, VIDEO } from "../../helpers/bluesky-video";
+import { blueskyVideoSetup, CREATE_RECORD_PATH, publishRequestPaths, VIDEO } from "../../helpers/bluesky-video";
 import { closeDb, testDb } from "../../helpers/db";
 
 type Setup = Awaited<ReturnType<typeof blueskyVideoSetup>>;
@@ -92,13 +92,7 @@ describe("the 25-a-day allowance", () => {
     await testDb().insert(allowanceUses).values({ projectId: project.id, socialAccountId: current.target.socialAccountId, units: 25, createdAt: at(-HOUR) });
     const counts = await current.tick(at(0));
     expect(counts).toMatchObject({ claimed: 1, deferred: 1 });
-    // The scheduler's engagement-read section sweeps every active Bluesky account in the same
-    // tick, independent of this target's publish attempt; filter its traffic out before counting.
-    expect(
-      current.pds.requests.filter(
-        (r) => !new URL(r.url).pathname.includes("createSession") && !new URL(r.url).pathname.includes("notification.listNotifications"),
-      ),
-    ).toHaveLength(0);
+    expect(publishRequestPaths(current.pds.requests)).toEqual([]);
     const row = await current.row();
     expect(row.lastError).toContain("Waiting for Bluesky's daily video upload allowance");
     expect(row.attemptCount).toBe(0);

@@ -222,6 +222,9 @@ export type CandidatesResult =
   /** `message` is shown to the user as written, on the paste form and in the accounts banner (G18): plain text, secrets scrubbed, at most 500 characters. */
   | { ok: false; message: string };
 
+/** G40. Docket's own read surfaces an opt-in scope can belong to. Never a platform name. */
+export type ScopeSurface = "insights" | "engagement";
+
 export interface OAuthConnectGroup {
   /** `[a-z0-9-]+`, unique among groups. Stored in `connect_attempts.group_key`. */
   key: string;
@@ -235,6 +238,13 @@ export interface OAuthConnectGroup {
     issues(source: Readonly<Record<string, string | undefined>>): ProviderEnvIssue[];
     configured(source: Readonly<Record<string, string | undefined>>): boolean;
   };
+  /**
+   * G39. The scopes this group's dialog asks for every time, before any opt-in. Declared so a
+   * surface can tell "the dialog will ask for this, so reconnecting helps" from "the dialog never
+   * asks for this, so it cannot". Omit it and nothing is assumed to be requested — which is the
+   * safe default, since an undeclared group makes no promise about what its dialog carries.
+   */
+  baseScopes?: readonly string[];
   /** G32. The extra permissions this group may request, and whether it is asking for them now. */
   optionalScopes?: {
     /** Every extra scope, each with the purpose it serves. Static, non-secret, shown in docs. */
@@ -248,7 +258,10 @@ export interface OAuthConnectGroup {
      * Login for Business takes its permission set from the Meta app's configuration (FR-019).
      * Reconnecting cannot help, so no reconnect control is offered.
      */
-    cannotWiden?(source: Readonly<Record<string, string | undefined>>): { reason: string; doc?: string } | null;
+    cannotWiden?(
+      source: Readonly<Record<string, string | undefined>>,
+      surface: ScopeSurface,
+    ): { reason: string; doc?: string } | null;
   };
   /** Callback-address requirement; a group whose address does not qualify is shown as unavailable (G10). */
   redirectRequirement?: {
@@ -534,6 +547,14 @@ export interface EngagementDeclaration {
    * is ever made for them.
    */
   unavailable?: { reason: string; docsPath?: string };
+  /**
+   * G40. Permissions an account must hold before Docket reads a single comment for it.
+   * Default empty — "no permission needed", which is every provider's behaviour today.
+   * A per-account claim: two accounts on the same provider may differ.
+   */
+  readScopes?: readonly string[];
+  /** G40. Shown when `readScopes` are not held. Required when `readScopes` is non-empty. */
+  missingReadScopes?: { reason: string; docsPath?: string };
 }
 
 export interface InboundItemDraft {
@@ -742,6 +763,20 @@ export interface SocialProvider<Settings = unknown, State = unknown> {
     now: Date;
     signal: AbortSignal;
   }): Promise<RefreshResult>;
+  /**
+   * True when `refreshCredentials` can open a brand-new session from what is already stored — a
+   * Bluesky app password, say — rather than only renewing a live one. Such an account is worth
+   * retrying *while* it is `needs_reauth`, because the thing that would fix it is already on disk.
+   *
+   * Without this, flagging an account was a one-way door. `claimRefreshAccounts` takes only
+   * `active` rows and `acquireRefreshLease` requires `active`, so the moment anything flagged the
+   * account — including a refusal a stored password would have survived — nothing ever called
+   * `refreshCredentials` again, and publishing refused every target at claim time with "The
+   * account is no longer available for publishing" and zero attempts. The stored password could
+   * only ever help in the narrow window before the flag; after it, only a human reconnect
+   * reopened the door. Requires `refreshCredentials`.
+   */
+  canReauthenticate?: boolean;
   validate(content: PostContent, capabilities: ProviderCapabilities): ValidationIssue[];
   /** Pure and total. `settings` is the account's parsed settings (a step can depend on them). */
   stepFor(state: State | null, settings: Settings, content: StepContent): StepInfo;

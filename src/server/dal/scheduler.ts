@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { allowanceUses, mediaAssets, postMedia, postTargets, posts, socialAccounts, type SocialAccountRow } from "../db/schema";
 import { resolvePostType } from "../../providers/post-type";
@@ -265,14 +265,31 @@ export interface ClaimRefreshOptions {
   leaseMs: number;
   /** Provider keys that define `refreshCredentials`. */
   providerKeys: readonly string[];
+  /**
+   * Provider keys that also declare `canReauthenticate` — they can rebuild a session from stored
+   * credentials. Their `needs_reauth` accounts are claimed too, so a flag can be undone without a
+   * human. Always a subset of `providerKeys`.
+   */
+  recoverProviderKeys?: readonly string[];
   /** Lease token written to `refresh_lease_owner`. */
   token: string;
 }
 
-/** Claims accounts whose credentials are due for refresh, setting a refresh lease. */
+/**
+ * Claims accounts whose credentials are due for refresh, setting a refresh lease.
+ *
+ * Two kinds of row qualify. An `active` account due inside the refresh window, and — for a provider
+ * that declares `canReauthenticate` — an account already flagged `needs_reauth`, regardless of the
+ * window: its stored expiry says nothing useful once the session is refused, and the point of the
+ * claim is to try the stored credentials again. A refusal parks the row (see `RECOVERY_RETRY_MS`),
+ * so a permanently dead account is retried on a cadence rather than every tick.
+ */
 export function claimRefreshAccounts(opts: ClaimRefreshOptions): Promise<ClaimedAccount[]> {
   return crossProject("scheduler: claim token refresh", async () => {
     if (opts.limit <= 0 || opts.providerKeys.length === 0) return [];
+    // Never widen the claim beyond what can refresh at all: a key that cannot refresh would be
+    // claimed, fail the `refreshCredentials` lookup and be flagged again by its own catch.
+    const recoverKeys = (opts.recoverProviderKeys ?? []).filter((k) => opts.providerKeys.includes(k));
     return getDb().transaction(async (tx) => {
       const exec = tx as unknown as Database;
       const rows = await exec
@@ -280,16 +297,33 @@ export function claimRefreshAccounts(opts: ClaimRefreshOptions): Promise<Claimed
         .from(socialAccounts)
         .where(
           and(
-            eq(socialAccounts.status, "active"),
+            // Main moved the `active` filter into the `or` below, so this claim can also pick up a
+            // `needs_reauth` row for a provider that can re-authenticate. A disabled account belongs in
+            // neither branch, so the guard stays at the top level.
             isNull(socialAccounts.disabledAt),
             isNull(socialAccounts.removedAt),
             isNotNull(socialAccounts.credentialsEncrypted),
-            lte(socialAccounts.credentialsExpiresAt, new Date(opts.now.getTime() + opts.refreshWindowMs)),
-            inArray(socialAccounts.providerKey, [...opts.providerKeys]),
             or(isNull(socialAccounts.refreshLeaseUntil), lte(socialAccounts.refreshLeaseUntil, opts.now)),
+            or(
+              and(
+                eq(socialAccounts.status, "active"),
+                lte(socialAccounts.credentialsExpiresAt, new Date(opts.now.getTime() + opts.refreshWindowMs)),
+                inArray(socialAccounts.providerKey, [...opts.providerKeys]),
+              ),
+              recoverKeys.length > 0
+                ? and(eq(socialAccounts.status, "needs_reauth"), inArray(socialAccounts.providerKey, [...recoverKeys]))
+                : sql`false`,
+            ),
           ),
         )
-        .orderBy(asc(socialAccounts.credentialsExpiresAt), asc(socialAccounts.id))
+        // Flagged rows first: they are failing now, where a due `active` row is merely close to it.
+        // Spelled as a CASE, not `asc(status)`, which would order by the enum's declaration order
+        // and put `active` first.
+        .orderBy(
+          sql`case when ${socialAccounts.status} = 'needs_reauth' then 0 else 1 end`,
+          asc(socialAccounts.credentialsExpiresAt),
+          asc(socialAccounts.id),
+        )
         .limit(opts.limit)
         .for("update", { skipLocked: true });
       const leaseUntil = new Date(opts.now.getTime() + opts.leaseMs);

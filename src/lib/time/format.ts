@@ -49,3 +49,32 @@ export function formatMonthDay(value: string): string {
     new Date(Date.UTC(2001, month - 1, day)),
   );
 }
+
+/**
+ * The calendar day an instant falls on in a given zone, as "YYYY-MM-DD".
+ *
+ * A grouping key, not a display string — but it lives here rather than in the component that needed
+ * it, because `tests/lint/date-format.test.ts` makes this module the only place `Intl.DateTimeFormat`
+ * is constructed, and `dayHeading` below does display its result.
+ */
+export function dayKeyInZone(value: Date | string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+}
+
+/**
+ * The heading over a day's worth of items in a list: "Today", "Yesterday", or "Mon, Oct 19"
+ * (design-system.md §19). `key` is a `dayKeyInZone` value; `now` is the instant "today" is measured
+ * against, passed in so the caller owns the clock.
+ *
+ * Deliberately not a relative time like "3 hours ago": §4 keeps one format for an instant, and the
+ * grouping is what carries "recently or a while ago" in a list.
+ */
+export function dayHeading(key: string, timeZone: string, now: Date): string {
+  if (key === dayKeyInZone(now, timeZone)) return "Today";
+  if (key === dayKeyInZone(new Date(now.getTime() - 86_400_000), timeZone)) return "Yesterday";
+  // The same weekday/month/day parts `formatLocal` uses, with no time and no zone shift: `key` is
+  // already the local day, so it is read back as UTC to avoid moving it.
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(
+    new Date(`${key}T00:00:00Z`),
+  );
+}

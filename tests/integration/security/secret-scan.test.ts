@@ -61,6 +61,7 @@ import PostPage from "../../../src/app/p/[projectSlug]/posts/[postId]/page";
 import JobsPage from "../../../src/app/p/[projectSlug]/jobs/page";
 import JobPage from "../../../src/app/p/[projectSlug]/jobs/[jobId]/page";
 import { connectAttempts, installState, llmCallUsage, membershipAuditLog, projectLlmSettings, session as sessionTable, user } from "../../../src/server/db/schema";
+import { engagementItems } from "../../../src/server/db/schema/engagement";
 import { publishAttempts } from "../../../src/server/db/schema/attempts";
 import { postTargets } from "../../../src/server/db/schema/posts";
 import { socialAccounts } from "../../../src/server/db/schema/accounts";
@@ -105,7 +106,7 @@ import { clearHolds, clearProjectCredentials, jobsEnv, modelOk, tickConfig } fro
 import { atTime } from "../../helpers/clock";
 import { createDueTarget, createMockAccount, parkAllDueTargets } from "../../helpers/scheduling";
 import { forSchedulerProject } from "../../../src/server/dal/scheduler";
-import { eventsFor } from "../../helpers/activity";
+import { dump, eventsFor } from "../../helpers/activity";
 import { pageCandidate, registerThrowaway, sessionFor, throwawayGroup, unregisterThrowaway } from "../../helpers/connect-group";
 import { blueskyLikeProvider, registerTestProvider } from "../../helpers/provider-fixtures";
 import { postsEnv } from "../../helpers/posts-env";
@@ -893,7 +894,8 @@ describe("secret scan (FR-020, SC-005)", () => {
       connectedByUserId: null,
       grantedScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
     });
-    // Threads still declares `unavailable`: never claimed, never called (080 behaviour, unchanged).
+    // Threads is claimed and read now; its stored blob is deliberately the wrong shape, so the
+    // reader refuses it before issuing a request and TH_TOKEN never reaches the wire.
     const threads = await repos.accounts.upsertConnected({
       providerKey: "threads",
       displayName: "Scan Threads",
@@ -945,7 +947,9 @@ describe("secret scan (FR-020, SC-005)", () => {
     session.current = sessionBefore;
     const pieces: Piece[] = [{ place: "page: post (meta insights panel states)", text: postMarkup }];
     // Sanity: the four 081 panel states this entry adds all actually rendered, not just an absence of secrets.
-    expect(postMarkup).toContain("not confirmed"); // threads: unavailable, 080 behaviour
+    // threads: a real reader now, and this account's stored blob is a Facebook page token rather
+    // than a Threads credential — so the read refuses before any call and the panel says why.
+    expect(postMarkup).toContain("Stored credentials are unreadable");
     expect(postMarkup).toMatch(/read_insights|cannot read its numbers|has not been given permission|Reconnect/);
     expect(postMarkup).toContain("cannot be used to request its numbers"); // facebook: unqueryable
     expect(postMarkup).toContain("story has expired"); // instagram: expired
@@ -959,6 +963,150 @@ describe("secret scan (FR-020, SC-005)", () => {
       { name: "graph error echo of the facebook token", value: GRAPH_ERROR_ECHO },
     ];
     expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
+  });
+
+  it("the Facebook and Instagram engagement readers never echo a credential (FR-023, FR-034, SC-007)", async () => {
+    await parkAllDueTargets();
+    const FB_ENG_TOKEN = "scan-fb-engagement-token-4a1e7c902b3d5f681a2b3c4d5e6f7081";
+    const IG_ENG_TOKEN = "scan-ig-engagement-token-f3a8c9d1e6b504739a1b2c3d4e5f6071";
+    const GRAPH_ERROR_ECHO = `Rejected for token ${FB_ENG_TOKEN}`;
+
+    const ctx = await postsEnv();
+    const repos = forSchedulerProject(ctx.project.id);
+    const FB_PAGE_ID = "7000000001";
+    const IG_USER_ID = "7000000002";
+
+    // A Facebook Page whose comment listing fails — the fake Graph error message echoes the page
+    // token, exactly the shape engagement-errors.ts must scrub before anything is stored.
+    const fbAccount = await repos.accounts.upsertConnected({
+      providerKey: "facebook",
+      displayName: "Scan Engagement FB Page",
+      externalAccountId: FB_PAGE_ID,
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["pages_read_engagement", "pages_read_user_content"],
+    });
+    await repos.accounts.setCredentials(fbAccount.id, accounts.encryptCredentials(fbAccount.id, { pageToken: FB_ENG_TOKEN }), null);
+
+    // An Instagram account whose comment listing succeeds, so a stored item, its provider_data and
+    // the account's provider_state are all in scope for the scan too.
+    const igAccount = await repos.accounts.upsertConnected({
+      providerKey: "instagram",
+      displayName: "Scan Engagement IG Account",
+      externalAccountId: IG_USER_ID,
+      settings: {},
+      credentialsEncrypted: null,
+      credentialsExpiresAt: null,
+      connectedByUserId: null,
+      grantedScopes: ["instagram_basic", "instagram_manage_comments", "pages_read_engagement"],
+    });
+    await repos.accounts.setCredentials(igAccount.id, accounts.encryptCredentials(igAccount.id, { pageToken: IG_ENG_TOKEN }), null);
+
+    const graph = createFakeGraph();
+    graph.on("GET", `/${graphVersion()}/${FB_PAGE_ID}/posts`, { kind: "graph_error", code: 1, message: GRAPH_ERROR_ECHO });
+    graph.on("GET", `/${graphVersion()}/${IG_USER_ID}`, { kind: "ok", body: { username: "scan_ig_handle" } });
+    const IG_MEDIA_ID = "7000000003";
+    graph.on("GET", `/${graphVersion()}/${IG_USER_ID}/media`, {
+      kind: "ok",
+      body: {
+        data: [
+          {
+            id: IG_MEDIA_ID,
+            timestamp: "2026-10-18T00:00:00+0000",
+            comments: {
+              data: [{ id: "7000000004", text: "Nice shot!", timestamp: "2026-10-18T01:00:00+0000", username: "a_commenter" }],
+            },
+          },
+        ],
+      },
+    });
+    graph.fallback({ kind: "graph_error", code: 803, message: "Unexpected request in the engagement reader scan test" });
+    graph.install();
+    try {
+      await runTick(tickConfig({ engagementReadMinIntervalMs: 0 }));
+    } finally {
+      graph.uninstall();
+    }
+
+    const fbState = await repos.engagementAccountStates.get(fbAccount.id);
+    const igState = await repos.engagementAccountStates.get(igAccount.id);
+    const igItems = await testDb()
+      .select()
+      .from(engagementItems)
+      .where(and(eq(engagementItems.projectId, ctx.project.id), eq(engagementItems.socialAccountId, igAccount.id)));
+    expect(igItems.length).toBe(1); // the Instagram read actually stored its comment, not just an absence of secrets
+    expect(fbState?.lastError).toBeTruthy(); // the Facebook read actually hit the scripted error
+
+    const sessionBefore = session.current;
+    session.current = { user: { id: ctx.owner.id }, session: { id: "scan-engagement-read-session" } };
+    const accountsMarkup = renderToStaticMarkup((await AccountsPage({ params: Promise.resolve({ projectSlug: ctx.project.slug }) })) as never);
+    const inboxMarkup = renderToStaticMarkup((await InboxPage({ params: Promise.resolve({ projectSlug: ctx.project.slug }), searchParams: Promise.resolve({}) })) as never);
+    session.current = sessionBefore;
+
+    const pieces: Piece[] = [
+      { place: "engagement_account_states (facebook)", text: JSON.stringify(fbState) },
+      { place: "engagement_account_states (instagram)", text: JSON.stringify(igState) },
+      { place: "engagement_items (instagram)", text: dump(igItems) },
+      { place: "activity events (engagement read)", text: dump(await eventsFor(ctx.project.id)) },
+      { place: "page: accounts (engagement read)", text: accountsMarkup },
+      { place: "page: inbox (engagement read)", text: inboxMarkup },
+    ];
+    const secrets: Secret[] = [
+      { name: "facebook engagement page token", value: FB_ENG_TOKEN },
+      { name: "instagram engagement page token", value: IG_ENG_TOKEN },
+      { name: "graph error echo of the facebook engagement token", value: GRAPH_ERROR_ECHO },
+    ];
+    expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
+  });
+
+  it("the engagement scope-gate notice, reason and count never echo a credential or token (FR-039)", async () => {
+    await parkAllDueTargets();
+    const GATED_TOKEN = "scan-mock-engagement-gated-token-6f3a19c2d8e4506097a1b2c3d4e5f607";
+
+    const ctx = await postsEnv();
+    const repos = forSchedulerProject(ctx.project.id);
+    const { mockEngagement } = await import("../../../src/providers/mock/engagement");
+    const originalDeclaration = mockEngagement.declaration;
+    mockEngagement.declaration = {
+      ...originalDeclaration,
+      readScopes: ["read_comments"],
+      missingReadScopes: { reason: "Reconnect and grant read_comments to read comments." },
+    };
+    try {
+      const gated = await repos.accounts.upsertConnected({
+        providerKey: "mock",
+        displayName: "Scan Mock Gated",
+        externalAccountId: "scan-mock-engagement-gated",
+        settings: {},
+        credentialsEncrypted: null,
+        credentialsExpiresAt: null,
+        connectedByUserId: null,
+        // grantedScopes omitted: NULL, never holding the declared scope.
+      });
+      await repos.accounts.setCredentials(gated.id, accounts.encryptCredentials(gated.id, { token: GATED_TOKEN }), null);
+
+      const sessionBefore = session.current;
+      session.current = { user: { id: ctx.owner.id }, session: { id: "scan-engagement-gate-session" } };
+      const params = { params: Promise.resolve({ projectSlug: ctx.project.slug }) };
+      const accountsMarkup = renderToStaticMarkup((await AccountsPage(params)) as never);
+      const inboxMarkup = renderToStaticMarkup((await InboxPage({ ...params, searchParams: Promise.resolve({}) })) as never);
+      session.current = sessionBefore;
+
+      // Sanity: the notice actually rendered on both pages, not just an absence of secrets.
+      expect(accountsMarkup).toContain("Inbox needs a reconnect.");
+      expect(inboxMarkup).toMatch(/needs a reconnect to read its comments/);
+
+      const pieces: Piece[] = [
+        { place: "page: accounts (engagement scope gate)", text: accountsMarkup },
+        { place: "page: inbox (engagement scope gate)", text: inboxMarkup },
+      ];
+      const secrets: Secret[] = [{ name: "mock engagement gated token", value: GATED_TOKEN }];
+      expect(scan(pieces, [...ENV_SECRETS, ...secrets])).toEqual([]);
+    } finally {
+      mockEngagement.declaration = originalDeclaration;
+    }
   });
 
   it("the TikTok, Pinterest and X insights readers and their poll-state/snapshot rows never echo a credential (FR-013, FR-054)", async () => {
@@ -1218,12 +1366,14 @@ describe("secret scan (FR-020, SC-005)", () => {
           name: "Scan Project",
           problems: [
             {
+              outcome: "failed" as const,
               outcomeLabel: "Failed",
               occurredAt: new Date(),
               platforms: [{ key: "bluesky", name: "Bluesky" }],
               accountName: "scan.bsky.social",
               message: "Could not reach the server.",
               href: "https://docket.scan.test/p/scan-project/activity",
+              actionLabel: "Open Activity",
             },
           ],
           overflow: 0,

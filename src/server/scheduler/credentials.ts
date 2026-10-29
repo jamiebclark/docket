@@ -13,16 +13,25 @@ type Repos = ReturnType<typeof forSchedulerProject>;
 
 type RefreshPatch = Parameters<Repos["accounts"]["recordRefresh"]>[2];
 
-/** `recordRefresh`; a move from `active` to `needs_reauth` emits `account.needs_reauth` in the same transaction. Returns whether the row changed. */
-export async function recordRefreshEmitting(repos: Repos, id: string, token: string, patch: RefreshPatch): Promise<boolean> {
-  if (patch.status !== "needs_reauth") return (await repos.accounts.recordRefresh(id, token, patch)).changed;
+/**
+ * `recordRefresh`; a move from `active` to `needs_reauth` emits `account.needs_reauth` in the same
+ * transaction. Returns whether the row changed, and the status it held before — the caller needs
+ * the latter to tell a routine refresh from an account coming back off the flag.
+ */
+export async function recordRefreshEmitting(
+  repos: Repos,
+  id: string,
+  token: string,
+  patch: RefreshPatch,
+): Promise<{ changed: boolean; previousStatus: "active" | "needs_reauth" | null }> {
+  if (patch.status !== "needs_reauth") return repos.accounts.recordRefresh(id, token, patch);
   return repos.transaction(async (tx) => {
     const r = await tx.accounts.recordRefresh(id, token, patch);
     if (r.changed && r.previousStatus === "active") {
       await emitEvent(tx, "account.needs_reauth", { accountId: id });
       await recordAccountNeedsReauth(tx, id, "renewal_refused");
     }
-    return r.changed;
+    return r;
   });
 }
 
@@ -43,12 +52,23 @@ export async function markInvalidEmitting(
 }
 
 export type AppliedRefresh =
-  | { kind: "refreshed"; credentials: unknown; ciphertext: string }
+  | { kind: "refreshed"; credentials: unknown; ciphertext: string; recovered: boolean }
   | { kind: "lost" } // the refresh lease expired and someone else owns the row now
   | { kind: "refused"; reason: string } // definitive: the account is now `needs_reauth`
   | { kind: "transient"; reason: string; retryAt?: Date }; // the account stays `active`
 
 const MAX_TRANSIENT_HOLD_MS = 24 * 3_600_000;
+
+/**
+ * How long a refused account waits before its stored credentials are tried again.
+ *
+ * A refusal used to leave `refresh_lease_until` null, which was harmless only because a flagged
+ * account was never claimed again. Now that one can be, an account whose password really is dead
+ * would be re-asked every tick — a sign-in attempt every few seconds against the platform, which
+ * is how an account earns a rate limit or a lockout. Fifteen minutes is far below the cost of a
+ * missed post and far above anything a platform would call abusive.
+ */
+export const RECOVERY_RETRY_MS = 15 * 60_000;
 
 /**
  * The one place a refresh outcome becomes a row change, shared by the scheduled section and publish-time refresh.
@@ -71,12 +91,18 @@ export async function applyRefreshResult(
       credentialsExpiresAt: result.expiresAt,
       lastRefreshedAt: at,
       lastError: null,
+      // Clearing the flag is what makes a successful refresh worth attempting on a flagged
+      // account at all. Before this, `needs_reauth` was set in four places and cleared in
+      // exactly one — `upsertConnected`, i.e. a human retyping the credential — so even a
+      // refresh that worked left the account unpublishable.
+      status: "active",
       ...(result.displayName && result.displayName !== account.displayName
         ? { displayName: redact(result.displayName, secrets) }
         : {}),
       ...(normalized !== null ? { grantedScopes: normalized } : {}),
     });
-    return kept ? { kind: "refreshed", credentials: result.credentials, ciphertext } : { kind: "lost" };
+    if (!kept.changed) return { kind: "lost" };
+    return { kind: "refreshed", credentials: result.credentials, ciphertext, recovered: kept.previousStatus === "needs_reauth" };
   }
   if (result.transient) {
     const reason = redact(result.reason, secrets);
@@ -89,12 +115,18 @@ export async function applyRefreshResult(
       lastError: `Renewing credentials failed temporarily: ${reason}`,
       ...(hold ? { refreshLeaseUntil: hold } : {}),
     });
-    if (!kept) return { kind: "lost" };
+    if (!kept.changed) return { kind: "lost" };
     return { kind: "transient", reason, ...(result.retryAt ? { retryAt: result.retryAt } : {}) };
   }
   const reason = redact(result.reason, secrets);
-  const kept = await recordRefreshEmitting(repos, account.id, token, { status: "needs_reauth", lastError: reason });
-  return kept ? { kind: "refused", reason } : { kind: "lost" };
+  const kept = await recordRefreshEmitting(repos, account.id, token, {
+    status: "needs_reauth",
+    lastError: reason,
+    // Park it: a flagged account is now claimable, so without this a dead credential would be
+    // re-tried on every tick for as long as it stayed connected.
+    refreshLeaseUntil: new Date(at.getTime() + RECOVERY_RETRY_MS),
+  });
+  return kept.changed ? { kind: "refused", reason } : { kind: "lost" };
 }
 
 export type PublishRefresh =

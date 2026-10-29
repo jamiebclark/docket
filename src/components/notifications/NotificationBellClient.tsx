@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { NotificationPanel } from "@/components/notifications/NotificationPanel";
 import { browserRefreshEnv, startRefreshing, type RefreshHandle } from "@/components/notifications/refresh";
 import { iconControlStyles } from "@/components/ui/controls";
+import { useDismiss } from "@/components/ui/dismiss";
 import { Icon } from "@/components/ui/Icon";
 import type { UnreadSummary } from "@/lib/notifications/types";
 
@@ -58,28 +59,11 @@ export function NotificationBellClient({ initial }: { initial: UnreadSummary }) 
     };
   }, [hydrated, initial]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      button.current?.focus();
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onFocusIn = (event: FocusEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("focusin", onFocusIn);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("focusin", onFocusIn);
-    };
-  }, [open]);
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) button.current?.focus();
+  }, []);
+  useDismiss(root, close, open);
 
   const children = (
     <>

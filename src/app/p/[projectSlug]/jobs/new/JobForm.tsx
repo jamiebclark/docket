@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, useTransition, type ReactNode } from "react";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { LiveRegion } from "@/components/ui/LiveRegion";
 import { MARK_CLOSE, MARK_OPEN, renderTemplate, unknownPlaceholders } from "@/lib/jobs/template";
@@ -211,9 +212,9 @@ export function JobForm(props: JobFormProps) {
           accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
         />
         {needImage.map((name) => (
-          <p key={name} role="note" className="rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning">
+          <Alert key={name} tone="warning" role="none">
             Warning: {imageWarning(name)}
-          </p>
+          </Alert>
         ))}
       </div>
 

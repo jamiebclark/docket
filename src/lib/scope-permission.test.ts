@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insightsPermissionFor } from "./eligibility";
+import { scopePermissionFor as insightsPermissionFor } from "./scope-permission";
 
 const missingScopes = { reason: "Reconnect to grant insights", docsPath: "/docs/insights" };
 
@@ -111,5 +111,57 @@ describe("insightsPermissionFor", () => {
       docsPath: missingScopes.docsPath,
       canReconnect: true,
     });
+  });
+
+  // Regression. Found on a live install: every account connected before the grant started being
+  // recorded has `grantedScopes: null`, so every required scope counts as missing — including the
+  // BASE ones the dialog always carries. While the caller passed only the opt-in additions as
+  // `requestedScopes`, those base scopes looked unrequested, the whole surface reported
+  // "not requested", and the accounts page (which renders its reconnect block only for
+  // `not_granted`) offered nothing. The operator had the opt-in on and no way to act on it.
+  it("offers a reconnect when the dialog carries every missing scope, grant unrecorded", () => {
+    const result = insightsPermissionFor({
+      // What Instagram's post surface actually requires.
+      requiredScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+      // Never recorded: the account predates the grant being stored.
+      grantedScopes: null,
+      // The group's base set plus the enabled opt-ins — what its dialog will really ask for.
+      requestedScopes: [
+        "pages_show_list",
+        "pages_manage_posts",
+        "pages_read_engagement",
+        "instagram_basic",
+        "instagram_content_publish",
+        "read_insights",
+        "instagram_manage_insights",
+      ],
+      cannotWiden: null,
+      missingScopes,
+    });
+    expect(result).toEqual({
+      kind: "not_granted",
+      missing: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+      reason: missingScopes.reason,
+      docsPath: missingScopes.docsPath,
+      canReconnect: true,
+    });
+  });
+
+  it("still reports not_requested when an opt-in the surface needs is switched off", () => {
+    const result = insightsPermissionFor({
+      requiredScopes: ["instagram_basic", "instagram_manage_insights", "pages_read_engagement"],
+      grantedScopes: null,
+      // Base set only: the insights opt-in is off, so the dialog never carries it.
+      requestedScopes: [
+        "pages_show_list",
+        "pages_manage_posts",
+        "pages_read_engagement",
+        "instagram_basic",
+        "instagram_content_publish",
+      ],
+      cannotWiden: null,
+      missingScopes,
+    });
+    expect(result.kind).toBe("not_requested");
   });
 });

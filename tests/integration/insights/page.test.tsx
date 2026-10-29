@@ -7,6 +7,7 @@ vi.mock("@/server/auth/session", async () => (await import("../../helpers/action
 vi.mock("next/cache", async () => (await import("../../helpers/actions")).cacheModule);
 vi.mock("next/navigation", async () => (await import("../../helpers/actions")).navigationModule);
 
+import { FirstEngagementCard } from "../../../src/components/insights/FirstEngagementCard";
 import InsightsPage from "../../../src/app/p/[projectSlug]/insights/page";
 import InsightsLoading from "../../../src/app/p/[projectSlug]/insights/loading";
 import InsightsError from "../../../src/app/p/[projectSlug]/insights/error";
@@ -45,6 +46,30 @@ describe("insights page (quickstart.md §6, FR-070 to FR-074)", () => {
     expect(html).toContain("42");
     expect(html).toContain("as of");
     expect(html).toContain('<caption class="sr-only">');
+  });
+
+  it("draws the single reading as a point, never an empty box, on a one-reading series (charts.md §5)", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    await env.scope.accountMetricSnapshots.insertIfAbsent({ socialAccountId: account.id, providerKey: "mock", capturedAt: new Date(), metrics: { followersCount: 42 } });
+    actAs(env.owner);
+    const html = await render(env.project.slug);
+
+    // A <polyline> of one vertex renders nothing at all, which is the empty chart §5 forbids.
+    expect(html, "the one point must be drawn").toContain("<circle");
+    expect(html).toContain("A trend needs more than one reading.");
+    // And it must not be given a full plot area to sit alone in.
+    expect(html).toMatch(/viewBox="0 0 480 56"/);
+  });
+
+  it("never lets a chart scale past the size it was laid out for", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    await env.scope.accountMetricSnapshots.insertIfAbsent({ socialAccountId: account.id, providerKey: "mock", capturedAt: new Date(), metrics: { followersCount: 42 } });
+    actAs(env.owner);
+    const html = await render(env.project.slug);
+    // width="100%" on its own stretched a 480-wide viewBox to the card, half again its height.
+    expect(html).toContain("max-w-[480px]");
   });
 
   it("states a note naming the platform, never an empty chart or a zero, when a platform declares no account metrics (FR-015, US1.3)", async () => {
@@ -91,6 +116,31 @@ describe("insights page (quickstart.md §6, FR-070 to FR-074)", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  // A single published post produces one comparison per dimension per platform-and-metric pair, and
+  // none of them can rank anything yet. Before this, each was a full-width card repeating "not
+  // enough posts" — on a real project that was 75 of them, which is what made the page unreadable.
+  it("counts the comparisons that cannot rank instead of giving each one a card", async () => {
+    const env = await postsEnv();
+    const account = await env.account({});
+    const post = await env.scope.posts.insert({ baseText: "A post." });
+    const [target] = await env.scope.targets.insertMany([{ postId: post.id, socialAccountId: account.id }]);
+    await env.scope.targets.update(target!.id, { status: "published", externalId: `ext-${post.id}`, publishedAt: new Date() });
+    await env.scope.postMetricSnapshots.insertIfAbsent({
+      postTargetId: target!.id,
+      socialAccountId: account.id,
+      providerKey: "mock",
+      capturedAt: new Date(),
+      metrics: { likeCount: 5 },
+    });
+    actAs(env.owner);
+
+    const html = await render(env.project.slug);
+    expect(html).toContain("waiting for more posts");
+    // Still reachable, inside the disclosure — collapsed, never dropped.
+    expect(html).toContain("Not enough posts yet to rank");
+    expect(html).toContain("<details");
+  });
 });
 
 describe("insights loading and error states", () => {
@@ -103,6 +153,37 @@ describe("insights loading and error states", () => {
     const html = renderToStaticMarkup(createElement(InsightsError, { error: new Error("boom"), reset: () => {} }));
     expect(html).toContain('role="alert"');
     expect(html).toContain("Try again");
+  });
+});
+
+describe("first-engagement lines name the post they are about", () => {
+  const entry = (postId: string, publishedAt: string, afterAtMostMs: number) => ({
+    targetId: `t-${postId}`,
+    postId,
+    publishedAt: new Date(publishedAt),
+    accountName: "stencilvania.bsky.social",
+    providerKey: "bluesky",
+    platform: "Bluesky",
+    figure: { kind: "within_first_reading" as const, afterAtMostMs },
+  });
+
+  const view = {
+    entries: [entry("p1", "2026-10-10T12:00:00Z", 259_200_000), entry("p2", "2026-10-14T12:00:00Z", 172_800_000)],
+    exactCapablePlatforms: ["Bluesky"],
+  };
+
+  const html = () =>
+    renderToStaticMarkup(createElement(FirstEngagementCard, { view, projectSlug: "stencilvania", timeZone: "America/New_York" }));
+
+  it("links each line to its own post, so two figures for one account can be told apart", () => {
+    const out = html();
+    expect(out).toContain("/p/stencilvania/posts/p1");
+    expect(out).toContain("/p/stencilvania/posts/p2");
+  });
+
+  it("puts the most recent post first", () => {
+    const out = html();
+    expect(out.indexOf("/p/stencilvania/posts/p2")).toBeLessThan(out.indexOf("/p/stencilvania/posts/p1"));
   });
 });
 

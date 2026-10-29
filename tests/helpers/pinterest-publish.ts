@@ -5,6 +5,7 @@ import { pinterestPostingSchema } from "../../src/providers/pinterest/posting";
 import { consentFingerprint } from "../../src/server/services/posts/consent";
 import { encryptCredentials } from "../../src/server/services/accounts";
 import { runTick } from "../../src/server/scheduler";
+import { tickConfig } from "./tick";
 import { atTime } from "./clock";
 import { testDb } from "./db";
 import { createDraftPost } from "./scheduling";
@@ -86,7 +87,7 @@ export async function pinterestPublishSetup(storage: MemoryStorage, opts: Pinter
   const target = targets[0]!;
 
   const tick = async (at?: Date) => {
-    const run = async () => (await runTick({ config: {} })).publishing.counts;
+    const run = async () => (await runTick(tickConfig())).publishing.counts;
     return at ? atTime(at, run) : run();
   };
   const row = async () => (await testDb().select().from(postTargets).where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, target.id))))[0]!;

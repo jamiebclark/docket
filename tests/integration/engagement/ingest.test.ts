@@ -118,6 +118,28 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     expect(event).toBeDefined();
   });
 
+  it("says which kinds arrived, not just how many items (020 feedback)", async () => {
+    const { scope } = await setupWithItems([
+      { kind: "comment", externalId: "k-1", text: "nice" },
+      { kind: "comment", externalId: "k-2", text: "also nice" },
+      { kind: "mention", externalId: "k-3", text: "hi there" },
+    ]);
+    await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
+    const feed = await scope.activity.list({
+      windows: [{ projectId: scope.project.id, from: null, to: null }],
+      outcomes: null,
+      platform: null,
+      accountId: null,
+      cursor: null,
+      direction: "older",
+      limit: 10,
+    });
+    const event = feed.find((e) => e.kind === "engagement_received");
+    // The old message was "3 new items", which left a person unable to tell a DM from a mention
+    // without opening the app — and the notification email quoted it verbatim.
+    expect(event!.message).toBe("2 new comments and 1 mention");
+  });
+
   it("stamps edited_upstream_at when the provider reports the item was edited on a later read (US2 AS8)", async () => {
     const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "up-1", text: "Nice post!", saidAt: AT.toISOString() }]);
     await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
@@ -215,7 +237,7 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
     // The account state row is only created lazily on the first claim, so claim (and release) once
     // before forcing a stable "older" direction across both pages this run — otherwise the second
     // provider call reuses the unrelated "newest" cursor, restarting the page count at zero.
-    await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] });
+    await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providers: [{ providerKey: "mock", readScopes: [] }] });
     await forSchedulerProject(ctx.project.id).engagementAccountStates.update(account.id, { backfilling: true, readLeaseUntil: null, readLeaseOwner: null });
 
     const tick = await atTime(AT, () => runTick(tickConfig({ ...NO_WAIT, engagementReadPageSize: 2, engagementReadPagesPerRun: 3 })));
@@ -259,7 +281,7 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
 
   it("a tick finds the read lease already held by another and moves on", async () => {
     const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "lease-1", text: "hi" }]);
-    const held = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 60_000, minIntervalMs: 0, providerKeys: ["mock"] });
+    const held = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 60_000, minIntervalMs: 0, providers: [{ providerKey: "mock", readScopes: [] }] });
     expect(held.map((c) => c.account.id)).toContain(account.id);
 
     const tick = await atTime(AT, () => runTick(tickConfig(NO_WAIT)));
@@ -272,7 +294,7 @@ describe("engagement inbox ingest (US2, FR-006–FR-015, SC-001, SC-008)", () =>
   it("resumes from the last committed cursor after a tick is killed mid-read", async () => {
     const { scope, account } = await setupWithItems([{ kind: "reply", externalId: "kill-1", text: "hi", saidAt: AT.toISOString() }]);
     // Simulate a kill: claim the lease but never commit or release it.
-    const killed = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providerKeys: ["mock"] });
+    const killed = await claimDueEngagementReads({ now: AT, limit: 10, leaseMs: 1000, minIntervalMs: 0, providers: [{ providerKey: "mock", readScopes: [] }] });
     expect(killed.map((c) => c.account.id)).toContain(account.id);
 
     // Once the dangling lease has expired, the next tick reclaims the account and reads normally,

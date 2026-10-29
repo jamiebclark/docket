@@ -86,6 +86,16 @@ export const saveConnectedAccountSchema = z.object({
   credentials: z.unknown().optional(),
   credentialsExpireAt: z.date().nullish(),
   settings: z.unknown().optional(),
+  /**
+   * G31. Left unvalidated here on purpose: `normalizeGrantedScopes` is the one place that decides
+   * what may be stored, and it returns null rather than a filtered list when anything looks wrong.
+   * Validating a second time here would be a second opinion that could disagree with the first.
+   *
+   * It has to be *named* here, though. Zod strips unknown keys, so while this field was missing the
+   * chooser's `grantedScopes` was silently dropped on every connect, on every provider — which is
+   * why no account on a real install had ever had one recorded.
+   */
+  grantedScopes: z.unknown().optional(),
 });
 
 export const addSlotSchema = z.object({

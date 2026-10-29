@@ -19,6 +19,13 @@ import { describe, expect, it } from "vitest";
  * This test exists because pinning it in one call of a file and not the others is exactly the bug that
  * reached CI twice: `scheduler/refresh.test.ts` had the fix, with a comment explaining it, on one of
  * its six calls.
+ *
+ * It scans the helpers as well as the tests, because for a long time it did not, and six helpers
+ * called `runTick({ config: {} })` behind the backs of about sixty test files. That is how a section
+ * that could never start at the shipped budget — the insights poll, whose share was below one
+ * provider timeout — stayed invisible: the only ticks running the real configuration were the ones
+ * nothing was asserting about it, and every tick a test looked at closely had the budget pinned
+ * wide open.
  */
 
 const ROOT = process.cwd();
@@ -48,6 +55,16 @@ function testFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/** Every `.ts` under `tests/helpers`, test file or not: a helper's tick is some test's tick. */
+function helperFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) helperFiles(path, out);
+    else if (/\.tsx?$/.test(entry)) out.push(path);
+  }
+  return out;
+}
+
 /** The text between the parentheses of each `runTick(` call, parens balanced. */
 function callArguments(source: string): string[] {
   const out: string[] = [];
@@ -68,8 +85,8 @@ function callArguments(source: string): string[] {
   return out;
 }
 
-describe("every runTick in a test pins the tick budget", () => {
-  const files = testFiles(join(ROOT, "tests")).concat(testFiles(join(ROOT, "src")));
+describe("every runTick in a test or helper pins the tick budget", () => {
+  const files = testFiles(join(ROOT, "tests")).concat(testFiles(join(ROOT, "src")), helperFiles(join(ROOT, "tests", "helpers")));
 
   it("finds the test files", () => {
     expect(files.length).toBeGreaterThan(0);

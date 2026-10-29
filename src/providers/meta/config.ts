@@ -12,6 +12,8 @@ export interface MetaConfig {
   insightsScopes: boolean;
   /** FR-045. Percent of Meta's own BUC usage at or above which insights reads back off. */
   insightsUsageCeiling: number;
+  /** G40. Default off: `dialogUrl` requests no engagement scope while this is false. */
+  engagementScopes: boolean;
 }
 
 type Source = Readonly<Record<string, string | undefined>>;
@@ -45,6 +47,7 @@ export function parseMetaEnv(source: Source): { config: MetaConfig | null; issue
   const configId = readEnv(source, "META_LOGIN_CONFIG_ID");
   const insightsScopesRaw = readEnv(source, "META_INSIGHTS_SCOPES");
   const usageCeilingRaw = readEnv(source, "META_INSIGHTS_USAGE_CEILING");
+  const engagementScopesRaw = readEnv(source, "META_ENGAGEMENT_SCOPES");
 
   if (appSecret && !appId) issues.push({ name: "META_APP_ID", reason: "required when META_APP_SECRET is set" });
   else if (appId && !isAppId(appId)) issues.push({ name: "META_APP_ID", reason: "must be the numeric app id" });
@@ -79,6 +82,13 @@ export function parseMetaEnv(source: Source): { config: MetaConfig | null; issue
     else issues.push({ name: "META_INSIGHTS_USAGE_CEILING", reason: "must be an integer from 1 to 100" });
   }
 
+  let engagementScopes = false;
+  if (engagementScopesRaw !== null) {
+    const v = engagementScopesRaw.toLowerCase();
+    if (v === "true") engagementScopes = true;
+    else if (v !== "false") issues.push({ name: "META_ENGAGEMENT_SCOPES", reason: "must be true or false" });
+  }
+
   const valid =
     appId && appSecret && isAppId(appId) && isAppSecret(appSecret);
   if (!valid) return { config: null, issues };
@@ -90,6 +100,7 @@ export function parseMetaEnv(source: Source): { config: MetaConfig | null; issue
       loginConfigId: configId && DIGITS.test(configId) ? configId : null,
       insightsScopes,
       insightsUsageCeiling,
+      engagementScopes,
     },
     issues,
   };

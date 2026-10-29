@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import { engagementAccountStates, socialAccounts, type EngagementAccountStateRow, type SocialAccountRow } from "../db/schema";
+import { accountHoldsScopes, accountMissingScopes } from "./scope-predicates";
 import { crossProject } from "./scope";
 import type { ClaimedAccount } from "./scheduler";
 
@@ -11,10 +12,28 @@ export interface ClaimedEngagementAccount {
   token: string;
 }
 
+/** contracts/engagement-read-scopes.md §4 (G40). The claim's eligibility rule for one provider. */
+export interface EngagementProviderRule {
+  providerKey: string;
+  /** Scopes the engagement read surface needs. Empty = no permission needed (Bluesky, mock). */
+  readScopes: readonly string[];
+}
+
 function strip(row: SocialAccountRow): ClaimedAccount {
   const { credentialsEncrypted: _c, ...rest } = row;
   void _c;
   return rest;
+}
+
+/** FR-018 to FR-023, G40. An ineligible account never gets as far as a lease, a decrypt or a call. */
+function eligible(rules: readonly EngagementProviderRule[]) {
+  return or(
+    ...rules.map((r) =>
+      r.readScopes.length === 0
+        ? eq(socialAccounts.providerKey, r.providerKey)
+        : and(eq(socialAccounts.providerKey, r.providerKey), accountHoldsScopes(r.readScopes)),
+    ),
+  );
 }
 
 /**
@@ -28,13 +47,13 @@ export function claimDueEngagementReads(opts: {
   limit: number;
   leaseMs: number;
   minIntervalMs: number;
-  providerKeys: readonly string[];
+  providers: readonly EngagementProviderRule[];
 }): Promise<ClaimedEngagementAccount[]> {
   return crossProject("scheduler: claim due engagement reads", async () => {
-    if (opts.limit <= 0 || opts.providerKeys.length === 0) return [];
+    if (opts.limit <= 0 || opts.providers.length === 0) return [];
     return getDb().transaction(async (tx) => {
       const exec = tx as unknown as Database;
-      const providerKeys = [...opts.providerKeys];
+      const rules = opts.providers;
       const missing = await exec
         .select({ id: socialAccounts.id, projectId: socialAccounts.projectId })
         .from(socialAccounts)
@@ -44,7 +63,7 @@ export function claimDueEngagementReads(opts: {
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
             isNull(socialAccounts.disabledAt),
-            inArray(socialAccounts.providerKey, providerKeys),
+            eligible(rules),
             isNull(engagementAccountStates.socialAccountId),
           ),
         );
@@ -64,7 +83,7 @@ export function claimDueEngagementReads(opts: {
             isNull(socialAccounts.removedAt),
             eq(socialAccounts.status, "active"),
             isNull(socialAccounts.disabledAt),
-            inArray(socialAccounts.providerKey, providerKeys),
+            eligible(rules),
             or(isNull(engagementAccountStates.readLeaseUntil), lte(engagementAccountStates.readLeaseUntil, opts.now)),
             or(isNull(engagementAccountStates.readNotBefore), lte(engagementAccountStates.readNotBefore, opts.now)),
             or(isNull(engagementAccountStates.lastReadAt), lte(engagementAccountStates.lastReadAt, readyBefore)),
@@ -87,5 +106,40 @@ export function claimDueEngagementReads(opts: {
       }
       return claimed;
     });
+  });
+}
+
+/**
+ * Companion count for `accountsSkippedNoPermission` (contracts/engagement-read-scopes.md §4, G40):
+ * the claim excludes an ineligible account, so the claim cannot report it. Counts an account
+ * missing its declared scopes, deduplicated by account id, over providers that declare any.
+ */
+export function countAccountsMissingEngagementScopes(rules: readonly EngagementProviderRule[]): Promise<number> {
+  return crossProject("scheduler: count engagement-ineligible accounts", async () => {
+    const declared = rules.filter((r) => r.readScopes.length > 0);
+    if (declared.length === 0) return 0;
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(socialAccounts)
+      .where(
+        and(
+          isNull(socialAccounts.removedAt),
+          eq(socialAccounts.status, "active"),
+          or(...declared.map((r) => and(eq(socialAccounts.providerKey, r.providerKey), accountMissingScopes(r.readScopes)))),
+        ),
+      );
+    return row?.n ?? 0;
+  });
+}
+
+/** research.md §3 Finding D3. Active accounts on a provider whose engagement is declared `unavailable`. */
+export function countAccountsOnUnavailableEngagement(providerKeys: readonly string[]): Promise<number> {
+  return crossProject("scheduler: count unavailable-engagement accounts", async () => {
+    if (providerKeys.length === 0) return 0;
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(socialAccounts)
+      .where(and(isNull(socialAccounts.removedAt), eq(socialAccounts.status, "active"), or(...providerKeys.map((key) => eq(socialAccounts.providerKey, key)))));
+    return row?.n ?? 0;
   });
 }

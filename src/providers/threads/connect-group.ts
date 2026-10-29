@@ -7,6 +7,12 @@ import { exchangeCode, exchangeLongLived, readProfile, refreshLongLived, type Th
 
 const PUBLISH_PERMISSION = "threads_content_publish";
 
+/** G40. Filled from docs/research/engagement.md §2 and nowhere else (constitution I, FR-010). */
+const ENGAGEMENT_SCOPES_DECLARED = [
+  { scope: "threads_manage_replies", purpose: "Read replies to a Threads post" },
+  { scope: "threads_manage_mentions", purpose: "Read mentions of a Threads account" },
+] as const;
+
 function refused(f: ThreadsCallFailure, secrets: readonly string[]): { ok: false; message: string } {
   if (f.transient) return { ok: false, message: "Threads could not be reached. Nothing changed. Try again." };
   return {
@@ -88,6 +94,7 @@ export const threadsConnectGroup: OAuthConnectGroup = {
       { name: "THREADS_GRAPH_BASE", secret: false, required: false },
       { name: "THREADS_INSIGHTS_SCOPES", secret: false, required: false },
       { name: "THREADS_INSIGHTS_USAGE_CEILING", secret: false, required: false },
+      { name: "THREADS_ENGAGEMENT_SCOPES", secret: false, required: false },
     ],
     issues: (source) => parseThreadsEnv(source).issues,
     configured: (source) => parseThreadsEnv(source).config !== null,
@@ -100,14 +107,30 @@ export const threadsConnectGroup: OAuthConnectGroup = {
   },
   callbackHint:
     "If Threads refused the login, check that this Threads account accepted the tester invite in Threads under Settings → Website permissions.",
+  // G39. What the dialog carries before any opt-in (see `authorizationUrl` below).
+  baseScopes: ["threads_basic", "threads_content_publish"],
   optionalScopes: {
-    declared: [{ scope: "threads_manage_insights", purpose: "Read a Threads account's and its posts' numbers" }],
+    declared: [
+      { scope: "threads_manage_insights", purpose: "Read a Threads account's and its posts' numbers" },
+      ...ENGAGEMENT_SCOPES_DECLARED,
+    ],
     doc: docsUrl("meta-setup", "insights"),
-    requested: (source) => (parseThreadsEnv(source).config?.insightsScopes ? ["threads_manage_insights"] : []),
+    requested: (source) => {
+      const { config } = parseThreadsEnv(source);
+      return [
+        ...(config?.insightsScopes ? ["threads_manage_insights"] : []),
+        ...(config?.engagementScopes ? ENGAGEMENT_SCOPES_DECLARED.map((s) => s.scope) : []),
+      ];
+    },
   },
   authorizationUrl({ state, redirectUri }) {
     const cfg = requireThreadsConfig();
-    const scopes = ["threads_basic", "threads_content_publish", ...(cfg.insightsScopes ? ["threads_manage_insights"] : [])];
+    const scopes = [
+      "threads_basic",
+      "threads_content_publish",
+      ...(cfg.insightsScopes ? ["threads_manage_insights"] : []),
+      ...(cfg.engagementScopes ? ENGAGEMENT_SCOPES_DECLARED.map((s) => s.scope) : []),
+    ];
     const url = new URL(THREADS_AUTHORIZE_URL);
     url.searchParams.set("client_id", cfg.appId);
     url.searchParams.set("redirect_uri", redirectUri);

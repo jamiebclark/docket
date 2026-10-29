@@ -19,6 +19,7 @@ describe("parseMetaEnv", () => {
       loginConfigId: null,
       insightsScopes: false,
       insightsUsageCeiling: 80,
+      engagementScopes: false,
     });
   });
 
@@ -82,6 +83,25 @@ describe("parseMetaEnv", () => {
       parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_INSIGHTS_USAGE_CEILING: "50" }).config
         ?.insightsUsageCeiling,
     ).toBe(50);
+  });
+
+  it("parses META_ENGAGEMENT_SCOPES with its documented default", () => {
+    expect(parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET }).config?.engagementScopes).toBe(false);
+    expect(
+      parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_ENGAGEMENT_SCOPES: "true" }).config
+        ?.engagementScopes,
+    ).toBe(true);
+    expect(
+      parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_ENGAGEMENT_SCOPES: "false" }).config
+        ?.engagementScopes,
+    ).toBe(false);
+  });
+
+  it("rejects a non-boolean META_ENGAGEMENT_SCOPES as an environment issue, not a crash, with no value echoed", () => {
+    const r = parseMetaEnv({ META_APP_ID: ID, META_APP_SECRET: SECRET, META_ENGAGEMENT_SCOPES: "maybe" });
+    expect(r.config).not.toBeNull();
+    expect(r.issues).toEqual([{ name: "META_ENGAGEMENT_SCOPES", reason: "must be true or false" }]);
+    expect(JSON.stringify(r.issues)).not.toContain("maybe");
   });
 
   it("rejects an out-of-range META_INSIGHTS_USAGE_CEILING as an environment issue, not a crash", () => {

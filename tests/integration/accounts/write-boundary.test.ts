@@ -23,7 +23,8 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /** True for an object-literal write position (`grantedScopes: value` or shorthand `grantedScopes,`),
- * false for a type annotation, a drizzle column definition, a destructure, or a read reference. */
+ * false for a type annotation, a drizzle column definition, a zod schema field, a destructure, or a
+ * read reference. */
 function isWriteLine(line: string): boolean {
   const trimmed = line.trim();
   if (trimmed === "grantedScopes," || trimmed === "grantedScopes") return true;
@@ -31,8 +32,12 @@ function isWriteLine(line: string): boolean {
   if (!m) return false;
   const value = m[1]!;
   // Exclude a read that passes the same field through unchanged (e.g. `grantedScopes: a.grantedScopes`) —
-  // a write assigns a distinct, already-computed value.
-  return !/^readonly$/.test(value) && !/^text\(/.test(value) && !/grantedScopes/.test(value);
+  // a write assigns a distinct, already-computed value. A `z.` value is a zod schema *declaring*
+  // that the field may travel through a payload, the same kind of thing as the drizzle `text(`
+  // column definition already excluded here: it names the field, it does not write the column.
+  // The schema has to name it — zod strips unknown keys, and that strip is exactly how the value
+  // was lost between the provider and the write boundary.
+  return !/^readonly$/.test(value) && !/^text\(/.test(value) && !/^z\./.test(value) && !/grantedScopes/.test(value);
 }
 
 describe("the write boundary for grantedScopes (FR-010)", () => {

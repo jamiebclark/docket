@@ -2,8 +2,15 @@
 import { findProvider, listProviders } from "../../providers/registry";
 import type { EngagementReadResult } from "../../providers/types";
 import { directionFor, nextBackfillState, shouldReadAnotherPage } from "../../lib/engagement/paging";
+import { engagementItemsMessage, type EngagementItemKind } from "../../lib/engagement/kinds";
 import * as clock from "../dal/clock";
-import { claimDueEngagementReads, type ClaimedEngagementAccount } from "../dal/engagement-read-claims";
+import {
+  claimDueEngagementReads,
+  countAccountsMissingEngagementScopes,
+  countAccountsOnUnavailableEngagement,
+  type ClaimedEngagementAccount,
+  type EngagementProviderRule,
+} from "../dal/engagement-read-claims";
 import { forSchedulerProject } from "../dal/scheduler";
 import { writeHeartbeat } from "../dal/heartbeats";
 import { decryptCredentials } from "../services/accounts";
@@ -22,6 +29,7 @@ export interface EngagementReadCounts {
   cursorLost: number;
   unavailable: number;
   failed: number;
+  accountsSkippedNoPermission: number;
 }
 
 export const emptyEngagementReadCounts = (): EngagementReadCounts => ({
@@ -34,6 +42,7 @@ export const emptyEngagementReadCounts = (): EngagementReadCounts => ({
   cursorLost: 0,
   unavailable: 0,
   failed: 0,
+  accountsSkippedNoPermission: 0,
 });
 
 const ACCOUNTS_PER_RUN = 20;
@@ -49,20 +58,25 @@ export async function runEngagementRead(opts: { config: SchedulerConfig; tickId:
   const counts = emptyEngagementReadCounts();
   const deadline = opts.startedAt.getTime() + cfg.timeBudgetMs;
   // FR-055: a declared-but-unavailable surface is never claimed, so no call is ever attempted for it.
-  const providerKeys = listProviders()
+  const providers: EngagementProviderRule[] = listProviders()
     .filter((p) => p.engagement && !p.engagement.declaration.unavailable)
+    .map((p) => ({ providerKey: p.key, readScopes: p.engagement!.declaration.readScopes ?? [] }));
+  const unavailableProviderKeys = listProviders()
+    .filter((p) => p.engagement?.declaration.unavailable)
     .map((p) => p.key);
+  counts.unavailable += await countAccountsOnUnavailableEngagement(unavailableProviderKeys);
 
-  if (providerKeys.length > 0) {
+  if (providers.length > 0) {
     const now = await clock.now();
     const claimed = await claimDueEngagementReads({
       now,
       limit: ACCOUNTS_PER_RUN,
       leaseMs: opts.config.leaseMs,
       minIntervalMs: cfg.readMinIntervalMs,
-      providerKeys,
+      providers,
     });
     counts.claimed = claimed.length;
+    counts.accountsSkippedNoPermission = await countAccountsMissingEngagementScopes(providers);
     await Promise.all(claimed.map((claim) => processAccount(claim, { config: opts.config, cfg, deadline, counts })));
   }
 
@@ -119,7 +133,7 @@ async function processAccount(
   }
 
   const parsedProviderState = engagement.stateSchema.safeParse(state.providerState ?? {});
-  const providerState = (parsedProviderState.success ? parsedProviderState.data : {}) as Record<string, unknown>;
+  let providerState = (parsedProviderState.success ? parsedProviderState.data : {}) as Record<string, unknown>;
   // The persisted cursor only ever paginates older history (the backfill direction): the newest
   // direction has no "since" parameter on any provider, so it always restarts from `cursor: null`
   // and stops as soon as it sees an item already stored — that overlap *is* the new-items boundary.
@@ -129,6 +143,10 @@ async function processAccount(
   let pagesRead = 0;
   let stop: EngagementReadResult | null = null;
   let inserted = 0;
+  // Counted by kind, not just totalled: the activity row — and the email built from it — has to say
+  // "1 new comment" rather than "1 new item", or a person cannot tell a DM from a mention without
+  // opening the app (020 feedback).
+  const insertedByKind: Partial<Record<EngagementItemKind, number>> = {};
   let newestSaidAt: Date | null = state.lastItemAt;
   const now0 = await clock.now();
   const retentionHorizon = new Date(now0.getTime() - ctx.cfg.retentionDays * 86_400_000);
@@ -154,6 +172,7 @@ async function processAccount(
       stop = result;
       break;
     }
+    providerState = (result.providerState ?? providerState) as Record<string, unknown>;
     pagesRead++;
     let anyAlreadyStored = false;
     for (const item of result.items) {
@@ -185,6 +204,7 @@ async function processAccount(
       });
       if (insertResult.inserted) {
         inserted++;
+        insertedByKind[item.kind] = (insertedByKind[item.kind] ?? 0) + 1;
         if (!newestSaidAt || item.saidAt > newestSaidAt) newestSaidAt = item.saidAt;
       } else {
         anyAlreadyStored = true;
@@ -222,7 +242,7 @@ async function processAccount(
           occurredAt: stopNow,
           socialAccountId: account.id,
           providerKey: account.providerKey,
-          message: `${inserted} new ${inserted === 1 ? "item" : "items"}`,
+          message: engagementItemsMessage(insertedByKind),
           details: { items: inserted },
         });
       });
@@ -256,7 +276,7 @@ async function processAccount(
         occurredAt: now,
         socialAccountId: account.id,
         providerKey: account.providerKey,
-        message: `${inserted} new ${inserted === 1 ? "item" : "items"}`,
+        message: engagementItemsMessage(insertedByKind),
         details: { items: inserted },
       });
     }

@@ -77,6 +77,8 @@ Each optional member above was added as a generic change; `docs/decisions.md` re
 | G36 | `publicPostId` on `StepResult`'s `{ kind: "done" }`, persisted by the generic publish path | 21 |
 | G37 | `postScopes`/`missingPostScopes` and `accountScopes`/`missingAccountScopes` on an `insights` declaration — eligibility checked per surface, not once for both | 21 |
 | G38 | `shape` on a `MetricKeyDeclaration` — whether a key is cumulative, windowed or unknown | 21 |
+| G39 | `baseScopes` on an `OAuthConnectGroup` — what its dialog asks for before any opt-in | 4 |
+| G40 | `readScopes`/`missingReadScopes` on an `engagement` declaration, checked in the claim; `optionalScopes.cannotWiden` answered per surface | 4, 20 |
 
 ## 3. Capabilities and counting rules
 
@@ -212,6 +214,17 @@ behind it. Inert for a provider that never sets `grantedScopes` or `optionalScop
 | `requested(source)` | Pure, reads only `source`: the scopes this group will actually add to its dialog as currently configured. An operator who has not opted in gets `[]`, and the dialog is unchanged. |
 | `cannotWiden(source)` | Pure. Non-null when the operator opted in but Docket *cannot* widen the dialog — Facebook Login for Business takes its permission set from the Meta app's own configuration (FR-019). Reconnecting cannot help, so no reconnect control is offered; the returned `reason` (and optional `doc`) is shown instead. |
 
+`baseScopes` (G39) is what the group's dialog asks for every time, before any opt-in. It exists so a
+surface can tell "the dialog will carry this, so reconnecting helps" from "the dialog never carries
+it, so reconnecting cannot". Omit it and nothing is assumed to be requested, which is the safe
+default: a group that has not declared its base set makes no promise about what its dialog carries.
+
+Getting this wrong is not theoretical. An account connected before `granted_scopes` was stored has
+it `NULL` — "not known" — so **every** required scope counts as unheld, base scopes included. Judged
+against the opt-ins alone, those base scopes look unrequested and the whole surface reports
+"not requested", which renders no reconnect control at all. That was every pre-existing account on a
+live install, with the opt-in correctly switched on and nothing to click.
+
 The distinction `cannotWiden` draws matters: "you have not asked for this yet" and "asking again cannot
 help, the app configuration decides" are different problems with different fixes, and offering a Reconnect
 button for the second is a dead end.
@@ -331,8 +344,18 @@ never directly. Every content and rate limit Docket enforces, with its source an
 
 Implement `refreshCredentials({ account, credentials, now, signal })` for expiring tokens. The engine calls it ahead of
 expiry. Return `{ ok: true, credentials, expiresAt }` to store the new credentials, or `{ ok: false, reason }`.
-A failure marks the account `needs_reauth`: its targets stop publishing until the user reconnects.
-Do not throw for an expected refusal; return `ok: false`.
+A failure marks the account `needs_reauth`: its targets stop publishing until the user reconnects. A success clears the
+flag, so an account that comes back no longer needs a human. Do not throw for an expected refusal; return `ok: false` —
+a throw is held as transient (it says nothing definitive about the credentials) and the account stays `active`.
+
+**`canReauthenticate`.** Set it when `refreshCredentials` can build a brand-new session out of what is already stored,
+rather than only renewing a live one — Bluesky with its saved app password is the case it exists for. Flagged accounts of
+such a provider are claimed by the refresh section *as well as* `active` ones, regardless of the refresh window, so
+`needs_reauth` is a state the engine can leave on its own. Without it, the flag is one-way: `claimRefreshAccounts` takes
+only `active` rows and `acquireRefreshLease` requires `active`, so nothing calls `refreshCredentials` again, and every
+due target is refused at claim time with "The account is no longer available for publishing" and **zero attempts** until
+a human reconnects. A refusal parks the account for 15 minutes, so a credential that really is dead is retried on a
+cadence rather than once per tick.
 
 **Refresh hold.** G11 parks the refresh lease until `retryAt` (up to 24 hours). A provider that both returns a transient `retryAt`
 and defines `needsRefresh` would see the publish-time refresh as `busy` and release its targets until the hold ends. If your
@@ -386,11 +409,15 @@ Secrets exist only in the HTTP request itself. Never put them in `error`, `summa
 `src/providers/bluesky/` is the first real provider using only the generic hooks above (the one registry line aside).
 
 - **Connect.** `connect` is `credentials` with `handle`, `appPassword` and an optional `pdsUrl`. `connectAccount` calls
-  `com.atproto.server.createSession`, stores the session tokens, DID and handle, and drops the app password.
+  `com.atproto.server.createSession` and stores the session tokens, the DID, the handle **and the app password**, all
+  encrypted. Keeping the password is what lets `refreshCredentials` open a brand-new session on its own, so the provider
+  sets `canReauthenticate: true`. Accounts connected before this change have no stored password; their refresh is refused
+  and they keep the manual-reconnect path.
 - **Publish-time refresh.** `needsRefresh` is true within 5 minutes of the access JWT's expiry, which is the common case for an idle
   account, so the engine refreshes under a lease before `advance`. If the create call still answers `ExpiredToken`, the provider
-  returns `retryable_error` with `credentialsExpired: true` and the engine refreshes in the same tick, then retries. A refused refresh marks `needs_reauth`;
-  a 5xx or network failure is `transient`.
+  returns `retryable_error` with `credentialsExpired: true` and the engine refreshes in the same tick, then retries. A refused
+  refresh first retries the stored app password (identifying by DID, so a renamed account still signs in) and only marks
+  `needs_reauth` if that is refused too; a 5xx or network failure is `transient`.
 - **Multi-step images.** `stepFor` uses `content.mediaCount`: a text post goes straight to `create_post` (`mayPublish`), a post with
   images runs one non-publishing `upload_image` step per image (state holds each `BlobRef#toJSON()` result), then `create_post`.
 - **Outcomes.** Connection refused / DNS failure is `retryable_error`; 4xx on create is `fatal_error`; timeout, reset or an
@@ -557,7 +584,9 @@ engagement?: {
     reads: readonly ("reply" | "comment" | "mention" | "direct_message")[]; // never empty — omit `engagement` instead
     canReply: boolean;
     writeBudget?: { count: number; windowSeconds: number }; // the per-account allowance a reply spends
-    unavailable?: { reason: string; docsPath?: string };    // declared but not readable on this install (G55)
+    unavailable?: { reason: string; docsPath?: string };    // declared but not readable on this install (077 FR-055)
+    readScopes?: readonly string[];                         // granted_scopes this provider's read needs (G40)
+    missingReadScopes?: { reason: string; docsPath?: string }; // shown when readScopes are not held; required when readScopes is non-empty (G40)
   };
   itemDataSchema: z.ZodType;  // your own shape of `engagement_items.provider_data`
   stateSchema: z.ZodType;     // your own shape of `engagement_account_states.provider_state`
@@ -576,13 +605,34 @@ engagement?: {
   what was created) returned as `ambiguous`, never `retryable_error` — the same "never risk a double effect" rule
   `advance()` already follows.
 - `itemDataSchema` and `stateSchema` must reject anything resembling a credential or token.
+- `readScopes` (G40) is one list, not a pair like `insights`' `postScopes`/`accountScopes` — engagement has one
+  read surface. Default empty means "no permission needed", every provider's behaviour before this field
+  existed. `unavailable` and a non-empty `readScopes` are mutually exclusive — they say different things ("not
+  readable here at all" vs. "not granted by this account yet") and the registry refuses a declaration naming
+  both. A non-empty `readScopes` requires `missingReadScopes.reason` (1–300 characters), and every entry must
+  match `GRANTED_SCOPE_PATTERN` (`src/lib/granted-scopes.ts`) — all enforced at load time by
+  `assertEngagementDeclaration`, so a bad declaration is a startup failure, not a tick-time surprise.
+- **Claim-level guarantee**: an account missing a declared scope (or whose `granted_scopes` is `NULL`, which
+  means "not known", never "holds everything") is never claimed, leased, decrypted or called —
+  `claimDueEngagementReads` checks `readScopes` against the account's `granted_scopes` before it claims, not
+  after. Items already read stay readable; losing eligibility never withdraws them.
+- A surface blocked on something **the platform has not published** — no confirmed read endpoint, no confirmed
+  object shape — is `unavailable`: no account can make it readable, so it declares no `readScopes`.
+  `src/providers/threads/engagement.ts` is the current example. A surface blocked on something **this account
+  has not granted** declares `readScopes` and no `unavailable`, and becomes readable the moment the account
+  reconnects. Naming both would tell a member to go and fix something that is not theirs to fix.
 
-`src/providers/bluesky/engagement.ts` is the one real implementation so far: `app.bsky.notification.listNotifications`
-for reading (never calling `updateSeen`), and `com.atproto.repo.createRecord` for sending, reusing the session and
-refresh path `publish.ts` already has. `src/providers/mock/index.ts` declares all four kinds plus an `unavailable`
-variant, so the inbox's capability seam is testable with no platform credentials at all — read that one first. See
-`docs/engagement.md` for what the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md`
-for the full contract.
+There are two reader shapes, each with one real example:
+
+| Shape | Current real example | Suits |
+|---|---|---|
+| **Account-level reader** — the platform hands the account a feed of inbound items; one call per read, the cursor is the platform's own | `src/providers/bluesky/engagement.ts` (`app.bsky.notification.listNotifications` for reading, never calling `updateSeen`; `com.atproto.repo.createRecord` for sending, reusing the session and refresh path `publish.ts` already has) | platforms with a notifications or mentions feed scoped to the account |
+| **Per-post reader** — the platform lists comments per post, so the provider must discover its own recent posts and walk them, keeping the walk's position in `provider_state` under its own `stateSchema` | `src/providers/meta/engagement-sweep.ts` with `src/providers/facebook/engagement.ts` and `src/providers/instagram/engagement.ts` as the thin per-platform surfaces | platforms whose comment edge hangs off a post, not an account |
+
+`src/providers/mock/index.ts` declares all four kinds plus an `unavailable` variant, so the inbox's capability
+seam is testable with no platform credentials at all — read that one first. See `docs/engagement.md` for what
+the feature looks like to a member, and `specs/077-engagement-inbox/contracts/provider-engagement.md` for the
+full contract.
 
 ## 21. Reading post and account metrics (`insights`, 080)
 

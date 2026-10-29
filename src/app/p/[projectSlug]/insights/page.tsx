@@ -47,34 +47,128 @@ export default async function InsightsPage({ params }: { params: Promise<{ proje
           buildFirstEngagement({ projectId: scope.project.id, timeZone: scope.project.timezone, range }),
         ]);
 
+  // A metric with no readings yet said "No readings in this range yet." in a card of its own, so a
+  // project awaiting its first poll showed a column of identical cards. Those collapse to one line;
+  // only series that actually have something to show get a chart.
+  const withReadings = series.filter((s) => s.points.length > 0);
+  const awaiting = series.filter((s) => s.points.length === 0);
+  const byAccount = [...Map.groupBy(withReadings, (s) => s.accountId).entries()];
+
+  // Same problem one level down, and worse: five dimensions times every platform-and-metric pair is
+  // dozens of comparisons, and until enough posts have been read EVERY one of them is a card saying
+  // so. A comparison earns a card by actually ranking something; the rest are counted, with their
+  // reason, in a line. `refusal` is a structural "there is nothing here to compare" (no standing
+  // series has ever run), which is a different thing to say than "not enough posts yet".
+  const ranked = comparisons.filter((c) => c.refusal === null && c.conclusion === "ranked");
+  const notEnough = comparisons.filter((c) => c.refusal === null && c.conclusion !== "ranked");
+  const refused = comparisons.filter((c) => c.refusal !== null);
+  const refusalReasons = [...new Set(refused.map((c) => c.refusal!))];
+
   return (
     <div>
-      <PageHeader title="Insights" description={`Account trends over the last ${RANGE_DAYS} days.`} />
+      <PageHeader title="Insights" description={`The last ${RANGE_DAYS} days, per account and per platform. Numbers are never added together across platforms.`} />
       {activeAccounts.length === 0 ? (
         <EmptyState icon="insights" message="Connect an account, publish a post, then wait for the first scheduled read to see trends here." />
       ) : series.length === 0 && trendNotes.length === 0 ? (
         <EmptyState icon="insights" message="No readings yet. Once a scheduled read succeeds, trends will show up here." />
       ) : (
-        <div className="flex flex-col gap-6">
-          {series.map((s) => (
-            <Card key={`${s.accountId}-${s.metricKey}`}>
-              <TrendChart series={s} timeZone={scope.project.timezone} />
-            </Card>
-          ))}
-          {trendNotes.map((note, i) => (
-            <Card key={i}>
-              <TrendNoteCard note={note} />
-            </Card>
-          ))}
-          {comparisons.map((c) => (
-            <Card key={`${c.dimension}-${c.providerKey}-${c.metricKey}`}>
-              <ComparisonCard comparison={c} />
-            </Card>
-          ))}
+        <div className="flex flex-col gap-10">
+          {/*
+            Three sections, not one flat list. Every card used to carry the same visual weight — a
+            follower trend, a "cannot plot" note and a slot comparison all looked alike — so the
+            page read as an undifferentiated scroll. Headings give it a shape a reader can skim,
+            and the trends are grouped by account so an account's name is stated once.
+          */}
+          {withReadings.length > 0 || awaiting.length > 0 ? (
+            <section aria-labelledby="insights-trends">
+              <h2 id="insights-trends" className="text-base font-semibold text-heading">
+                Account trends
+              </h2>
+              <div className="mt-3 flex flex-col gap-6">
+                {byAccount.map(([accountId, group]) => (
+                  <Card key={accountId}>
+                    <div className="flex flex-col gap-6">
+                      {group.map((s) => (
+                        <TrendChart key={`${s.accountId}-${s.metricKey}`} series={s} timeZone={scope.project.timezone} />
+                      ))}
+                    </div>
+                  </Card>
+                ))}
+                {awaiting.length > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {awaiting.length} other metric{awaiting.length === 1 ? "" : "s"} across{" "}
+                    {new Set(awaiting.map((s) => s.accountId)).size} account
+                    {new Set(awaiting.map((s) => s.accountId)).size === 1 ? "" : "s"} {awaiting.length === 1 ? "is" : "are"} awaiting a
+                    first reading.
+                  </p>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {comparisons.length > 0 ? (
+            <section aria-labelledby="insights-comparisons">
+              <h2 id="insights-comparisons" className="text-base font-semibold text-heading">
+                What is working
+              </h2>
+              <div className="mt-3 flex flex-col gap-6">
+                {ranked.map((c) => (
+                  <Card key={`${c.dimension}-${c.providerKey}-${c.metricKey}`}>
+                    <ComparisonCard comparison={c} />
+                  </Card>
+                ))}
+                {ranked.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nothing can be ranked yet. A comparison appears here once enough posts have been read to put its
+                    groups in a believable order.
+                  </p>
+                ) : null}
+                {notEnough.length > 0 ? (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-muted-foreground underline-offset-2 hover:underline">
+                      {notEnough.length} comparison{notEnough.length === 1 ? "" : "s"} waiting for more posts
+                    </summary>
+                    <div className="mt-3 flex flex-col gap-6">
+                      {notEnough.map((c) => (
+                        <Card key={`${c.dimension}-${c.providerKey}-${c.metricKey}`}>
+                          <ComparisonCard comparison={c} />
+                        </Card>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+                {refusalReasons.map((reason) => (
+                  <p key={reason} className="text-sm text-muted-foreground">
+                    {reason}
+                  </p>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {firstEngagement.entries.length > 0 ? (
-            <Card>
-              <FirstEngagementCard view={firstEngagement} />
-            </Card>
+            <section aria-labelledby="insights-first-engagement">
+              <h2 id="insights-first-engagement" className="text-base font-semibold text-heading">
+                Time to first reply
+              </h2>
+              <Card className="mt-3">
+                <FirstEngagementCard view={firstEngagement} projectSlug={projectSlug} timeZone={scope.project.timezone} />
+              </Card>
+            </section>
+          ) : null}
+
+          {/* The notes were full-width cards interleaved with the data; they are reference, not findings. */}
+          {trendNotes.length > 0 ? (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted-foreground underline-offset-2 hover:underline">
+                What cannot be plotted ({trendNotes.length})
+              </summary>
+              <div className="mt-3 flex flex-col gap-2">
+                {trendNotes.map((note, i) => (
+                  <TrendNoteCard key={i} note={note} />
+                ))}
+              </div>
+            </details>
           ) : null}
         </div>
       )}

@@ -225,15 +225,37 @@ describe("insights env vars", () => {
 });
 
 describe("insights time share", () => {
-  it("defaults to a share of the tick budget, so insights cannot work to the tick deadline", () => {
-    expect(insightsConfig(base).timeBudgetMs).toBe(6_000);
+  // `runInsightsPoll` refuses to begin unless `providerTimeoutMs` still remains, so a share worth
+  // less than one provider call is not a small share — it is the section never running, silently,
+  // for the life of the install. 0.3 of the stock 25s tick is 7.5s against a 10s timeout, which is
+  // exactly what shipped and exactly why nothing was ever polled on any platform.
+  it("is floored at one provider call plus a margin, so the section can always start", () => {
+    // 0.3 × 20_000 = 6_000, below the 10_000 timeout — floored to 12_000.
+    expect(insightsConfig(base).timeBudgetMs).toBe(12_000);
+    expect(insightsConfig(base).timeBudgetMs).toBeGreaterThan(base.providerTimeoutMs);
   });
 
-  it("honours an explicit share", () => {
-    expect(insightsConfig({ ...base, insightsTimeShare: 0.5 }).timeBudgetMs).toBe(10_000);
+  it("honours an explicit share once it clears the floor", () => {
+    expect(insightsConfig({ ...base, insightsTimeShare: 0.8 }).timeBudgetMs).toBe(16_000);
+  });
+
+  it("raises a share that would leave too little for one call", () => {
+    expect(insightsConfig({ ...base, insightsTimeShare: 0.05 }).timeBudgetMs).toBe(12_000);
   });
 
   it("never exceeds the tick budget itself", () => {
     expect(insightsConfig({ ...base, insightsTimeShare: 1 }).timeBudgetMs).toBeLessThanOrEqual(base.timeBudgetMs);
+    // Even when the floor itself does not fit: a tick this small cannot make a provider call at all.
+    const tiny = { ...base, timeBudgetMs: 5_000 };
+    expect(insightsConfig(tiny).timeBudgetMs).toBeLessThanOrEqual(tiny.timeBudgetMs);
+  });
+
+  it("treats an explicit zero as an off switch, not a share to be raised", () => {
+    expect(insightsConfig({ ...base, insightsTimeShare: 0 }).timeBudgetMs).toBe(0);
+  });
+
+  it("the SHIPPED defaults leave room for a call, which is what was never checked", () => {
+    const shipped: SchedulerConfig = { ...base, timeBudgetMs: 25_000, providerTimeoutMs: 10_000 };
+    expect(insightsConfig(shipped).timeBudgetMs).toBeGreaterThan(shipped.providerTimeoutMs);
   });
 });

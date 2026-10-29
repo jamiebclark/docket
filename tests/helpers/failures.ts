@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { socialAccounts } from "../../src/server/db/schema/accounts";
 import { runTick } from "../../src/server/scheduler";
+import { tickConfig } from "./tick";
 import * as posts from "../../src/server/services/posts";
 import { atTime } from "./clock";
 import { testDb } from "./db";
@@ -17,7 +18,7 @@ export async function outcomeTarget(env: Env, behaviour: "ambiguous" | "fatal", 
   const account = await env.account({ behaviour });
   const draft = await posts.createDraft(env.scope, { baseText: text, targets: [{ accountId: account.id }] });
   await atTime(BEFORE, () => posts.addToQueue(env.scope, draft.post.id, {}));
-  await atTime(SLOT, () => runTick());
+  await atTime(SLOT, () => runTick(tickConfig()));
   const detail = await posts.getPost(env.scope, draft.post.id);
   return { account, postId: draft.post.id, targetId: detail.targets[0]!.id };
 }

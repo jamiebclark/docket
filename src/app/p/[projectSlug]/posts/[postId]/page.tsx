@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { Icon, ProviderIcon } from "@/components/ui/Icon";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -9,10 +11,11 @@ import { forProject, NotFoundError } from "@/server/dal";
 import { getSession } from "@/server/auth/session";
 import * as posts from "@/server/services/posts";
 import { groupAttemptRuns } from "@/server/services/failures";
-import { preparingVideoLabel } from "@/server/services/posts/view";
+import { preparingVideoLabel, type PostViewTarget } from "@/server/services/posts/view";
 import { AnnounceProvider } from "@/components/ui/Announce";
-import { AttemptLog } from "@/components/targets/AttemptLog";
-import { PerformancePanel } from "@/components/targets/PerformancePanel";
+import { DeliveryLog } from "@/components/targets/DeliveryLog";
+import { PerformanceOverlay } from "@/components/targets/PerformanceOverlay";
+import { PostMediaGallery } from "@/components/posts/PostMediaGallery";
 import { TargetResolution } from "@/components/targets/TargetResolution";
 import { safeExternalHref } from "@/lib/safe-redirect";
 import { DeletePostButton } from "./DeletePostButton";
@@ -40,144 +43,167 @@ export default async function PostPage({ params }: { params: Promise<{ projectSl
 
   return (
     <AnnounceProvider focusFallbackId="page-title">
-    <article className="space-y-6">
-      <div>
-        <p className="mb-2 text-sm">
-          <Link href={`/p/${projectSlug}/posts`} className="underline">
-            Posts
-          </Link>
-        </p>
-        <PageHeader
-          title="Post"
-          titleId="page-title"
-          description="Where this post goes, its status on each account, and every publish attempt."
-          aside={<StatusBadge status={view.post.status} />}
-          actions={
-            <>
-              {!started && scope.can({ post: ["edit"] }) ? (
-                <Link href={`/p/${projectSlug}/compose/${view.post.id}`} className={buttonStyles({ variant: "secondary" })}>
-                  Edit
-                </Link>
-              ) : null}
-              <DeletePostButton slug={projectSlug} postId={view.post.id} canDelete={canDelete} deleteBlocked={view.deleteBlocked} />
-            </>
-          }
-        />
-      </div>
+      <article className="flex flex-col gap-6">
+        <div>
+          <p className="mb-2 text-sm">
+            <Link href={`/p/${projectSlug}/posts`} className="underline">
+              Posts
+            </Link>
+          </p>
+          <PageHeader
+            title="Post"
+            titleId="page-title"
+            description={`Where this post went, how it is doing, and what happened on the way. Times are in ${tz}.`}
+            aside={<StatusBadge status={view.post.status} />}
+            actions={
+              <>
+                {!started && scope.can({ post: ["edit"] }) ? (
+                  <Link href={`/p/${projectSlug}/compose/${view.post.id}`} className={buttonStyles({ variant: "secondary" })}>
+                    Edit
+                  </Link>
+                ) : null}
+                <DeletePostButton slug={projectSlug} postId={view.post.id} canDelete={canDelete} deleteBlocked={view.deleteBlocked} />
+              </>
+            }
+          />
+        </div>
 
-      <section aria-labelledby="content">
-        <h2 id="content" className="text-lg font-semibold">
-          Content
-        </h2>
-        <p className="mt-2 whitespace-pre-wrap">{view.post.baseText || "(no text)"}</p>
-        {view.media.length > 0 ? (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {view.media.map((m) => (
-              <li key={m.id}>
-                {m.deleted ? (
-                  <span className="inline-flex h-20 w-20 items-center justify-center rounded border border-dashed border-border p-1 text-center text-xs">Image deleted</span>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.thumbnailUrl} alt={m.altText} className="h-20 w-20 rounded object-cover" />
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      {view.targets.map((t) => (
-        <section key={t.id} aria-labelledby={`target-${t.id}`} className="rounded-xl border border-border bg-surface p-5 shadow-card">
-          <h2 id={`target-${t.id}`} className="text-lg font-semibold">
-            {t.accountName}
-          </h2>
-          <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-            <dt className="font-medium">Account</dt>
-            <dd>
-              {t.accountName} ({t.providerName})
-            </dd>
-            <dt className="font-medium">Status</dt>
-            <dd>
-              <StatusBadge status={t.status} />
-              {t.preparingVideo ? <span className="ml-2">{preparingVideoLabel(t.providerName)}…</span> : null}
-              {t.inProgress ? <span className="ml-2">Publishing now…</span> : null}
-              {t.note ? <span className="ml-2">{t.note}</span> : null}
-            </dd>
-            {t.scheduledAt ? (
-              <>
-                <dt className="font-medium">Scheduled for</dt>
-                <dd>
-                  <LocalTime value={t.scheduledAt} timeZone={tz} /> ({tz}
-                  {t.scheduleKind === "now" ? ", published now" : t.scheduleKind === "explicit" ? ", chosen time" : ", queue slot"})
-                </dd>
-              </>
+        {/*
+          The post itself reads as the post: the copy at reading size beside its pictures, rather
+          than a "Content" heading over a paragraph and a row of 80px chips. The media sits in a
+          column of its own from `sm` up so a tall image does not push the text into a gutter.
+        */}
+        <Card>
+          <div className="flex flex-col gap-4 sm:flex-row-reverse sm:items-start sm:gap-6">
+            {view.media.length > 0 ? (
+              <div className="sm:shrink-0">
+                <PostMediaGallery media={view.media} />
+              </div>
             ) : null}
-            {t.publishedAt ? (
-              <>
-                <dt className="font-medium">Published</dt>
-                <dd>
-                  <LocalTime value={t.publishedAt} timeZone={tz} />
-                </dd>
-              </>
-            ) : null}
-            {t.externalUrl ? (
-              <>
-                <dt className="font-medium">Link</dt>
-                <dd>
-                  {safeExternalHref(t.externalUrl) ? (
-                    <a href={safeExternalHref(t.externalUrl)!} rel="noopener noreferrer" target="_blank" className="underline">
-                      View on {t.providerName}
-                    </a>
-                  ) : (
-                    t.externalUrl
-                  )}
-                </dd>
-              </>
-            ) : null}
-            {!t.externalUrl && t.status === "published" ? (
-              <>
-                <dt className="font-medium">Link</dt>
-                <dd>Published on {t.providerName}</dd>
-              </>
-            ) : null}
-            <dt className="font-medium">Attempts</dt>
-            <dd>{t.attemptCount}</dd>
-            {t.lastError ? (
-              <>
-                <dt className="font-medium">Last error</dt>
-                <dd className="text-danger">{t.lastError}</dd>
-              </>
-            ) : null}
-          </dl>
-
-          {t.status === "ambiguous" ? (
-            <div role="group" aria-label="Needs your decision" className="mt-3 rounded-md border border-warning-border bg-warning-bg p-3 text-warning">
-              <p className="font-medium">
-                <Badge tone="warning">Needs your decision</Badge>
-              </p>
-              <p className="mt-2 text-sm">
-                We sent this post but never heard back, so we can&apos;t tell whether it went out. Check {t.accountName}, then record what you found.
-              </p>
-            </div>
-          ) : null}
-
-          <div className="mt-3">
-            <TargetResolution slug={projectSlug} targetId={t.id} accountId={t.accountId} timeZone={tz} accountName={t.accountName} status={t.status} actions={t.actions} canSchedule={canSchedule} variant="detail" />
+            <p className="min-w-0 flex-1 text-base whitespace-pre-wrap">
+              {view.post.baseText || <span className="text-muted-foreground">No text</span>}
+            </p>
           </div>
+        </Card>
 
-          <h3 className="mt-4 text-sm font-semibold">Attempts</h3>
-          {t.attempts.length === 0 ? (
-            <p className="mt-1 text-sm">No attempts yet.</p>
-          ) : (
-            <div className="mt-1">
-              <AttemptLog runs={groupAttemptRuns(t.attempts)} timeZone={tz} caption={`Attempts for ${t.accountName}`} />
-            </div>
-          )}
+        {/* The reason most people open this page, so it comes before the delivery detail. */}
+        <PerformanceOverlay
+          subjects={view.targets.map((t) => ({
+            targetId: t.id,
+            accountName: t.accountName,
+            providerKey: t.providerKey,
+            providerName: t.providerName,
+            view: t.insights,
+          }))}
+          timeZone={tz}
+        />
 
-          <PerformancePanel view={t.insights} platform={t.providerName} timeZone={tz} />
+        <section aria-labelledby="accounts" className="flex flex-col gap-3">
+          <h2 id="accounts" className="text-lg font-semibold">
+            Accounts
+          </h2>
+          {view.targets.map((t) => (
+            <TargetCard key={t.id} target={t} slug={projectSlug} timeZone={tz} canSchedule={canSchedule} />
+          ))}
         </section>
-      ))}
-    </article>
+      </article>
     </AnnounceProvider>
+  );
+}
+
+/**
+ * One account's delivery. The facts that used to be a six-row definition list — Account, Status,
+ * Scheduled for, Published, Link, Attempts — are a heading line and one quiet line under it: the
+ * account name already said the account, the attempt count is in the log's own summary, and only
+ * the time that actually applies to this target's state is worth a line of its own.
+ */
+function TargetCard({
+  target: t,
+  slug,
+  timeZone,
+  canSchedule,
+}: {
+  target: PostViewTarget;
+  slug: string;
+  timeZone: string;
+  canSchedule: boolean;
+}) {
+  const href = t.externalUrl ? safeExternalHref(t.externalUrl) : null;
+  return (
+    <Card as="section" aria-labelledby={`target-${t.id}`}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <ProviderIcon providerKey={t.providerKey} size={32} />
+            <div className="min-w-0">
+              <h3 id={`target-${t.id}`} className="truncate font-semibold">
+                {t.accountName}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {t.providerName}
+                {t.publishedAt ? (
+                  <>
+                    {" · Published "}
+                    <LocalTime value={t.publishedAt} timeZone={timeZone} />
+                  </>
+                ) : t.scheduledAt ? (
+                  <>
+                    {" · "}
+                    {t.scheduleKind === "now" ? "Publishing now, asked for " : t.scheduleKind === "explicit" ? "Due " : "Queue slot "}
+                    <LocalTime value={t.scheduledAt} timeZone={timeZone} />
+                  </>
+                ) : null}
+                {t.note ? ` · ${t.note}` : null}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={t.status} />
+            {href ? (
+              <a href={href} rel="noopener noreferrer" target="_blank" className="inline-flex items-center gap-1 text-sm underline">
+                View on {t.providerName}
+                <Icon name="externalLink" size={14} />
+              </a>
+            ) : t.status === "published" ? (
+              // Answers the question the account beside it raises: that one has "View on Bluesky"
+              // and this one does not, because the platform handed back no address for the post.
+              <span className="text-sm text-muted-foreground">Published on {t.providerName}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {t.preparingVideo || t.inProgress ? (
+          <p className="text-sm text-muted-foreground">{t.preparingVideo ? `${preparingVideoLabel(t.providerName)}…` : "Publishing now…"}</p>
+        ) : null}
+
+        {t.lastError ? <p className="text-sm text-danger">{t.lastError}</p> : null}
+
+        {t.status === "ambiguous" ? (
+          <div role="group" aria-label="Needs your decision" className="rounded-lg border border-warning-border bg-warning-bg p-3 text-warning">
+            <p className="font-medium">
+              <Badge tone="warning">Needs your decision</Badge>
+            </p>
+            <p className="mt-2 text-sm">
+              We sent this post but never heard back, so we can&apos;t tell whether it went out. Check {t.accountName}, then record what you
+              found.
+            </p>
+          </div>
+        ) : null}
+
+        <TargetResolution
+          slug={slug}
+          targetId={t.id}
+          accountId={t.accountId}
+          timeZone={timeZone}
+          accountName={t.accountName}
+          status={t.status}
+          actions={t.actions}
+          canSchedule={canSchedule}
+          variant="detail"
+        />
+
+        <DeliveryLog runs={groupAttemptRuns(t.attempts)} timeZone={timeZone} accountName={t.accountName} />
+      </div>
+    </Card>
   );
 }

@@ -3,6 +3,7 @@ import { postTargets } from "../../src/server/db/schema/posts";
 import { createSchedulingRepos } from "../../src/server/dal/scope";
 import { forSchedulerProject } from "../../src/server/dal/scheduler";
 import { runTick } from "../../src/server/scheduler";
+import { tickConfig } from "./tick";
 import { encryptCredentials } from "../../src/server/services/accounts";
 import { testDb } from "./db";
 import type { PostType } from "../../src/providers/types";
@@ -52,7 +53,7 @@ export async function metaSetup(providerKey: "facebook" | "instagram", externalI
     ids.push(asset.id);
   }
   if (ids.length) await repos.posts.setMedia(post.id, ids);
-  const tick = async () => (await runTick({ config: {} })).publishing.counts;
+  const tick = async () => (await runTick(tickConfig())).publishing.counts;
   const row = async () =>
     (await testDb().select().from(postTargets).where(and(eq(postTargets.projectId, projectId), eq(postTargets.id, target.id))))[0]!;
   return { projectId, accountId: account.id, targetId: target.id, tick, row };

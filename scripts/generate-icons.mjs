@@ -31,6 +31,7 @@ const ICONS = {
   arrowRight: "arrow-right",
   arrowUp: "arrow-up",
   externalLink: "external-link",
+  expand: "maximize",
   clock: "clock",
   trash: "trash",
   upload: "upload",

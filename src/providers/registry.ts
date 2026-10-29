@@ -8,7 +8,7 @@ import { pinterestProvider } from "./pinterest";
 import { threadsProvider } from "./threads";
 import { tiktokProvider } from "./tiktok";
 import { xProvider } from "./x";
-import type { MetricKeyDeclaration, MetricShape, OAuthConnectGroup, SocialProvider } from "./types";
+import type { EngagementDeclaration, MetricKeyDeclaration, MetricShape, OAuthConnectGroup, SocialProvider } from "./types";
 
 // Adding a provider = one line here (plus its folder under src/providers/<key>/).
 export const providers: readonly SocialProvider[] = [mockProvider as SocialProvider, blueskyProvider as SocialProvider, facebookProvider as SocialProvider, instagramProvider as SocialProvider, threadsProvider as SocialProvider, xProvider as SocialProvider, tiktokProvider as SocialProvider, pinterestProvider as SocialProvider];
@@ -117,6 +117,50 @@ export function assertInsightsDeclaration(provider: Pick<SocialProvider, "key" |
   }
 }
 for (const p of providers) assertInsightsDeclaration(p);
+
+/** Throws on a malformed `engagement` declaration, so a bad provider fails at registry load (G40). */
+export function assertEngagementDeclaration(provider: {
+  key: string;
+  engagement?: { declaration: EngagementDeclaration };
+  connect?: SocialProvider["connect"];
+}): void {
+  const support = provider.engagement;
+  if (support === undefined) return;
+  const d = support.declaration;
+  const bad = (why: string) => {
+    throw new Error(`Inconsistent engagement declaration for ${provider.key}: ${why}.`);
+  };
+  if (d.reads.length === 0) bad("reads is empty; omit engagement instead");
+  if (d.unavailable) {
+    const reason = d.unavailable.reason;
+    if (reason.length < 1 || reason.length > 300) bad("unavailable.reason must be 1-300 characters");
+  }
+  if (d.unavailable && d.readScopes && d.readScopes.length > 0) {
+    bad("unavailable and readScopes must never both be set");
+  }
+  if (d.readScopes && d.readScopes.length > 0) {
+    const reason = d.missingReadScopes?.reason;
+    if (reason === undefined || reason.length < 1 || reason.length > 300) {
+      bad("readScopes is non-empty but missingReadScopes.reason is missing or not 1-300 characters");
+    }
+    for (const scope of d.readScopes) {
+      if (!GRANTED_SCOPE_PATTERN.test(scope)) bad(`readScopes entry "${scope}" does not match GRANTED_SCOPE_PATTERN`);
+    }
+    // contracts/meta-comment-surface.md §6 rule 1: a scope no dialog can ever request would make
+    // `readScopes` an unreachable claim with no error anywhere short of this check.
+    if (provider.connect?.strategy === "oauth") {
+      const group = provider.connect.group;
+      const requestable = new Set([...(group.baseScopes ?? []), ...(group.optionalScopes?.declared.map((s) => s.scope) ?? [])]);
+      for (const scope of d.readScopes) {
+        if (!requestable.has(scope)) bad(`readScopes entry "${scope}" is not in connect group "${group.key}"'s baseScopes or optionalScopes.declared`);
+      }
+    }
+  }
+  // contracts/meta-comment-surface.md §6 rule 2: a write allowance on a surface that cannot be
+  // written to is dead configuration, and the reserve it would claim is taken from publishing.
+  if (d.canReply === false && d.writeBudget) bad("canReply is false but writeBudget is set");
+}
+for (const p of providers) assertEngagementDeclaration(p);
 
 export function findProvider(key: string): SocialProvider | undefined {
   return providers.find((p) => p.key === key);

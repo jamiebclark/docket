@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ActionBar } from "@/components/ui/ActionBar";
 import { ChoiceField } from "@/components/ui/ChoiceField";
@@ -219,9 +220,9 @@ export function StandingSeriesForm(props: StandingSeriesFormProps) {
           accounts={accounts.map((a) => ({ ...a, unavailableReason: a.providerAvailable ? null : "This platform is not available." }))}
         />
         {[...new Set(needImage)].map((name) => (
-          <p key={name} role="note" className="rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning">
+          <Alert key={name} tone="warning" role="none">
             {imageWarning(name)}
-          </p>
+          </Alert>
         ))}
       </div>
 

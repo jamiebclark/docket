@@ -12,6 +12,7 @@ import {
   type SocialAccountRow,
 } from "../db/schema";
 import { crossProject } from "./scope";
+import { accountHoldsScopes, accountMissingScopes } from "./scope-predicates";
 import type { ClaimedAccount } from "./scheduler";
 
 export interface ClaimedAccountMetricPoll {
@@ -70,16 +71,9 @@ function declaredOn(rule: InsightsProviderRule, surface: "post" | "account"): bo
 function eligible(rules: readonly InsightsProviderRule[], surface: "post" | "account") {
   const withSurface = rules.filter((r) => declaredOn(r, surface));
   return or(
-    ...withSurface.map((r) => {
-      const scopes = scopesOf(r, surface);
-      return scopes.length === 0
-        ? eq(socialAccounts.providerKey, r.providerKey)
-        : and(
-            eq(socialAccounts.providerKey, r.providerKey),
-            isNotNull(socialAccounts.grantedScopes),
-            sql`${socialAccounts.grantedScopes} @> ${sql.param([...scopes])}::text[]`,
-          );
-    }),
+    ...withSurface.map((r) =>
+      and(eq(socialAccounts.providerKey, r.providerKey), accountHoldsScopes(scopesOf(r, surface))),
+    ),
   );
 }
 
@@ -372,16 +366,10 @@ export function countAccountsMissingInsightsScopes(providers: readonly InsightsP
     if (rules.length === 0) return 0;
     const conditions = [
       ...missingOn("post").map((r) =>
-        and(
-          eq(socialAccounts.providerKey, r.providerKey),
-          or(isNull(socialAccounts.grantedScopes), sql`NOT (${socialAccounts.grantedScopes} @> ${sql.param([...r.postScopes])}::text[])`),
-        ),
+        and(eq(socialAccounts.providerKey, r.providerKey), accountMissingScopes(r.postScopes)),
       ),
       ...missingOn("account").map((r) =>
-        and(
-          eq(socialAccounts.providerKey, r.providerKey),
-          or(isNull(socialAccounts.grantedScopes), sql`NOT (${socialAccounts.grantedScopes} @> ${sql.param([...r.accountScopes])}::text[])`),
-        ),
+        and(eq(socialAccounts.providerKey, r.providerKey), accountMissingScopes(r.accountScopes)),
       ),
     ];
     const [row] = await getDb()

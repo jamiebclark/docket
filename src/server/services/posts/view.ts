@@ -19,6 +19,8 @@ export interface PostViewTarget {
   id: string;
   accountId: string;
   accountName: string;
+  /** `social_accounts.provider_key`, for the platform mark. Never used to branch on behaviour. */
+  providerKey: string;
   providerName: string;
   status: TargetRecord["status"];
   scheduleKind: TargetRecord["scheduleKind"];
@@ -41,7 +43,19 @@ export interface PostViewTarget {
 /** The status line shown beside the badge while a target waits for its adapted video. */
 export const preparingVideoLabel = (providerName: string) => `Preparing video for ${providerName}`;
 
-export type PostViewMedia = { id: string; deleted: true } | { id: string; deleted: false; thumbnailUrl: string; altText: string };
+export type PostViewMedia =
+  | { id: string; deleted: true }
+  | {
+      id: string;
+      deleted: false;
+      thumbnailUrl: string;
+      /** The unresized asset, for the full-screen view. Same signing rules as the thumbnail. */
+      fullUrl: string;
+      altText: string;
+      width: number | null;
+      height: number | null;
+      kind: "image" | "video";
+    };
 
 export interface PostView {
   post: Pick<PostRecord, "id" | "baseText" | "status" | "reviewState" | "createdAt" | "updatedAt">;
@@ -73,6 +87,7 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
         id: t.id,
         accountId: t.socialAccountId,
         accountName: account?.displayName ?? "Removed account",
+        providerKey: account?.providerKey ?? "",
         providerName,
         status: t.status,
         scheduleKind: t.scheduleKind,
@@ -100,6 +115,15 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
       };
     }),
   );
+  // A post's targets are inserted in one statement, so the rows all carry one `created_at` and the
+  // repo's `created_at, id` tiebreak falls to a random UUID: the accounts came out in a different
+  // order on each load, and the performance columns with them. Order is display-only here, so the
+  // view sorts by what a reader can predict rather than changing the repo, whose order the publish
+  // path depends on.
+  targetViews.sort(
+    (a, b) => a.providerName.localeCompare(b.providerName) || a.accountName.localeCompare(b.accountName) || a.id.localeCompare(b.id),
+  );
+
   const media: PostViewMedia[] = [];
   for (const mediaId of await scope.posts.listMediaIds(id)) {
     const row = await scope.media.getIncludingDeleted(mediaId);
@@ -108,7 +132,16 @@ export async function getPostView(scope: ProjectScope, postId: string): Promise<
       continue;
     }
     const v = await getMedia(scope, mediaId);
-    media.push({ id: mediaId, deleted: false, thumbnailUrl: v.thumbnailUrl, altText: v.altText });
+    media.push({
+      id: mediaId,
+      deleted: false,
+      thumbnailUrl: v.thumbnailUrl,
+      fullUrl: v.publicUrl,
+      altText: v.altText,
+      width: v.width,
+      height: v.height,
+      kind: v.kind,
+    });
   }
   return {
     post: {

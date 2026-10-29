@@ -7,7 +7,7 @@ import { atTime } from "../../helpers/clock";
 import { closeDb } from "../../helpers/db";
 import { createVideoAsset } from "../../helpers/factories";
 import { createMediaAsset, createSlots } from "../../helpers/scheduling";
-import { blueskyVideoSetup } from "../../helpers/bluesky-video";
+import { blueskyVideoSetup, publishRequests } from "../../helpers/bluesky-video";
 
 type Setup = Awaited<ReturnType<typeof blueskyVideoSetup>>;
 let current: Setup | undefined;
@@ -70,10 +70,6 @@ describe("two videos, or a video with an image, are refused with no request to B
       expect(queued[0]).toMatchObject({ ok: false, code: "validation" });
 
       await s.repos.posts.setMedia(s.post.id, mediaIds);
-      // The scheduler's engagement-read section sweeps every active Bluesky account in the same
-      // tick, independent of this target's publish attempt; filter its traffic out before counting.
-      const publishRequests = (rs: typeof s.pds.requests) =>
-        rs.filter((r) => !new URL(r.url).pathname.includes("notification.listNotifications"));
       const before = publishRequests(s.pds.requests).length;
       await s.tick();
       const after = await forSchedulerProject(s.env.project.id).targets.get(s.target.id);

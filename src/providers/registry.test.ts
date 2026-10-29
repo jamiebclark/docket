@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { UnknownProviderError } from "./errors";
 import { assertVideoCapabilities, mediaConstraintsOf } from "./media";
 import { z } from "zod";
-import { assertCreationAllowance, assertInsightsDeclaration } from "./registry";
+import { assertCreationAllowance, assertEngagementDeclaration, assertInsightsDeclaration } from "./registry";
 import { readFileSync } from "node:fs";
 import { findConnectGroup, findProvider, getProvider, listConnectGroups, listProviders } from "./registry";
-import type { InsightsDeclaration } from "./types";
+import type { EngagementDeclaration, InsightsDeclaration, OAuthConnectGroup } from "./types";
 
 describe("provider registry", () => {
   it("finds the mock provider", () => {
@@ -210,6 +210,70 @@ describe("provider registry", () => {
       withDecl({ post: [], account: [], unavailable: { reason: "no permission" }, postScopes: ["read_insights"], missingPostScopes: { reason: "ok" } }),
     ).toThrow(/unavailable.*postScopes|postScopes.*unavailable/);
   });
+  it("accepts a well-formed engagement declaration and rejects G40 violations", () => {
+    const ok = { key: "x", engagement: { declaration: { reads: ["comment"], canReply: false } as EngagementDeclaration } };
+    expect(() => assertEngagementDeclaration(ok)).not.toThrow();
+    expect(() => assertEngagementDeclaration({ key: "x" })).not.toThrow();
+    const withDecl = (over: Partial<EngagementDeclaration>) =>
+      assertEngagementDeclaration({ ...ok, engagement: { ...ok.engagement, declaration: { ...ok.engagement.declaration, ...over } } });
+
+    expect(() => withDecl({ reads: [] })).toThrow(/reads is empty/);
+
+    expect(() => withDecl({ unavailable: { reason: "" } })).toThrow(/unavailable.reason/);
+    expect(() => withDecl({ unavailable: { reason: "x".repeat(301) } })).toThrow(/unavailable.reason/);
+    expect(() => withDecl({ unavailable: { reason: "needs a permission" } })).not.toThrow();
+
+    expect(() => withDecl({ unavailable: { reason: "needs a permission" }, readScopes: ["read_comments"] })).toThrow(
+      /unavailable and readScopes must never both be set/,
+    );
+
+    expect(() => withDecl({ readScopes: ["read_comments"] })).toThrow(/missingReadScopes/);
+    expect(() => withDecl({ readScopes: ["read_comments"], missingReadScopes: { reason: "" } })).toThrow(/missingReadScopes/);
+    expect(() => withDecl({ readScopes: ["read_comments"], missingReadScopes: { reason: "x".repeat(301) } })).toThrow(/missingReadScopes/);
+    expect(() => withDecl({ readScopes: ["read_comments"], missingReadScopes: { reason: "ok" } })).not.toThrow();
+
+    expect(() => withDecl({ readScopes: ["Not Valid!"], missingReadScopes: { reason: "ok" } })).toThrow(/readScopes entry/);
+
+    // A readScope absent from the connect group's requestable scopes fails at load (contracts/meta-comment-surface.md §6 rule 1).
+    const group: OAuthConnectGroup = {
+      key: "test-group",
+      displayName: "Test",
+      baseScopes: ["base_scope"],
+      optionalScopes: { declared: [{ scope: "optional_scope", purpose: "x" }], requested: () => [] },
+      environment: { variables: [], issues: () => [], configured: () => true },
+      authorizationUrl: () => "https://example.test",
+      exchangeCode: async () => ({ ok: false as const, message: "n/a" }),
+    };
+    const withGroup = (over: Partial<EngagementDeclaration>) =>
+      assertEngagementDeclaration({ key: "x", connect: { strategy: "oauth", group }, engagement: { declaration: { reads: ["comment"], canReply: false, ...over } } });
+
+    expect(() => withGroup({ readScopes: ["base_scope"], missingReadScopes: { reason: "ok" } })).not.toThrow();
+    expect(() => withGroup({ readScopes: ["optional_scope"], missingReadScopes: { reason: "ok" } })).not.toThrow();
+    expect(() => withGroup({ readScopes: ["unrequestable_scope"], missingReadScopes: { reason: "ok" } })).toThrow(/is not in connect group/);
+
+    // canReply: false forbids a writeBudget on the same declaration.
+    expect(() => withDecl({ canReply: false, writeBudget: { count: 1, windowSeconds: 60 } })).toThrow(/writeBudget/);
+  });
+  it("accepts the shipped threadsEngagement declaration and refuses it with readScopes or writeBudget added (FR-035)", async () => {
+    const { threadsEngagement } = await import("./threads/engagement");
+    expect(() =>
+      assertEngagementDeclaration({ key: "threads", engagement: threadsEngagement, connect: getProvider("threads").connect }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertEngagementDeclaration({
+        key: "threads",
+        engagement: { declaration: { ...threadsEngagement.declaration, readScopes: ["threads_manage_replies"] } },
+      }),
+    ).toThrow(/unavailable and readScopes must never both be set/);
+
+    expect(() =>
+      assertEngagementDeclaration({
+        key: "threads",
+        engagement: { declaration: { ...threadsEngagement.declaration, writeBudget: { count: 1, windowSeconds: 60 } } },
+      }),
+    ).toThrow(/writeBudget/);
+  });
   it("holds the connect and refresh invariants for every provider", () => {
     for (const p of listProviders()) {
       if (p.connectAccount) {
@@ -272,6 +336,7 @@ describe("provider registry", () => {
         "THREADS_GRAPH_BASE",
         "THREADS_INSIGHTS_SCOPES",
         "THREADS_INSIGHTS_USAGE_CEILING",
+        "THREADS_ENGAGEMENT_SCOPES",
       ]);
     });
     it("registers x in its own connect group", () => {

@@ -4119,3 +4119,207 @@ section does should run that section, not a whole tick:
 that way, and hunt 39195627319 shows `refresh.test.ts` gone from the report entirely after the first.
 `jobs/budget.test.ts` had been doing it this way all along. The tick wrapper is usually incidental to
 what these tests assert, and it is the part exposed to the contention.
+
+## 084 — G40, declaring an engagement read's scopes and answering `cannotWiden` per surface (2026-10-19)
+
+- **The declaration and `cannotWiden` ship as one change, not two.** They answer one question from two
+  sides: may this account's comments be read, and if not, can reconnecting fix it? Shipping the
+  eligibility gate alone would let the UI tell a member "not granted" on an install whose dialog cannot
+  be widened (a login configuration that does not list the permission), sending them round a reconnect
+  loop that cannot grant anything — the precise failure 081 was built to avoid for insights, and the
+  reason this entry's Constraint 6 insists engagement get the same treatment rather than shipping the
+  half that is easier to test.
+- **The pure decision and the SQL predicate are generalised, not duplicated, with aliases kept.**
+  `insightsPermissionFor`/`InsightsPermission` move verbatim to `scopePermissionFor`/`ScopePermission`
+  in `src/lib/scope-permission.ts`, and `eligible()`'s inline SQL in the insights claim becomes
+  `accountHoldsScopes`/`accountMissingScopes` in `src/server/dal/scope-predicates.ts`, reused by both
+  the insights and engagement claims. `src/lib/insights/eligibility.ts` keeps exporting the old names as
+  a two-line alias so no caller outside this entry has to change, and 081's test suite is the proof: it
+  passes with zero edits (Phase 5, T021).
+- **Two deployment flags, not one shared one.** `META_ENGAGEMENT_SCOPES` and `THREADS_ENGAGEMENT_SCOPES`
+  are new flags, separate from their insights twins — turning on insights scopes must not silently widen
+  the engagement dialog too, and an operator who wants comments read but not metrics captured (or the
+  reverse) needs to be able to say so. Each mirrors its insights sibling's parsing and failure shape
+  exactly, so there is one pattern to learn, not two.
+- **Reversal.** Delete `readScopes`/`missingReadScopes` from the `engagement` declaration and
+  `assertEngagementDeclaration`'s last three checks; restore `claimDueEngagementReads`'s
+  `providerKeys: readonly string[]` parameter; delete `countAccountsMissingEngagementScopes` and
+  `accountsSkippedNoPermission`; drop the `surface` argument from `cannotWiden`; delete both env flags
+  and the engagement entries from both connect groups' `declared`. Nothing persisted needs undoing —
+  the gate reads `granted_scopes`, it writes nothing new. `src/lib/scope-permission.ts` and
+  `src/server/dal/scope-predicates.ts` stay regardless: they are the insights code, relocated, and 081
+  depends on them under their aliases.
+
+## 085 — Facebook Page and Instagram comment reading, four judgement calls (2026-10-19)
+
+- **§2's "must ship declared-but-`unavailable`" verdict is overturned by research, not by assumption.**
+  Both surfaces ship readable because FR-001 to FR-005 closed the gaps that caused the verdict and
+  FR-006 then computed it mechanically from the FR-006 table, not by asserting it. The `unavailable`
+  path stays built and tested (US6), and flipping either surface back to it is one declaration field
+  (`contracts/meta-comment-surface.md` §5), not a design change. **Reversal:** set that surface's
+  declaration to `unavailable: { reason, docsPath }`; no other file changes.
+- **`pages_read_user_content` is declared, which skips every existing Facebook Page until it
+  reconnects.** The alternative — declaring only `pages_read_engagement` and hoping it also covers
+  comments other people leave — ships a reader that returns nothing, with no explanation anywhere in
+  the product. 084's gate already has a reconnect notice built for exactly this shape of gap, and that
+  notice is the better failure: a Page owner sees "Inbox needs a reconnect" rather than silence.
+  **Reversal:** drop `pages_read_user_content` from `facebookEngagement`'s declared `readScopes` and
+  from `ENGAGEMENT_SCOPES_DECLARED`; every already-connected Page reads again, minus the comments the
+  dropped scope was the only way to reach.
+- **The sweep advances its own catch-up rather than waiting for the scheduler's backfill flag**,
+  because that flag demonstrably never fires for a Meta account — nothing upstream of this entry sets
+  it for the engagement seam. The step chooser's `lastStep === "fresh"` branch is what makes the
+  catch-up start on its own. **Reversal:** delete that branch in the step chooser; the catch-up becomes
+  `direction`-driven only, which is correct but relies on the scheduler flag firing — slower, not wrong.
+- **No pacing setting was added.** FR-018's usage-signal back-off (`activeUsageBackoff`,
+  `recordUsageBackoff`) plus the scheduler's existing minimum read interval are the only budget
+  controls; a brand-new interval setting would have been a number invented for this entry rather than
+  a fact traced to anything, which Constitution I forbids. **Reversal:** none needed — there is no
+  setting to remove, only a setting that was deliberately not added.
+
+## 086 — Threads replies and mentions stay a declaration, three judgement calls (2026-10-19)
+
+- **Both surfaces unverified ⇒ no reader, and the entry itself is the declaration.** The feature
+  description's "if a research unknown can't be closed within the entry, declare `unavailable`
+  honestly rather than guessing" rule applied twice — once per Threads surface — rather than once per
+  entry, because the two surfaces (`reply`, `mention`) have independent permissions and independent
+  unconfirmed endpoints; collapsing them into one verdict would have hidden that mentions could in
+  principle ship before replies do, or vice versa, the moment either endpoint is confirmed. Shipping
+  nothing at all was rejected: the account already exists on connected installs, the engagement
+  system already claims and leases accounts on a tick, and leaving Threads undeclared would mean a
+  silent miss rather than an honest, visible `unavailable` with a reason. **Reversal:** none needed —
+  the declaration is the entry; a future entry that confirms either endpoint edits
+  `threadsEngagement.declaration` to add `readScopes` for that surface.
+- **`docsHref`, and a shipped broken link fixed in passing.** FR-003's notice link could not be
+  delivered without a function that turns a declared `docsPath` into a real URL — the two existing
+  render sites (`TargetMetrics.tsx`, `PerformancePanel.tsx`) were already casting `docsPath as
+  DocPage` and calling `docsUrl` directly, which breaks the moment a `docsPath` carries an anchor or
+  names a page `docsUrl` does not recognize; both call sites have been wrong since 085. Fixing the
+  cast at its two live sites alongside adding `docsHref` means no `as DocPage` cast survives anywhere
+  in the tree, not just at this entry's two new call sites. **Reversal:** delete `docsHref` from
+  `src/lib/docs.ts` and restore the `as DocPage` cast at all four render sites — not recommended, it
+  reintroduces the shipped defect.
+- **`countAccountsOnUnavailableEngagement` is a count query, not a `processAccount` side effect.**
+  FR-016 needs `counts.unavailable` to include Threads accounts, but computing that count inside
+  `processAccount` would mean claiming, leasing and decrypting the account first — exactly what
+  FR-010 forbids for an account whose engagement is declared `unavailable`. A standalone count query
+  mirroring `countAccountsMissingEngagementScopes`'s predicate shape gets the number into the tick's
+  report with no claim, lease or decrypt anywhere in its path. **Reversal:** delete the function and
+  its call in `src/server/scheduler/engagement-read.ts`; `counts.unavailable` undercounts by the
+  number of Threads accounts, which is wrong but not unsafe.
+## Notification emails: what happened, not how many problems (2026-10-21)
+
+An email arrived titled "Docket: 1 problem", body referring to Stencilvania. It was not a problem:
+somebody had left a comment on a post, and it was sitting in the Inbox. The message was four lines
+long, had no link, and the subject named neither the project nor what had occurred. Four separate
+causes, each fixed:
+
+1. **The subject counted everything as a "problem".** `renderProblemEmail` summed every attention
+   outcome under that one word, though `PROBLEM_OUTCOMES` deliberately excludes `engagement` —
+   077's own contract says "a new comment is not a problem". Subjects now count per outcome through
+   `OUTCOME_COUNT_NOUN` and lead with the project: "Stencilvania: 1 new inbox message". Reverse by
+   restoring the single total in `src/lib/email/problem-email.ts`.
+
+2. **Engagement rows led nowhere.** `activityLink` returned `null` for any row without a
+   `post_target_id`, and an engagement row never has one — it was the only attention row with no
+   destination, in the email *and* in the in-app Activity feed. It now opens the Inbox filtered to
+   the receiving account, and assembly falls back to the project's Activity screen, so no mailed row
+   can be linkless. FR-011 asked for a link all along.
+
+3. **"1 new item" named no kind.** The engagement reader wrote a bare count. It now counts by kind
+   ("1 new comment", "2 new comments and 1 mention") via `src/lib/engagement/kinds.ts`.
+
+4. **No layout.** The HTML was an unstyled `h2`/`ul`/`li`. It is now an inline-styled 600px table on
+   the design-system tokens, with a card and an action button per row. Still no images, no remote
+   content and no stylesheet, and every tone colour sits beside words carrying the same meaning, so
+   FR-014 holds.
+
+**`OUTCOME_LABEL.engagement`: "New replies" → "New in Inbox".** 077 pinned "New replies", but that
+is the badge for a class that also holds comments, mentions and DMs, and it renders directly above a
+message naming the actual kind. The first fix was a separate heading used only by the email, which
+left the in-app badge still saying "New replies" over "1 new comment"; the label itself was the bug,
+so it is now correct everywhere and that workaround is gone. The label also feeds the Activity
+outcome filter, the `OutcomeIcon` title and screen-reader text, the notifications panel and the
+per-kind notification switch — all read correctly with the new wording. `OUTCOME_TONE` is unchanged
+and `PROBLEM_OUTCOMES` still excludes `engagement`. `specs/077-engagement-inbox/contracts/vocabulary.md`
+§2 and `data-model.md` carry the amendment; `tasks.md` keeps the original as the record of what T018
+did, annotated. Reverse by setting the label back and re-adding an email-only heading.
+
+Pinned by `src/lib/activity/outcomes.test.ts`, which fails if the engagement label or count noun
+ever says "repl" again.
+
+## The image build fetched pnpm three times, not once (2026-10-22)
+
+The `docker` job failed four times on #191 with `Could not reach
+https://registry.npmjs.org/@pnpm/exe.linux-x64/12.6.0: timed out after 30s`, while every other
+check passed. Nothing in that PR touched a dependency, the Dockerfile, or the build config — the
+npm registry was degraded (measured from a workstation at the time: one success in six attempts,
+the rest timing out at ten seconds). The branch was not the problem, but the build's exposure to
+the registry was, and the failure point moved between Docker stages from run to run.
+
+The `base` stage already intended to prevent this; its comment read "pnpm is fetched once here so
+later stages never hit the network for it". That was untrue, and nothing checked it. `corepack
+install` caches the pnpm **npm package**, but pnpm 12 fetches a separate **native binary**
+(`@pnpm/exe.<platform>`) the first time it actually runs, landing it at
+`$COREPACK_HOME/v1/pnpm/<version>/pnpm-native`. `corepack install` never triggers that, so `deps`
+and `build` each fetched it themselves: three registry round-trips for pnpm per build, each on a
+30 s fuse, any one of which could fail an otherwise sound image.
+
+`base` now runs `pnpm --version` once after `corepack install`, which materialises the native
+binary into that layer for every later stage. Two details that are easy to get wrong, and were:
+
+- **It needs a `package.json` in scope.** The first attempt warmed from `/tmp`, where pnpm sees no
+  `packageManager` field, resolves the *latest* release (12.14.0 at the time) and caches a binary
+  no later stage wants — turning three fetches into four. It now warms against a throwaway copy of
+  the project's own `package.json`.
+- **pnpm drops a lockfile beside whatever `package.json` it finds.** Hence the throwaway copy in
+  `/warm`, removed in the same layer, rather than warming in `/app`.
+
+Measured on a `--no-cache` build: three `Downloading the pnpm` lines before, one after, in `base`.
+`docker run --network none` then resolves `pnpm --version` to 12.6.0 inside the image, which is the
+property actually wanted — `deps` and `build` still reach the registry for *packages*, as they must,
+but no longer for pnpm itself.
+
+Reverse by dropping the warm-up run from the `base` stage. `tests/lint/dockerfile-pnpm.test.ts`
+pins it: pnpm runs in `base`, with a `package.json` in scope, the warm-up directory is cleaned up,
+and no later stage re-provisions pnpm. The guard was checked against the original Dockerfile and
+fails on it.
+
+## Threads insights, shape (b) → shape (a) (2026-10-27)
+
+081 shipped `src/providers/threads/insights.ts` as contract shape (b): `post: []`, `account: []` and
+`unavailable: { reason: "Docket has not confirmed which metrics the Threads insights API reports." }`.
+That was correct at the time — FR-003 forbids declaring a metric the research has not CONFIRMED, and
+the enum was then corroborated only by third-party guides.
+
+**The research caught up and the provider did not.** T099's live check confirmed the media-insights
+enum from Meta's own page and wrote it into `docs/research/meta.md`, but the "upgrade shape (b) to
+shape (a)" half of that task never landed. The task was ticked, so nothing flagged it again, and the
+placeholder reason went on rendering on every published Threads post's performance panel — a
+sentence about Docket's own research state, shown to someone who wanted a number. It is now a real
+reader.
+
+- **Both "in development" metrics are declared.** Meta marks `views` and `shares` that way. They are
+  still part of the documented enum, so Graph does not reject the request; they may just not come
+  back, and an absent key renders no row at all, never a zero (FR-035). Dropping them would instead
+  guarantee no row forever, which is the worse failure.
+- **Three keys are prefixed; the request is not.** `views`, `likes` and `shares` are Instagram's
+  field names too, and `tests/integration/insights/provider-seam.test.ts` requires declared keys to
+  be disjoint across providers — the thing that keeps a shared mapping table from growing between
+  two platforms that use one word for two different events. They store as `threads_views`,
+  `threads_likes`, `threads_shares`; `replies`, `reposts` and `quotes` collide with nothing and keep
+  Threads' own word. Prefixing only the colliders follows TikTok's `tiktok_like_count` precedent.
+  The raw names go out on the wire, and a test asserts the request carries no `threads_` key.
+- **The account surface stays undeclared.** Threads' *profile* edge exposes `follower_count` and
+  some 7-day counters, but those are profile fields rather than `user_insights` metrics, and
+  declaring a profile field as an insights metric key would be a category error (research R4). With
+  `account: []` the poller never claims that surface, so `readAccountMetrics` is unreachable; it
+  returns an honest `unavailable` rather than throwing, so a later caller cannot read silence as a
+  zero. `docs/research/meta.md` records a confirmed `user_insights` enum, so this is a live
+  opportunity, not a dead end — it is simply not this change.
+- **Anyone who already granted the permission needs no reconnect**, which is exactly what shape (b)
+  was designed to preserve: `threads_manage_insights` was requested and recorded all along. An
+  account that did *not* grant it now gets `needs_reconnect` with a reason naming the permission —
+  a state someone can act on, which the old sentence was not.
+
+Reverse by restoring the `unavailable` declaration; nothing outside the provider folder changed.

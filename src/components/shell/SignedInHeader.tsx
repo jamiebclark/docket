@@ -8,8 +8,9 @@ import * as invitations from "@/server/services/invitations";
 
 /**
  * The signed-in header shared by the project shell and the pages outside it: the Docket mark (home),
- * invitations link with its pending count, and the user menu with sign-out. `left` holds anything
- * shell-specific (the project switcher).
+ * invitations link with its pending count, the notification bell, and the user menu — which holds
+ * the account, all-activity and sign-out items rather than spending a header control on each.
+ * `left` holds anything shell-specific (the project switcher).
  */
 export async function SignedInHeader({
   user,
@@ -37,7 +38,7 @@ export async function SignedInHeader({
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <InvitationBadge count={pending} />
         <NotificationBell />
-        <UserMenu name={user.name} signOut={signOut} />
+        <UserMenu name={user.name} email={user.email} signOut={signOut} />
       </div>
     </header>
   );

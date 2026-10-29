@@ -173,10 +173,125 @@ describe("token refresh", () => {
     // either not claimed (its provider missing from `listProviders()` at tick time, so its key is not
     // in the claim's `providerKeys`) or handed back as `outOfBudget`, which this section does silently
     // whenever `now + providerTimeoutMs > deadline`. But `status` flipping to "needs_reauth" means the
-    // catch path fired and the refresh threw. Measured at 1-2 of 20 repetitions across three hunts,
+    // provider refused the refresh outright - a throw no longer gets here, it is held as transient.
+    // Measured at 1-2 of 20 repetitions across three hunts,
     // and it has blocked three unrelated PRs, so the counts and the row both go in the message.
     const row = await repos.accounts.get(account.id);
     const seen = `tokenRefresh ${JSON.stringify(counts)}; row displayName=${row?.displayName} status=${row?.status} lastError=${row?.lastError ?? "null"} lastRefreshedAt=${row?.lastRefreshedAt?.toISOString() ?? "null"}`;
     expect(row, seen).toMatchObject({ displayName: "new.handle", status: "active" });
+  });
+});
+
+/**
+ * A provider that can rebuild a session from what is already stored — Bluesky with a saved app
+ * password is the real one. Its flagged accounts are claimed, so `needs_reauth` is recoverable.
+ */
+const recovering = new Map<string, RefreshResult>();
+registerTestProvider({
+  ...blueskyLikeProvider,
+  key: "scripted-recovering-refresh",
+  displayName: "Scripted (recovering)",
+  canReauthenticate: true,
+  refreshCredentials: async ({ account }) =>
+    recovering.get(account.id) ?? { ok: true, credentials: { token: "fresh" }, expiresAt: new Date(Date.now() + 30 * 86_400_000) },
+} as SocialProvider);
+
+/** An account already flagged `needs_reauth`, with credentials whose expiry is nowhere near due. */
+async function flagged(projectId: string, providerKey: string) {
+  const far = new Date(Date.now() + 45 * 86_400_000);
+  const account = await createMockAccount(projectId, {}, { providerKey, credentialsExpiresAt: far });
+  const repos = forSchedulerProject(projectId);
+  const ciphertext = encryptCredentials(account.id, { token: "stored-secret-token" });
+  await repos.accounts.setCredentials(account.id, ciphertext, far);
+  await repos.accounts.markCredentialsInvalid(account.id, {
+    expectedCiphertext: ciphertext,
+    reason: "Bluesky refused to renew the session.",
+  });
+  expect((await repos.accounts.get(account.id))!.status).toBe("needs_reauth");
+  return { account, repos };
+}
+
+/**
+ * The bug these cover: `needs_reauth` was a one-way door. `claimRefreshAccounts` took only `active`
+ * rows, so nothing called `refreshCredentials` again, and publishing refused every target at claim
+ * time with "The account is no longer available for publishing" and zero attempts. A stored Bluesky
+ * app password could not help, because nothing ever asked it to — only a human reconnect cleared
+ * the flag. That is why the same account kept dying after each manual reconnect.
+ */
+describe("recovering a flagged account from stored credentials", () => {
+  it("claims a needs_reauth account, clears the flag, and counts it recovered", async () => {
+    const { project } = await createProjectWithMembers();
+    const { account, repos } = await flagged(project.id, "scripted-recovering-refresh");
+
+    const counts = await refreshOnly({ refreshMaxAccounts: 1000 });
+    expect(counts.recovered, `tokenRefresh ${JSON.stringify(counts)}`).toBeGreaterThanOrEqual(1);
+    const after = await repos.accounts.get(account.id);
+    expect(after, `tokenRefresh ${JSON.stringify(counts)}`).toMatchObject({ status: "active", lastError: null });
+    expect(after!.lastRefreshedAt).not.toBeNull();
+    const creds = decryptCredentials(account.id, await repos.accounts.getCredentialsCiphertext(account.id)) as { token: string };
+    expect(creds.token).toBe("fresh");
+  });
+
+  it("publishes again on the next tick, with no human reconnect in between", async () => {
+    const { project } = await createProjectWithMembers();
+    const { account, repos } = await flagged(project.id, "scripted-recovering-refresh");
+    await refreshOnly({ refreshMaxAccounts: 1000 });
+    expect((await repos.accounts.get(account.id))!.status).toBe("active");
+
+    const { target } = await createDueTarget(project.id, account.id);
+    await runTick({ config: { timeBudgetMs: TICK_BUDGET_MS } });
+    const attempts = await repos.attempts.listForTarget(target.id);
+    expect(attempts.map((a) => a.outcome)).not.toContain("account_unavailable");
+  });
+
+  it("leaves the flag alone, and parks the account, when the stored credentials are refused too", async () => {
+    const { project } = await createProjectWithMembers();
+    const { account, repos } = await flagged(project.id, "scripted-recovering-refresh");
+    recovering.set(account.id, { ok: false, reason: "The app password no longer works." });
+    try {
+      const counts = await refreshOnly({ refreshMaxAccounts: 1000 });
+      expect(counts.failed, `tokenRefresh ${JSON.stringify(counts)}`).toBeGreaterThanOrEqual(1);
+      const after = await repos.accounts.get(account.id);
+      expect(after).toMatchObject({ status: "needs_reauth", lastError: "The app password no longer works." });
+      expect(after!.lastError).not.toContain("stored-secret-token");
+
+      // Parked, so a dead password is retried on a cadence instead of once per tick. Asserted on
+      // the row rather than on `claimed`, which counts every account on this worker's database.
+      const parked = await repos.accounts.get(account.id);
+      expect(parked!.refreshLeaseUntil!.getTime()).toBeGreaterThan(Date.now() + 10 * 60_000);
+    } finally {
+      recovering.delete(account.id);
+    }
+  });
+
+  it("does not claim a flagged account whose provider cannot re-authenticate", async () => {
+    const { project } = await createProjectWithMembers();
+    const { account, repos } = await flagged(project.id, "scripted-scheduled-refresh");
+    const counts = await refreshOnly({ refreshMaxAccounts: 1000 });
+    const after = await repos.accounts.get(account.id);
+    expect(after!.status, `tokenRefresh ${JSON.stringify(counts)}`).toBe("needs_reauth");
+    expect(after!.lastRefreshedAt).toBeNull();
+  });
+
+  /**
+   * The interaction between this recovery and disabling. Recovery deliberately claims `needs_reauth`
+   * rows, which is exactly the state a broken-and-switched-off account is in underneath. Re-signing it
+   * in behind the member's back would undo the disable in the one way that matters — the account would
+   * go back to publishing — so the claim's `disabled_at IS NULL` guard has to hold here too.
+   */
+  it("leaves a flagged account alone while it is disabled, and recovers it once enabled", async () => {
+    const { project } = await createProjectWithMembers();
+    const { account, repos } = await flagged(project.id, "scripted-recovering-refresh");
+    await repos.accounts.setDisabled(account.id, new Date());
+
+    const counts = await refreshOnly({ refreshMaxAccounts: 1000 });
+    const off = await repos.accounts.get(account.id);
+    expect(off!.status, `tokenRefresh ${JSON.stringify(counts)}`).toBe("disabled");
+    expect(off!.authStatus).toBe("needs_reauth");
+    expect(off!.lastRefreshedAt).toBeNull();
+
+    await repos.accounts.setDisabled(account.id, null);
+    await refreshOnly({ refreshMaxAccounts: 1000 });
+    expect((await repos.accounts.get(account.id))!.status).toBe("active");
   });
 });

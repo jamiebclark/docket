@@ -54,7 +54,7 @@ function What({ run }: { run: AttemptRun }) {
  * redacted request and response. Consecutive identical attempts are one row, expandable to the
  * individual tries. Shared by the failures view (inside a row's `<details>`) and the post page.
  */
-export function AttemptLog({ runs, timeZone, caption }: { runs: AttemptRun[]; timeZone: string; caption: string }) {
+export function AttemptLog({ runs, timeZone, caption }: { runs: readonly AttemptRun[]; timeZone: string; caption: string }) {
   return (
     <table className="w-full border-collapse text-left text-xs">
       <caption className="sr-only">{caption}</caption>
@@ -118,7 +118,7 @@ export function AttemptLog({ runs, timeZone, caption }: { runs: AttemptRun[]; ti
 }
 
 /** The failures view's collapsed version: a `<details>` whose summary counts the entries. */
-export function AttemptLogDetails({ runs, timeZone, caption }: { runs: AttemptRun[]; timeZone: string; caption: string }) {
+export function AttemptLogDetails({ runs, timeZone, caption }: { runs: readonly AttemptRun[]; timeZone: string; caption: string }) {
   const entries = runs.reduce((n, r) => n + r.count, 0);
   return (
     <details>
