@@ -10,6 +10,7 @@ import {
 function skips(partial: Partial<SkipCounts> = {}): SkipCounts {
   return {
     account_removed: 0,
+    account_disabled: 0,
     needs_reconnecting: 0,
     provider_unavailable: 0,
     no_longer_failed: 0,
@@ -64,11 +65,12 @@ describe("retryAllMessage", () => {
         no_longer_failed: 1,
         provider_unavailable: 1,
         needs_reconnecting: 1,
+        account_disabled: 1,
         account_removed: 1,
       }),
     });
     expect(message).toBe(
-      "1 post will be retried. Skipped 6: 1 on a removed account, 1 needs reconnecting, 1 with an unavailable provider, 1 no longer failed, 1 can't be published as is, 1 no free slot.",
+      "1 post will be retried. Skipped 7: 1 on a removed account, 1 on a disabled account, 1 needs reconnecting, 1 with an unavailable provider, 1 no longer failed, 1 can't be published as is, 1 no free slot.",
     );
   });
 });
@@ -76,6 +78,7 @@ describe("retryAllMessage", () => {
 describe("skipPhrase", () => {
   const table: Record<RetryAllSkipReason, [string, string]> = {
     account_removed: ["1 on a removed account", "3 on removed accounts"],
+    account_disabled: ["1 on a disabled account", "3 on disabled accounts"],
     needs_reconnecting: ["1 needs reconnecting", "3 need reconnecting"],
     provider_unavailable: ["1 with an unavailable provider", "3 with an unavailable provider"],
     no_longer_failed: ["1 no longer failed", "3 no longer failed"],

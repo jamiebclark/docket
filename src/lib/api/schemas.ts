@@ -27,7 +27,9 @@ export const AccountSchema = z
     id: z.uuid(),
     provider: z.string(),
     displayName: z.string(),
-    status: z.enum(["active", "needs_reauth"]),
+    status: z
+      .enum(["active", "needs_reauth", "disabled"])
+      .meta({ description: "\"disabled\" means a member switched the account off; it publishes nothing until enabled." }),
     lastError: z.string().nullable(),
     postingInstructions: z
       .string()
@@ -316,6 +318,7 @@ export const RetryFailedTargetsRequestSchema = z
 
 const skippedCounts = z.object({
   account_removed: z.number().int(),
+  account_disabled: z.number().int(),
   needs_reconnecting: z.number().int(),
   provider_unavailable: z.number().int(),
   no_longer_failed: z.number().int(),

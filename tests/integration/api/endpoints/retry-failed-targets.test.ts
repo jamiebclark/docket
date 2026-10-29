@@ -15,7 +15,7 @@ afterAll(closeDb);
 type Env = Awaited<ReturnType<typeof failedTarget>>["env"];
 
 const PATH = "/targets/retry-failed";
-const SKIP_KEYS = ["account_removed", "cannot_publish", "needs_reconnecting", "no_free_slot", "no_longer_failed", "provider_unavailable"];
+const SKIP_KEYS = ["account_disabled", "account_removed", "cannot_publish", "needs_reconnecting", "no_free_slot", "no_longer_failed", "provider_unavailable"];
 const hour = (h: number) => new Date(`2026-10-05T${String(h).padStart(2, "0")}:00:00Z`);
 
 async function failedAt(env: Env, accountId: string, at: Date, text: string) {
@@ -33,7 +33,7 @@ async function setup() {
 }
 
 describe("POST /targets/retry-failed", () => {
-  it("retries everything and the counts add up, with all six skip keys", async () => {
+  it("retries everything and the counts add up, with all seven skip keys", async () => {
     const f = await setup();
     const other = await f.env.account({ behaviour: "fatal" });
     await failedAt(f.env, other.id, hour(8), "Other");

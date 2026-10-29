@@ -108,7 +108,7 @@ export async function getOverview(scope: ProjectScope): Promise<OverviewFacts> {
     providerKey: a.providerKey,
     providerName: a.providerName,
     displayName: a.displayName,
-    status: a.status === "needs_reauth" ? "needs_reauth" : "active",
+    status: a.status,
     providerAvailable: a.providerAvailable,
     credentialsExpireAt: a.credentialsExpireAt,
     slots: { active: slotCounts.get(a.id)?.active ?? 0, paused: slotCounts.get(a.id)?.paused ?? 0 },

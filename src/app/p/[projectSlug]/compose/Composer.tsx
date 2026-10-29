@@ -80,6 +80,7 @@ const DEBOUNCE_MS = 200;
 /** Why an account can't be picked, or `null` when it can. */
 function unavailableReason(a: AccountOption): string | null {
   if (!a.providerAvailable) return "This platform is not available.";
+  if (a.status === "disabled") return "Disabled. Enable it on Accounts to post here.";
   if (a.status === "needs_reauth") return "Needs reconnecting.";
   return null;
 }

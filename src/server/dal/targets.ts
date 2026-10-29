@@ -97,6 +97,12 @@ export interface TargetsRepo {
   listOpenForAccount(accountId: string): Promise<TargetRecord[]>;
   /** The target of this account whose own publish `external_id` matches — engagement ingest's parent resolution. */
   getByExternalId(accountId: string, externalId: string): Promise<TargetRecord | null>;
+  /**
+   * Brings the account's scheduled targets forward to `now` when the publishing section pushed them past
+   * it — what enabling a disabled account does. Only `scheduled` rows with no live lease, and only ones
+   * already overdue, so a genuinely future schedule keeps its time. Returns how many moved.
+   */
+  makeDueForAccount(accountId: string, now: Date): Promise<number>;
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -323,6 +329,25 @@ export function createTargetsRepo(db: Database, projectId: string): TargetsRepo 
           ),
         )
         .orderBy(asc(postTargets.id));
+    },
+    async makeDueForAccount(accountId, now) {
+      const rows = await db
+        .update(postTargets)
+        .set({ nextAttemptAt: now })
+        .where(
+          and(
+            eq(postTargets.projectId, projectId),
+            eq(postTargets.socialAccountId, accountId),
+            eq(postTargets.status, "scheduled"),
+            isNull(postTargets.leaseUntil),
+            // Overdue only: the hold pushed `next_attempt_at` out, and a target whose turn has not come
+            // round yet must keep it.
+            lte(postTargets.scheduledAt, now),
+            gt(postTargets.nextAttemptAt, now),
+          ),
+        )
+        .returning({ id: postTargets.id });
+      return rows.length;
     },
     async getByExternalId(accountId, externalId) {
       const [row] = await db

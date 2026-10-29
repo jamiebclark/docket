@@ -46,8 +46,9 @@ export type RetryResult =
 export function retryBlockedKey(
   account: AccountRecord | null,
   providerRegistered: boolean,
-): "account_removed" | "needs_reconnecting" | "provider_unavailable" | null {
+): "account_removed" | "account_disabled" | "needs_reconnecting" | "provider_unavailable" | null {
   if (!account) return "account_removed";
+  if (account.status === "disabled") return "account_disabled";
   if (account.status !== "active") return "needs_reconnecting";
   if (!providerRegistered) return "provider_unavailable";
   return null;
@@ -58,6 +59,8 @@ export function retryBlockedReason(account: AccountRecord | null, providerRegist
   switch (retryBlockedKey(account, providerRegistered)) {
     case "account_removed":
       return "This account was removed, so the post can't be retried.";
+    case "account_disabled":
+      return `${account!.displayName} is disabled, so this post can't be retried. Enable it first.`;
     case "needs_reconnecting":
       return `${account!.displayName} needs to be reconnected before this post can be retried.`;
     case "provider_unavailable":

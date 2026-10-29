@@ -22,6 +22,8 @@ export const membershipAction = pgEnum("membership_action", [
   "webhook_enable",
   "webhook_disable",
   "account_posting_instructions_update",
+  "account_disable",
+  "account_enable",
   "llm_credential_update",
   "project_brand_update",
   "standing_series_create",

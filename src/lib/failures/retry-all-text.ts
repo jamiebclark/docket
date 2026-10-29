@@ -1,5 +1,6 @@
 export type RetryAllSkipReason =
   | "account_removed"
+  | "account_disabled"
   | "needs_reconnecting"
   | "provider_unavailable"
   | "no_longer_failed"
@@ -11,6 +12,7 @@ export type SkipCounts = Record<RetryAllSkipReason, number>;
 /** Display order for skip reasons (research D3). */
 export const SKIP_REASONS: readonly RetryAllSkipReason[] = [
   "account_removed",
+  "account_disabled",
   "needs_reconnecting",
   "provider_unavailable",
   "no_longer_failed",
@@ -24,6 +26,7 @@ export const SKIP_PHRASES: Record<
   { one: string; many: (n: number) => string }
 > = {
   account_removed: { one: "1 on a removed account", many: (n) => `${n} on removed accounts` },
+  account_disabled: { one: "1 on a disabled account", many: (n) => `${n} on disabled accounts` },
   needs_reconnecting: { one: "1 needs reconnecting", many: (n) => `${n} need reconnecting` },
   provider_unavailable: {
     one: "1 with an unavailable provider",

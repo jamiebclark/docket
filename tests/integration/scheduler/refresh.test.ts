@@ -272,4 +272,26 @@ describe("recovering a flagged account from stored credentials", () => {
     expect(after!.status, `tokenRefresh ${JSON.stringify(counts)}`).toBe("needs_reauth");
     expect(after!.lastRefreshedAt).toBeNull();
   });
+
+  /**
+   * The interaction between this recovery and disabling. Recovery deliberately claims `needs_reauth`
+   * rows, which is exactly the state a broken-and-switched-off account is in underneath. Re-signing it
+   * in behind the member's back would undo the disable in the one way that matters — the account would
+   * go back to publishing — so the claim's `disabled_at IS NULL` guard has to hold here too.
+   */
+  it("leaves a flagged account alone while it is disabled, and recovers it once enabled", async () => {
+    const { project } = await createProjectWithMembers();
+    const { account, repos } = await flagged(project.id, "scripted-recovering-refresh");
+    await repos.accounts.setDisabled(account.id, new Date());
+
+    const counts = await refreshOnly({ refreshMaxAccounts: 1000 });
+    const off = await repos.accounts.get(account.id);
+    expect(off!.status, `tokenRefresh ${JSON.stringify(counts)}`).toBe("disabled");
+    expect(off!.authStatus).toBe("needs_reauth");
+    expect(off!.lastRefreshedAt).toBeNull();
+
+    await repos.accounts.setDisabled(account.id, null);
+    await refreshOnly({ refreshMaxAccounts: 1000 });
+    expect((await repos.accounts.get(account.id))!.status).toBe("active");
+  });
 });

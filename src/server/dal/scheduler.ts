@@ -297,6 +297,10 @@ export function claimRefreshAccounts(opts: ClaimRefreshOptions): Promise<Claimed
         .from(socialAccounts)
         .where(
           and(
+            // Main moved the `active` filter into the `or` below, so this claim can also pick up a
+            // `needs_reauth` row for a provider that can re-authenticate. A disabled account belongs in
+            // neither branch, so the guard stays at the top level.
+            isNull(socialAccounts.disabledAt),
             isNull(socialAccounts.removedAt),
             isNotNull(socialAccounts.credentialsEncrypted),
             or(isNull(socialAccounts.refreshLeaseUntil), lte(socialAccounts.refreshLeaseUntil, opts.now)),

@@ -39,6 +39,14 @@ export interface PublishingCounts {
   released: number;
   waitingForVideo: number;
   /**
+   * Due targets left scheduled because their account is switched off.
+   *
+   * Not `deferred` (a publish limit, which clears itself) and emphatically not `failed`: a member
+   * disabled the account on purpose, and failing their queue would be the opposite of what they asked
+   * for. The target keeps its `scheduled` status and its times; enabling the account makes it due again.
+   */
+  heldDisabled: number;
+  /**
    * Due targets passed over because another session held the account's row lock.
    *
    * The publishing claim takes `social_accounts` `FOR NO KEY UPDATE ... SKIP LOCKED` while
@@ -63,12 +71,15 @@ export const emptyPublishingCounts = (): PublishingCounts => ({
   staleResults: 0,
   released: 0,
   waitingForVideo: 0,
+  heldDisabled: 0,
   accountLocked: 0,
 });
 
 /** How long a due target waits for its adapted video before it fails (P13). */
 const VIDEO_WAIT_LIMIT_MS = 2 * 60 * 60 * 1000;
 const VIDEO_WAIT_RETRY_MS = 60_000;
+/** How long a held target waits before the claim looks at its account again. Enabling resets it, so this is only the ceiling. */
+const DISABLED_HOLD_RETRY_MS = 15 * 60 * 1000;
 const VIDEO_WORKER_FRESH_MS = 10 * 60 * 1000;
 
 const UNLEASED = { leaseOwner: null, leaseUntil: null, inFlightStep: null, inFlightMayPublish: null } as const;
@@ -179,6 +190,12 @@ export async function runPublishing(opts: {
           ]);
         };
 
+        // Switched off by a member: hold, do not settle. A step already in flight is let finish instead,
+        // because abandoning one mid-sequence would leave a half-published thread behind.
+        if (account.disabledAt !== null && account.removedAt === null && target.stepState === null) {
+          counts.heldDisabled++;
+          return { patch: { ...UNLEASED, ...patch, nextAttemptAt: new Date(now.getTime() + DISABLED_HOLD_RETRY_MS) } };
+        }
         if (account.removedAt !== null || account.status !== "active" || !provider) {
           return refuse({
             lastError: "The account is no longer available for publishing.",

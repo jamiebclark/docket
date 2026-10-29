@@ -17,6 +17,7 @@ const STATUSES: Record<string, { label: string; tone: Tone }> = {
   needs_decision: { label: "Needs your decision", tone: "warning" },
   active: { label: "Connected", tone: "success" },
   needs_reauth: { label: "Needs reconnecting", tone: "danger" },
+  disabled: { label: "Disabled", tone: "neutral" },
   queued: { label: "Queued", tone: "neutral" },
   running: { label: "Running", tone: "info" },
   done: { label: "Done", tone: "success" },

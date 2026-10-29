@@ -55,6 +55,7 @@ function AccountCell({ row }: { row: FailureRow }) {
       {row.account.providerName ? <Sub>{row.account.providerName}</Sub> : null}
       {row.account.status === "removed" ? <Badge tone="danger">Removed account</Badge> : null}
       {row.account.status === "needs_reauth" ? <Badge tone="warning">Reconnect needed</Badge> : null}
+      {row.account.status === "disabled" ? <Badge tone="neutral">Disabled</Badge> : null}
     </>
   );
 }
