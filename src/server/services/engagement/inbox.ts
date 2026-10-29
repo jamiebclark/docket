@@ -13,6 +13,8 @@ export interface InboxParent {
   kind: "docket_post" | "external_reference";
   text: string | null;
   externalId: string | null;
+  /** Where the post lives on the platform, when Docket recorded it at publish time (G41). */
+  url: string | null;
 }
 
 export interface ReplyableVerdict {
@@ -69,6 +71,11 @@ export interface InboxItemView {
   kind: EngagementItemRow["kind"];
   state: EngagementItemRow["state"];
   externalId: string;
+  /**
+   * G41. Where the item itself lives on the platform, when the provider can state it; `null` when
+   * it cannot, and the surface offers `parent.url` instead.
+   */
+  url: string | null;
   text: string;
   textTruncated: boolean;
   author: {
@@ -90,10 +97,15 @@ export interface InboxItemView {
 
 async function resolveParent(scope: ProjectScope, item: EngagementItemRow): Promise<InboxParent | null> {
   if (item.parentPostTargetId) {
-    const content = await scope.targets.effectiveContent(item.parentPostTargetId);
-    if (content) return { kind: "docket_post", text: content.text, externalId: null };
+    const [content, target] = await Promise.all([
+      scope.targets.effectiveContent(item.parentPostTargetId),
+      scope.targets.get(item.parentPostTargetId),
+    ]);
+    // The address Docket recorded when it published. It is the fallback for every platform whose
+    // own comment URLs are not a confirmed fact, which today is all of the Meta surfaces (G41).
+    if (content) return { kind: "docket_post", text: content.text, externalId: null, url: target?.externalUrl ?? null };
   }
-  if (item.parentExternalId) return { kind: "external_reference", text: null, externalId: item.parentExternalId };
+  if (item.parentExternalId) return { kind: "external_reference", text: null, externalId: item.parentExternalId, url: null };
   return null;
 }
 
@@ -128,6 +140,10 @@ async function toView(scope: ProjectScope, item: EngagementItemRow): Promise<Inb
     kind: item.kind,
     state: item.state,
     externalId: item.externalId,
+    url: findProvider(item.providerKey)?.engagement?.declaration.itemUrl?.({
+      externalId: item.externalId,
+      authorHandle: item.authorHandle,
+    }) ?? null,
     text: item.text,
     textTruncated: item.textTruncated,
     author: {

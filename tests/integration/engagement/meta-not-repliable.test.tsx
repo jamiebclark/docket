@@ -60,7 +60,9 @@ describe.each(["facebook", "instagram"] as const)(
       // The reason is the platform-limit sentence, not an account or item problem.
       expect(item.replyable).toEqual({ ok: false, reason: "This platform cannot be replied to through Docket." });
       // Which post it belongs to is still resolved.
-      expect(item.parent).toEqual({ kind: "external_reference", text: null, externalId: `ext-post-${providerKey}` });
+      // `url` is null for an external reference: Docket did not publish it, so it never recorded
+      // an address for it (G41).
+      expect(item.parent).toEqual({ kind: "external_reference", text: null, externalId: `ext-post-${providerKey}`, url: null });
 
       const markup = renderToStaticMarkup(
         createElement(ReplyPanel, {

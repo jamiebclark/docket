@@ -135,3 +135,33 @@ describe("bluesky engagement.send()", () => {
     expect(result.kind).toBe("ambiguous");
   });
 });
+
+describe("itemUrl (G41)", () => {
+  const itemUrl = blueskyEngagement.declaration.itemUrl!;
+  const uri = "at://did:plc:abc123/app.bsky.feed.post/3kxyz";
+
+  it("addresses a reply the way the rest of this provider addresses a post", () => {
+    expect(itemUrl({ externalId: uri, authorHandle: "someone.bsky.social" })).toBe(
+      "https://bsky.app/profile/someone.bsky.social/post/3kxyz",
+    );
+  });
+
+  it("returns null without a handle, rather than a link that cannot resolve", () => {
+    expect(itemUrl({ externalId: uri, authorHandle: null })).toBeNull();
+  });
+
+  it("returns null for a record that is not a post", () => {
+    expect(itemUrl({ externalId: "at://did:plc:abc123/app.bsky.feed.like/3kxyz", authorHandle: "a.bsky.social" })).toBeNull();
+  });
+
+  it("returns null for something that is not an AT URI at all", () => {
+    // Meta ids end up here if a provider is ever mis-wired; a guessed bsky.app link would 404.
+    expect(itemUrl({ externalId: "17912345678901234", authorHandle: "a.bsky.social" })).toBeNull();
+    expect(itemUrl({ externalId: "", authorHandle: "a.bsky.social" })).toBeNull();
+  });
+
+  it("is pure — no network, same answer every time", () => {
+    const once = itemUrl({ externalId: uri, authorHandle: "a.bsky.social" });
+    expect(itemUrl({ externalId: uri, authorHandle: "a.bsky.social" })).toBe(once);
+  });
+});

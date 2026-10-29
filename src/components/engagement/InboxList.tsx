@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { dayHeading, dayKeyInZone } from "@/lib/time/format";
+import { OriginalLink } from "./OriginalLink";
 import type { InboxItemView } from "@/server/services/engagement/inbox";
 
 /**
@@ -32,25 +33,33 @@ function InboxRow({
   timeZone,
   showAccount,
   selected,
+  platform,
 }: {
   item: InboxItemView;
   href: string;
   timeZone: string;
   showAccount: boolean;
   selected: boolean;
+  platform: string;
 }) {
   const author = item.author.displayName ?? item.author.handle ?? "Unknown";
   // State is weight, not a badge on every row (§19): waiting reads heavier and keeps the dot.
   const waiting = item.state === "waiting";
 
   return (
-    <li>
+    // The row is a link, and it also carries a link out to the platform. An `<a>` inside an `<a>`
+    // is invalid, so the row link covers the row with an overlay (`after:inset-0`) and the external
+    // link sits beside it, lifted above that overlay. Both stay real links: middle-click, open in a
+    // new tab and the status bar all behave.
+    <li
+      className={`relative flex gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-accent/60 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring ${
+        selected ? "bg-accent" : ""
+      }`}
+    >
       <Link
         href={href}
         aria-current={selected ? "true" : undefined}
-        className={`flex gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-          selected ? "bg-accent" : ""
-        }`}
+        className="flex min-w-0 flex-1 gap-3 after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none"
       >
         <span aria-hidden="true" className={`mt-2 size-2 shrink-0 rounded-full ${waiting ? "bg-primary" : "bg-transparent"}`} />
         <span className="min-w-0 flex-1">
@@ -58,8 +67,9 @@ function InboxRow({
             <span className={`line-clamp-2 min-w-0 flex-1 text-sm ${waiting ? "font-medium text-foreground" : "text-muted-foreground"}`}>
               {item.text || "(no text)"}
             </span>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              <LocalTime value={item.saidAt} timeZone={timeZone} />
+            {/* The day is on the heading above, so the row shows the clock only (§4, §19). */}
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+              <LocalTime value={item.saidAt} timeZone={timeZone} format="time" />
             </span>
           </span>
           {/*
@@ -81,6 +91,10 @@ function InboxRow({
           </span>
         </span>
       </Link>
+      {/* Lifted above the row link's overlay so it is clickable in its own right. */}
+      <span className="relative z-10 shrink-0 self-center text-xs text-muted-foreground">
+        <OriginalLink item={item} platform={platform} />
+      </span>
     </li>
   );
 }
@@ -88,6 +102,7 @@ function InboxRow({
 export function InboxList({
   items,
   hrefForItem,
+  platformFor,
   timeZone,
   selectedId,
   now,
@@ -95,6 +110,8 @@ export function InboxList({
   items: readonly InboxItemView[];
   /** Built by the page, so opening an item keeps the filters the reader had applied. */
   hrefForItem: (itemId: string) => string;
+  /** The platform's own display name, for the "view on …" link (G41). */
+  platformFor: (providerKey: string) => string;
   timeZone: string;
   selectedId?: string | undefined;
   now: Date;
@@ -118,6 +135,7 @@ export function InboxList({
                 timeZone={timeZone}
                 showAccount={showAccount}
                 selected={item.id === selectedId}
+                platform={platformFor(item.providerKey)}
               />
             ))}
           </ul>

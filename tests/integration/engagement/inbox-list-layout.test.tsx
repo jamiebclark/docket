@@ -25,11 +25,12 @@ function item(over: Partial<InboxItemView> = {}): InboxItemView {
     kind: "comment",
     state: "waiting",
     externalId: "ext-1",
+    url: null,
     text: "Can you send it?",
     textTruncated: false,
     author: { displayName: null, handle: "american_fams_", externalId: "a1", url: null, identityStable: false, reachable: true },
     saidAt: new Date("2026-10-20T13:05:00Z"),
-    parent: { kind: "docket_post", text: "Dark porch. Candle going in.", externalId: null },
+    parent: { kind: "docket_post", text: "Dark porch. Candle going in.", externalId: null, url: null },
     newerOnSameParent: 0,
     withdrawnAt: null,
     editedUpstreamAt: null,
@@ -41,7 +42,13 @@ function item(over: Partial<InboxItemView> = {}): InboxItemView {
 
 const render = (items: InboxItemView[]) =>
   renderToStaticMarkup(
-    createElement(InboxList, { items, hrefForItem: (id: string) => `/p/x/inbox?item=${id}`, timeZone: TZ, now: NOW }),
+    createElement(InboxList, {
+      items,
+      hrefForItem: (id: string) => `/p/x/inbox?item=${id}`,
+      platformFor: () => "Instagram",
+      timeZone: TZ,
+      now: NOW,
+    }),
   );
 
 describe("the inbox list is an inbox, not a table", () => {
@@ -63,7 +70,7 @@ describe("the inbox list is an inbox, not a table", () => {
   it("caps the quoted post so it cannot out-weigh the message", () => {
     // Rendered unbounded on the live install, the quote ran the full row and became the longest
     // thing in it — the opposite of the weight order §19 sets out.
-    const html = render([item({ parent: { kind: "docket_post", text: "x".repeat(400), externalId: null } })]);
+    const html = render([item({ parent: { kind: "docket_post", text: "x".repeat(400), externalId: null, url: null } })]);
     expect(html).toMatch(/max-w-\[\d+ch\][^"]*truncate|truncate[^"]*max-w-\[\d+ch\]/);
   });
 
@@ -101,11 +108,82 @@ describe("the inbox list is an inbox, not a table", () => {
       createElement(InboxList, {
         items: [item({ id: "open-1" })],
         hrefForItem: (id: string) => `/p/x/inbox?item=${id}`,
+        platformFor: () => "Instagram",
         timeZone: TZ,
         now: NOW,
         selectedId: "open-1",
       }),
     );
     expect(html).toContain('aria-current="true"');
+  });
+});
+
+describe("a way to read it where it was said (G41)", () => {
+  it("links to the item itself when the provider can state its address", () => {
+    const html = render([item({ url: "https://bsky.app/profile/someone.bsky.social/post/abc123" })]);
+    expect(html).toContain("https://bsky.app/profile/someone.bsky.social/post/abc123");
+    expect(html).toContain("View on Instagram →");
+  });
+
+  it("falls back to the post the comment is on, and says so", () => {
+    // No Meta surface has a confirmed comment-permalink shape, so a comment opens its post — and
+    // the label must not imply it lands on the comment.
+    const html = render([
+      item({ url: null, parent: { kind: "docket_post", text: "A post", externalId: null, url: "https://instagram.com/p/XYZ/" } }),
+    ]);
+    expect(html).toContain("https://instagram.com/p/XYZ/");
+    expect(html).toContain("View the post on Instagram →");
+  });
+
+  it("prefers the item's own address over the post's", () => {
+    const html = render([
+      item({
+        url: "https://bsky.app/profile/a/post/1",
+        parent: { kind: "docket_post", text: "A post", externalId: null, url: "https://bsky.app/profile/b/post/2" },
+      }),
+    ]);
+    expect(html).toContain("https://bsky.app/profile/a/post/1");
+    expect(html).not.toContain("https://bsky.app/profile/b/post/2");
+  });
+
+  it("renders no link at all when neither address exists", () => {
+    const html = render([item({ url: null, parent: null })]);
+    expect(html).not.toContain("View on");
+    expect(html).not.toContain("View the post on");
+  });
+
+  it("refuses an address that is not an http(s) URL", () => {
+    const html = render([item({ url: "javascript:alert(1)" })]);
+    expect(html).not.toContain("javascript:");
+    expect(html).not.toContain("View on Instagram");
+  });
+
+  it("opens in a new tab without handing the platform a window reference", () => {
+    const html = render([item({ url: "https://bsky.app/profile/a/post/1" })]);
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+  });
+
+  it("does not nest the outward link inside the row link", () => {
+    // An <a> inside an <a> is invalid and browsers recover from it unpredictably. The row link
+    // covers the row with an overlay instead, so both remain real links.
+    const html = render([item({ url: "https://bsky.app/profile/a/post/1" })]);
+    const rowLinkStart = html.indexOf("<a");
+    const rowLinkEnd = html.indexOf("</a>", rowLinkStart);
+    expect(html.indexOf("bsky.app")).toBeGreaterThan(rowLinkEnd);
+  });
+});
+
+describe("the time in a row", () => {
+  it("shows the clock only, because the heading above already names the day", () => {
+    const html = render([item()]);
+    expect(html).toContain("9:05 AM EDT");
+    // The date belongs to the group heading, not to every row under it.
+    expect(html).not.toContain("Tue, Oct 20, 9:05 AM");
+  });
+
+  it("keeps the whole date in the tooltip, so nothing is lost", () => {
+    const html = render([item()]);
+    expect(html).toMatch(/title="[^"]*October 20, 2026[^"]*"/);
   });
 });

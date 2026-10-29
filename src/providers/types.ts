@@ -539,6 +539,17 @@ export interface EngagementDeclaration {
   reads: readonly EngagementItemKind[];
   /** Whether an inbound item can be answered on this platform. */
   canReply: boolean;
+  /**
+   * G41. The item's own address on the platform, so a member can go and read it where it was said.
+   *
+   * Pure, and derived only from what is already stored — no network call, no guessing. Return
+   * `null` whenever the platform's own URL shape is not a confirmed fact for this surface: a
+   * plausible-looking link that 404s is worse than no link, and the inbox falls back to the parent
+   * post's address, which Docket recorded when it published.
+   *
+   * Omit the hook entirely for a provider that can never say.
+   */
+  itemUrl?: (item: { externalId: string; authorHandle: string | null }) => string | null;
   /** The per-account write allowance a reply spends, for the publishing-first reserve (FR-042). */
   writeBudget?: PublishLimit;
   /**

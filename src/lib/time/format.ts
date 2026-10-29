@@ -23,6 +23,20 @@ export function formatFull(value: Date | string, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "full", timeStyle: "long" }).format(new Date(value));
 }
 
+/**
+ * Just the clock time, e.g. "9:05 AM EDT", for a row that already sits under a heading naming its
+ * day (design-system.md §4, §19).
+ *
+ * The second instant format in the app, and deliberately narrow: it is only correct where the date
+ * is stated nearby, because on its own it cannot say which day it means. Everywhere else is
+ * `formatLocal`. The zone is kept — a time without one is ambiguous wherever the reader is.
+ */
+export function formatTimeOnly(value: Date | string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(
+    new Date(value),
+  );
+}
+
 export class InvalidLocalDateError extends Error {
   constructor(value: string) {
     super(`formatLocalDate expects "YYYY-MM-DD", got ${JSON.stringify(value)}`);
