@@ -34,11 +34,20 @@ export const VIDEO = {
  * only platform where this shows up: its reads need no granted scope, so nothing holds those
  * sections back the way an unconnected permission does elsewhere.
  *
- * Add a line here when a new section starts sweeping — twice now a test has counted another
- * section's traffic as evidence that a publish was attempted.
+ * Three times now a test has counted another section's traffic as evidence that a publish was
+ * attempted. Most recently `refreshSession`: #193 let the refresh section claim a flagged account
+ * regardless of the refresh window, which made that call ordinary in these ticks and turned a gap
+ * in this list into an intermittent CI failure.
+ *
+ * The list is the thing to extend, not the assertion — add a line when a new section starts
+ * sweeping, and keep it to traffic the publish path provably does not make.
  */
 const SWEEP_PATHS = [
-  "com.atproto.server.createSession", // authentication, for whichever section needed it
+  // Session management, for whichever section needed it. Not `getServiceAuth`, which the video
+  // publish path itself calls and which therefore must still count.
+  "com.atproto.server.createSession",
+  "com.atproto.server.refreshSession",
+  "com.atproto.server.getSession",
   "app.bsky.notification.listNotifications", // engagement reads
   "app.bsky.actor.getProfile", // insights: account metrics
   "app.bsky.feed.getPosts", // insights: post metrics

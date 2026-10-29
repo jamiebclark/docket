@@ -90,7 +90,7 @@ describe("Instagram outcome matrix", () => {
             expect(r.nextAttemptAt).toBeNull();
             const sent = graph.requests.length;
             expect(await tickAt(500)).toMatchObject({ claimed: 0 });
-            expect(graph.requests).toHaveLength(sent);
+            expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(sent);
           } else if (expected === "retryable") {
             expect(counts).toMatchObject({ retried: 1 });
             expect(["ambiguous", "failed", "published"]).not.toContain(r.status);
@@ -139,6 +139,6 @@ describe("Instagram outcome matrix", () => {
     expect(await row()).toMatchObject({ status: "ambiguous", nextAttemptAt: null, leaseOwner: null });
     const outcomes = (await forSchedulerProject(projectId).attempts.listForTarget(targetId)).map((a) => a.outcome);
     expect(outcomes).toEqual(["recovered_ambiguous"]);
-    expect(graph.requests).toHaveLength(0);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(0);
   });
 });

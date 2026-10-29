@@ -61,7 +61,7 @@ describe("Facebook outcome matrix", () => {
             expect(r.nextAttemptAt).toBeNull();
             const sent = graph.requests.length;
             expect(await tick()).toMatchObject({ claimed: 0 });
-            expect(graph.requests).toHaveLength(sent);
+            expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(sent);
           } else if (expected === "retryable") {
             expect(counts).toMatchObject({ retried: 1 });
             expect(["ambiguous", "failed", "published"]).not.toContain(r.status);

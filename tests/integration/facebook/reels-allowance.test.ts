@@ -69,7 +69,7 @@ describe("the 30-Reels allowance", () => {
     const base = await facebookVideoSetup(storage, "reel", { postType: "reel", video: { width: 1080, height: 1920 } });
     await seed(base.projectId, base.accountId, 30);
     expect(await tickAt(0)).toMatchObject({ claimed: 1, deferred: 1 });
-    expect(graph.requests).toHaveLength(0);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(0);
     const row = await base.row();
     expect(row.lastError).toBe("Waiting for Facebook's daily Reels allowance (30 of 30 used in the last 24 hours); nothing was created.");
     expect(row.attemptCount).toBe(0);

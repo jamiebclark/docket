@@ -44,7 +44,7 @@ describe("Instagram single image through the real scheduler", () => {
     // The status check is held back by the engine until the 10 s delay passes.
     expect(afterCreate.nextAttemptAt!.getTime() - T0).toBe(10_000);
     expect(await tickAt(5)).toMatchObject({ claimed: 0 });
-    expect(graph.requests).toHaveLength(1);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(1);
 
     expect(await tickAt(11)).toMatchObject({ claimed: 1, continued: 1 }); // check_status
     expect(await tickAt(12)).toMatchObject({ claimed: 1, continued: 1 }); // check_quota

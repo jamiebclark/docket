@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { assertEngagementDeclaration } from "../../../src/providers/registry";
+import { assertEngagementDeclaration, listProviders } from "../../../src/providers/registry";
 import { mockProvider } from "../../../src/providers/mock";
 import { mockEngagement } from "../../../src/providers/mock/engagement";
 import type { EngagementDeclaration } from "../../../src/providers/types";
@@ -33,6 +33,13 @@ import { tickConfig } from "../../helpers/tick";
  * singleton's `declaration`) leaks the same `readScopes` onto the real "mock" key's accounts too,
  * defeating the isolation a global, cross-project count otherwise needs.
  */
+/** The rule list `runEngagementRead` builds, so a baseline is measured the way the count is. */
+function sectionRules(): EngagementProviderRule[] {
+  return listProviders()
+    .filter((p) => p.engagement && !p.engagement.declaration.unavailable)
+    .map((p) => ({ providerKey: p.key, readScopes: p.engagement!.declaration.readScopes ?? [] }));
+}
+
 const skipCountProvider = registerTestProvider({
   ...mockProvider,
   key: "skip-count-test",
@@ -390,6 +397,12 @@ describe("the accountsSkippedNoPermission count (US6, FR-049-FR-050)", () => {
   it("counts accounts skipped for missing permission, deduplicated, and keeps it distinct from unavailable, failed and rateLimited", async () => {
     const ctx = await createProjectWithMembers();
     const repos = forSchedulerProject(ctx.project.id);
+    // Measured before this test creates anything. The count is database-wide across every provider
+    // with declared read scopes — the 086 review said so at the time — so a Meta account another
+    // file left behind without `pages_read_user_content` lands in it too: run beside the Meta
+    // suites it reads 146, not 1. The claim here is that exactly one of THIS test's accounts is
+    // skipped, which is a delta.
+    const skippedBefore = await countAccountsMissingEngagementScopes(sectionRules());
     // Missing both declared scopes — counted once, not twice.
     await repos.accounts.upsertConnected({
       providerKey: skipCountProvider.key,
@@ -419,9 +432,8 @@ describe("the accountsSkippedNoPermission count (US6, FR-049-FR-050)", () => {
     // happened to leave a Threads account behind. Thirteen of them do. The claim this test is
     // actually making is that none of ITS accounts land in `unavailable`, which is a delta.
     const unavailableBefore = await countAccountsOnUnavailableEngagement(["threads"]);
-
     const counts = await runSection();
-    expect(counts.accountsSkippedNoPermission).toBe(1);
+    expect(counts.accountsSkippedNoPermission).toBe(skippedBefore + 1);
     expect(counts.unavailable).toBe(unavailableBefore);
     expect(counts.failed).toBe(0);
     expect(counts.rateLimited).toBe(0);

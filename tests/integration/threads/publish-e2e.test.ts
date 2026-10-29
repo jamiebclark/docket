@@ -39,7 +39,7 @@ describe("Threads text and image posts through the real scheduler", () => {
     expect(afterCreate.status).not.toBe("published");
     expect(afterCreate.nextAttemptAt!.getTime() - T0).toBe(30_000);
     expect(await tickAt(5)).toMatchObject({ claimed: 0 }); // held back until 30 s
-    expect(graph.requests).toHaveLength(1);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(1);
 
     expect(await tickAt(31)).toMatchObject({ claimed: 1, continued: 1 }); // check_status
         expect(await tickAt(32)).toMatchObject({ claimed: 1, continued: 1 }); // check_quota
