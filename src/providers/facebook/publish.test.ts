@@ -57,11 +57,23 @@ function paths() {
 describe("Facebook publish success paths", () => {
   it("publishes text only", async () => {
     graph.fallback({ kind: "ok", body: { id: `${PAGE}_99` } });
+    graph.on("GET", `/v26.0/${PAGE}_99`, { kind: "ok", body: { permalink_url: `https://www.facebook.com/${PAGE}/posts/99` } });
     const r = await advanceFacebook(ctx("hello", 0));
-    expect(r).toMatchObject({ kind: "done", externalId: `${PAGE}_99` });
-    expect(graph.requests).toHaveLength(1);
+    // The publish, then one read for the address (G41) — the feed reply carries only the id.
+    expect(r).toMatchObject({ kind: "done", externalId: `${PAGE}_99`, url: `https://www.facebook.com/${PAGE}/posts/99` });
+    expect(paths()).toEqual([`/${PAGE}/feed`, `/${PAGE}_99`]);
     expect(graph.requests[0]!.path).toMatch(feed);
     expect(graph.requests[0]!.params).toEqual({ message: "hello", access_token: "[redacted]" });
+  });
+
+  it("still publishes when the address cannot be read", async () => {
+    // The post is live and its id is known; a missing permalink is cosmetic and must never
+    // downgrade a published target.
+    graph.on("POST", `/v26.0/${PAGE}/feed`, { kind: "ok", body: { id: `${PAGE}_99` } });
+    graph.on("GET", `/v26.0/${PAGE}_99`, { kind: "graph_error", code: 190, status: 400 });
+    const r = await advanceFacebook(ctx("hello", 0));
+    expect(r).toMatchObject({ kind: "done", externalId: `${PAGE}_99` });
+    expect(r.kind === "done" && r.url).toBeUndefined();
   });
 
   it("sends the first URL as link", async () => {
@@ -104,7 +116,7 @@ describe("Facebook publish success paths", () => {
     expect(reqs.slice(0, 3).every((r) => r.params.published === "false")).toBe(true);
     expect(reqs[3]!.params.message).toBe("trip");
     expect(JSON.parse(reqs[3]!.params.attached_media!)).toEqual([{ media_fbid: "ph1" }, { media_fbid: "ph2" }, { media_fbid: "ph3" }]);
-    expect(paths()).toEqual([`/${PAGE}/photos`, `/${PAGE}/photos`, `/${PAGE}/photos`, `/${PAGE}/feed`]);
+    expect(paths()).toEqual([`/${PAGE}/photos`, `/${PAGE}/photos`, `/${PAGE}/photos`, `/${PAGE}/feed`, `/${PAGE}_77`]);
   });
 
   it("describes a single photo with alt_text_custom", async () => {
@@ -202,7 +214,7 @@ describe("publish_video", () => {
     graph.on("POST", videos, { kind: "ok", body: { id: "vid1" } });
     const r = await advanceFacebook(videoCtx("hello"));
     expect(r).toMatchObject({ kind: "done", externalId: "vid1" });
-    expect(graph.requests).toHaveLength(1);
+    expect(paths()).toEqual([`/${PAGE}/videos`, "/vid1"]);
     const p = bodyOf();
     expect(p.get("file_url")).toBe("https://media.test/1.mp4");
     expect(p.get("description")).toBe("hello");

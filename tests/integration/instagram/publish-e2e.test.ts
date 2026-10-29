@@ -36,6 +36,7 @@ describe("Instagram single image through the real scheduler", () => {
     graph.on("GET", "/v26.0/c1", { kind: "ok", body: { status_code: "FINISHED" } });
     graph.on("GET", quota, { kind: "ok", body: { data: [{ quota_usage: 3, config: { quota_total: 100 } }] } });
     graph.on("POST", publish, { kind: "ok", body: { id: "ig_m1" } });
+    graph.on("GET", "/v26.0/ig_m1", { kind: "ok", body: { permalink: "https://www.instagram.com/p/ABC123/" } });
     const { row } = await instagramSetup(storage, "hello", 1);
 
     expect(await tickAt(0)).toMatchObject({ claimed: 1, continued: 1 });
@@ -55,10 +56,17 @@ describe("Instagram single image through the real scheduler", () => {
       "GET /c1",
       `GET /${IG_ID}/content_publishing_limit`,
       `POST /${IG_ID}/media_publish`,
+      // The publish reply carries only the media id, so the address takes one more read.
+      "GET /ig_m1",
     ]);
     expect(graph.requests[0]!.params).toMatchObject({ caption: "hello" });
     expect(graph.requests[0]!.params.image_url).toMatch(/^https:\/\/media\.example\.test\//);
-    expect(await row()).toMatchObject({ status: "published", externalId: "ig_m1" });
+    // The address reaches the row, which is what lets the Posts page and the inbox link out to it.
+    expect(await row()).toMatchObject({
+      status: "published",
+      externalId: "ig_m1",
+      externalUrl: "https://www.instagram.com/p/ABC123/",
+    });
   });
 
   it("takes the extra tick for IN_PROGRESS then FINISHED, each check carrying a notBefore", async () => {

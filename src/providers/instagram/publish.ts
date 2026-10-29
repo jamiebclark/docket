@@ -4,6 +4,7 @@ import { graphVersion } from "../meta/config";
 import { readPageToken } from "../meta/credentials";
 import { classifyGraphError, graphStepError, graphSummary, scrub } from "../meta/errors";
 import type { AttemptSummary, PublishContext, StepResult } from "../types";
+import { fetchPermalink } from "../meta/permalink";
 import { QUOTA_RETRY_MS, readQuota } from "./quota";
 import { IMAGE_STATUS_FIELDS, itemParams, reelContainerParams, storyContainerParams, VIDEO_STATUS_FIELDS } from "./requests";
 import {
@@ -317,7 +318,15 @@ export async function advanceInstagram(ctx: PublishContext, app?: MetaApp): Prom
         summary: summarize(name, state, outcome, {}, { containerId: container }),
       };
     }
-    return { kind: "done", externalId: id, summary: summarize(name, state, outcome, { externalId: id }, { containerId: container }) };
+    // One extra read, best effort: the post is already published and `id` is already known, so a
+    // missing address must never make this anything but `done` (G41, `meta/permalink.ts`).
+    const url = await fetchPermalink(graph, { id, field: "permalink", token, signal: ctx.signal });
+    return {
+      kind: "done",
+      externalId: id,
+      ...(url ? { url } : {}),
+      summary: summarize(name, state, outcome, { externalId: id }, { containerId: container }),
+    };
   }
 
   return fatal("The post changed while publishing.");

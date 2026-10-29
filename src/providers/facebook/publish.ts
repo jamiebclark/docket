@@ -1,6 +1,7 @@
 import { docsUrl } from "@/lib/docs";
 import { graphRequest, ruploadRequest, DEFAULT_GRAPH_BASE, type GraphOutcome, type MetaApp } from "../meta/graph";
 import { graphVersion } from "../meta/config";
+import { fetchPermalink } from "../meta/permalink";
 import { readPageToken } from "../meta/credentials";
 import { graphStepError, graphSummary, scrub } from "../meta/errors";
 import type { PublishContext, StepResult } from "../types";
@@ -127,7 +128,9 @@ export async function advanceFacebook(ctx: PublishContext, app?: MetaApp): Promi
   if (!id) {
     return { kind: "ambiguous", error: "Facebook accepted the request but its reply could not be read.", summary };
   }
-  return { kind: "done", externalId: id, summary };
+  // Best effort, after the post exists — a missing address never downgrades a published post (G41).
+  const url = await fetchPermalink(graph, { id, field: "permalink_url", token, signal: ctx.signal });
+  return { kind: "done", externalId: id, ...(url ? { url } : {}), summary };
 }
 
 const ageMs = (now: Date, since: string | null): number => (since === null ? 0 : now.getTime() - Date.parse(since));

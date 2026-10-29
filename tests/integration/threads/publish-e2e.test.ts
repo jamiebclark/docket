@@ -32,6 +32,7 @@ const U = THREADS_USER_ID;
 describe("Threads text and image posts through the real scheduler", () => {
   it("publishes a text post in 4 ticks with the exact request sequence", async () => {
     scriptThreads(graph).create(["1001"]).status("1001", ["FINISHED"]).quota(3).publish("th_1");
+    graph.on("GET", `${V}/th_1`, { kind: "ok", body: { permalink: "https://www.threads.net/@me/post/th_1" } });
     const { row } = await threadsSetup(storage, { text: "hello threads" });
 
     expect(await tickAt(0)).toMatchObject({ claimed: 1, continued: 1 });
@@ -45,12 +46,14 @@ describe("Threads text and image posts through the real scheduler", () => {
         expect(await tickAt(32)).toMatchObject({ claimed: 1, continued: 1 }); // check_quota
     expect(await tickAt(33)).toMatchObject({ claimed: 1, done: 1 }); // publish
 
-    expect(shape()).toEqual([`POST /${U}/threads`, "GET /1001", `GET /${U}/threads_publishing_limit`, `POST /${U}/threads_publish`]);
+    // The publish, then one read for the post's own address — the publish reply carries only the id.
+    expect(shape()).toEqual([`POST /${U}/threads`, "GET /1001", `GET /${U}/threads_publishing_limit`, `POST /${U}/threads_publish`, "GET /th_1"]);
     expect(graph.requests[0]!.params).toMatchObject({ media_type: "TEXT", text: "hello threads" });
     expect(graph.requests[0]!.params).not.toHaveProperty("auto_publish_text");
     expect(graph.requests[1]!.params).toMatchObject({ fields: "status,error_message" });
     expect(graph.requests[3]!.params).toMatchObject({ creation_id: "1001" });
-    expect(await row()).toMatchObject({ status: "published", externalId: "th_1" });
+    // The address reaches the row, which is what lets the Posts page and the inbox link out to it.
+    expect(await row()).toMatchObject({ status: "published", externalId: "th_1", externalUrl: "https://www.threads.net/@me/post/th_1" });
   });
 
   it("publishes one image through IN_PROGRESS then FINISHED in 5 ticks, the second wait about 60 s", async () => {
@@ -73,18 +76,26 @@ describe("Threads text and image posts through the real scheduler", () => {
     expect(await row()).toMatchObject({ status: "published", externalId: "th_2" });
   });
 
-  it("makes at most one platform request per tick and only the publish step may publish", async () => {
+  it("advances one step per tick and only the publish step may publish", async () => {
     scriptThreads(graph).create(["1001"]).status("1001", ["FINISHED"]).quota(3).publish("th_3");
+    graph.on("GET", `${V}/th_3`, { kind: "ok", body: { permalink: "https://www.threads.net/@me/post/th_3" } });
     const { row } = await threadsSetup(storage, { text: "one each" });
-    const seen: number[] = [];
+    const seen: string[][] = [];
     for (const s of [0, 31, 32, 33]) {
       const before = graph.requests.length;
       await tickAt(s);
-      seen.push(graph.requests.length - before);
+      seen.push(shape().slice(before));
     }
-    expect(seen).toEqual([1, 1, 1, 1]);
-    const attempts = (await row()).status;
-    expect(attempts).toBe("published");
+    // One step's worth of traffic per tick. The publishing tick also reads the new post's address,
+    // which happens after it exists and cannot publish anything — so this names the requests rather
+    // than counting them, and a second *step* sneaking into a tick still fails here.
+    expect(seen).toEqual([
+      [`POST /${U}/threads`],
+      ["GET /1001"],
+      [`GET /${U}/threads_publishing_limit`],
+      [`POST /${U}/threads_publish`, "GET /th_3"],
+    ]);
+    expect((await row()).status).toBe("published");
     expect(graph.requests.filter((r) => r.path.endsWith("/threads_publish"))).toHaveLength(1);
   });
 

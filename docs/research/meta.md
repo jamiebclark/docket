@@ -796,3 +796,46 @@ It is absent from that tool's permission list entirely — Threads runs on its o
 its own app configuration. A Threads insights grant cannot be exercised the way the
 Facebook/Instagram one can, so the assumption that one reconnect flow covers all three
 Meta surfaces does not hold for Threads.
+
+## Post permalinks, 2026-10-29
+
+Why: Pinterest, X and Bluesky have always answered a publish with the post's address, so
+`post_targets.external_url` is set for them. Facebook, Instagram and Threads never did, so that
+column was null for every Meta post Docket has ever published — which is why the Posts page showed
+no link for them, and why an Instagram comment in the inbox had no post to point at. None of the
+three returns the address in the publish reply, so each needs one extra read.
+
+### CONFIRMED — the field per surface
+
+| Surface | Node asked | Field | Value |
+|---|---|---|---|
+| Facebook Page post | the id Docket stores (`post_id` for photos, else `id`) | `permalink_url` | "The permanent static URL to the post on www.facebook.com" |
+| Instagram media | the `media_publish` id | `permalink` | a permanent URL to the media; a public field |
+| Threads post | the `threads_publish` id | `permalink` | `https://www.threads.net/@<user>/post/<id>` |
+
+- Page post: https://developers.facebook.com/docs/graph-api/reference/post
+- IG Media: https://developers.facebook.com/docs/instagram-platform/reference/instagram-media/
+  — note `permalink` is **not** available on a child of an album; Docket asks about the parent it
+  just published, so this does not bite.
+- Threads: https://developers.facebook.com/docs/threads/posts/
+
+### OPEN QUESTION — Facebook Reels have no documented field
+
+A Reel publish answers with a **video** id, and the Video node's documented read fields are `id`,
+`created_time`, `description`, `embed_html`, `format`, `event`, `from`, `icon`, `name`, `picture`,
+`place`, `source`, `updated_time` — **no `permalink_url`**
+(https://developers.facebook.com/docs/graph-api/reference/video/). The Reel status reply
+(`video_reels` -> `status`) carries no post id either, so there is nothing to translate the video id
+into a post id with.
+
+Asking for `permalink_url` anyway may well work — it is widely used against Page videos — but it is
+not documented, and a request per Reel that returns `null` is worse than not asking. Reels are
+therefore left without an address on purpose. To close this, verify `permalink_url` on a real Page
+video id, or find a documented video -> post id edge.
+
+### Implementation note
+
+`src/providers/meta/permalink.ts` is **best effort by contract**: the post is already published and
+its id already known by the time it runs, so every failure answers `null` and the publish stays
+`done`. A missing link is cosmetic; a publish turned ambiguous over one is not. It also refuses
+anything that is not an `https://` URL, since the value is rendered as a link.
