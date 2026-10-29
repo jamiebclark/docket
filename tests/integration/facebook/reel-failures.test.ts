@@ -188,7 +188,10 @@ describe("a Reel after finish was sent", () => {
     const before = graph.requests.length;
     await drive(125, 200);
     expect((await s.row()).status).toBe("ambiguous");
-    expect(graph.requests).toHaveLength(before);
+    // Named, not counted. `vitest --shard` balances by file size, so editing any test file moves
+    // files between shards and changes which leftovers a tick can reach; when that makes this fail,
+    // "8 became 10" says nothing, and the paths say which section went looking.
+    expect(graph.requests.slice(before).map((r) => `${r.method} ${r.path}`)).toEqual([]);
     expect(graph.requests.filter((r) => r.path === reels && r.params.upload_phase === "start")).toHaveLength(1);
   });
 
