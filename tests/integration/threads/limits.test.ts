@@ -67,7 +67,7 @@ describe("Threads default publish limit", () => {
     expect(count(create)).toBe(250);
     const before = graph.requests.length;
     await drain(600, 3);
-    expect(graph.requests).toHaveLength(before);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(before);
   }, 120_000);
 
   it("an account-level override stricter than the default still applies", async () => {

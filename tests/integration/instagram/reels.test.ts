@@ -154,7 +154,7 @@ describe("a single video through the real scheduler", () => {
       expect((await row()).status).toBe("ambiguous");
       const sent = graph.requests.length;
       expect(await tickAt(s + 5000)).toMatchObject({ claimed: 0 });
-      expect(graph.requests).toHaveLength(sent);
+      expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(sent);
       expect(publishes()).toHaveLength(1);
     });
   }

@@ -73,7 +73,7 @@ describe("Instagram default publish limit", () => {
     expect(creates()).toBe(50);
     const before = graph.requests.length;
     await drain(200, 3);
-    expect(graph.requests).toHaveLength(before);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(before);
   });
 
   it("an account-level override stricter than the default still applies", async () => {

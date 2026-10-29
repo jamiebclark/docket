@@ -104,7 +104,7 @@ describe("Threads outcome matrix", () => {
             expect(r.nextAttemptAt).toBeNull();
             const sent = graph.requests.length;
             expect(await tickAt(500)).toMatchObject({ claimed: 0 });
-            expect(graph.requests).toHaveLength(sent);
+            expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(sent);
             expect(graph.requests.filter((q) => q.path === publish)).toHaveLength(1);
           } else if (expected === "retryable") {
             expect(counts).toMatchObject({ retried: 1 });
@@ -151,7 +151,7 @@ describe("Threads outcome matrix", () => {
     expect(await row()).toMatchObject({ status: "failed", nextAttemptAt: null });
     expect(await forSchedulerProject(projectId).accounts.get(accountId)).toMatchObject({ status: "needs_reauth" });
     expect(graph.requests.every((r) => !r.path.includes("refresh_access_token") && !r.path.includes("oauth"))).toBe(true);
-    expect(graph.requests).toHaveLength(2);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(2);
   });
 
   it("code 190 after the credentials were rotated meanwhile does not flag the new credentials (G7)", async () => {
@@ -211,6 +211,6 @@ describe("Threads outcome matrix", () => {
     expect(await row()).toMatchObject({ status: "ambiguous", nextAttemptAt: null, leaseOwner: null });
     const outcomes = (await forSchedulerProject(projectId).attempts.listForTarget(targetId)).map((a) => a.outcome);
     expect(outcomes).toEqual(["recovered_ambiguous"]);
-    expect(graph.requests).toHaveLength(0);
+    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(0);
   });
 });
