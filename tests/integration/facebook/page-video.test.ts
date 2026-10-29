@@ -31,9 +31,11 @@ describe("Facebook Page video through the real scheduler", () => {
     const { tick, row } = await facebookVideoSetup(storage, "A video");
     expect(await tick()).toMatchObject({ claimed: 1, done: 1 });
 
+    // Named, not counted: `vitest --shard` balances by file size, so editing any test file changes
+    // which files share a worker database and which leftovers a tick can reach. "1 became 2" cannot
+    // say what the second call was; the path can.
     const requests = graph.requests.filter((r) => r.method === "POST");
-    expect(requests).toHaveLength(1);
-    expect(requests[0]!.path).toBe(videos);
+    expect(requests.map((r) => r.path)).toEqual([videos]);
     expect(requests[0]!.params.file_url).toMatch(/^http/);
     expect(requests[0]!.params.description).toBe("A video");
     expect(graph.requests.some((r) => r.path.includes("video_reels"))).toBe(false);
@@ -72,6 +74,7 @@ describe("Facebook Page video through the real scheduler", () => {
     expect((await row()).status).toBe("ambiguous");
     const sent = graph.requests.length;
     expect(await tick()).toMatchObject({ claimed: 0 });
-    expect(graph.requests).toHaveLength(sent);
+    // Named, not counted — see the note above.
+    expect(graph.requests.slice(sent).map((r) => `${r.method} ${r.path}`)).toEqual([]);
   });
 });
