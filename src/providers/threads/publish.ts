@@ -1,6 +1,7 @@
 import { docsUrl } from "@/lib/docs";
 import { graphRequest, type GraphOutcome } from "../meta/graph";
 import { classifyGraphError, graphStepError, graphSummary } from "../meta/errors";
+import { fetchPermalink } from "../meta/permalink";
 import type { AttemptSummary, PublishContext, StepResult } from "../types";
 import { threadsApp } from "./config";
 import { readThreadsCredentials } from "./credentials";
@@ -310,7 +311,13 @@ export async function advanceThreads(ctx: PublishContext): Promise<StepResult> {
         summary: summarize(name, state, outcome, {}, { containerId: container }),
       };
     }
-    return { kind: "done", externalId: id, summary: summarize(name, state, outcome, { externalId: id }, { containerId: container }) };
+    const url = await fetchPermalink(graph, { id, field: "permalink", token, signal: ctx.signal });
+    return {
+      kind: "done",
+      externalId: id,
+      ...(url ? { url } : {}),
+      summary: summarize(name, state, outcome, { externalId: id }, { containerId: container }),
+    };
   }
 
   return fatal("The post changed while publishing.");

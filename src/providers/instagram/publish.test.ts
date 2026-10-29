@@ -211,9 +211,28 @@ describe("publish", () => {
 
   it("sends one media_publish with creation_id and finishes with the media id", async () => {
     graph.on("POST", p(`/${IG}/media_publish`), { kind: "ok", body: { id: "m9" } });
+    graph.on("GET", p("/m9"), { kind: "ok", body: { permalink: "https://www.instagram.com/p/ABC123/" } });
     const r = await advanceInstagram(ctx({ state }));
-    expect(graph.requests).toHaveLength(1);
+    // The publish, then one read for the address (G41) — Instagram does not return it inline.
+    expect(graph.requests.map((q) => `${q.method} ${q.path}`)).toEqual([`POST ${p(`/${IG}/media_publish`)}`, `GET ${p("/m9")}`]);
     expect(graph.requests[0]!.params).toEqual({ creation_id: "c1", access_token: "[redacted]" });
+    expect(r).toMatchObject({ kind: "done", externalId: "m9", url: "https://www.instagram.com/p/ABC123/" });
+  });
+
+  it("still publishes when the address cannot be read", async () => {
+    // The post is live and its id is known; a missing permalink is cosmetic and must never
+    // downgrade a published target to ambiguous.
+    graph.on("POST", p(`/${IG}/media_publish`), { kind: "ok", body: { id: "m9" } });
+    graph.on("GET", p("/m9"), { kind: "http", status: 500 });
+    const r = await advanceInstagram(ctx({ state }));
+    expect(r).toMatchObject({ kind: "done", externalId: "m9" });
+    expect(r.kind === "done" && r.url).toBeUndefined();
+  });
+
+  it("refuses an address that is not an https URL", async () => {
+    graph.on("POST", p(`/${IG}/media_publish`), { kind: "ok", body: { id: "m9" } });
+    graph.on("GET", p("/m9"), { kind: "ok", body: { permalink: "javascript:alert(1)" } });
+    const r = await advanceInstagram(ctx({ state }));
     expect(r).toMatchObject({ kind: "done", externalId: "m9" });
     expect(r.kind === "done" && r.url).toBeUndefined();
   });
