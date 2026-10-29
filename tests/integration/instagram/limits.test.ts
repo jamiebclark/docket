@@ -73,7 +73,16 @@ describe("Instagram default publish limit", () => {
     expect(creates()).toBe(50);
     const before = graph.requests.length;
     await drain(200, 3);
-    expect(graph.requests.map((r) => `${r.method} ${r.path}`)).toHaveLength(before);
+    // What the cap actually promises is that no *capped* operation gets through once it is reached.
+    // Asserting "no requests at all" instead made this depend on nothing else in the tick touching
+    // this account, which is not the scheduler's contract: `runTick` runs its sections concurrently,
+    // so the engagement read and the insights poll sweep this same account in the same ticks.
+    // Name the leftovers rather than count them, so a failure says which request got through.
+    expect({
+      publishesAfterCap: publishes() - 50,
+      createsAfterCap: creates() - 50,
+      other: graph.requests.slice(before).map((r) => `${r.method} ${r.path.replace(/^\/v[\d.]+/, "")}`),
+    }).toEqual({ publishesAfterCap: 0, createsAfterCap: 0, other: [] });
   });
 
   it("an account-level override stricter than the default still applies", async () => {
